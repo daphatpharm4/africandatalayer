@@ -1,0 +1,9 @@
+{
+  "name": "African Data Layer",
+  "description": "A professional crowdsourced data infrastructure platform for African cities, providing real-time intelligence on fuel prices, mobile money services, and urban infrastructure.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation",
+    "microphone"
+  ]
+}
