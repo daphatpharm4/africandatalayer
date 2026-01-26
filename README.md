@@ -1,20 +1,34 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# African Data Layer – MVP (Investor Demo)
 
-# Run and deploy your AI Studio app
+A mobile-first web application that allows users to crowdsource and submit data about local kiosks and fuel stations across Africa.
 
-This contains everything you need to run your app locally.
+---
 
-View your app in AI Studio: https://ai.studio/apps/drive/1Ez4phNreWeja_cfCR67JomJ-HB0SxAQf
+## 🌍 Key Features
 
-## Run Locally
+- 📸 Mandatory live camera capture (no gallery upload)
+- 📍 GPS + photo metadata + IP location cross-check
+- ⛽ Fuel & Mobile Money (Orange / MTN) data entry forms
+- 🎮 Gamified XP rewards and leaderboard
+- 📊 Mock dashboard for admins and investors
+- 🔍 Offline-ready design (static + PWA capability)
+- 🧪 Fraud detection simulations (static)
 
-**Prerequisites:**  Node.js
+---
 
+## 📁 Folder Structure
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- `/components`: UI elements (buttons, inputs, cards)
+- `/screens`: Main screens (Home, Submit, Profile)
+- `/mockData`: Static JSON to simulate backend
+- `/services`: Location, Camera, and validation utilities
+- `/constants`: Colors, fonts, config
+- `/public`: Static assets, logos, images
+
+---
+
+## 🚀 Run Locally
+
+```bash
+npm install
+npm run dev
