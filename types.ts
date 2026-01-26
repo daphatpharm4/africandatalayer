@@ -1,4 +1,3 @@
-
 export enum Screen {
   SPLASH = 'SPLASH',
   HOME = 'HOME',
@@ -25,9 +24,12 @@ export interface DataPoint {
   location: string;
   price?: number;
   currency?: string;
+  quality?: string;
   lastUpdated: string;
   availability: 'High' | 'Low' | 'Out';
+  queueLength?: string;
   trustScore: number;
+  contributorTrust?: string;
   provider?: string;
   merchantId?: string;
   hours?: string;
