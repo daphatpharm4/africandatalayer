@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ChevronLeft,
   Camera,
@@ -34,6 +34,27 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
   const [merchantId, setMerchantId] = useState('M-129384');
   const [reliability, setReliability] = useState('Excellent');
   const [comment, setComment] = useState('');
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (photoPreview) {
+        URL.revokeObjectURL(photoPreview);
+      }
+    };
+  }, [photoPreview]);
+
+  const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const nextPreview = URL.createObjectURL(file);
+    setPhotoPreview(prevPreview => {
+      if (prevPreview) {
+        URL.revokeObjectURL(prevPreview);
+      }
+      return nextPreview;
+    });
+  };
 
   const totalSteps = 3;
 
@@ -84,9 +105,29 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
             </div>
 
             <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
-              <Camera size={48} className="mb-4 opacity-40" />
-              <p className="text-xs font-bold uppercase tracking-widest opacity-60">Live Camera Preview</p>
-              <span className="mt-2 text-[10px] text-gray-400">EXIF metadata + GPS tagged</span>
+              {photoPreview ? (
+                <img src={photoPreview} alt="Captured station or kiosk" className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                <>
+                  <Camera size={48} className="mb-4 opacity-40" />
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-60">Live Camera Preview</p>
+                  <span className="mt-2 text-[10px] text-gray-400">EXIF metadata + GPS tagged</span>
+                </>
+              )}
+              <input
+                id="capture-photo"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoChange}
+                className="sr-only"
+              />
+              <label
+                htmlFor="capture-photo"
+                className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/90 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-600 shadow-sm backdrop-blur hover:bg-white"
+              >
+                {photoPreview ? 'Retake Photo' : 'Capture Photo'}
+              </label>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
