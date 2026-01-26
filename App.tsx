@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Screen, Category, DataPoint } from './types';
+import { Screen, DataPoint } from './types';
 import Splash from './components/Screens/Splash';
 import Home from './components/Screens/Home';
 import Details from './components/Screens/Details';
@@ -37,7 +37,11 @@ const App: React.FC = () => {
 
   const switchTab = (screen: Screen) => {
     setHistory([]);
-    setCurrentScreen(screen);
+    if (screen === Screen.CONTRIBUTE && !isAuthenticated) {
+      setCurrentScreen(Screen.AUTH);
+    } else {
+      setCurrentScreen(screen);
+    }
   };
 
   useEffect(() => {
@@ -55,7 +59,14 @@ const App: React.FC = () => {
       case Screen.SPLASH:
         return <Splash onStart={(scr) => navigateTo(scr)} />;
       case Screen.HOME:
-        return <Home onSelectPoint={(p) => navigateTo(Screen.DETAILS, p)} isAuthenticated={isAuthenticated} onAuth={() => navigateTo(Screen.AUTH)} />;
+        return (
+          <Home
+            onSelectPoint={(p) => navigateTo(Screen.DETAILS, p)}
+            isAuthenticated={isAuthenticated}
+            onAuth={() => navigateTo(Screen.AUTH)}
+            onContribute={() => (isAuthenticated ? navigateTo(Screen.CONTRIBUTE) : navigateTo(Screen.AUTH))}
+          />
+        );
       case Screen.DETAILS:
         return <Details point={selectedPoint} onBack={goBack} onContribute={() => isAuthenticated ? navigateTo(Screen.CONTRIBUTE) : navigateTo(Screen.AUTH)} />;
       case Screen.AUTH:

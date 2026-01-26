@@ -1,32 +1,61 @@
-
-import React, { useState } from 'react';
-import { ArrowLeft, ShieldCheck, XCircle, CheckCircle, MapPin, Camera, AlertTriangle, Eye } from 'lucide-react';
+import React from 'react';
+import {
+  ArrowLeft,
+  ShieldCheck,
+  XCircle,
+  CheckCircle,
+  AlertTriangle,
+  Flag,
+  MapPin
+} from 'lucide-react';
 
 interface Props {
   onBack: () => void;
 }
 
 const AdminQueue: React.FC<Props> = ({ onBack }) => {
-  const [queue, setQueue] = useState([
-    { id: 1, user: "Jean-Paul E.", type: "Fuel", loc: "Shell Akwa", val: "840 XAF", trust: 92, status: "pending", img: "https://picsum.photos/seed/a1/300/200" },
-    { id: 2, user: "Kofi M.", type: "Kiosk", loc: "MTN Bonapriso", val: "Cash Available", trust: 45, status: "flagged", img: "https://picsum.photos/seed/a2/300/200" }
-  ]);
+  const queue = [
+    {
+      id: 1,
+      user: 'Jean-Paul E.',
+      type: 'Fuel',
+      loc: 'Shell Akwa',
+      val: '840 XAF',
+      trust: 92,
+      status: 'match',
+      img: 'https://picsum.photos/seed/a1/300/200',
+      exif: '4.0511°N, 9.7012°E',
+      device: '4.0510°N, 9.7015°E'
+    },
+    {
+      id: 2,
+      user: 'Kofi M.',
+      type: 'Kiosk',
+      loc: 'MTN Bonapriso',
+      val: 'Cash Available',
+      trust: 45,
+      status: 'mismatch',
+      img: 'https://picsum.photos/seed/a2/300/200',
+      exif: '4.0472°N, 9.7208°E',
+      device: '4.0589°N, 9.7121°E'
+    }
+  ];
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
-      <div className="sticky top-0 z-30 bg-gray-900 text-white px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 hover:text-blue-400 transition-colors">
+      <div className="sticky top-0 z-30 bg-[#1f2933] text-white px-4 h-14 flex items-center justify-between">
+        <button onClick={onBack} className="p-2 -ml-2 hover:text-[#c86b4a] transition-colors">
           <ArrowLeft size={20} />
         </button>
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em]">Internal Validation Queue</h3>
-        <ShieldCheck size={18} className="text-blue-400" />
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em]">Validator Queue</h3>
+        <ShieldCheck size={18} className="text-[#c86b4a]" />
       </div>
 
       <div className="p-4 space-y-6">
         <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex items-start space-x-3">
           <AlertTriangle className="text-amber-600 shrink-0" size={18} />
           <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider leading-relaxed">
-            Data sovereignty notice: All metadata is strictly processed within local Cameroonian nodes.
+            Demo validator view • compare EXIF GPS vs device location before approval.
           </p>
         </div>
 
@@ -35,31 +64,57 @@ const AdminQueue: React.FC<Props> = ({ onBack }) => {
             <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="relative h-32 bg-gray-200">
                 <img src={item.img} className="w-full h-full object-cover opacity-80" alt="submission" />
-                <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur rounded text-[8px] font-bold text-white uppercase tracking-widest">
+                <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur rounded-xl text-[8px] font-bold text-white uppercase tracking-widest">
                   Live Capture: Verified
                 </div>
               </div>
-              
+
               <div className="p-4 space-y-4">
                 <div className="flex justify-between items-start">
                   <div>
                     <h4 className="text-sm font-bold text-gray-900">{item.loc}</h4>
                     <p className="text-[10px] text-gray-400 font-medium uppercase">{item.user} • {item.type}</p>
                   </div>
-                  <span className="text-sm font-bold text-blue-600">{item.val}</span>
+                  <span className="text-sm font-bold text-[#0f2b46]">{item.val}</span>
+                </div>
+
+                <div className="bg-[#f9fafb] border border-gray-100 rounded-2xl p-3 space-y-2">
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                    <span className="text-gray-400">Photo GPS</span>
+                    <span className="text-gray-700">{item.exif}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                    <span className="text-gray-400">Device GPS</span>
+                    <span className="text-gray-700">{item.device}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
+                    <span className="text-gray-400">Match Status</span>
+                    <span className={item.status === 'match' ? 'text-[#4c7c59]' : 'text-[#c86b4a]'}>
+                      {item.status === 'match' ? 'Match' : 'Mismatch'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="bg-[#e7eef4] rounded-2xl p-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                  <span>Map Comparison</span>
+                  <MapPin size={14} />
                 </div>
 
                 <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
                   <span className="text-gray-400">Trust Score</span>
-                  <span className={item.trust > 80 ? "text-green-600" : "text-amber-600"}>{item.trust}%</span>
+                  <span className={item.trust > 80 ? 'text-[#4c7c59]' : 'text-[#c86b4a]'}>{item.trust}%</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-2">
-                  <button className="h-10 border border-red-100 text-red-600 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-red-50">
+                <div className="grid grid-cols-3 gap-3 pt-2">
+                  <button className="h-10 border border-red-100 text-red-600 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-red-50">
                     <XCircle size={14} />
                     <span>Reject</span>
                   </button>
-                  <button className="h-10 bg-green-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-green-700">
+                  <button className="h-10 border border-amber-100 text-[#c86b4a] rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-[#f7e8e1]">
+                    <Flag size={14} />
+                    <span>Flag</span>
+                  </button>
+                  <button className="h-10 bg-[#4c7c59] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-[#3f6a4d]">
                     <CheckCircle size={14} />
                     <span>Approve</span>
                   </button>

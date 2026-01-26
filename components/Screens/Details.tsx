@@ -1,8 +1,20 @@
-
 import React, { useState } from 'react';
 import { Category, DataPoint } from '../../types';
-import { ArrowLeft, Share2, MapPin, Clock, CreditCard, ShieldCheck, Info, Navigation2, Zap, Volume2, Activity, User } from 'lucide-react';
-import { textToSpeech } from '../../lib/gemini';
+import {
+  ArrowLeft,
+  Share2,
+  MapPin,
+  Clock,
+  CreditCard,
+  ShieldCheck,
+  Info,
+  Navigation2,
+  Zap,
+  Volume2,
+  Activity,
+  User,
+  BadgeCheck
+} from 'lucide-react';
 
 interface Props {
   point: DataPoint | null;
@@ -15,39 +27,31 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
 
   if (!point) return null;
 
-  const handleSpeech = async () => {
+  const handleSpeech = () => {
     setIsSpeaking(true);
-    try {
-      const summary = `${point.name} is a ${point.type === Category.FUEL ? 'Fuel Station' : 'Mobile Money Kiosk'} located in ${point.location}. ${point.price ? `Current price is ${point.price} ${point.currency}.` : `Availability is ${point.availability}.`} It has a trust score of ${point.trustScore} percent.`;
-      await textToSpeech(summary);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSpeaking(false);
-    }
+    setTimeout(() => setIsSpeaking(false), 1200);
   };
 
   const getReliabilityColor = (reliability?: string) => {
     if (!reliability) return 'text-gray-400 bg-gray-50';
     const r = reliability.toLowerCase();
-    if (r === 'excellent' || r === 'good') return 'text-green-700 bg-green-50';
-    if (r === 'poor' || r === 'congested') return 'text-amber-700 bg-amber-50';
-    return 'text-blue-700 bg-blue-50';
+    if (r === 'excellent' || r === 'good') return 'text-[#4c7c59] bg-[#eaf3ee]';
+    if (r === 'poor' || r === 'congested') return 'text-[#b85f3f] bg-[#f7e8e1]';
+    return 'text-[#0f2b46] bg-[#e7eef4]';
   };
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
-      {/* Header */}
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-blue-600 transition-colors">
+        <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-[#0f2b46] transition-colors">
           <ArrowLeft size={20} />
         </button>
         <h3 className="text-sm font-bold truncate max-w-[200px]">{point.name}</h3>
         <div className="flex items-center space-x-1">
-          <button 
+          <button
             onClick={handleSpeech}
             disabled={isSpeaking}
-            className={`p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors ${isSpeaking ? 'animate-pulse' : ''}`}
+            className={`p-2 text-[#0f2b46] hover:bg-[#f2f4f7] rounded-xl transition-colors ${isSpeaking ? 'animate-pulse' : ''}`}
           >
             <Volume2 size={18} />
           </button>
@@ -58,69 +62,78 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Status Pills */}
         <div className="flex justify-center">
-          <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-full uppercase tracking-wider">
+          <span className="text-[10px] font-bold bg-[#e7eef4] text-[#0f2b46] px-3 py-1 rounded-full uppercase tracking-wider">
             Last Updated {point.lastUpdated}
           </span>
         </div>
 
-        {/* Map Preview Card */}
         <div className="h-44 rounded-2xl bg-gray-200 overflow-hidden relative shadow-sm border border-gray-100">
           <img src={`https://picsum.photos/seed/${point.id}/800/400?grayscale&blur=2`} className="w-full h-full object-cover opacity-50" alt="mini map" />
           <div className="absolute inset-0 flex items-center justify-center">
-             <div className="p-2 bg-blue-600 rounded-full border-2 border-white shadow-xl">
-               {point.type === Category.FUEL ? <Zap size={20} className="text-white" /> : <ShieldCheck size={20} className="text-white" />}
-             </div>
+            <div className="p-2 bg-[#0f2b46] rounded-full border-2 border-white shadow-xl">
+              {point.type === Category.FUEL ? <Zap size={20} className="text-white" /> : <ShieldCheck size={20} className="text-white" />}
+            </div>
           </div>
-          <button className="absolute bottom-3 right-3 p-2 bg-white rounded-lg shadow-md border border-gray-100 text-blue-600">
+          <button className="absolute bottom-3 right-3 p-2 bg-white rounded-xl shadow-md border border-gray-100 text-[#0f2b46]">
             <Navigation2 size={18} />
           </button>
         </div>
 
-        {/* Quick Stats Grid */}
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
             <span className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
               {point.type === Category.FUEL ? <Zap size={10} className="mr-1" /> : <CreditCard size={10} className="mr-1" />}
-              {point.type === Category.FUEL ? 'Diesel Price' : 'Availability'}
+              {point.type === Category.FUEL ? 'Fuel Price' : 'Availability'}
             </span>
             <div className="flex flex-col">
-               <span className="text-2xl font-bold text-gray-900 tracking-tight">
-                 {point.type === Category.FUEL ? `${point.price}` : point.availability}
-               </span>
-               <span className="text-[10px] text-gray-500 font-medium">
-                 {point.type === Category.FUEL ? `${point.currency}/L` : 'Real-time status'}
-               </span>
+              <span className="text-2xl font-bold text-gray-900 tracking-tight">
+                {point.type === Category.FUEL ? `${point.price}` : point.availability}
+              </span>
+              <span className="text-[10px] text-gray-500 font-medium">
+                {point.type === Category.FUEL ? `${point.currency}/L • ${point.quality}` : 'Real-time status'}
+              </span>
             </div>
             <div className="mt-2 flex items-center">
-               <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase ${point.type === Category.FUEL ? 'text-green-700 bg-green-50' : 'text-blue-700 bg-blue-50'}`}>
-                 {point.type === Category.FUEL ? '→ Stable' : 'Verified'}
-               </span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${point.type === Category.FUEL ? 'text-[#4c7c59] bg-[#eaf3ee]' : 'text-[#0f2b46] bg-[#e7eef4]'}`}>
+                {point.type === Category.FUEL ? '→ Stable' : 'Verified'}
+              </span>
             </div>
           </div>
-          
+
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
             <span className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
               <ShieldCheck size={10} className="mr-1" />
               Trust Score
             </span>
             <div className="flex flex-col">
-               <span className="text-2xl font-bold text-gray-900 tracking-tight">{point.trustScore}%</span>
-               <span className="text-[10px] text-gray-500 font-medium">Community confidence</span>
+              <span className="text-2xl font-bold text-gray-900 tracking-tight">{point.trustScore}%</span>
+              <span className="text-[10px] text-gray-500 font-medium">Community confidence</span>
             </div>
             <div className="mt-2 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-               <div className="h-full bg-blue-600 rounded-full" style={{ width: `${point.trustScore}%` }}></div>
+              <div className="h-full bg-[#0f2b46] rounded-full" style={{ width: `${point.trustScore}%` }}></div>
             </div>
           </div>
         </div>
 
-        {/* Reliability Indicator for Mobile Money */}
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <BadgeCheck className="text-[#4c7c59]" size={20} />
+              <h4 className="text-sm font-bold text-gray-900">Contributor Trust</h4>
+            </div>
+            <span className="text-sm font-bold text-[#4c7c59]">{point.contributorTrust}</span>
+          </div>
+          <p className="text-[11px] text-gray-500 leading-relaxed">
+            Weighted by recent verification accuracy and photo metadata match.
+          </p>
+        </div>
+
         {point.type === Category.MOBILE_MONEY && (
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Activity className="text-blue-600" size={20} />
+                <Activity className="text-[#0f2b46]" size={20} />
                 <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">Reliability Indicator</h4>
               </div>
               <span className={`text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wider ${getReliabilityColor(point.reliability)}`}>
@@ -136,25 +149,25 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <ShieldCheck className="text-blue-600" size={20} />
+              <ShieldCheck className="text-[#0f2b46]" size={20} />
               <h4 className="text-sm font-bold text-gray-900">Data Integrity</h4>
             </div>
-            <span className="text-sm font-bold text-blue-600">{point.trustScore}%</span>
+            <span className="text-sm font-bold text-[#0f2b46]">{point.trustScore}%</span>
           </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-600 rounded-full" style={{ width: `${point.trustScore}%` }}></div>
+            <div className="h-full bg-[#0f2b46] rounded-full" style={{ width: `${point.trustScore}%` }}></div>
           </div>
           <div className="flex items-center text-[10px] text-gray-400 font-medium leading-relaxed">
             <Info size={12} className="mr-1 shrink-0" />
-            Verified by community reputation consensus.
+            Verified with device GPS + live camera capture.
           </div>
         </div>
 
         <div className="space-y-4 pt-2">
           <h4 className="text-sm font-bold text-gray-900 px-1">Location Intelligence</h4>
-          
+
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
-            <div className="p-2 bg-gray-50 rounded-lg text-gray-400">
+            <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
               <MapPin size={18} />
             </div>
             <div className="flex flex-col">
@@ -164,7 +177,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
-            <div className="p-2 bg-gray-50 rounded-lg text-gray-400">
+            <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
               <Clock size={18} />
             </div>
             <div className="flex flex-col">
@@ -173,10 +186,20 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
             </div>
           </div>
 
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
+            <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
+              <User size={18} />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-gray-900">Queue Length</span>
+              <p className="text-xs text-gray-500 mt-0.5">{point.queueLength}</p>
+            </div>
+          </div>
+
           {point.type === Category.MOBILE_MONEY && point.merchantId && (
             <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
-              <div className="p-2 bg-gray-50 rounded-lg text-gray-400">
-                <User size={18} />
+              <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
+                <BadgeCheck size={18} />
               </div>
               <div className="flex flex-col">
                 <span className="text-xs font-bold text-gray-900">Merchant ID</span>
@@ -186,7 +209,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
           )}
 
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
-            <div className="p-2 bg-gray-50 rounded-lg text-gray-400">
+            <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
               <CreditCard size={18} />
             </div>
             <div className="flex flex-col">
@@ -204,10 +227,10 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
       <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[calc(28rem-2rem)] px-4 flex items-center space-x-2 z-40">
         <button
           onClick={onContribute}
-          className="flex-1 h-14 bg-blue-600 text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-blue-700 active:scale-95 transition-all"
+          className="flex-1 h-14 bg-[#c86b4a] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-[#b85f3f] active:scale-95 transition-all"
         >
           <Zap size={18} />
-          <span>Report Update</span>
+          <span>Add Data</span>
         </button>
         <button className="h-14 w-14 bg-gray-100 text-gray-900 rounded-xl shadow-md border border-gray-200 flex items-center justify-center hover:bg-gray-200 transition-colors">
           <Navigation2 size={20} />

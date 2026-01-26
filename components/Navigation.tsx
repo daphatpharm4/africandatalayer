@@ -1,7 +1,6 @@
-
 import React from 'react';
 import { Screen } from '../types';
-import { Map, PlusCircle, BarChart2, User, Settings } from 'lucide-react';
+import { Map, PlusCircle, BarChart2, User } from 'lucide-react';
 
 interface Props {
   currentScreen: Screen;
@@ -14,7 +13,7 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
     { id: Screen.HOME, label: 'Explore', icon: Map },
     { id: Screen.CONTRIBUTE, label: 'Contribute', icon: PlusCircle },
     { id: Screen.ANALYTICS, label: 'Impact', icon: BarChart2 },
-    { id: isAuthenticated ? Screen.PROFILE : Screen.AUTH, label: isAuthenticated ? 'Profile' : 'Sign In', icon: User },
+    { id: isAuthenticated ? Screen.PROFILE : Screen.AUTH, label: isAuthenticated ? 'Profile' : 'Sign In', icon: User }
   ];
 
   return (
@@ -27,7 +26,7 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
             key={item.id}
             onClick={() => onNavigate(item.id)}
             className={`flex flex-col items-center justify-center space-y-1 w-full transition-colors ${
-              isActive ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'
+              isActive ? 'text-[#0f2b46]' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
             <Icon size={20} />
