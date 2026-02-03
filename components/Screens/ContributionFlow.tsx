@@ -139,11 +139,14 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
     if (lower.includes('photo location does not match ip location')) {
       return "We couldn't verify your location from your network. Try switching Wi-Fi/data and retake the photo on site.";
     }
+    if (lower.includes('device location does not match ip location')) {
+      return "We couldn't verify your device location from your network. Try switching Wi-Fi/data and retry.";
+    }
     if (lower.includes('photo gps coordinates do not match submission location')) {
       return "Photo GPS doesn't match the submitted location. Retake the photo at the site or update the coordinates.";
     }
     if (lower.includes('photo is missing gps metadata')) {
-      return 'Your photo has no GPS metadata. Enable location for the camera and retake the photo.';
+      return 'Your photo has no GPS metadata. On iPhone, allow Location for Safari and Camera, then retake.';
     }
     if (lower.includes('unable to read photo gps metadata')) {
       return "We couldn't read GPS from the photo. Please retake the photo.";

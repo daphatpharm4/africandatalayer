@@ -187,26 +187,45 @@ export async function POST(request: Request): Promise<Response> {
       const gps = await exifr.gps(imageBuffer);
       const latitude = gps?.latitude;
       const longitude = gps?.longitude;
-      if (!latitude || !longitude) {
-        return errorResponse("Photo is missing GPS metadata", 400);
-      }
-      photoLocation = { latitude, longitude };
+      if (latitude && longitude) {
+        photoLocation = { latitude, longitude };
 
-      if (location) {
-        const distance = haversineKm(location, photoLocation);
-        if (distance > 1) {
-          return errorResponse("Photo GPS coordinates do not match submission location", 400);
+        if (location) {
+          const distance = haversineKm(location, photoLocation);
+          if (distance > 1) {
+            return errorResponse("Photo GPS coordinates do not match submission location", 400);
+          }
         }
-      }
 
-      if (ipLocation) {
-        const distance = haversineKm(ipLocation, photoLocation);
-        if (distance > IP_PHOTO_MATCH_KM) {
-          return errorResponse("Photo location does not match IP location", 400);
+        if (ipLocation) {
+          const distance = haversineKm(ipLocation, photoLocation);
+          if (distance > IP_PHOTO_MATCH_KM) {
+            return errorResponse("Photo location does not match IP location", 400);
+          }
+        }
+      } else {
+        // iOS Safari capture can strip EXIF GPS metadata even with location enabled.
+        // Fall back to browser GPS/IP checks instead of hard-failing on metadata absence.
+        if (!location && !ipLocation) {
+          return errorResponse("Photo is missing GPS metadata", 400);
+        }
+        if (location && ipLocation) {
+          const distance = haversineKm(location, ipLocation);
+          if (distance > IP_PHOTO_MATCH_KM) {
+            return errorResponse("Device location does not match IP location", 400);
+          }
         }
       }
     } catch (error) {
-      return errorResponse("Unable to read photo GPS metadata", 400);
+      if (!location && !ipLocation) {
+        return errorResponse("Unable to read photo GPS metadata", 400);
+      }
+      if (location && ipLocation) {
+        const distance = haversineKm(location, ipLocation);
+        if (distance > IP_PHOTO_MATCH_KM) {
+          return errorResponse("Device location does not match IP location", 400);
+        }
+      }
     }
 
     newSubmission.photoUrl = imageBase64;
