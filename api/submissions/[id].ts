@@ -3,6 +3,17 @@ import { getSubmissions, setSubmissions } from "../../lib/edgeConfig.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import type { Submission } from "../../shared/types.js";
 
+const INLINE_PHOTO_PREFIX = "data:image/";
+
+function stripInlinePhotoData(submission: Submission): Submission {
+  if (typeof submission.photoUrl !== "string" || !submission.photoUrl.startsWith(INLINE_PHOTO_PREFIX)) {
+    return submission;
+  }
+  const { photoUrl: _photoUrl, ...rest } = submission;
+  const details = { ...(submission.details ?? {}), hasPhoto: true };
+  return { ...rest, details };
+}
+
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
@@ -12,7 +23,7 @@ export async function GET(request: Request): Promise<Response> {
 
   if (!id) return errorResponse("Missing submission id", 400);
 
-  const submissions = await getSubmissions();
+  const submissions = (await getSubmissions()).map(stripInlinePhotoData);
   const submission = submissions.find((item) => item.id === id);
   if (!submission) return errorResponse("Submission not found", 404);
 
@@ -35,7 +46,7 @@ export async function PUT(request: Request): Promise<Response> {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  const submissions = await getSubmissions();
+  const submissions = (await getSubmissions()).map(stripInlinePhotoData);
   const submission = submissions.find((item) => item.id === id);
   if (!submission) return errorResponse("Submission not found", 404);
 

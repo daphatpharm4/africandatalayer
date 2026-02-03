@@ -6,6 +6,7 @@ import type { Submission, SubmissionCategory, SubmissionLocation } from "../../s
 
 const allowedCategories: SubmissionCategory[] = ["fuel_station", "mobile_money"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
+const INLINE_PHOTO_PREFIX = "data:image/";
 
 function parseLocation(input: unknown): SubmissionLocation | null {
   if (!input || typeof input !== "object") return null;
@@ -40,6 +41,17 @@ function haversineKm(a: SubmissionLocation, b: SubmissionLocation): number {
 function stripBase64Prefix(imageBase64: string): string {
   const commaIndex = imageBase64.indexOf(",");
   return commaIndex === -1 ? imageBase64 : imageBase64.slice(commaIndex + 1);
+}
+
+function isInlinePhotoData(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith(INLINE_PHOTO_PREFIX);
+}
+
+function stripInlinePhotoData(submission: Submission): Submission {
+  if (!isInlinePhotoData(submission.photoUrl)) return submission;
+  const { photoUrl: _photoUrl, ...rest } = submission;
+  const details = { ...(submission.details ?? {}), hasPhoto: true };
+  return { ...rest, details };
 }
 
 function normalizeIp(raw: string | null): string | null {
@@ -101,7 +113,7 @@ export async function GET(request: Request): Promise<Response> {
   const lng = url.searchParams.get("lng");
   const radius = url.searchParams.get("radius");
 
-  let submissions = await getSubmissions();
+  let submissions = (await getSubmissions()).map(stripInlinePhotoData);
 
   if (lat && lng && radius) {
     const latitude = Number(lat);
@@ -177,6 +189,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!imageBase64) {
     return errorResponse("Photo is required", 400);
   }
+  rawDetails.hasPhoto = true;
 
   let photoLocation: SubmissionLocation | null = null;
   if (imageBase64) {
@@ -228,7 +241,6 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
-    newSubmission.photoUrl = imageBase64;
   }
 
   if (photoLocation) {
@@ -241,8 +253,9 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse("Missing or invalid location", 400);
   }
 
-  const submissions = await getSubmissions();
-  submissions.push(newSubmission);
+  const submissions = (await getSubmissions()).map(stripInlinePhotoData);
+  const storedSubmission = stripInlinePhotoData(newSubmission);
+  submissions.push(storedSubmission);
   await setSubmissions(submissions);
 
   const profile = await getUserProfile(auth.id);
@@ -251,5 +264,5 @@ export async function POST(request: Request): Promise<Response> {
     await setUserProfile(auth.id, profile);
   }
 
-  return jsonResponse(newSubmission, { status: 201 });
+  return jsonResponse(storedSubmission, { status: 201 });
 }
