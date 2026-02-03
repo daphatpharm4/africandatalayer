@@ -97,7 +97,7 @@ const Splash: React.FC<Props> = ({ onStart }) => {
               className="w-full h-14 bg-[#c86b4a] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-[#b85f3f] transition-all"
             >
               <Globe size={16} />
-              <span>Create Account</span>
+              <span>Sign In</span>
             </button>
           </div>
         )}

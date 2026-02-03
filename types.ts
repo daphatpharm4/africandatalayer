@@ -22,7 +22,12 @@ export interface DataPoint {
   name: string;
   type: Category;
   location: string;
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
   price?: number;
+  fuelType?: string;
   currency?: string;
   quality?: string;
   lastUpdated: string;
@@ -35,6 +40,7 @@ export interface DataPoint {
   hours?: string;
   paymentMethods?: string[];
   reliability?: string;
+  photoUrl?: string;
   verified?: boolean;
 }
 

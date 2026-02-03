@@ -20,9 +20,11 @@ interface Props {
   point: DataPoint | null;
   onBack: () => void;
   onContribute: () => void;
+  isAuthenticated: boolean;
+  onAuth: () => void;
 }
 
-const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
+const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated, onAuth }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   if (!point) return null;
@@ -39,6 +41,12 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
     if (r === 'poor' || r === 'congested') return 'text-[#b85f3f] bg-[#f7e8e1]';
     return 'text-[#0f2b46] bg-[#e7eef4]';
   };
+
+  const hasUserPhoto = Boolean(point.photoUrl);
+  const heroImage = point.photoUrl || `https://picsum.photos/seed/${point.id}/800/400?grayscale&blur=2`;
+  const fuelSubtitle = [point.currency ? `${point.currency}/L` : null, point.fuelType ? `Type: ${point.fuelType}` : null, point.quality ?? null]
+    .filter(Boolean)
+    .join(' • ');
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
@@ -69,7 +77,10 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
         </div>
 
         <div className="h-44 rounded-2xl bg-gray-200 overflow-hidden relative shadow-sm border border-gray-100">
-          <img src={`https://picsum.photos/seed/${point.id}/800/400?grayscale&blur=2`} className="w-full h-full object-cover opacity-50" alt="mini map" />
+          <img src={heroImage} className={`w-full h-full object-cover ${hasUserPhoto ? '' : 'opacity-50'}`} alt={hasUserPhoto ? 'User submitted station photo' : 'Fallback location image'} />
+          <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur rounded-xl text-[8px] font-bold text-white uppercase tracking-widest">
+            {hasUserPhoto ? 'User Photo' : 'Demo Image'}
+          </div>
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="p-2 bg-[#0f2b46] rounded-full border-2 border-white shadow-xl">
               {point.type === Category.FUEL ? <Zap size={20} className="text-white" /> : <ShieldCheck size={20} className="text-white" />}
@@ -88,15 +99,15 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
             </span>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900 tracking-tight">
-                {point.type === Category.FUEL ? `${point.price}` : point.availability}
+                {point.type === Category.FUEL ? (typeof point.price === 'number' ? `${point.price}` : '--') : point.availability}
               </span>
               <span className="text-[10px] text-gray-500 font-medium">
-                {point.type === Category.FUEL ? `${point.currency}/L • ${point.quality}` : 'Real-time status'}
+                {point.type === Category.FUEL ? fuelSubtitle || 'Price details unavailable' : 'Real-time status'}
               </span>
             </div>
             <div className="mt-2 flex items-center">
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${point.type === Category.FUEL ? 'text-[#4c7c59] bg-[#eaf3ee]' : 'text-[#0f2b46] bg-[#e7eef4]'}`}>
-                {point.type === Category.FUEL ? '→ Stable' : 'Verified'}
+                {point.type === Category.FUEL ? (point.fuelType || 'Fuel') : 'Verified'}
               </span>
             </div>
           </div>
@@ -196,6 +207,18 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
             </div>
           </div>
 
+          {point.type === Category.FUEL && point.fuelType && (
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
+              <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
+                <Zap size={18} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-gray-900">Fuel Type</span>
+                <p className="text-xs text-gray-500 mt-0.5">{point.fuelType}</p>
+              </div>
+            </div>
+          )}
+
           {point.type === Category.MOBILE_MONEY && point.merchantId && (
             <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
               <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
@@ -226,11 +249,11 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute }) => {
 
       <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[calc(28rem-2rem)] px-4 flex items-center space-x-2 z-40">
         <button
-          onClick={onContribute}
+          onClick={isAuthenticated ? onContribute : onAuth}
           className="flex-1 h-14 bg-[#c86b4a] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-[#b85f3f] active:scale-95 transition-all"
         >
           <Zap size={18} />
-          <span>Add Data</span>
+          <span>{isAuthenticated ? 'Add Data' : 'Sign In to Add Data'}</span>
         </button>
         <button className="h-14 w-14 bg-gray-100 text-gray-900 rounded-xl shadow-md border border-gray-200 flex items-center justify-center hover:bg-gray-200 transition-colors">
           <Navigation2 size={20} />

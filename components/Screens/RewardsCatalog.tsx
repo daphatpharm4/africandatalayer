@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Smartphone, Fuel, Gift, Award, CheckCircle } from 'lucide-react';
+import { apiJson } from '../../lib/client/api';
+import type { UserProfile } from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -8,6 +10,8 @@ interface Props {
 const RewardsCatalog: React.FC<Props> = ({ onBack }) => {
   const [selectedReward, setSelectedReward] = useState<number | null>(null);
   const [redeemed, setRedeemed] = useState(false);
+  const [xpBalance, setXpBalance] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const rewards = [
     { id: 1, name: 'Mobile credit (5,000 FCFA)', cost: '5,000 XP', stock: 'In Stock', icon: <Smartphone />, category: 'Mobile credit' },
@@ -17,6 +21,21 @@ const RewardsCatalog: React.FC<Props> = ({ onBack }) => {
   ];
 
   const activeReward = rewards.find((reward) => reward.id === selectedReward);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        setIsLoading(true);
+        const data = await apiJson<UserProfile>('/api/user');
+        setXpBalance(typeof data?.XP === 'number' ? data.XP : 0);
+      } catch {
+        setXpBalance(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProfile();
+  }, []);
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
@@ -32,7 +51,13 @@ const RewardsCatalog: React.FC<Props> = ({ onBack }) => {
         <div className="bg-[#0f2b46] p-6 rounded-2xl text-white shadow-xl flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">Your Balance</span>
-            <div className="text-3xl font-bold">45,000 <span className="text-sm font-medium opacity-60">XP</span></div>
+            {isLoading ? (
+              <div className="h-8 w-28 rounded-lg bg-white/20 animate-pulse"></div>
+            ) : (
+              <div className="text-3xl font-bold">
+                {xpBalance?.toLocaleString?.() ?? '0'} <span className="text-sm font-medium opacity-60">XP</span>
+              </div>
+            )}
           </div>
           <div className="p-3 bg-white/20 rounded-2xl"><Award size={24} /></div>
         </div>

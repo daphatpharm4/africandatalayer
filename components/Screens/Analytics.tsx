@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
@@ -18,10 +18,12 @@ import {
   PieChart,
   Pie
 } from 'recharts';
+import { getSession } from '../../lib/client/auth';
 
 interface Props {
   onBack: () => void;
   onAdmin?: () => void;
+  isAdmin?: boolean;
 }
 
 const CITY_DATA = [
@@ -44,44 +46,69 @@ const HEATMAP = [
   ['Low', 'Medium', 'High', 'Medium']
 ];
 
-const Analytics: React.FC<Props> = ({ onBack, onAdmin }) => {
+const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin }) => {
+  const adminMode = Boolean(isAdmin);
+  const [adminName, setAdminName] = useState<string | null>(null);
+  const [adminEmail, setAdminEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!adminMode) return;
+    const loadSession = async () => {
+      const session = await getSession();
+      setAdminName(session?.user?.name ?? null);
+      setAdminEmail(session?.user?.email ?? null);
+    };
+    loadSession();
+  }, [adminMode]);
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
         <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-[#0f2b46] transition-colors">
           <ArrowLeft size={20} />
         </button>
-        <h3 className="text-sm font-bold mx-auto">Investor Analytics</h3>
+        <h3 className="text-sm font-bold mx-auto">{adminMode ? 'Investor Analytics' : 'Leaderboard'}</h3>
         <button className="p-2 text-gray-400 absolute right-2">
           <Share2 size={20} />
         </button>
       </div>
 
       <div className="p-4 space-y-6">
-        <div className="flex items-center justify-between py-2">
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 rounded-full border-2 border-white shadow bg-[#e7eef4] overflow-hidden">
-              <img src="https://picsum.photos/seed/kofi/300/300" alt="avatar" className="w-full h-full object-cover" />
-            </div>
-            <div className="flex flex-col">
-              <h4 className="font-bold text-gray-900 text-sm">Kofi Mensah</h4>
-              <div className="flex items-center space-x-1.5">
-                <ShieldCheck size={12} className="text-[#4c7c59]" />
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Senior Contributor</span>
+        {adminMode ? (
+          <div className="flex items-center justify-between py-2">
+            <div className="flex items-center space-x-3">
+              <div className="w-12 h-12 rounded-full border-2 border-white shadow bg-[#e7eef4] overflow-hidden">
+                <img src="https://picsum.photos/seed/kofi/300/300" alt="avatar" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex flex-col">
+                <h4 className="font-bold text-gray-900 text-sm">
+                  {adminName || adminEmail || 'Admin'}
+                </h4>
+                <div className="flex items-center space-x-1.5">
+                  <ShieldCheck size={12} className="text-[#4c7c59]" />
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Senior Contributor</span>
+                </div>
               </div>
             </div>
+            {onAdmin && (
+              <button
+                onClick={onAdmin}
+                className="px-3 py-1.5 bg-[#1f2933] text-white text-[10px] font-bold uppercase rounded-xl tracking-wider hover:bg-black transition-colors shadow-sm"
+              >
+                Admin
+              </button>
+            )}
           </div>
-          {onAdmin && (
-            <button
-              onClick={onAdmin}
-              className="px-3 py-1.5 bg-[#1f2933] text-white text-[10px] font-bold uppercase rounded-xl tracking-wider hover:bg-black transition-colors shadow-sm"
-            >
-              Admin
-            </button>
-          )}
-        </div>
+        ) : (
+          <div className="flex items-center justify-between py-2">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Leaderboard</span>
+              <span className="text-sm font-semibold text-gray-900">Top contributors near you</span>
+            </div>
+          </div>
+        )}
 
-        <div className="grid grid-cols-2 gap-4">
+        {adminMode && (
+          <div className="grid grid-cols-2 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-2">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">% Approved</span>
             <div className="flex items-baseline space-x-1">
@@ -97,8 +124,10 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin }) => {
             </div>
           </div>
         </div>
+        )}
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        {adminMode && (
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <BarChart3 size={16} className="text-[#0f2b46]" />
@@ -121,8 +150,10 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin }) => {
             </ResponsiveContainer>
           </div>
         </div>
+        )}
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        {adminMode && (
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Medal size={16} className="text-[#4c7c59]" />
@@ -143,8 +174,10 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin }) => {
             </ResponsiveContainer>
           </div>
         </div>
+        )}
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        {adminMode && (
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <ThermometerSun size={16} className="text-[#c86b4a]" />
@@ -169,14 +202,17 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin }) => {
             )}
           </div>
         </div>
+        )}
 
         <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Medal size={16} className="text-[#0f2b46]" />
-              <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">Top Contributor Leaderboard</span>
+              <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">
+                {adminMode ? 'Top Contributor Leaderboard' : 'Top Contributors Near You'}
+              </span>
             </div>
-            <span className="text-[10px] font-bold text-gray-400 uppercase">Monthly</span>
+            <span className="text-[10px] font-bold text-gray-400 uppercase">{adminMode ? 'Monthly' : 'Local'}</span>
           </div>
           <div className="space-y-3">
             {[
@@ -195,12 +231,14 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin }) => {
           </div>
         </div>
 
-        <div className="bg-[#f9fafb] p-6 rounded-2xl border-2 border-dashed border-gray-200 text-center space-y-3">
+        {adminMode && (
+          <div className="bg-[#f9fafb] p-6 rounded-2xl border-2 border-dashed border-gray-200 text-center space-y-3">
           <p className="text-[10px] font-bold text-[#0f2b46] uppercase tracking-widest">API Monetization Ready</p>
           <p className="text-xs text-gray-500">
             Tiered access for municipalities, NGOs, and logistics providers with real-time SLAs.
           </p>
         </div>
+        )}
 
         <div className="h-24"></div>
       </div>

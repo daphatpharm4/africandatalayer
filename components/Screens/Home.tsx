@@ -1,5 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import L from 'leaflet';
 import { Category, DataPoint } from '../../types';
+import type { Submission } from '../../shared/types';
 import {
   Fuel,
   Landmark,
@@ -7,16 +10,18 @@ import {
   Map as MapIcon,
   MapPin,
   Plus,
-  Search,
   ShieldCheck,
   User
 } from 'lucide-react';
+import { apiJson } from '../../lib/client/api';
 
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
   isAuthenticated: boolean;
+  isAdmin?: boolean;
   onAuth: () => void;
   onContribute: () => void;
+  onProfile: () => void;
 }
 
 const MOCK_POINTS: DataPoint[] = [
@@ -25,7 +30,9 @@ const MOCK_POINTS: DataPoint[] = [
     name: 'Total Akwa',
     type: Category.FUEL,
     location: 'Gare des Grands Bus, Akwa, Douala',
+    coordinates: { latitude: 4.0516, longitude: 9.7072 },
     price: 840,
+    fuelType: 'Super',
     quality: 'Premium',
     currency: 'XAF',
     lastUpdated: '12 mins ago',
@@ -42,6 +49,7 @@ const MOCK_POINTS: DataPoint[] = [
     name: 'MTN Mobile Money - Bonapriso',
     type: Category.MOBILE_MONEY,
     location: 'Rue des Ecoles, Bonapriso, Douala',
+    coordinates: { latitude: 4.0345, longitude: 9.7003 },
     lastUpdated: '42 mins ago',
     availability: 'High',
     queueLength: 'Moderate',
@@ -57,7 +65,9 @@ const MOCK_POINTS: DataPoint[] = [
     name: 'Tradex Gare des Grands Bus',
     type: Category.FUEL,
     location: 'Akwa, Douala',
+    coordinates: { latitude: 4.0582, longitude: 9.7136 },
     price: 828,
+    fuelType: 'Diesel',
     quality: 'Standard',
     currency: 'XAF',
     lastUpdated: '42 mins ago',
@@ -73,6 +83,7 @@ const MOCK_POINTS: DataPoint[] = [
     name: 'Orange Money Kiosk',
     type: Category.MOBILE_MONEY,
     location: 'Marché Deido, Douala',
+    coordinates: { latitude: 4.0735, longitude: 9.7321 },
     lastUpdated: '3h ago',
     availability: 'Low',
     queueLength: 'Long',
@@ -84,42 +95,136 @@ const MOCK_POINTS: DataPoint[] = [
   }
 ];
 
-const MARKER_POSITIONS: Record<string, { top: string; left: string }> = {
-  '1': { top: '22%', left: '32%' },
-  '2': { top: '52%', left: '58%' },
-  '3': { top: '28%', left: '45%' },
-  '4': { top: '42%', left: '18%' }
-};
+const DOUALA_CENTER = { latitude: 4.0511, longitude: 9.7679 };
 
-const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, onAuth, onContribute }) => {
+const createMarkerIcon = (color: string) =>
+  L.divIcon({
+    className: '',
+    html: `<div style="width:26px;height:26px;border-radius:9999px;background:${color};border:2px solid #ffffff;box-shadow:0 8px 16px rgba(15,43,70,0.35);display:flex;align-items:center;justify-content:center;"></div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13]
+  });
+
+const fuelIcon = createMarkerIcon('#0f2b46');
+const kioskIcon = createMarkerIcon('#1f2933');
+
+const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth, onContribute, onProfile }) => {
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [activeCategory, setActiveCategory] = useState<Category | 'ALL'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [groundingResults, setGroundingResults] = useState<string[]>([]);
-  const [activeMarkerId, setActiveMarkerId] = useState<string | null>(null);
+  const [points, setPoints] = useState<DataPoint[]>(MOCK_POINTS);
+  const [isLoadingPoints, setIsLoadingPoints] = useState(true);
+
+  const formatTimeAgo = (iso: string) => {
+    const created = new Date(iso).getTime();
+    if (Number.isNaN(created)) return 'Unknown';
+    const diffMs = Date.now() - created;
+    const minutes = Math.max(1, Math.round(diffMs / 60000));
+    if (minutes < 60) return `${minutes} mins ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    return `${days}d ago`;
+  };
+
+  const mapAvailability = (raw?: string): 'High' | 'Low' | 'Out' => {
+    if (!raw) return 'High';
+    const normalized = raw.toLowerCase();
+    if (normalized.includes('out')) return 'Out';
+    if (normalized.includes('limited') || normalized.includes('low')) return 'Low';
+    return 'High';
+  };
+
+  const parsePrice = (value: unknown): number | undefined => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return undefined;
+  };
+
+  const mapSubmissionToPoint = (submission: Submission): DataPoint => {
+    const isFuel = submission.category === 'fuel_station';
+    const details = (submission.details ?? {}) as Record<string, unknown>;
+    const coords = submission.location;
+    const name =
+      (details.siteName as string | undefined) ??
+      (isFuel ? 'Fuel Station' : 'Money Kiosk');
+    const availability = isFuel ? 'High' : mapAvailability(details.availability as string | undefined);
+    const paymentModes = Array.isArray(details.paymentModes) ? (details.paymentModes as string[]) : undefined;
+    const fuelPrice = parsePrice(details.fuelPrice ?? details.price);
+    const fuelType = typeof details.fuelType === 'string' ? details.fuelType : undefined;
+
+    return {
+      id: submission.id,
+      name,
+      type: isFuel ? Category.FUEL : Category.MOBILE_MONEY,
+      location: coords
+        ? `GPS: ${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°`
+        : 'Location unavailable',
+      coordinates: coords ? { latitude: coords.latitude, longitude: coords.longitude } : undefined,
+      price: fuelPrice,
+      fuelType,
+      currency: 'XAF',
+      quality: typeof details.quality === 'string' ? details.quality : undefined,
+      lastUpdated: formatTimeAgo(submission.createdAt),
+      availability,
+      queueLength: typeof details.queueLength === 'string' ? details.queueLength : undefined,
+      trustScore: 85,
+      contributorTrust: 'Silver',
+      provider: typeof details.provider === 'string' ? details.provider : undefined,
+      merchantId: typeof details.merchantId === 'string' ? details.merchantId : undefined,
+      hours: typeof details.hours === 'string' ? details.hours : undefined,
+      paymentMethods: paymentModes,
+      reliability: typeof details.reliability === 'string' ? details.reliability : undefined,
+      photoUrl: typeof submission.photoUrl === 'string' ? submission.photoUrl : undefined,
+      verified: true
+    };
+  };
+
+  useEffect(() => {
+    const loadPoints = async () => {
+      try {
+        setIsLoadingPoints(true);
+        const data = await apiJson<Submission[]>('/api/submissions');
+        if (Array.isArray(data)) {
+          setPoints(data.map(mapSubmissionToPoint));
+        }
+      } catch {
+        setPoints(MOCK_POINTS);
+      } finally {
+        setIsLoadingPoints(false);
+      }
+    };
+    loadPoints();
+  }, []);
 
   const filteredPoints = useMemo(() => {
-    if (activeCategory === 'ALL') return MOCK_POINTS;
-    return MOCK_POINTS.filter(p => p.type === activeCategory);
-  }, [activeCategory]);
-
-  const handleSmartSearch = () => {
-    if (!searchQuery.trim()) return;
-    setGroundingResults([
-      `Top result: ${searchQuery} • Bonanjo (verified 2h ago)`,
-      `Nearby match: ${searchQuery} • Akwa (verified 30m ago)`
-    ]);
-  };
+    const source = points;
+    if (activeCategory === 'ALL') return source;
+    return source.filter(p => p.type === activeCategory);
+  }, [activeCategory, points]);
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb]">
       <header className="px-4 pt-4 pb-3 bg-white border-b border-gray-100 shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
-            <h2 className="text-lg font-bold text-[#1f2933] leading-tight">African Data Layer</h2>
+            <div className="flex items-center space-x-2">
+              <h2 className="text-lg font-bold text-[#1f2933] leading-tight">African Data Layer</h2>
+              {isAdmin && (
+                <span className="px-2 py-0.5 rounded-full bg-[#e7eef4] text-[#0f2b46] text-[9px] font-bold uppercase tracking-widest">
+                  Admin
+                </span>
+              )}
+            </div>
             <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">GPS Centered • Douala, Cameroon</span>
           </div>
-          <button onClick={onAuth} className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 border border-gray-100">
+          <button
+            onClick={isAuthenticated ? onProfile : onAuth}
+            className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 border border-gray-100"
+            aria-label={isAuthenticated ? 'Profile' : 'Sign in'}
+          >
             <User size={18} />
           </button>
         </div>
@@ -127,26 +232,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, onAuth, onContr
         <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-[#4c7c59] mb-3">
           <ShieldCheck size={12} />
           <span>Offline-first sync ready</span>
-        </div>
-
-        <div className="relative mb-4 group">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0f2b46]">
-            <Search size={16} />
-          </div>
-          <input
-            type="text"
-            placeholder="Search neighborhoods or landmarks..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSmartSearch()}
-            className="w-full h-10 pl-10 pr-12 bg-gray-50 border border-gray-100 rounded-xl text-xs focus:bg-white focus:border-[#0f2b46] focus:outline-none transition-all"
-          />
-          <button
-            onClick={handleSmartSearch}
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-xl transition-colors text-[#0f2b46] hover:bg-[#f2f4f7]"
-          >
-            <Search size={16} />
-          </button>
         </div>
 
         <div className="flex p-1 bg-gray-100 rounded-xl mb-2">
@@ -172,27 +257,52 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, onAuth, onContr
       </header>
 
       <div className="flex-1 relative overflow-hidden flex flex-col">
-        {groundingResults.length > 0 && (
-          <div className="absolute top-0 inset-x-0 z-30 p-4 space-y-2 bg-white/95 border-b border-gray-100 shadow-lg animate-in fade-in slide-in-from-top-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-[#0f2b46] uppercase tracking-widest">Smart Search Results</span>
-              <button onClick={() => setGroundingResults([])} className="text-[10px] text-gray-400 font-bold uppercase">Clear</button>
-            </div>
-            {groundingResults.map((result, i) => (
-              <div key={i} className="flex items-center justify-between p-2 bg-[#f2f4f7] rounded-xl border border-gray-100">
-                <span className="text-xs font-semibold text-gray-900 truncate pr-4">{result}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
         {viewMode === 'map' ? (
-          <div className="flex-1 bg-[#e7eef4] relative overflow-hidden" onClick={() => setActiveMarkerId(null)}>
-            <img
-              src="https://picsum.photos/seed/douala-map/1200/1800"
-              className="absolute inset-0 w-full h-full object-cover opacity-40 grayscale"
-              alt="map placeholder"
-            />
+          <div className="flex-1 bg-[#e7eef4] relative overflow-hidden">
+            <MapContainer
+              center={[DOUALA_CENTER.latitude, DOUALA_CENTER.longitude]}
+              zoom={13}
+              scrollWheelZoom
+              className="absolute inset-0 h-full w-full"
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {filteredPoints
+                .filter((point) => point.coordinates)
+                .map((point) => {
+                  const position = point.coordinates!;
+                  return (
+                    <Marker
+                      key={point.id}
+                      position={[position.latitude, position.longitude]}
+                      icon={point.type === Category.FUEL ? fuelIcon : kioskIcon}
+                    >
+                      <Popup>
+                        <div className="space-y-1">
+                          <span className="text-[9px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                            {point.type === Category.FUEL ? 'Fuel Station' : 'Money Kiosk'}
+                          </span>
+                          <p className="text-sm font-semibold text-gray-900">{point.name}</p>
+                          <p className="text-[10px] text-gray-500">{point.location}</p>
+                          {point.type === Category.FUEL && (
+                            <p className="text-[10px] text-gray-600">
+                              {(point.fuelType ?? 'Fuel')} • {typeof point.price === 'number' ? `${point.price} XAF/L` : 'Price unavailable'}
+                            </p>
+                          )}
+                          <button
+                            className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
+                            onClick={() => onSelectPoint(point)}
+                          >
+                            View Details
+                          </button>
+                        </div>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+            </MapContainer>
             <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
@@ -201,74 +311,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, onAuth, onContr
                 </div>
                 <div className="w-2 h-2 rounded-full bg-[#4c7c59] animate-pulse"></div>
               </div>
-            </div>
-            <div className="absolute inset-0">
-              {filteredPoints.map(point => {
-                const pos = MARKER_POSITIONS[point.id] || { top: '50%', left: '50%' };
-                const isActive = activeMarkerId === point.id;
-
-                return (
-                  <div
-                    key={point.id}
-                    className="absolute transition-transform duration-300 z-10"
-                    style={{ top: pos.top, left: pos.left }}
-                  >
-                    {isActive && (
-                      <div
-                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelectPoint(point);
-                        }}
-                      >
-                        <div className="p-3 space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[8px] font-bold text-[#0f2b46] uppercase tracking-widest">
-                              {point.type === Category.FUEL ? 'Fuel Station' : 'Money Kiosk'}
-                            </span>
-                            <span className="text-[8px] font-bold text-[#4c7c59]">{point.trustScore}%</span>
-                          </div>
-                          <h4 className="text-[11px] font-bold text-gray-900 truncate">{point.name}</h4>
-                          <p className="text-[9px] text-gray-400 truncate flex items-center">
-                            <MapPin size={8} className="mr-0.5" /> {point.location}
-                          </p>
-                          <div className="text-[9px] text-gray-500 space-y-0.5">
-                            <p>
-                              {point.type === Category.FUEL ? `Price: ${point.price} ${point.currency} • ${point.quality}` : `Availability: ${point.availability}`}
-                            </p>
-                            <p>Queue: {point.queueLength} • Updated {point.lastUpdated}</p>
-                            <p>Contributor: {point.contributorTrust} trust</p>
-                          </div>
-                        </div>
-                        <div className="bg-[#0f2b46] py-1.5 text-center">
-                          <span className="text-[8px] font-bold text-white uppercase tracking-widest">View Details</span>
-                        </div>
-                        <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white"></div>
-                      </div>
-                    )}
-
-                    <div
-                      className={`p-2.5 rounded-full border-2 border-white shadow-xl cursor-pointer transition-all active:scale-90 ${
-                        isActive
-                          ? 'bg-[#0f2b46] scale-125 z-20'
-                          : point.type === Category.FUEL
-                          ? 'bg-[#0f2b46]/80 hover:bg-[#0f2b46]'
-                          : 'bg-[#1f2933]/80 hover:bg-[#1f2933]'
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMarkerId(isActive ? null : point.id);
-                      }}
-                    >
-                      {point.type === Category.FUEL ? (
-                        <Fuel size={14} className="text-white" />
-                      ) : (
-                        <Landmark size={14} className="text-white" />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
         ) : (
@@ -285,9 +327,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, onAuth, onContr
                 <div className="flex-1">
                   <div className="flex justify-between items-start">
                     <h4 className="font-semibold text-gray-900 text-sm">{point.name}</h4>
-                    {point.price && <span className="font-bold text-gray-900 text-sm">{point.price} {point.currency}</span>}
+                    {typeof point.price === 'number' && <span className="font-bold text-gray-900 text-sm">{point.price} {point.currency}</span>}
                   </div>
                   <p className="text-xs text-gray-500 truncate mt-1">{point.location}</p>
+                  {point.type === Category.FUEL && point.fuelType && (
+                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">Fuel: {point.fuelType}</p>
+                  )}
                   <div className="flex items-center space-x-2 mt-2">
                     <span className="text-[10px] font-medium text-gray-400 uppercase">Updated {point.lastUpdated}</span>
                     {point.verified && (
@@ -310,8 +355,9 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, onAuth, onContr
         </button>
 
         <button
-          onClick={onContribute}
+          onClick={isAuthenticated ? onContribute : onAuth}
           className="fixed bottom-24 right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
+          aria-label={isAuthenticated ? 'Contribute' : 'Sign in to contribute'}
         >
           <Plus size={22} />
         </button>

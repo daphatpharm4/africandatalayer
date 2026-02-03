@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   Award,
@@ -9,6 +9,8 @@ import {
   Settings as SettingsIcon,
   Wallet
 } from 'lucide-react';
+import { apiJson } from '../../lib/client/api';
+import type { UserProfile } from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -17,6 +19,27 @@ interface Props {
 }
 
 const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        setIsLoading(true);
+        setLoadError('');
+        const data = await apiJson<UserProfile>('/api/user');
+        setProfile(data);
+      } catch {
+        setProfile(null);
+        setLoadError('Unable to load profile.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProfile();
+  }, []);
+
   const history = [
     { date: 'Today • 11:14', location: 'Akwa, Douala', type: 'Fuel Price', xp: 5 },
     { date: 'Yesterday • 17:40', location: 'Bonapriso, Douala', type: 'Kiosk Availability', xp: 15 },
@@ -45,11 +68,24 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
               <BadgeCheck size={14} className="text-white" />
             </div>
           </div>
-          <h2 className="text-xl font-bold text-gray-900">Jean-Paul Eto'o</h2>
-          <div className="flex items-center justify-center text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-widest space-x-2">
-            <MapPin size={12} />
-            <span>Douala, Cameroon</span>
-          </div>
+          <h2 className="text-xl font-bold text-gray-900">
+            {isLoading ? (
+              <span className="inline-block h-4 w-40 rounded-full bg-gray-200 animate-pulse"></span>
+            ) : (
+              profile?.name || profile?.email || 'Contributor'
+            )}
+          </h2>
+          {!isLoading && (
+            <div className="flex items-center justify-center text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-widest space-x-2">
+              <MapPin size={12} />
+              <span>Location not set</span>
+            </div>
+          )}
+          {loadError && (
+            <div className="mt-2 text-[10px] font-bold uppercase tracking-widest text-red-500">
+              {loadError}
+            </div>
+          )}
           <div className="mt-4">
             <span className="px-4 py-1.5 bg-[#e7eef4] text-[#0f2b46] text-[10px] font-bold rounded-full uppercase tracking-widest border border-[#d5e1eb] shadow-sm">
               Senior Contributor
@@ -61,8 +97,14 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
           <div className="relative z-10 space-y-1">
             <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">XP Balance</span>
             <div className="flex items-baseline space-x-1">
-              <h3 className="text-3xl font-extrabold tracking-tight">45,000</h3>
-              <span className="text-lg font-bold opacity-60">XP</span>
+              {isLoading ? (
+                <div className="h-8 w-24 rounded-lg bg-white/20 animate-pulse"></div>
+              ) : (
+                <>
+                  <h3 className="text-3xl font-extrabold tracking-tight">{profile?.XP?.toLocaleString?.() ?? '0'}</h3>
+                  <span className="text-lg font-bold opacity-60">XP</span>
+                </>
+              )}
             </div>
           </div>
           <div className="relative z-10">
