@@ -47,6 +47,7 @@ This repo includes serverless functions under `/api` for Auth.js (Google OAuth +
 - `EDGE_CONFIG`
 - `EDGE_CONFIG_ID`
 - `VERCEL_API_TOKEN`
+- `BLOB_READ_WRITE_TOKEN` (for storing user-submitted photos)
 - Optional: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
 - Optional (frontend): `VITE_ADMIN_EMAIL` (to show Impact tab for admin users)
 

@@ -10,7 +10,8 @@ import {
   Wallet
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
-import type { UserProfile } from '../../shared/types';
+import { getSession } from '../../lib/client/auth';
+import type { Submission, UserProfile } from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -22,6 +23,39 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [userLocation, setUserLocation] = useState('Location not set');
+  const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
+
+  const formatHistoryDate = (iso: string) => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return 'Unknown';
+
+    const now = new Date();
+    const sameDay = now.toDateString() === date.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const isYesterday = yesterday.toDateString() === date.toDateString();
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    if (sameDay) return `Today • ${time}`;
+    if (isYesterday) return `Yesterday • ${time}`;
+    return `${date.toLocaleDateString([], { month: 'short', day: '2-digit' })} • ${time}`;
+  };
+
+  const submissionToHistory = (submission: Submission) => {
+    const details = (submission.details ?? {}) as Record<string, unknown>;
+    const siteName = typeof details.siteName === 'string' ? details.siteName : null;
+    const locationLabel = siteName || `GPS: ${submission.location.latitude.toFixed(4)}°, ${submission.location.longitude.toFixed(4)}°`;
+    const typeLabel = submission.category === 'fuel_station' ? 'Fuel Price' : 'Kiosk Availability';
+
+    return {
+      id: submission.id,
+      date: formatHistoryDate(submission.createdAt),
+      location: locationLabel,
+      type: typeLabel,
+      xp: 10
+    };
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -30,21 +64,48 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
         setLoadError('');
         const data = await apiJson<UserProfile>('/api/user');
         setProfile(data);
+
+        try {
+          const [session, submissions] = await Promise.all([
+            getSession(),
+            apiJson<Submission[]>('/api/submissions')
+          ]);
+          const userId = session?.user?.id?.toLowerCase().trim();
+          if (!userId) {
+            setHistory([]);
+            setUserLocation('Location not set');
+            return;
+          }
+
+          const ownSubmissions = submissions
+            .filter((submission) => (typeof submission.userId === 'string' ? submission.userId.toLowerCase().trim() : '') === userId)
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+          setHistory(ownSubmissions.map(submissionToHistory));
+
+          const latest = ownSubmissions[0];
+          if (latest) {
+            const details = (latest.details ?? {}) as Record<string, unknown>;
+            const siteName = typeof details.siteName === 'string' ? details.siteName : null;
+            setUserLocation(siteName || `GPS ${latest.location.latitude.toFixed(4)}°, ${latest.location.longitude.toFixed(4)}°`);
+          } else {
+            setUserLocation('No contributions yet');
+          }
+        } catch {
+          setHistory([]);
+          setUserLocation('Location not set');
+        }
       } catch {
         setProfile(null);
         setLoadError('Unable to load profile.');
+        setHistory([]);
+        setUserLocation('Location not set');
       } finally {
         setIsLoading(false);
       }
     };
     loadProfile();
   }, []);
-
-  const history = [
-    { date: 'Today • 11:14', location: 'Akwa, Douala', type: 'Fuel Price', xp: 5 },
-    { date: 'Yesterday • 17:40', location: 'Bonapriso, Douala', type: 'Kiosk Availability', xp: 15 },
-    { date: 'Mar 22 • 08:22', location: 'Deido, Douala', type: 'Queue Length', xp: 10 }
-  ];
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
@@ -78,7 +139,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
           {!isLoading && (
             <div className="flex items-center justify-center text-[10px] text-gray-400 mt-1 font-bold uppercase tracking-widest space-x-2">
               <MapPin size={12} />
-              <span>Location not set</span>
+              <span>{userLocation}</span>
             </div>
           )}
           {loadError && (
@@ -160,8 +221,13 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
           </div>
 
           <div className="space-y-3">
-            {history.map((act, i) => (
-              <div key={i} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+            {history.length === 0 && (
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+                No contributions yet. Add your first report to build your history.
+              </div>
+            )}
+            {history.map((act) => (
+              <div key={act.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400">
                     <Calendar size={18} />

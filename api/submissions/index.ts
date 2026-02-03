@@ -1,4 +1,5 @@
 import exifr from "exifr";
+import { put } from "@vercel/blob";
 import { requireUser } from "../../lib/auth.js";
 import { getSubmissions, getUserProfile, setSubmissions, setUserProfile } from "../../lib/edgeConfig.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
@@ -7,6 +8,9 @@ import type { Submission, SubmissionCategory, SubmissionLocation } from "../../s
 const allowedCategories: SubmissionCategory[] = ["fuel_station", "mobile_money"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const INLINE_PHOTO_PREFIX = "data:image/";
+const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
+const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
+const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
 function parseLocation(input: unknown): SubmissionLocation | null {
   if (!input || typeof input !== "object") return null;
@@ -52,6 +56,52 @@ function stripInlinePhotoData(submission: Submission): Submission {
   const { photoUrl: _photoUrl, ...rest } = submission;
   const details = { ...(submission.details ?? {}), hasPhoto: true };
   return { ...rest, details };
+}
+
+function mimeToExtension(mime: string): string {
+  switch (mime) {
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    case "image/heic":
+      return "heic";
+    case "image/heif":
+      return "heif";
+    default:
+      return "jpg";
+  }
+}
+
+function parseImagePayload(imageBase64: string): { imageBuffer: Buffer; mime: string; ext: string } | null {
+  const match = imageBase64.match(INLINE_IMAGE_REGEX);
+  if (!match) return null;
+
+  const mime = match[1]?.toLowerCase() ?? "";
+  if (!allowedImageMime.has(mime)) return null;
+
+  const base64 = stripBase64Prefix(imageBase64);
+  const imageBuffer = Buffer.from(base64, "base64");
+  if (!imageBuffer.length) return null;
+
+  return { imageBuffer, mime, ext: mimeToExtension(mime) };
+}
+
+async function uploadSubmissionPhoto(
+  submissionId: string,
+  imageBuffer: Buffer,
+  mime: string,
+  ext: string
+): Promise<string> {
+  const pathname = `submissions/${submissionId}-${Date.now()}.${ext}`;
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const uploaded = await put(pathname, imageBuffer, {
+    access: "public",
+    contentType: mime,
+    addRandomSuffix: false,
+    token: token || undefined,
+  });
+  return uploaded.url;
 }
 
 function normalizeIp(raw: string | null): string | null {
@@ -189,12 +239,17 @@ export async function POST(request: Request): Promise<Response> {
   if (!imageBase64) {
     return errorResponse("Photo is required", 400);
   }
-  rawDetails.hasPhoto = true;
+  const parsedPhoto = parseImagePayload(imageBase64);
+  if (!parsedPhoto) {
+    return errorResponse("Invalid photo format", 400);
+  }
+  if (parsedPhoto.imageBuffer.byteLength > MAX_IMAGE_BYTES) {
+    return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
+  }
 
   let photoLocation: SubmissionLocation | null = null;
-  if (imageBase64) {
-    const base64 = stripBase64Prefix(imageBase64);
-    const imageBuffer = Buffer.from(base64, "base64");
+  if (parsedPhoto) {
+    const { imageBuffer, mime, ext } = parsedPhoto;
 
     try {
       const gps = await exifr.gps(imageBuffer);
@@ -240,7 +295,12 @@ export async function POST(request: Request): Promise<Response> {
         }
       }
     }
-
+    try {
+      newSubmission.photoUrl = await uploadSubmissionPhoto(newSubmission.id, imageBuffer, mime, ext);
+      rawDetails.hasPhoto = true;
+    } catch {
+      return errorResponse("Unable to store photo", 500);
+    }
   }
 
   if (photoLocation) {

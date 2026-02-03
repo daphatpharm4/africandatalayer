@@ -154,6 +154,15 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
     if (lower.includes('photo is required')) {
       return 'Please capture a photo before submitting.';
     }
+    if (lower.includes('invalid photo format')) {
+      return 'Unsupported photo format. Use JPG, PNG, WEBP, or HEIC.';
+    }
+    if (lower.includes('photo exceeds maximum size')) {
+      return 'Photo is too large. Retake with lower quality and try again.';
+    }
+    if (lower.includes('unable to store photo')) {
+      return "We couldn't save your photo right now. Please retry.";
+    }
     if (lower.includes('invalid fuel price')) {
       return 'Please enter a valid fuel price.';
     }
