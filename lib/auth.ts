@@ -18,14 +18,16 @@ export function getSessionCookieName(): string {
 export async function getAuthToken(request: Request): Promise<JWT | null> {
   const secret = getAuthSecret();
   if (!secret) return null;
-  const salt = getSessionCookieName();
+  const cookieName = getSessionCookieName();
+  const secureCookie = isSecureRequest();
+  const salt = cookieName;
   const authHeader = request.headers.get("authorization");
   if (authHeader?.toLowerCase().startsWith("bearer ")) {
     const raw = authHeader.slice(7).trim();
     const decoded = await decode({ token: raw, secret, salt });
     return decoded ?? null;
   }
-  return await getToken({ req: request, secret, salt });
+  return await getToken({ req: request, secret, salt, cookieName, secureCookie });
 }
 
 export async function requireUser(request: Request): Promise<{ id: string; token: JWT } | null> {
