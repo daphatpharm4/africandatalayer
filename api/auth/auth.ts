@@ -1,6 +1,7 @@
 import { Auth } from "@auth/core";
 import Credentials from "@auth/core/providers/credentials";
 import Google from "@auth/core/providers/google";
+import type { AppProviders } from "@auth/core/providers";
 import bcrypt from "bcryptjs";
 import type { UserProfile } from "../../shared/types.js";
 import { getUserProfile, setUserProfile } from "../../lib/edgeConfig.js";
@@ -9,7 +10,7 @@ import { getAuthSecret, getSessionCookieName, isSecureRequest } from "../../lib/
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
 
-const providers = [
+const providers: AppProviders = [
   Credentials({
     name: "Credentials",
     credentials: {
@@ -17,8 +18,8 @@ const providers = [
       password: { label: "Password", type: "password" },
     },
     async authorize(credentials) {
-      const email = credentials?.email?.toLowerCase().trim();
-      const password = credentials?.password ?? "";
+      const email = typeof credentials?.email === "string" ? credentials.email.toLowerCase().trim() : "";
+      const password = typeof credentials?.password === "string" ? credentials.password : "";
 
       if (!email || !password) return null;
 
@@ -145,7 +146,10 @@ export default async function handler(request: Request): Promise<Response> {
         } else {
           (token as { isAdmin?: boolean }).isAdmin = false;
         }
-        if (user) {
+        if (email) {
+          // Profiles are keyed by normalized email in Edge Config, so keep uid aligned.
+          (token as { uid?: string }).uid = email.trim();
+        } else if (user) {
           const id = (user as { id?: string }).id ?? user.email;
           if (id) (token as { uid?: string }).uid = id;
         }

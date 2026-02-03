@@ -31,7 +31,11 @@ export async function getAuthToken(request: Request): Promise<JWT | null> {
 export async function requireUser(request: Request): Promise<{ id: string; token: JWT } | null> {
   const token = await getAuthToken(request);
   if (!token) return null;
-  const id = (token as JWT & { uid?: string }).uid ?? token.sub ?? token.email;
+  const email = typeof token.email === "string" ? token.email.toLowerCase().trim() : null;
+  const uid = (token as JWT & { uid?: unknown }).uid;
+  const normalizedUid = typeof uid === "string" ? uid.trim() : null;
+  const sub = typeof token.sub === "string" ? token.sub.trim() : null;
+  const id = email || normalizedUid || sub;
   if (!id) return null;
   return { id, token };
 }
