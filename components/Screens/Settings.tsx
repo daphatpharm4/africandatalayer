@@ -11,6 +11,7 @@ import {
   ChevronRight,
   FileText
 } from 'lucide-react';
+import BrandLogo from '../BrandLogo';
 
 interface Props {
   onBack: () => void;
@@ -144,6 +145,7 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
             <span>{t('Log Out', 'Deconnexion')}</span>
           </button>
           <div className="text-center">
+            <BrandLogo size={18} className="mx-auto mb-2" />
             <p className="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">African Data Layer v2.4.0 (Build 892)</p>
           </div>
         </div>

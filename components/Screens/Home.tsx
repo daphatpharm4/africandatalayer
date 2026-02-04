@@ -14,6 +14,7 @@ import {
   User
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
+import BrandLogo from '../BrandLogo';
 
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
@@ -227,6 +228,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
             <div className="flex items-center space-x-2">
+              <BrandLogo size={18} className="shrink-0" />
               <h2 className="text-lg font-bold text-[#1f2933] leading-tight">African Data Layer</h2>
               {isAdmin && (
                 <span className="px-2 py-0.5 rounded-full bg-[#e7eef4] text-[#0f2b46] text-[9px] font-bold uppercase tracking-widest">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Layers, Mail, Lock, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, Mail, Lock, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
 import { getSession, registerWithCredentials, signInWithCredentials, signInWithGoogle } from '../../lib/client/auth';
+import BrandLogo from '../BrandLogo';
 
 interface Props {
   onBack: () => void;
@@ -50,8 +51,8 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
       <button onClick={onBack} className="p-2 -ml-4 self-start text-gray-700"><ChevronLeft size={24} /></button>
 
       <div className="flex-1 flex flex-col justify-center max-w-[320px] mx-auto w-full">
-        <div className="w-16 h-16 bg-[#0f2b46] rounded-2xl flex items-center justify-center mb-8 shadow-lg mx-auto">
-          <Layers className="text-white" size={32} />
+        <div className="w-16 h-16 bg-white border border-[#e7eef4] rounded-2xl flex items-center justify-center mb-8 shadow-lg mx-auto">
+          <BrandLogo size={40} />
         </div>
 
         <div className="text-center mb-10">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Screen } from '../../types';
-import { Layers, Camera, MapPin, ShieldCheck, ArrowRight, Globe } from 'lucide-react';
+import { Camera, MapPin, ShieldCheck, ArrowRight, Globe } from 'lucide-react';
+import BrandLogo from '../BrandLogo';
 
 interface Props {
   onStart: (screen: Screen) => void;
@@ -15,7 +16,7 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
     {
       title: t('Real-time infrastructure & price data for African cities.', 'Donnees d\'infrastructure et de prix en temps reel pour les villes africaines.'),
       desc: t('African Data Layer is a civic-tech platform for crowdsourced, fraud-resistant reporting.', 'African Data Layer est une plateforme civic-tech de signalement participatif resistante a la fraude.'),
-      icon: <Layers size={46} className="text-white" />,
+      icon: <BrandLogo size={52} />,
       action: t('Continue', 'Continuer')
     },
     {
@@ -56,11 +57,12 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
   };
 
   const isFinalSlide = step === slides.length - 1;
+  const heroIconBg = step === 0 ? 'bg-white' : step < 2 ? 'bg-[#0f2b46]' : 'bg-[#f2f4f7]';
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] text-[#1f2933]">
       <div className="flex-1 flex flex-col items-center justify-center px-8 text-center animate-in fade-in duration-700">
-        <div className={`w-24 h-24 ${step < 2 ? 'bg-[#0f2b46]' : 'bg-[#f2f4f7]'} rounded-2xl flex items-center justify-center mb-10 shadow-xl`}>
+        <div className={`w-24 h-24 ${heroIconBg} rounded-2xl flex items-center justify-center mb-10 shadow-xl`}>
           {slides[step].icon}
         </div>
         <h1 className="text-2xl font-bold tracking-tight mb-4 text-[#1f2933]">{slides[step].title}</h1>
