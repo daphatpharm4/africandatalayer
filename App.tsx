@@ -21,8 +21,13 @@ const App: React.FC = () => {
   const [isOffline, setIsOffline] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [language, setLanguage] = useState<'en' | 'fr'>(() => {
+    const saved = localStorage.getItem('adl_language');
+    return saved === 'en' ? 'en' : 'fr';
+  });
   const [history, setHistory] = useState<Screen[]>([]);
   const [authReturnScreen, setAuthReturnScreen] = useState<Screen>(Screen.SPLASH);
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const navigateTo = (screen: Screen, point: DataPoint | null = null) => {
     if (currentScreen === Screen.SPLASH && screen !== Screen.SPLASH) {
@@ -66,6 +71,11 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    localStorage.setItem('adl_language', language);
+    document.documentElement.lang = language;
+  }, [language]);
+
+  useEffect(() => {
     const handleStatus = () => setIsOffline(!navigator.onLine);
     window.addEventListener('online', handleStatus);
     window.addEventListener('offline', handleStatus);
@@ -106,7 +116,7 @@ const App: React.FC = () => {
   const renderScreen = () => {
     switch (currentScreen) {
       case Screen.SPLASH:
-        return <Splash onStart={(scr) => navigateTo(scr)} />;
+        return <Splash onStart={(scr) => navigateTo(scr)} language={language} />;
       case Screen.HOME:
         return (
           <Home
@@ -116,6 +126,7 @@ const App: React.FC = () => {
             onAuth={() => navigateTo(Screen.AUTH)}
             onContribute={() => (isAuthenticated ? navigateTo(Screen.CONTRIBUTE) : navigateTo(Screen.AUTH))}
             onProfile={() => switchTab(Screen.PROFILE)}
+            language={language}
           />
         );
       case Screen.DETAILS:
@@ -126,26 +137,30 @@ const App: React.FC = () => {
             onContribute={() => (isAuthenticated ? navigateTo(Screen.CONTRIBUTE) : navigateTo(Screen.AUTH))}
             isAuthenticated={isAuthenticated}
             onAuth={() => navigateTo(Screen.AUTH)}
+            language={language}
           />
         );
       case Screen.AUTH:
-        return <Auth onBack={goBack} onComplete={async () => { await refreshSession(); switchTab(Screen.HOME); }} />;
+        return <Auth language={language} onBack={goBack} onComplete={async () => { await refreshSession(); switchTab(Screen.HOME); }} />;
       case Screen.CONTRIBUTE:
-        return <ContributionFlow onBack={goBack} onComplete={() => switchTab(Screen.HOME)} />;
+        return <ContributionFlow language={language} onBack={goBack} onComplete={() => switchTab(Screen.HOME)} />;
       case Screen.PROFILE:
-        return <Profile onBack={goBack} onSettings={() => navigateTo(Screen.SETTINGS)} onRedeem={() => navigateTo(Screen.REWARDS)} />;
+        return <Profile language={language} onBack={goBack} onSettings={() => navigateTo(Screen.SETTINGS)} onRedeem={() => navigateTo(Screen.REWARDS)} />;
       case Screen.ANALYTICS:
         return (
           <Analytics
             onBack={goBack}
             isAdmin={isAdmin}
             onAdmin={isAdmin ? () => navigateTo(Screen.ADMIN) : undefined}
+            language={language}
           />
         );
       case Screen.SETTINGS:
         return (
           <Settings
             onBack={goBack}
+            language={language}
+            onLanguageChange={setLanguage}
             onLogout={async () => {
               try {
                 await signOut();
@@ -160,13 +175,13 @@ const App: React.FC = () => {
           />
         );
       case Screen.QUALITY:
-        return <QualityInfo onBack={goBack} />;
+        return <QualityInfo language={language} onBack={goBack} />;
       case Screen.REWARDS:
-        return <RewardsCatalog onBack={goBack} />;
+        return <RewardsCatalog language={language} onBack={goBack} />;
       case Screen.ADMIN:
-        return <AdminQueue onBack={goBack} />;
+        return <AdminQueue language={language} onBack={goBack} />;
       default:
-        return <Splash onStart={(scr) => navigateTo(scr)} />;
+        return <Splash onStart={(scr) => navigateTo(scr)} language={language} />;
     }
   };
 
@@ -174,7 +189,7 @@ const App: React.FC = () => {
     <div className="flex flex-col h-screen w-full max-w-md mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-gray-100">
       {isOffline && (
         <div className="bg-amber-600 text-white text-[10px] font-bold py-1.5 px-4 text-center z-50 tracking-widest uppercase">
-          Offline Mode • Local Sync Active
+          {t('Offline Mode • Local Sync Active', 'Mode hors ligne • Sync locale active')}
         </div>
       )}
 
@@ -188,6 +203,7 @@ const App: React.FC = () => {
           onNavigate={(scr) => switchTab(scr)} 
           isAuthenticated={isAuthenticated}
           isAdmin={isAdmin}
+          language={language}
         />
       )}
     </div>

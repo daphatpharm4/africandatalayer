@@ -15,9 +15,14 @@ import { apiFetch } from '../../lib/client/api';
 interface Props {
   onBack: () => void;
   onComplete: () => void;
+  language: 'en' | 'fr';
 }
 
-const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
+const TIER_1_XP = 5;
+const TIER_2_XP = 10;
+const TIER_3_XP = 20;
+
+const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -39,20 +44,26 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
   const [comment, setComment] = useState('');
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [secondPhotoPreview, setSecondPhotoPreview] = useState<string | null>(null);
+  const [secondPhotoFile, setSecondPhotoFile] = useState<File | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [photoError, setPhotoError] = useState('');
   const [locationError, setLocationError] = useState('');
   const [manualLatitude, setManualLatitude] = useState('');
   const [manualLongitude, setManualLongitude] = useState('');
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   useEffect(() => {
     return () => {
       if (photoPreview) {
         URL.revokeObjectURL(photoPreview);
       }
+      if (secondPhotoPreview) {
+        URL.revokeObjectURL(secondPhotoPreview);
+      }
     };
-  }, [photoPreview]);
+  }, [photoPreview, secondPhotoPreview]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -81,17 +92,42 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
     });
   };
 
+  const handleSecondPhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const nextPreview = URL.createObjectURL(file);
+    setSecondPhotoFile(file);
+    setSecondPhotoPreview((prevPreview) => {
+      if (prevPreview) {
+        URL.revokeObjectURL(prevPreview);
+      }
+      return nextPreview;
+    });
+  };
+
   const totalSteps = 3;
+  const tier2Completed = Boolean(
+    profession.trim() ||
+      phoneMasked.trim() ||
+      queueLength ||
+      paymentModes.length ||
+      problem.trim() ||
+      (type === 'Kiosk' && hours.trim())
+  );
+  const tier3Completed = Boolean(
+    comment.trim() || (type === 'Kiosk' && (merchantId.trim() || reliability)) || secondPhotoFile
+  );
+  const earnedXp = TIER_1_XP + (tier2Completed ? TIER_2_XP : 0) + (tier3Completed ? TIER_3_XP : 0);
 
   const getCurrentLocation = () =>
     new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation not supported.'));
+        reject(new Error(t('Geolocation not supported.', 'Geolocalisation non supportee.')));
         return;
       }
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-        () => reject(new Error('Unable to access location.')),
+        () => reject(new Error(t('Unable to access location.', 'Impossible d\'acceder a la localisation.'))),
         { enableHighAccuracy: true, timeout: 10000 }
       );
     });
@@ -137,48 +173,48 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
     const message = rawMessage.replace(/^Error:\s*/i, '').trim();
     const lower = message.toLowerCase();
     if (lower.includes('photo location does not match ip location')) {
-      return "We couldn't verify your location from your network. Try switching Wi-Fi/data and retake the photo on site.";
+      return t("We couldn't verify your location from your network. Try switching Wi-Fi/data and retake the photo on site.", "Impossible de verifier votre localisation depuis votre reseau. Changez de Wi-Fi/donnees et reprenez la photo sur place.");
     }
     if (lower.includes('device location does not match ip location')) {
-      return "We couldn't verify your device location from your network. Try switching Wi-Fi/data and retry.";
+      return t("We couldn't verify your device location from your network. Try switching Wi-Fi/data and retry.", "Impossible de verifier la localisation appareil depuis votre reseau. Changez de Wi-Fi/donnees et reessayez.");
     }
     if (lower.includes('photo gps coordinates do not match submission location')) {
-      return "Photo GPS doesn't match the submitted location. Retake the photo at the site or update the coordinates.";
+      return t("Photo GPS doesn't match the submitted location. Retake the photo at the site or update the coordinates.", "Le GPS de la photo ne correspond pas a la localisation envoyee. Reprenez la photo sur place ou corrigez les coordonnees.");
     }
     if (lower.includes('photo is missing gps metadata')) {
-      return 'Your photo has no GPS metadata. On iPhone, allow Location for Safari and Camera, then retake.';
+      return t('Your photo has no GPS metadata. On iPhone, allow Location for Safari and Camera, then retake.', 'Votre photo n\'a pas de metadonnees GPS. Sur iPhone, autorisez la localisation pour Safari et Camera puis reprenez.');
     }
     if (lower.includes('unable to read photo gps metadata')) {
-      return "We couldn't read GPS from the photo. Please retake the photo.";
+      return t("We couldn't read GPS from the photo. Please retake the photo.", "Impossible de lire le GPS de la photo. Reprenez la photo.");
     }
     if (lower.includes('photo is required')) {
-      return 'Please capture a photo before submitting.';
+      return t('Please capture a photo before submitting.', 'Veuillez capturer une photo avant de soumettre.');
     }
     if (lower.includes('invalid photo format')) {
-      return 'Unsupported photo format. Use JPG, PNG, WEBP, or HEIC.';
+      return t('Unsupported photo format. Use JPG, PNG, WEBP, or HEIC.', 'Format photo non supporte. Utilisez JPG, PNG, WEBP ou HEIC.');
     }
     if (lower.includes('photo exceeds maximum size')) {
-      return 'Photo is too large. Retake with lower quality and try again.';
+      return t('Photo is too large. Retake with lower quality and try again.', 'Photo trop volumineuse. Reprenez avec une qualite plus faible puis reessayez.');
     }
     if (lower.includes('unable to store photo')) {
-      return "We couldn't save your photo right now. Please retry.";
+      return t("We couldn't save your photo right now. Please retry.", "Impossible d'enregistrer votre photo maintenant. Reessayez.");
     }
     if (lower.includes('blob storage is not configured')) {
-      return "Photo storage isn't configured on the server yet.";
+      return t("Photo storage isn't configured on the server yet.", "Le stockage photo n'est pas encore configure sur le serveur.");
     }
     if (lower.includes('entity_too_large') || lower.includes('body exceeded 2mb limit')) {
-      return 'Server storage is full. Please contact admin or try again later.';
+      return t('Server storage is full. Please contact admin or try again later.', 'Le stockage serveur est plein. Contactez un admin ou reessayez plus tard.');
     }
     if (lower.includes('invalid fuel price')) {
-      return 'Please enter a valid fuel price.';
+      return t('Please enter a valid fuel price.', 'Veuillez saisir un prix carburant valide.');
     }
     if (lower.includes('missing or invalid location')) {
-      return "We couldn't determine your location. Enable location or enter coordinates.";
+      return t("We couldn't determine your location. Enable location or enter coordinates.", "Impossible de determiner votre position. Activez la localisation ou saisissez les coordonnees.");
     }
     if (lower.includes('unauthorized')) {
-      return 'Please sign in to contribute.';
+      return t('Please sign in to contribute.', 'Connectez-vous pour contribuer.');
     }
-    return message || 'Submission failed.';
+    return message || t('Submission failed.', 'Echec de la soumission.');
   };
 
   const readErrorMessage = async (response: Response) => {
@@ -205,24 +241,22 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
             <BadgeCheck size={32} />
           </div>
           <div className="space-y-2">
-            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Submission Complete</h2>
-            <p className="text-sm text-gray-500">Your report is safely stored offline and queued for sync.</p>
+            <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Submission Complete', 'Soumission terminee')}</h2>
+            <p className="text-sm text-gray-500">{t('Your report is safely stored offline and queued for sync.', 'Votre signalement est enregistre hors ligne et en file pour synchronisation.')}</p>
           </div>
           <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">XP Earned</span>
-              <span className="text-sm font-bold text-[#4c7c59]">+25 XP</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('XP Earned', 'XP gagnes')}</span>
+              <span className="text-sm font-bold text-[#4c7c59]">+{earnedXp} XP</span>
             </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-gray-900">Total XP: 3,460</p>
-              <p className="text-[10px] text-gray-400">Next badge: Urban Validator</p>
-              <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#4c7c59] rounded-full" style={{ width: '68%' }}></div>
-              </div>
+            <div className="text-left space-y-1">
+              <p className="text-[11px] text-gray-600">{t('Tier', 'Niveau')} 1: +{TIER_1_XP} XP</p>
+              <p className="text-[11px] text-gray-600">{t('Tier', 'Niveau')} 2: +{tier2Completed ? TIER_2_XP : 0} XP</p>
+              <p className="text-[11px] text-gray-600">{t('Tier', 'Niveau')} 3: +{tier3Completed ? TIER_3_XP : 0} XP</p>
             </div>
           </div>
           <div className="bg-[#f2f4f7] border border-gray-100 rounded-2xl p-4 text-left text-xs text-gray-500">
-            Fraud checks: camera metadata + device GPS + contributor reputation.
+            {t('Fraud checks: camera metadata + device GPS + contributor reputation.', 'Controles anti-fraude : metadonnees camera + GPS appareil + reputation contributeur.')}
           </div>
         </div>
       );
@@ -234,13 +268,13 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
             <div className="flex items-center space-x-2">
               <span className="px-3 py-1 bg-[#e7eef4] text-[#0f2b46] text-[10px] font-bold rounded-full uppercase tracking-widest flex items-center">
-                <ShieldCheck size={12} className="mr-1" /> Tier 1 • Mandatory • +5 XP
+                <ShieldCheck size={12} className="mr-1" /> {t('Tier', 'Niveau')} 1 • {t('Mandatory', 'Obligatoire')} • +5 XP
               </span>
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Live Camera Capture</h2>
-              <p className="text-sm text-gray-500">Open the camera to capture the station/kiosk. Live capture only.</p>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Live Camera Capture', 'Capture camera en direct')}</h2>
+              <p className="text-sm text-gray-500">{t('Open the camera to capture the station/kiosk. Live capture only.', 'Ouvrez la camera pour capturer station/kiosque. Capture directe uniquement.')}</p>
             </div>
 
             <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
@@ -249,8 +283,8 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
               ) : (
                 <>
                   <Camera size={48} className="mb-4 opacity-40" />
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-60">Live Camera Preview</p>
-                  <span className="mt-2 text-[10px] text-gray-400">EXIF metadata + GPS tagged</span>
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-60">{t('Live Camera Preview', 'Apercu camera en direct')}</p>
+                  <span className="mt-2 text-[10px] text-gray-400">{t('EXIF metadata + GPS tagged', 'Metadonnees EXIF + GPS')}</span>
                 </>
               )}
               <input
@@ -265,7 +299,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                 htmlFor="capture-photo"
                 className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/90 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-600 shadow-sm backdrop-blur hover:bg-white"
               >
-                {photoPreview ? 'Retake Photo' : 'Capture Photo'}
+                {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
               </label>
             </div>
             {photoError && (
@@ -294,12 +328,12 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
               </div>
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                  {type === 'Fuel' ? 'Fuel Station Name' : 'Kiosk Name'}
+                  {type === 'Fuel' ? t('Fuel Station Name', 'Nom station-service') : t('Kiosk Name', 'Nom du kiosque')}
                 </label>
                 <input
                   value={siteName}
                   onChange={(e) => setSiteName(e.target.value)}
-                  placeholder={type === 'Fuel' ? 'e.g. Total Bonamoussadi' : 'e.g. MTN Express Kiosk'}
+                  placeholder={type === 'Fuel' ? t('e.g. Total Bonamoussadi', 'ex. Total Bonamoussadi') : t('e.g. MTN Express Kiosk', 'ex. Kiosque MTN Express')}
                   className="mt-2 w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
                 />
               </div>
@@ -308,7 +342,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
             {type === 'Fuel' ? (
               <div className="space-y-4">
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Fuel Type</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Fuel Type', 'Type de carburant')}</label>
                   <div className="grid grid-cols-3 gap-2 mt-2">
                     {['Diesel', 'Super', 'Gaz'].map(item => (
                       <button
@@ -323,7 +357,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                     ))}
                   </div>
                 </div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Fuel Price (XAF)</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Fuel Price (XAF)', 'Prix carburant (XAF)')}</label>
                 <div className="relative">
                   <input
                     type="number"
@@ -349,7 +383,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
               </div>
             ) : (
               <div className="space-y-4">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Kiosk Availability</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Kiosk Availability', 'Disponibilite kiosque')}</label>
                 <div className="flex p-1 bg-gray-50 rounded-xl">
                   {['Available', 'Limited', 'Out'].map(item => (
                     <button
@@ -363,7 +397,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                     </button>
                   ))}
                 </div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Provider</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Provider', 'Operateur')}</label>
                 <div className="flex items-center space-x-2">
                   {['MTN', 'Orange', 'Airtel'].map(item => (
                     <button
@@ -384,29 +418,29 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
               <div className="flex items-center space-x-3">
                 <MapPin size={18} className="text-[#0f2b46]" />
                 <div>
-                  <p className="text-xs font-bold text-gray-900">Device Location</p>
+                  <p className="text-xs font-bold text-gray-900">{t('Device Location', 'Position appareil')}</p>
                   <p className="text-[10px] text-gray-400">
                     {location
                       ? `GPS: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`
-                      : 'GPS: unavailable'}
+                      : t('GPS: unavailable', 'GPS: indisponible')}
                   </p>
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <span className="text-[10px] font-bold text-[#4c7c59] uppercase">{location ? 'Matched' : 'Pending'}</span>
+                <span className="text-[10px] font-bold text-[#4c7c59] uppercase">{location ? t('Matched', 'Valide') : t('Pending', 'En attente')}</span>
                 <button
                   type="button"
                   onClick={retryLocation}
                   className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]"
                 >
-                  Retry
+                  {t('Retry', 'Reessayer')}
                 </button>
               </div>
             </div>
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Manual Coordinates</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-300">Optional</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Manual Coordinates', 'Coordonnees manuelles')}</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-300">{t('Optional', 'Optionnel')}</span>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <input
@@ -415,7 +449,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                     setManualLatitude(e.target.value);
                     setLocationError('');
                   }}
-                  placeholder="Latitude"
+                  placeholder={t('Latitude', 'Latitude')}
                   className="h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
                 />
                 <input
@@ -424,7 +458,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                     setManualLongitude(e.target.value);
                     setLocationError('');
                   }}
-                  placeholder="Longitude"
+                  placeholder={t('Longitude', 'Longitude')}
                   className="h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
                 />
               </div>
@@ -441,41 +475,41 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
           <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
             <div className="flex items-center space-x-2">
               <span className="px-3 py-1 bg-[#eaf3ee] text-[#4c7c59] text-[10px] font-bold rounded-full uppercase tracking-widest flex items-center">
-                <Sparkles size={12} className="mr-1" /> Tier 2 • Optional • +10 XP
+                <Sparkles size={12} className="mr-1" /> {t('Tier', 'Niveau')} 2 • {t('Optional', 'Optionnel')} • +10 XP
               </span>
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Context & Operations</h2>
-              <p className="text-sm text-gray-500">Add context to improve data quality and monetization.</p>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Context & Operations', 'Contexte et operations')}</h2>
+              <p className="text-sm text-gray-500">{t('Add context to improve data quality and monetization.', 'Ajoutez du contexte pour ameliorer la qualite des donnees et la monetisation.')}</p>
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                All fields optional • Bonus XP
+                {t('All fields optional • Bonus XP', 'Tous les champs sont optionnels • XP bonus')}
               </p>
             </div>
 
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Profession</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Profession', 'Profession')}</label>
                   <input
                     value={profession}
                     onChange={(e) => setProfession(e.target.value)}
-                    placeholder="e.g. Transit Operator"
+                    placeholder={t('e.g. Transit Operator', 'ex. Operateur transport')}
                     className="mt-2 w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Phone (masked)</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Phone (masked)', 'Telephone (masque)')}</label>
                   <input
                     value={phoneMasked}
                     onChange={(e) => setPhoneMasked(e.target.value)}
-                    placeholder="e.g. +237 ••• •• 489"
+                    placeholder={t('e.g. +237 ••• •• 489', 'ex. +237 ••• •• 489')}
                     className="mt-2 w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
                   />
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Queue Length</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Queue Length', 'Longueur de file')}</label>
                 <div className="flex p-1 bg-gray-50 rounded-xl mt-2">
                   {['Short', 'Moderate', 'Long'].map(item => (
                     <button
@@ -491,7 +525,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Payment Modes</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Payment Modes', 'Moyens de paiement')}</label>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {['Cash', 'Mobile Money', 'Cards'].map(item => (
                     <button
@@ -511,21 +545,21 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                 </div>
               </div>
               <div>
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Problems Noticed</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Problems Noticed', 'Problemes constates')}</label>
                   <textarea
                     value={problem}
                     onChange={(e) => setProblem(e.target.value)}
-                    placeholder="e.g. no cash, slow approvals"
+                    placeholder={t('e.g. no cash, slow approvals', 'ex. pas de cash, validation lente')}
                     className="mt-2 w-full h-20 bg-gray-50 border border-gray-100 rounded-xl p-3 text-xs resize-none"
                   />
               </div>
               {type === 'Kiosk' && (
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Opening Hours</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Opening Hours', 'Heures d\'ouverture')}</label>
                   <input
                     value={hours}
                     onChange={(e) => setHours(e.target.value)}
-                    placeholder="e.g. 08:00 - 20:00"
+                    placeholder={t('e.g. 08:00 - 20:00', 'ex. 08:00 - 20:00')}
                     className="mt-2 w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
                   />
                 </div>
@@ -538,31 +572,31 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
           <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300">
             <div className="flex items-center space-x-2">
               <span className="px-3 py-1 bg-[#f7e8e1] text-[#c86b4a] text-[10px] font-bold rounded-full uppercase tracking-widest flex items-center">
-                <Star size={12} className="mr-1" /> Tier 3 • Optional • +10 XP
+                <Star size={12} className="mr-1" /> {t('Tier', 'Niveau')} 3 • {t('Optional', 'Optionnel')} • +20 XP
               </span>
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Advanced Verification</h2>
-              <p className="text-sm text-gray-500">Add deeper metadata for validation and fraud resistance.</p>
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('Advanced Verification', 'Verification avancee')}</h2>
+              <p className="text-sm text-gray-500">{t('Add deeper metadata for validation and fraud resistance.', 'Ajoutez des metadonnees plus profondes pour la validation et la resistance a la fraude.')}</p>
               <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                All fields optional • Bonus XP
+                {t('All fields optional • Bonus XP', 'Tous les champs sont optionnels • XP bonus')}
               </p>
             </div>
 
             {type === 'Kiosk' && (
               <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Merchant ID</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Merchant ID', 'ID marchand')}</label>
                   <input
                     value={merchantId}
                     onChange={(e) => setMerchantId(e.target.value)}
-                    placeholder="e.g. M-129384"
+                    placeholder={t('e.g. M-129384', 'ex. M-129384')}
                     className="mt-2 w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs font-mono"
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Reliability Rating</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Reliability Rating', 'Niveau de fiabilite')}</label>
                   <div className="flex items-center space-x-2 mt-2">
                     {['Excellent', 'Good', 'Congested'].map(item => (
                       <button
@@ -580,17 +614,37 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
               </div>
             )}
 
-            <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400">
-              <Camera size={40} className="mb-3 opacity-40" />
-              <p className="text-xs font-bold uppercase tracking-widest opacity-60">Optional Second Photo</p>
+            <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
+              {secondPhotoPreview ? (
+                <img src={secondPhotoPreview} alt="Optional second capture" className="absolute inset-0 h-full w-full object-cover" />
+              ) : (
+                <>
+                  <Camera size={40} className="mb-3 opacity-40" />
+                  <p className="text-xs font-bold uppercase tracking-widest opacity-60">{t('Optional Second Photo', 'Deuxieme photo optionnelle')}</p>
+                </>
+              )}
+              <input
+                id="capture-second-photo"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleSecondPhotoChange}
+                className="sr-only"
+              />
+              <label
+                htmlFor="capture-second-photo"
+                className="relative z-10 mt-4 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/90 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-600 shadow-sm backdrop-blur hover:bg-white"
+              >
+                {secondPhotoPreview ? t('Retake 2nd Photo', 'Reprendre 2e photo') : t('Capture 2nd Photo', 'Capturer 2e photo')}
+              </label>
             </div>
 
             <div>
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Freeform Comment</label>
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Freeform Comment', 'Commentaire libre')}</label>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Share any extra context for validators..."
+                placeholder={t('Share any extra context for validators...', 'Partagez tout contexte supplementaire pour les validateurs...')}
                 className="mt-2 w-full h-28 bg-gray-50 border border-gray-100 rounded-xl p-4 text-xs resize-none"
               />
             </div>
@@ -599,11 +653,11 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
               <div className="flex items-center space-x-3">
                 <BadgeCheck size={18} className="text-[#4c7c59]" />
                 <div>
-                  <p className="text-xs font-bold text-gray-900">XP Summary</p>
-                  <p className="text-[10px] text-gray-400">Tier 1 + Tier 2 + Tier 3</p>
+                  <p className="text-xs font-bold text-gray-900">{t('XP Summary', 'Resume XP')}</p>
+                  <p className="text-[10px] text-gray-400">{t('Tier', 'Niveau')} 1 + {t('Tier', 'Niveau')} 2 + {t('Tier', 'Niveau')} 3</p>
                 </div>
               </div>
-              <span className="text-sm font-bold text-[#4c7c59]">+25 XP</span>
+              <span className="text-sm font-bold text-[#4c7c59]">+{earnedXp} XP</span>
             </div>
           </div>
         );
@@ -616,7 +670,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
     setPhotoError('');
     setLocationError('');
     if (step === 1 && !photoFile) {
-      setPhotoError('Please capture a Tier 1 photo before continuing.');
+      setPhotoError(t('Please capture a Tier 1 photo before continuing.', 'Veuillez capturer une photo niveau 1 avant de continuer.'));
       return;
     }
 
@@ -632,24 +686,25 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
       try {
         if (!photoFile) {
           setStep(1);
-          setPhotoError('Please capture a Tier 1 photo before submitting.');
+          setPhotoError(t('Please capture a Tier 1 photo before submitting.', 'Veuillez capturer une photo niveau 1 avant de soumettre.'));
           return;
         }
 
         const manual = parseManualLocation();
         if ((manualLatitude.trim() || manualLongitude.trim()) && !manual) {
           setStep(1);
-          setLocationError('Enter a valid latitude and longitude.');
+          setLocationError(t('Enter a valid latitude and longitude.', 'Entrez une latitude et une longitude valides.'));
           return;
         }
         const currentLocation = location ?? manual ?? null;
         const imageBase64 = await fileToBase64(photoFile);
+        const secondImageBase64 = secondPhotoFile ? await fileToBase64(secondPhotoFile) : undefined;
         const parsedFuelPrice = Number(price);
         const normalizedFuelPrice = Number.isFinite(parsedFuelPrice) ? parsedFuelPrice : undefined;
 
         if (type === 'Fuel' && normalizedFuelPrice === undefined) {
           setStep(1);
-          throw new Error('Invalid fuel price');
+          throw new Error(t('Invalid fuel price', 'Prix carburant invalide'));
         }
 
         const details: Record<string, unknown> = {
@@ -671,12 +726,16 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
         if (type === 'Kiosk' && merchantId.trim()) details.merchantId = merchantId.trim();
         if (type === 'Kiosk' && reliability) details.reliability = reliability;
         if (comment.trim()) details.comment = comment.trim();
+        details.tier2Completed = tier2Completed;
+        details.tier3Completed = tier3Completed;
+        details.xpAwarded = earnedXp;
 
         const payload = {
           category: type === 'Fuel' ? 'fuel_station' : 'mobile_money',
           location: currentLocation ?? undefined,
           details,
           imageBase64,
+          secondImageBase64,
         };
 
         const response = await apiFetch('/api/submissions', {
@@ -692,7 +751,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
 
         setSubmitted(true);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Submission failed.';
+        const message = error instanceof Error ? error.message : t('Submission failed.', 'Echec de la soumission.');
         setErrorMessage(message.replace(/^Error:\s*/, ''));
       } finally {
         setIsSubmitting(false);
@@ -725,8 +784,8 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
           <button onClick={handleBack} className="p-1 -ml-1 text-gray-500">
             <ChevronLeft size={24} />
           </button>
-          <span className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em]">Tier {step} Contribution</span>
-          <span className="text-[10px] font-bold text-gray-400">Step {step} of {totalSteps}</span>
+          <span className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em]">{t('Tier', 'Niveau')} {step} {t('Contribution', 'Contribution')}</span>
+          <span className="text-[10px] font-bold text-gray-400">{t('Step', 'Etape')} {step} / {totalSteps}</span>
         </div>
         <div className="h-1 flex space-x-1.5">
           {[1, 2, 3].map(i => (
@@ -745,7 +804,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
             onClick={onComplete}
             className="w-full h-14 bg-[#c86b4a] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg hover:bg-[#b85f3f] active:scale-95 transition-all"
           >
-            Return to Map
+            {t('Return to Map', 'Retour a la carte')}
           </button>
         ) : (
           <>
@@ -755,7 +814,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                 type="button"
                 className="flex-1 h-12 rounded-xl border border-gray-200 text-gray-500 text-[10px] font-bold uppercase tracking-widest bg-white hover:bg-gray-50"
               >
-                {step === 1 ? 'Back to Map' : 'Back'}
+                {step === 1 ? t('Back to Map', 'Retour carte') : t('Back', 'Retour')}
               </button>
               {step > 1 && (
                 <button
@@ -763,7 +822,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
                   type="button"
                   className="flex-1 h-12 rounded-xl border border-gray-200 text-gray-500 text-[10px] font-bold uppercase tracking-widest bg-white hover:bg-gray-50"
                 >
-                  {step === totalSteps ? 'Skip Tier 3' : 'Skip Tier 2'}
+                  {step === totalSteps ? t('Skip Tier 3', 'Passer niveau 3') : t('Skip Tier 2', 'Passer niveau 2')}
                 </button>
               )}
             </div>
@@ -775,11 +834,11 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Submitting</span>
+                  <span>{t('Submitting', 'Soumission...')}</span>
                 </>
               ) : (
                 <>
-                  <span>{step === totalSteps ? 'Submit Data' : 'Save & Continue'}</span>
+                  <span>{step === totalSteps ? t('Submit Data', 'Soumettre') : t('Save & Continue', 'Enregistrer et continuer')}</span>
                   <ArrowRight size={18} />
                 </>
               )}
@@ -792,11 +851,10 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
             {step === totalSteps && (
               <div className="bg-white border border-gray-100 rounded-2xl p-4 text-center shadow-sm">
                 <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">XP Preview</p>
-                <p className="text-sm font-semibold text-gray-900 mt-1">Total XP: 3,460</p>
-                <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-[#4c7c59] rounded-full" style={{ width: '68%' }}></div>
-                </div>
-                <p className="text-[10px] text-gray-500 mt-2">Next badge: Urban Validator</p>
+                <p className="text-sm font-semibold text-gray-900 mt-1">{t('You will earn', 'Vous gagnerez')} +{earnedXp} XP</p>
+                <p className="text-[10px] text-gray-500 mt-2">
+                  {t('Tier', 'Niveau')} 1 ({TIER_1_XP}) + {t('Tier', 'Niveau')} 2 ({tier2Completed ? TIER_2_XP : 0}) + {t('Tier', 'Niveau')} 3 ({tier3Completed ? TIER_3_XP : 0})
+                </p>
               </div>
             )}
           </>

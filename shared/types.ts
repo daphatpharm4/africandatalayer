@@ -33,3 +33,13 @@ export interface UserProfile {
   passwordHash?: string;
   isAdmin?: boolean;
 }
+
+export interface LeaderboardEntry {
+  rank: number;
+  userId: string;
+  name: string;
+  xp: number;
+  contributions: number;
+  lastContributionAt: string | null;
+  lastLocation: string;
+}

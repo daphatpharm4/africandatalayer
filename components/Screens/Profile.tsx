@@ -17,18 +17,20 @@ interface Props {
   onBack: () => void;
   onSettings: () => void;
   onRedeem: () => void;
+  language: 'en' | 'fr';
 }
 
-const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
+const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
-  const [userLocation, setUserLocation] = useState('Location not set');
+  const [userLocation, setUserLocation] = useState(t('Location not set', 'Position non definie'));
   const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
 
   const formatHistoryDate = (iso: string) => {
     const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return 'Unknown';
+    if (Number.isNaN(date.getTime())) return t('Unknown', 'Inconnu');
 
     const now = new Date();
     const sameDay = now.toDateString() === date.toDateString();
@@ -37,8 +39,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
     const isYesterday = yesterday.toDateString() === date.toDateString();
     const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    if (sameDay) return `Today • ${time}`;
-    if (isYesterday) return `Yesterday • ${time}`;
+    if (sameDay) return language === 'fr' ? `Aujourd'hui • ${time}` : `Today • ${time}`;
+    if (isYesterday) return language === 'fr' ? `Hier • ${time}` : `Yesterday • ${time}`;
     return `${date.toLocaleDateString([], { month: 'short', day: '2-digit' })} • ${time}`;
   };
 
@@ -46,14 +48,16 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
     const details = (submission.details ?? {}) as Record<string, unknown>;
     const siteName = typeof details.siteName === 'string' ? details.siteName : null;
     const locationLabel = siteName || `GPS: ${submission.location.latitude.toFixed(4)}°, ${submission.location.longitude.toFixed(4)}°`;
-    const typeLabel = submission.category === 'fuel_station' ? 'Fuel Price' : 'Kiosk Availability';
+    const typeLabel = submission.category === 'fuel_station' ? t('Fuel Price', 'Prix carburant') : t('Kiosk Availability', 'Disponibilite kiosque');
+    const rawXp = details.xpAwarded;
+    const xpAwarded = typeof rawXp === 'number' && Number.isFinite(rawXp) ? rawXp : 5;
 
     return {
       id: submission.id,
       date: formatHistoryDate(submission.createdAt),
       location: locationLabel,
       type: typeLabel,
-      xp: 10
+      xp: xpAwarded
     };
   };
 
@@ -73,7 +77,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
           const userId = session?.user?.id?.toLowerCase().trim();
           if (!userId) {
             setHistory([]);
-            setUserLocation('Location not set');
+            setUserLocation(t('Location not set', 'Position non definie'));
             return;
           }
 
@@ -89,23 +93,23 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
             const siteName = typeof details.siteName === 'string' ? details.siteName : null;
             setUserLocation(siteName || `GPS ${latest.location.latitude.toFixed(4)}°, ${latest.location.longitude.toFixed(4)}°`);
           } else {
-            setUserLocation('No contributions yet');
+            setUserLocation(t('No contributions yet', 'Pas encore de contributions'));
           }
         } catch {
           setHistory([]);
-          setUserLocation('Location not set');
+          setUserLocation(t('Location not set', 'Position non definie'));
         }
       } catch {
         setProfile(null);
-        setLoadError('Unable to load profile.');
+        setLoadError(t('Unable to load profile.', 'Impossible de charger le profil.'));
         setHistory([]);
-        setUserLocation('Location not set');
+        setUserLocation(t('Location not set', 'Position non definie'));
       } finally {
         setIsLoading(false);
       }
     };
     loadProfile();
-  }, []);
+  }, [language]);
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
@@ -113,7 +117,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
         <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-[#0f2b46] transition-colors">
           <ArrowLeft size={20} />
         </button>
-        <h3 className="text-sm font-bold mx-auto">Dashboard</h3>
+        <h3 className="text-sm font-bold mx-auto">{t('Dashboard', 'Tableau de bord')}</h3>
         <button onClick={onSettings} className="p-2 text-[#0f2b46] absolute right-2">
           <SettingsIcon size={20} />
         </button>
@@ -133,7 +137,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
             {isLoading ? (
               <span className="inline-block h-4 w-40 rounded-full bg-gray-200 animate-pulse"></span>
             ) : (
-              profile?.name || profile?.email || 'Contributor'
+              profile?.name || profile?.email || t('Contributor', 'Contributeur')
             )}
           </h2>
           {!isLoading && (
@@ -149,14 +153,14 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
           )}
           <div className="mt-4">
             <span className="px-4 py-1.5 bg-[#e7eef4] text-[#0f2b46] text-[10px] font-bold rounded-full uppercase tracking-widest border border-[#d5e1eb] shadow-sm">
-              Senior Contributor
+              {t('Senior Contributor', 'Contributeur senior')}
             </span>
           </div>
         </div>
 
         <div className="bg-[#0f2b46] rounded-2xl p-6 text-white shadow-xl flex items-center justify-between relative overflow-hidden">
           <div className="relative z-10 space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">XP Balance</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-80">{t('XP Balance', 'Solde XP')}</span>
             <div className="flex items-baseline space-x-1">
               {isLoading ? (
                 <div className="h-8 w-24 rounded-lg bg-white/20 animate-pulse"></div>
@@ -181,11 +185,11 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
             className="h-14 bg-white text-[#0f2b46] border border-[#d5e1eb] rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-sm hover:bg-[#f2f4f7] transition-all flex items-center justify-center space-x-2"
           >
             <Gift size={16} />
-            <span>Redeem XP</span>
+            <span>{t('Redeem XP', 'Echanger XP')}</span>
           </button>
           <button className="h-14 bg-[#c86b4a] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest shadow-lg hover:bg-[#b85f3f] transition-all flex items-center justify-center space-x-2">
             <Wallet size={16} />
-            <span>Convert to Rewards</span>
+            <span>{t('Convert to Rewards', 'Convertir en recompenses')}</span>
           </button>
         </div>
 
@@ -193,7 +197,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
             <div className="flex items-center space-x-2 text-[#4c7c59]">
               <BadgeCheck size={16} />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Trust Score</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t('Trust Score', 'Score de confiance')}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900">98%</span>
@@ -205,25 +209,25 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem }) => {
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
             <div className="flex items-center space-x-2 text-[#0f2b46]">
               <Calendar size={16} />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Badges</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t('Badges', 'Badges')}</span>
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900">7</span>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Next: Urban Validator</p>
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{t('Next: Urban Validator', 'Suivant : Validateur urbain')}</p>
             </div>
           </div>
         </div>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
-            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Contribution History</h4>
-            <button className="text-[10px] font-bold text-[#0f2b46] uppercase">View All</button>
+            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Contribution History', 'Historique des contributions')}</h4>
+            <button className="text-[10px] font-bold text-[#0f2b46] uppercase">{t('View All', 'Voir tout')}</button>
           </div>
 
           <div className="space-y-3">
             {history.length === 0 && (
               <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
-                No contributions yet. Add your first report to build your history.
+                {t('No contributions yet. Add your first report to build your history.', 'Aucune contribution pour le moment. Ajoutez votre premier signalement pour construire votre historique.')}
               </div>
             )}
             {history.map((act) => (

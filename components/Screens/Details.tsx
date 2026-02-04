@@ -22,10 +22,12 @@ interface Props {
   onContribute: () => void;
   isAuthenticated: boolean;
   onAuth: () => void;
+  language: 'en' | 'fr';
 }
 
-const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated, onAuth }) => {
+const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated, onAuth, language }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   if (!point) return null;
 
@@ -44,7 +46,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
 
   const hasUserPhoto = Boolean(point.photoUrl);
   const heroImage = point.photoUrl || `https://picsum.photos/seed/${point.id}/800/400?grayscale&blur=2`;
-  const fuelSubtitle = [point.currency ? `${point.currency}/L` : null, point.fuelType ? `Type: ${point.fuelType}` : null, point.quality ?? null]
+  const fuelSubtitle = [point.currency ? `${point.currency}/L` : null, point.fuelType ? `${t('Type', 'Type')}: ${point.fuelType}` : null, point.quality ?? null]
     .filter(Boolean)
     .join(' • ');
 
@@ -63,23 +65,23 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
           >
             <Volume2 size={18} />
           </button>
-          <button className="p-2 -mr-2 text-gray-400">
-            <Share2 size={18} />
-          </button>
+            <button className="p-2 -mr-2 text-gray-400">
+              <Share2 size={18} />
+            </button>
         </div>
       </div>
 
       <div className="p-4 space-y-4">
         <div className="flex justify-center">
           <span className="text-[10px] font-bold bg-[#e7eef4] text-[#0f2b46] px-3 py-1 rounded-full uppercase tracking-wider">
-            Last Updated {point.lastUpdated}
+            {t('Last Updated', 'Derniere mise a jour')} {point.lastUpdated}
           </span>
         </div>
 
         <div className="h-44 rounded-2xl bg-gray-200 overflow-hidden relative shadow-sm border border-gray-100">
-          <img src={heroImage} className={`w-full h-full object-cover ${hasUserPhoto ? '' : 'opacity-50'}`} alt={hasUserPhoto ? 'User submitted station photo' : 'Fallback location image'} />
+          <img src={heroImage} className={`w-full h-full object-cover ${hasUserPhoto ? '' : 'opacity-50'}`} alt={hasUserPhoto ? t('User submitted station photo', 'Photo soumise par utilisateur') : t('Fallback location image', 'Image de secours')} />
           <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur rounded-xl text-[8px] font-bold text-white uppercase tracking-widest">
-            {hasUserPhoto ? 'User Photo' : 'Demo Image'}
+            {hasUserPhoto ? t('User Photo', 'Photo utilisateur') : t('Demo Image', 'Image demo')}
           </div>
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="p-2 bg-[#0f2b46] rounded-full border-2 border-white shadow-xl">
@@ -95,19 +97,19 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
             <span className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
               {point.type === Category.FUEL ? <Zap size={10} className="mr-1" /> : <CreditCard size={10} className="mr-1" />}
-              {point.type === Category.FUEL ? 'Fuel Price' : 'Availability'}
+              {point.type === Category.FUEL ? t('Fuel Price', 'Prix carburant') : t('Availability', 'Disponibilite')}
             </span>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900 tracking-tight">
                 {point.type === Category.FUEL ? (typeof point.price === 'number' ? `${point.price}` : '--') : point.availability}
               </span>
               <span className="text-[10px] text-gray-500 font-medium">
-                {point.type === Category.FUEL ? fuelSubtitle || 'Price details unavailable' : 'Real-time status'}
+                {point.type === Category.FUEL ? fuelSubtitle || t('Price details unavailable', 'Details de prix indisponibles') : t('Real-time status', 'Statut en temps reel')}
               </span>
             </div>
             <div className="mt-2 flex items-center">
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${point.type === Category.FUEL ? 'text-[#4c7c59] bg-[#eaf3ee]' : 'text-[#0f2b46] bg-[#e7eef4]'}`}>
-                {point.type === Category.FUEL ? (point.fuelType || 'Fuel') : 'Verified'}
+                {point.type === Category.FUEL ? (point.fuelType || t('Fuel', 'Carburant')) : t('Verified', 'Verifie')}
               </span>
             </div>
           </div>
@@ -115,11 +117,11 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
             <span className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
               <ShieldCheck size={10} className="mr-1" />
-              Trust Score
+              {t('Trust Score', 'Score de confiance')}
             </span>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900 tracking-tight">{point.trustScore}%</span>
-              <span className="text-[10px] text-gray-500 font-medium">Community confidence</span>
+              <span className="text-[10px] text-gray-500 font-medium">{t('Community confidence', 'Confiance de la communaute')}</span>
             </div>
             <div className="mt-2 h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
               <div className="h-full bg-[#0f2b46] rounded-full" style={{ width: `${point.trustScore}%` }}></div>
@@ -130,29 +132,29 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <BadgeCheck className="text-[#4c7c59]" size={20} />
-              <h4 className="text-sm font-bold text-gray-900">Contributor Trust</h4>
+                <BadgeCheck className="text-[#4c7c59]" size={20} />
+                <h4 className="text-sm font-bold text-gray-900">{t('Contributor Trust', 'Confiance contributeur')}</h4>
+              </div>
+              <span className="text-sm font-bold text-[#4c7c59]">{point.contributorTrust}</span>
             </div>
-            <span className="text-sm font-bold text-[#4c7c59]">{point.contributorTrust}</span>
+            <p className="text-[11px] text-gray-500 leading-relaxed">
+            {t('Weighted by recent verification accuracy and photo metadata match.', 'Pondere par la precision recente de verification et la coherence des metadonnees photo.')}
+            </p>
           </div>
-          <p className="text-[11px] text-gray-500 leading-relaxed">
-            Weighted by recent verification accuracy and photo metadata match.
-          </p>
-        </div>
 
         {point.type === Category.MOBILE_MONEY && (
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Activity className="text-[#0f2b46]" size={20} />
-                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">Reliability Indicator</h4>
+                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">{t('Reliability Indicator', 'Indicateur de fiabilite')}</h4>
               </div>
               <span className={`text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wider ${getReliabilityColor(point.reliability)}`}>
-                {point.reliability || 'Unrated'}
+                {point.reliability || t('Unrated', 'Non evalue')}
               </span>
             </div>
             <p className="text-[11px] text-gray-500 leading-relaxed italic">
-              Merchant stability is monitored via real-time transaction reports.
+              {t('Merchant stability is monitored via real-time transaction reports.', 'La stabilite marchand est suivie via les rapports de transaction en temps reel.')}
             </p>
           </div>
         )}
@@ -160,29 +162,29 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <ShieldCheck className="text-[#0f2b46]" size={20} />
-              <h4 className="text-sm font-bold text-gray-900">Data Integrity</h4>
+                <ShieldCheck className="text-[#0f2b46]" size={20} />
+                <h4 className="text-sm font-bold text-gray-900">{t('Data Integrity', 'Integrite des donnees')}</h4>
+              </div>
+              <span className="text-sm font-bold text-[#0f2b46]">{point.trustScore}%</span>
             </div>
-            <span className="text-sm font-bold text-[#0f2b46]">{point.trustScore}%</span>
-          </div>
           <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
             <div className="h-full bg-[#0f2b46] rounded-full" style={{ width: `${point.trustScore}%` }}></div>
           </div>
           <div className="flex items-center text-[10px] text-gray-400 font-medium leading-relaxed">
             <Info size={12} className="mr-1 shrink-0" />
-            Verified with device GPS + live camera capture.
+            {t('Verified with device GPS + live camera capture.', 'Verifie avec GPS appareil + capture camera en direct.')}
           </div>
         </div>
 
         <div className="space-y-4 pt-2">
-          <h4 className="text-sm font-bold text-gray-900 px-1">Location Intelligence</h4>
+          <h4 className="text-sm font-bold text-gray-900 px-1">{t('Location Intelligence', 'Intelligence de localisation')}</h4>
 
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
             <div className="p-2 bg-gray-50 rounded-xl text-gray-400">
               <MapPin size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-gray-900">Address</span>
+              <span className="text-xs font-bold text-gray-900">{t('Address', 'Adresse')}</span>
               <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{point.location}</p>
             </div>
           </div>
@@ -192,8 +194,8 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
               <Clock size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-gray-900">Hours</span>
-              <p className="text-xs text-gray-500 mt-0.5">{point.hours || 'Standard Business Hours'}</p>
+              <span className="text-xs font-bold text-gray-900">{t('Hours', 'Horaires')}</span>
+              <p className="text-xs text-gray-500 mt-0.5">{point.hours || t('Standard Business Hours', 'Horaires standards')}</p>
             </div>
           </div>
 
@@ -202,7 +204,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
               <User size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-gray-900">Queue Length</span>
+              <span className="text-xs font-bold text-gray-900">{t('Queue Length', 'Longueur de file')}</span>
               <p className="text-xs text-gray-500 mt-0.5">{point.queueLength}</p>
             </div>
           </div>
@@ -213,7 +215,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
                 <Zap size={18} />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-gray-900">Fuel Type</span>
+                <span className="text-xs font-bold text-gray-900">{t('Fuel Type', 'Type de carburant')}</span>
                 <p className="text-xs text-gray-500 mt-0.5">{point.fuelType}</p>
               </div>
             </div>
@@ -225,7 +227,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
                 <BadgeCheck size={18} />
               </div>
               <div className="flex flex-col">
-                <span className="text-xs font-bold text-gray-900">Merchant ID</span>
+                <span className="text-xs font-bold text-gray-900">{t('Merchant ID', 'ID marchand')}</span>
                 <p className="text-xs font-mono text-gray-600 mt-0.5">{point.merchantId}</p>
               </div>
             </div>
@@ -236,9 +238,9 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
               <CreditCard size={18} />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-gray-900">Accepted Payments</span>
+              <span className="text-xs font-bold text-gray-900">{t('Accepted Payments', 'Paiements acceptes')}</span>
               <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                {point.paymentMethods?.join(', ') || 'Cash, Mobile Money'}
+                {point.paymentMethods?.join(', ') || t('Cash, Mobile Money', 'Especes, Mobile Money')}
               </p>
             </div>
           </div>
@@ -253,7 +255,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
           className="flex-1 h-14 bg-[#c86b4a] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-[#b85f3f] active:scale-95 transition-all"
         >
           <Zap size={18} />
-          <span>{isAuthenticated ? 'Add Data' : 'Sign In to Add Data'}</span>
+          <span>{isAuthenticated ? t('Add Data', 'Ajouter des donnees') : t('Sign In to Add Data', 'Connectez-vous pour ajouter des donnees')}</span>
         </button>
         <button className="h-14 w-14 bg-gray-100 text-gray-900 rounded-xl shadow-md border border-gray-200 flex items-center justify-center hover:bg-gray-200 transition-colors">
           <Navigation2 size={20} />

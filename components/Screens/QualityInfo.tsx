@@ -3,16 +3,18 @@ import { ArrowLeft, ShieldCheck, UserCheck, Search, Database } from 'lucide-reac
 
 interface Props {
   onBack: () => void;
+  language: 'en' | 'fr';
 }
 
-const QualityInfo: React.FC<Props> = ({ onBack }) => {
+const QualityInfo: React.FC<Props> = ({ onBack, language }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
         <button onClick={onBack} className="p-2 -ml-2 text-gray-700">
           <ArrowLeft size={20} />
         </button>
-        <h3 className="text-sm font-bold mx-auto">Data Quality & Trust</h3>
+        <h3 className="text-sm font-bold mx-auto">{t('Data Quality & Trust', 'Qualite et confiance des donnees')}</h3>
         <div className="w-8"></div>
       </div>
 
@@ -21,18 +23,18 @@ const QualityInfo: React.FC<Props> = ({ onBack }) => {
           <div className="w-16 h-16 bg-[#e7eef4] text-[#0f2b46] rounded-2xl flex items-center justify-center mx-auto shadow-sm">
             <ShieldCheck size={32} />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">How we ensure reliability</h2>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{t('How we ensure reliability', 'Comment nous garantissons la fiabilite')}</h2>
           <p className="text-sm text-gray-500 leading-relaxed px-4">
-            Every data point on African Data Layer undergoes a multi-layered validation process to maintain institutional standards.
+            {t('Every data point on African Data Layer undergoes a multi-layered validation process to maintain institutional standards.', 'Chaque point de donnee sur African Data Layer suit un processus de validation multi-couches pour maintenir des standards eleves.')}
           </p>
         </div>
 
         <div className="space-y-4">
           {[
-            { title: 'Community Verification', desc: 'New submissions are cross-referenced by nearby contributors in real time.', icon: <Users size={20} /> },
-            { title: 'Automated Integrity Checks', desc: 'Systems detect statistical outliers and potential fraud patterns.', icon: <Search size={20} /> },
-            { title: 'Reputation Scoring', desc: 'Contributors build a history of trust. High-trust users carry more weight.', icon: <UserCheck size={20} /> },
-            { title: 'Ground Truth Audits', desc: 'Random physical inspections by senior contributors ensure accuracy.', icon: <Database size={20} /> }
+            { title: t('Community Verification', 'Verification communautaire'), desc: t('New submissions are cross-referenced by nearby contributors in real time.', 'Les nouvelles soumissions sont verifiees en temps reel par des contributeurs proches.'), icon: <Users size={20} /> },
+            { title: t('Automated Integrity Checks', 'Controles automatiques d\'integrite'), desc: t('Systems detect statistical outliers and potential fraud patterns.', 'Le systeme detecte les valeurs aberrantes et les schemas potentiels de fraude.'), icon: <Search size={20} /> },
+            { title: t('Reputation Scoring', 'Score de reputation'), desc: t('Contributors build a history of trust. High-trust users carry more weight.', 'Les contributeurs construisent un historique de confiance. Les profils fiables ont plus de poids.'), icon: <UserCheck size={20} /> },
+            { title: t('Ground Truth Audits', 'Audits terrain'), desc: t('Random physical inspections by senior contributors ensure accuracy.', 'Des inspections physiques aleatoires par des contributeurs seniors assurent la precision.'), icon: <Database size={20} /> }
           ].map((step, i) => (
             <div key={i} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm flex items-start space-x-4">
               <div className="p-3 bg-[#e7eef4] text-[#0f2b46] rounded-2xl">
@@ -47,12 +49,12 @@ const QualityInfo: React.FC<Props> = ({ onBack }) => {
         </div>
 
         <div className="bg-[#0f2b46] rounded-2xl p-6 text-white space-y-4 shadow-xl">
-          <h4 className="text-xs font-bold uppercase tracking-widest">Our Sovereignty Principle</h4>
+          <h4 className="text-xs font-bold uppercase tracking-widest">{t('Our Sovereignty Principle', 'Notre principe de souverainete')}</h4>
           <p className="text-sm leading-relaxed opacity-90">
-            African data, stored and governed locally. We believe infrastructure intelligence should serve the people who build it.
+            {t('African data, stored and governed locally. We believe infrastructure intelligence should serve the people who build it.', 'Donnees africaines, stockees et gouvernees localement. Nous pensons que l\'intelligence d\'infrastructure doit servir ceux qui la construisent.')}
           </p>
           <button className="text-[10px] font-bold uppercase tracking-widest bg-white/20 px-4 py-2 rounded-xl hover:bg-white/30 transition-colors">
-            Read Governance Framework
+            {t('Read Governance Framework', 'Lire le cadre de gouvernance')}
           </button>
         </div>
 

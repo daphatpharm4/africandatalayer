@@ -4,46 +4,48 @@ import { Layers, Camera, MapPin, ShieldCheck, ArrowRight, Globe } from 'lucide-r
 
 interface Props {
   onStart: (screen: Screen) => void;
+  language: 'en' | 'fr';
 }
 
-const Splash: React.FC<Props> = ({ onStart }) => {
+const Splash: React.FC<Props> = ({ onStart, language }) => {
   const [step, setStep] = useState(0);
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const slides = [
     {
-      title: 'Real-time infrastructure & price data for African cities.',
-      desc: 'African Data Layer is a civic-tech platform for crowdsourced, fraud-resistant reporting.',
+      title: t('Real-time infrastructure & price data for African cities.', 'Donnees d\'infrastructure et de prix en temps reel pour les villes africaines.'),
+      desc: t('African Data Layer is a civic-tech platform for crowdsourced, fraud-resistant reporting.', 'African Data Layer est une plateforme civic-tech de signalement participatif resistante a la fraude.'),
       icon: <Layers size={46} className="text-white" />,
-      action: 'Continue'
+      action: t('Continue', 'Continuer')
     },
     {
-      title: 'Permission Use Notice',
-      desc: 'Camera + location are required for geotagging and fraud prevention. No gallery uploads allowed.',
+      title: t('Permission Use Notice', 'Avis d\'utilisation des permissions'),
+      desc: t('Camera + location are required for geotagging and fraud prevention. No gallery uploads allowed.', 'La camera et la localisation sont requises pour le geotagging et la prevention de fraude. Import galerie interdit.'),
       icon: (
         <div className="flex items-center space-x-4 text-white">
           <Camera size={28} />
           <MapPin size={28} />
         </div>
       ),
-      action: 'Allow Permissions'
+      action: t('Allow Permissions', 'Autoriser les permissions')
     },
     {
-      title: 'See the map',
-      desc: 'Browse live fuel stations and mobile money kiosks in your city.',
+      title: t('See the map', 'Voir la carte'),
+      desc: t('Browse live fuel stations and mobile money kiosks in your city.', 'Parcourez les stations-service et kiosques mobile money de votre ville.'),
       icon: <MapPin size={46} className="text-[#0f2b46]" />,
-      action: 'Next'
+      action: t('Next', 'Suivant')
     },
     {
-      title: 'Contribute local info',
-      desc: 'Capture live photos, add prices, and confirm availability in minutes.',
+      title: t('Contribute local info', 'Contribuez des infos locales'),
+      desc: t('Capture live photos, add prices, and confirm availability in minutes.', 'Capturez des photos en direct, ajoutez les prix et confirmez la disponibilite en quelques minutes.'),
       icon: <Camera size={46} className="text-[#0f2b46]" />,
-      action: 'Next'
+      action: t('Next', 'Suivant')
     },
     {
-      title: 'Earn rewards, power change',
-      desc: 'Collect XP, unlock badges, and redeem local rewards.',
+      title: t('Earn rewards, power change', 'Gagnez des recompenses, creez le changement'),
+      desc: t('Collect XP, unlock badges, and redeem local rewards.', 'Gagnez des XP, debloquez des badges et echangez des recompenses locales.'),
       icon: <ShieldCheck size={46} className="text-[#0f2b46]" />,
-      action: 'Get Started'
+      action: t('Get Started', 'Commencer')
     }
   ];
 
@@ -90,14 +92,14 @@ const Splash: React.FC<Props> = ({ onStart }) => {
               onClick={() => onStart(Screen.HOME)}
               className="w-full h-14 bg-white text-[#0f2b46] border border-[#0f2b46]/20 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-[#f2f4f7] transition-all"
             >
-              Browse as Guest
+              {t('Browse as Guest', 'Continuer en invite')}
             </button>
             <button
               onClick={() => onStart(Screen.AUTH)}
               className="w-full h-14 bg-[#c86b4a] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-[#b85f3f] transition-all"
             >
               <Globe size={16} />
-              <span>Sign In</span>
+              <span>{t('Sign In', 'Connexion')}</span>
             </button>
           </div>
         )}

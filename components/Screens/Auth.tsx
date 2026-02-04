@@ -5,20 +5,22 @@ import { getSession, registerWithCredentials, signInWithCredentials, signInWithG
 interface Props {
   onBack: () => void;
   onComplete: () => void;
+  language: 'en' | 'fr';
 }
 
-const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
+const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const handleSubmit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !password) {
-      setErrorMessage('Email and password are required.');
+      setErrorMessage(t('Email and password are required.', 'Email et mot de passe requis.'));
       return;
     }
 
@@ -32,11 +34,11 @@ const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
       await signInWithCredentials(normalizedEmail, password);
       const session = await getSession();
       if (!session?.user) {
-        throw new Error('Unable to start a session.');
+        throw new Error(t('Unable to start a session.', 'Impossible de demarrer la session.'));
       }
       onComplete();
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Authentication failed.';
+      const message = error instanceof Error ? error.message : t('Authentication failed.', 'Echec d\'authentification.');
       setErrorMessage(message.replace(/^Error:\s*/, ''));
     } finally {
       setIsSubmitting(false);
@@ -53,11 +55,11 @@ const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
         </div>
 
         <div className="text-center mb-10">
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{mode === 'signin' ? 'Welcome Back' : 'Join the Network'}</h2>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{mode === 'signin' ? t('Welcome Back', 'Bon retour') : t('Join the Network', 'Rejoignez le reseau')}</h2>
           <p className="text-sm text-gray-500 mt-2 leading-relaxed">
             {mode === 'signin'
-              ? 'Access the African Data Layer portal for infrastructure and pricing.'
-              : 'Create an account to contribute data and earn XP rewards.'}
+              ? t('Access the African Data Layer portal for infrastructure and pricing.', 'Accedez au portail African Data Layer pour les donnees d\'infrastructure et de prix.')
+              : t('Create an account to contribute data and earn XP rewards.', 'Creez un compte pour contribuer et gagner des recompenses XP.')}
           </p>
         </div>
 
@@ -66,16 +68,16 @@ const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
             onClick={() => signInWithGoogle()}
             className="w-full h-12 bg-white border border-gray-100 rounded-xl text-[10px] font-bold uppercase tracking-widest text-[#0f2b46] shadow-sm hover:bg-gray-50 transition-all"
           >
-            Continue with Google
+            {t('Continue with Google', 'Continuer avec Google')}
           </button>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">Email Address</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Email Address', 'Adresse email')}</label>
             <div className="relative group">
               <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0f2b46] transition-colors" />
               <input
                 type="email"
-                placeholder="name@email.com"
+                placeholder={t('name@email.com', 'nom@email.com')}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 className="w-full h-14 bg-white border border-gray-100 rounded-xl pl-12 pr-4 text-sm focus:border-[#0f2b46] focus:outline-none transition-all shadow-sm"
@@ -85,14 +87,14 @@ const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
 
           <div className="space-y-2">
             <div className="flex justify-between items-center px-1">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Password</label>
-              {mode === 'signin' && <button className="text-[10px] font-bold text-[#0f2b46] uppercase">Forgot?</button>}
+              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Password', 'Mot de passe')}</label>
+              {mode === 'signin' && <button className="text-[10px] font-bold text-[#0f2b46] uppercase">{t('Forgot?', 'Oublie ?')}</button>}
             </div>
             <div className="relative group">
               <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0f2b46] transition-colors" />
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Min. 8 characters"
+                placeholder={t('Min. 8 characters', 'Min. 8 caracteres')}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="w-full h-14 bg-white border border-gray-100 rounded-xl pl-12 pr-12 text-sm focus:border-[#0f2b46] focus:outline-none transition-all shadow-sm"
@@ -112,7 +114,7 @@ const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
             disabled={isSubmitting}
             className="w-full h-14 bg-[#0f2b46] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-[#0b2236] active:scale-95 transition-all disabled:opacity-70"
           >
-            <span>{isSubmitting ? 'Working...' : mode === 'signin' ? 'Sign In' : 'Create Account'}</span>
+            <span>{isSubmitting ? t('Working...', 'Traitement...') : mode === 'signin' ? t('Sign In', 'Connexion') : t('Create Account', 'Creer un compte')}</span>
             <ArrowRight size={18} />
           </button>
 
@@ -126,11 +128,11 @@ const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
         <div className="mt-8 text-center flex flex-col space-y-6 items-center">
           <div className="flex items-center space-x-2 text-gray-400">
             <ShieldCheck size={12} />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Secure Encrypted Login</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest">{t('Secure Encrypted Login', 'Connexion chiffree securisee')}</span>
           </div>
 
           <p className="text-xs text-gray-500">
-            {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
+            {mode === 'signin' ? t("Don't have an account? ", 'Pas de compte ? ') : t('Already have an account? ', 'Vous avez deja un compte ? ')}
             <button
               onClick={() => {
                 setMode(mode === 'signin' ? 'signup' : 'signin');
@@ -138,7 +140,7 @@ const Auth: React.FC<Props> = ({ onBack, onComplete }) => {
               }}
               className="text-[#0f2b46] font-bold hover:underline"
             >
-              {mode === 'signin' ? 'Create an account' : 'Sign in instead'}
+              {mode === 'signin' ? t('Create an account', 'Creer un compte') : t('Sign in instead', 'Se connecter plutot')}
             </button>
           </p>
         </div>

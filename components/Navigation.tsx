@@ -7,18 +7,20 @@ interface Props {
   onNavigate: (screen: Screen) => void;
   isAuthenticated: boolean;
   isAdmin?: boolean;
+  language?: 'en' | 'fr';
 }
 
-const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticated, isAdmin }) => {
+const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticated, isAdmin, language = 'en' }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const navItems = [
-    { id: Screen.HOME, label: 'Explore', icon: Map },
-    { id: Screen.CONTRIBUTE, label: 'Contribute', icon: PlusCircle },
+    { id: Screen.HOME, label: t('Explore', 'Explorer'), icon: Map },
+    { id: Screen.CONTRIBUTE, label: t('Contribute', 'Contribuer'), icon: PlusCircle },
     {
       id: Screen.ANALYTICS,
-      label: isAdmin ? 'Impact' : 'Leaderboard',
+      label: isAdmin ? t('Impact', 'Impact') : t('Leaderboard', 'Classement'),
       icon: isAdmin ? BarChart2 : Medal
     },
-    { id: isAuthenticated ? Screen.PROFILE : Screen.AUTH, label: isAuthenticated ? 'Profile' : 'Sign In', icon: User }
+    { id: isAuthenticated ? Screen.PROFILE : Screen.AUTH, label: isAuthenticated ? t('Profile', 'Profil') : t('Sign In', 'Connexion'), icon: User }
   ];
 
   return (

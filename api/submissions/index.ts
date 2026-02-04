@@ -11,6 +11,9 @@ const INLINE_PHOTO_PREFIX = "data:image/";
 const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
 const MAX_EDGE_CONFIG_SUBMISSIONS_BYTES =
   Number(process.env.MAX_EDGE_CONFIG_SUBMISSIONS_BYTES ?? "1800000") || 1800000;
+const TIER_1_XP = 5;
+const TIER_2_XP = 10;
+const TIER_3_XP = 20;
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
@@ -74,6 +77,12 @@ function compactSubmissionsForStorage(submissions: Submission[]): Submission[] {
     sorted.pop();
   }
   return sorted;
+}
+
+function hasValue(input: unknown): boolean {
+  if (typeof input === "string") return Boolean(input.trim());
+  if (Array.isArray(input)) return input.length > 0;
+  return Boolean(input);
 }
 
 function mimeToExtension(mime: string): string {
@@ -228,6 +237,15 @@ export async function POST(request: Request): Promise<Response> {
 
   const location = parseLocation(body?.location);
   const rawDetails = body?.details && typeof body.details === "object" ? { ...(body.details as Record<string, unknown>) } : {};
+  const tier2Completed =
+    hasValue(rawDetails.profession) ||
+    hasValue(rawDetails.phoneMasked) ||
+    hasValue(rawDetails.queueLength) ||
+    hasValue(rawDetails.paymentModes) ||
+    hasValue(rawDetails.problem) ||
+    hasValue(rawDetails.hours);
+  let tier3Completed =
+    hasValue(rawDetails.comment) || hasValue(rawDetails.merchantId) || hasValue(rawDetails.reliability);
 
   if (category === "fuel_station") {
     const parsedFuelPrice = parseNumeric(rawDetails.fuelPrice ?? rawDetails.price);
@@ -257,6 +275,7 @@ export async function POST(request: Request): Promise<Response> {
   if (!imageBase64) {
     return errorResponse("Photo is required", 400);
   }
+  const secondImageBase64 = body?.secondImageBase64 as string | undefined;
   const parsedPhoto = parseImagePayload(imageBase64);
   if (!parsedPhoto) {
     return errorResponse("Invalid photo format", 400);
@@ -326,6 +345,34 @@ export async function POST(request: Request): Promise<Response> {
     }
   }
 
+  if (secondImageBase64) {
+    const parsedSecondPhoto = parseImagePayload(secondImageBase64);
+    if (!parsedSecondPhoto) {
+      return errorResponse("Invalid photo format", 400);
+    }
+    if (parsedSecondPhoto.imageBuffer.byteLength > MAX_IMAGE_BYTES) {
+      return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
+    }
+    try {
+      const secondPhotoUrl = await uploadSubmissionPhoto(
+        `${newSubmission.id}-second`,
+        parsedSecondPhoto.imageBuffer,
+        parsedSecondPhoto.mime,
+        parsedSecondPhoto.ext
+      );
+      rawDetails.secondPhotoUrl = secondPhotoUrl;
+      rawDetails.hasSecondaryPhoto = true;
+      tier3Completed = true;
+    } catch {
+      return errorResponse("Unable to store photo", 500);
+    }
+  }
+
+  const xpAwarded = TIER_1_XP + (tier2Completed ? TIER_2_XP : 0) + (tier3Completed ? TIER_3_XP : 0);
+  rawDetails.tier2Completed = tier2Completed;
+  rawDetails.tier3Completed = tier3Completed;
+  rawDetails.xpAwarded = xpAwarded;
+
   if (photoLocation) {
     newSubmission.location = photoLocation;
   } else if (location) {
@@ -344,7 +391,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const profile = await getUserProfile(auth.id);
   if (profile) {
-    profile.XP = (profile.XP ?? 0) + 10;
+    profile.XP = (profile.XP ?? 0) + xpAwarded;
     await setUserProfile(auth.id, profile);
   }
 
