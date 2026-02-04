@@ -26,6 +26,13 @@ interface Props {
   language: 'en' | 'fr';
 }
 
+type MapPointGroup = {
+  key: string;
+  latitude: number;
+  longitude: number;
+  points: DataPoint[];
+};
+
 const MOCK_POINTS: DataPoint[] = [
   {
     id: '1',
@@ -110,6 +117,22 @@ const createMarkerIcon = (color: string) =>
     iconSize: [26, 26],
     iconAnchor: [13, 13]
   });
+
+const clusterIconCache = new Map<string, L.DivIcon>();
+
+const getClusterIcon = (color: string, count: number) => {
+  const key = `${color}_${count}`;
+  const cached = clusterIconCache.get(key);
+  if (cached) return cached;
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="min-width:28px;height:28px;padding:0 8px;border-radius:9999px;background:${color};border:2px solid #ffffff;box-shadow:0 8px 16px rgba(15,43,70,0.35);display:flex;align-items:center;justify-content:center;color:#ffffff;font-size:11px;font-weight:700;line-height:1;">${count}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+  });
+  clusterIconCache.set(key, icon);
+  return icon;
+};
 
 const fuelIcon = createMarkerIcon('#0f2b46');
 const kioskIcon = createMarkerIcon('#1f2933');
@@ -222,6 +245,23 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     return source.filter(p => p.type === activeCategory);
   }, [activeCategory, points]);
 
+  const mapPointGroups = useMemo<MapPointGroup[]>(() => {
+    const groups = new Map<string, MapPointGroup>();
+    for (const point of filteredPoints) {
+      if (!point.coordinates) continue;
+      const latitude = Number(point.coordinates.latitude.toFixed(5));
+      const longitude = Number(point.coordinates.longitude.toFixed(5));
+      const key = `${latitude}_${longitude}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.points.push(point);
+      } else {
+        groups.set(key, { key, latitude, longitude, points: [point] });
+      }
+    }
+    return Array.from(groups.values());
+  }, [filteredPoints]);
+
   return (
     <div className="flex flex-col h-full bg-[#f9fafb]">
       <header className="px-4 pt-4 pb-3 bg-white border-b border-gray-100 shrink-0">
@@ -302,39 +342,67 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {filteredPoints
-                .filter((point) => point.coordinates)
-                .map((point) => {
-                  const position = point.coordinates!;
-                  return (
-                    <Marker
-                      key={point.id}
-                      position={[position.latitude, position.longitude]}
-                      icon={point.type === Category.FUEL ? fuelIcon : kioskIcon}
-                    >
-                      <Popup>
+              {mapPointGroups.map((group) => {
+                const singlePoint = group.points.length === 1 ? group.points[0] : null;
+                const hasFuel = group.points.some((point) => point.type === Category.FUEL);
+                const hasKiosk = group.points.some((point) => point.type === Category.MOBILE_MONEY);
+                const icon = singlePoint
+                  ? singlePoint.type === Category.FUEL
+                    ? fuelIcon
+                    : kioskIcon
+                  : getClusterIcon(hasFuel && hasKiosk ? '#c86b4a' : hasFuel ? '#0f2b46' : '#1f2933', group.points.length);
+
+                return (
+                  <Marker
+                    key={group.key}
+                    position={[group.latitude, group.longitude]}
+                    icon={icon}
+                  >
+                    <Popup>
+                      {singlePoint ? (
                         <div className="space-y-1">
                           <span className="text-[9px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                            {point.type === Category.FUEL ? t('Fuel Station', 'Station-service') : t('Money Kiosk', 'Kiosque mobile money')}
+                            {singlePoint.type === Category.FUEL ? t('Fuel Station', 'Station-service') : t('Money Kiosk', 'Kiosque mobile money')}
                           </span>
-                          <p className="text-sm font-semibold text-gray-900">{point.name}</p>
-                          <p className="text-[10px] text-gray-500">{point.location}</p>
-                          {point.type === Category.FUEL && (
+                          <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
+                          <p className="text-[10px] text-gray-500">{singlePoint.location}</p>
+                          {singlePoint.type === Category.FUEL && (
                             <p className="text-[10px] text-gray-600">
-                              {(point.fuelType ?? t('Fuel', 'Carburant'))} • {typeof point.price === 'number' ? `${point.price} XAF/L` : t('Price unavailable', 'Prix indisponible')}
+                              {(singlePoint.fuelType ?? t('Fuel', 'Carburant'))} • {typeof singlePoint.price === 'number' ? `${singlePoint.price} XAF/L` : t('Price unavailable', 'Prix indisponible')}
                             </p>
                           )}
                           <button
                             className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
-                            onClick={() => onSelectPoint(point)}
+                            onClick={() => onSelectPoint(singlePoint)}
                           >
                             {t('View Details', 'Voir details')}
                           </button>
                         </div>
-                      </Popup>
-                    </Marker>
-                  );
-                })}
+                      ) : (
+                        <div className="space-y-2 min-w-[220px]">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                            {language === 'fr' ? `${group.points.length} points au meme endroit` : `${group.points.length} points at this location`}
+                          </p>
+                          <div className="space-y-1.5">
+                            {group.points.map((point) => (
+                              <button
+                                key={point.id}
+                                className="w-full rounded-lg border border-gray-100 px-2 py-1.5 text-left hover:bg-gray-50"
+                                onClick={() => onSelectPoint(point)}
+                              >
+                                <p className="text-[11px] font-semibold text-gray-900 truncate">{point.name}</p>
+                                <p className="text-[9px] uppercase tracking-wider text-gray-500">
+                                  {point.type === Category.FUEL ? t('Fuel Station', 'Station-service') : t('Money Kiosk', 'Kiosque mobile money')}
+                                </p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </Popup>
+                  </Marker>
+                );
+              })}
             </MapContainer>
             <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between">
