@@ -163,6 +163,12 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete }) => {
     if (lower.includes('unable to store photo')) {
       return "We couldn't save your photo right now. Please retry.";
     }
+    if (lower.includes('blob storage is not configured')) {
+      return "Photo storage isn't configured on the server yet.";
+    }
+    if (lower.includes('entity_too_large') || lower.includes('body exceeded 2mb limit')) {
+      return 'Server storage is full. Please contact admin or try again later.';
+    }
     if (lower.includes('invalid fuel price')) {
       return 'Please enter a valid fuel price.';
     }

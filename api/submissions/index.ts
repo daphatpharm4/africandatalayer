@@ -9,6 +9,8 @@ const allowedCategories: SubmissionCategory[] = ["fuel_station", "mobile_money"]
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const INLINE_PHOTO_PREFIX = "data:image/";
 const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
+const MAX_EDGE_CONFIG_SUBMISSIONS_BYTES =
+  Number(process.env.MAX_EDGE_CONFIG_SUBMISSIONS_BYTES ?? "1800000") || 1800000;
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 
@@ -56,6 +58,22 @@ function stripInlinePhotoData(submission: Submission): Submission {
   const { photoUrl: _photoUrl, ...rest } = submission;
   const details = { ...(submission.details ?? {}), hasPhoto: true };
   return { ...rest, details };
+}
+
+function estimateJsonBytes(input: unknown): number {
+  return Buffer.byteLength(JSON.stringify(input), "utf8");
+}
+
+function compactSubmissionsForStorage(submissions: Submission[]): Submission[] {
+  if (estimateJsonBytes(submissions) <= MAX_EDGE_CONFIG_SUBMISSIONS_BYTES) return submissions;
+  const sorted = [...submissions].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  while (sorted.length > 0 && estimateJsonBytes(sorted) > MAX_EDGE_CONFIG_SUBMISSIONS_BYTES) {
+    sorted.pop();
+  }
+  return sorted;
 }
 
 function mimeToExtension(mime: string): string {
@@ -298,7 +316,12 @@ export async function POST(request: Request): Promise<Response> {
     try {
       newSubmission.photoUrl = await uploadSubmissionPhoto(newSubmission.id, imageBuffer, mime, ext);
       rawDetails.hasPhoto = true;
-    } catch {
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      const lower = raw.toLowerCase();
+      if (lower.includes("blob") && lower.includes("token")) {
+        return errorResponse("Blob storage is not configured", 500);
+      }
       return errorResponse("Unable to store photo", 500);
     }
   }
@@ -316,7 +339,8 @@ export async function POST(request: Request): Promise<Response> {
   const submissions = (await getSubmissions()).map(stripInlinePhotoData);
   const storedSubmission = stripInlinePhotoData(newSubmission);
   submissions.push(storedSubmission);
-  await setSubmissions(submissions);
+  const compactedSubmissions = compactSubmissionsForStorage(submissions);
+  await setSubmissions(compactedSubmissions);
 
   const profile = await getUserProfile(auth.id);
   if (profile) {
