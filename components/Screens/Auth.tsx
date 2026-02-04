@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ChevronLeft, Mail, Lock, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
-import { getSession, registerWithCredentials, signInWithCredentials, signInWithGoogle } from '../../lib/client/auth';
+import { AuthClientError, getSession, registerWithCredentials, signInWithCredentials, signInWithGoogle } from '../../lib/client/auth';
 import BrandLogo from '../BrandLogo';
 
 interface Props {
@@ -17,6 +17,38 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const isAuthClientError = (value: unknown): value is AuthClientError =>
+    value instanceof Error && 'code' in value && typeof (value as { code?: unknown }).code === 'string';
+
+  const mapAuthErrorMessage = (error: unknown): string => {
+    if (isAuthClientError(error)) {
+      switch (error.code) {
+        case 'invalid_credentials':
+          return t('Invalid email or password.', 'Email ou mot de passe invalide.');
+        case 'registration_conflict':
+          return t('An account already exists for this email.', 'Un compte existe deja pour cet email.');
+        case 'validation_error':
+          return t('Please check your details and try again.', 'Verifiez vos informations et reessayez.');
+        case 'configuration_error':
+        case 'auth_unavailable':
+          return t('Authentication service is temporarily unavailable. Please retry.', 'Service d\'authentification temporairement indisponible. Reessayez.');
+        case 'callback_error':
+          return t('Unable to complete sign in right now. Please retry.', 'Connexion impossible pour le moment. Reessayez.');
+        case 'access_denied':
+          return t('Access denied for this account.', 'Acces refuse pour ce compte.');
+        default:
+          return t('Authentication failed. Please try again.', 'Echec d\'authentification. Reessayez.');
+      }
+    }
+
+    if (error instanceof Error) {
+      const message = error.message.replace(/^Error:\s*/, '').trim();
+      if (message && !/^<!doctype/i.test(message) && !/^<html/i.test(message)) {
+        return message;
+      }
+    }
+    return t('Authentication failed. Please try again.', 'Echec d\'authentification. Reessayez.');
+  };
 
   const handleSubmit = async () => {
     const normalizedEmail = email.trim().toLowerCase();
@@ -27,20 +59,28 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
 
     setIsSubmitting(true);
     setErrorMessage('');
+    let accountCreated = false;
 
     try {
       if (mode === 'signup') {
         await registerWithCredentials(normalizedEmail, password);
+        accountCreated = true;
+        await signInWithCredentials(normalizedEmail, password, { maxAttempts: 6, retryDelayMs: 500 });
+      } else {
+        await signInWithCredentials(normalizedEmail, password);
       }
-      await signInWithCredentials(normalizedEmail, password);
       const session = await getSession();
       if (!session?.user) {
-        throw new Error(t('Unable to start a session.', 'Impossible de demarrer la session.'));
+        throw new AuthClientError('unknown_error', t('Unable to start a session.', 'Impossible de demarrer la session.'), { retryable: true });
       }
       onComplete();
     } catch (error) {
-      const message = error instanceof Error ? error.message : t('Authentication failed.', 'Echec d\'authentification.');
-      setErrorMessage(message.replace(/^Error:\s*/, ''));
+      if (mode === 'signup' && accountCreated) {
+        setMode('signin');
+        setErrorMessage(t('Account created. Automatic sign in took too long. Please sign in in a few seconds.', 'Compte cree. La connexion automatique a pris trop de temps. Connectez-vous dans quelques secondes.'));
+      } else {
+        setErrorMessage(mapAuthErrorMessage(error));
+      }
     } finally {
       setIsSubmitting(false);
     }
