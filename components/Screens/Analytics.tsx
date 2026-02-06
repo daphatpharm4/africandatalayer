@@ -114,7 +114,7 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
           <div className="flex items-center justify-between py-2">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 rounded-full border-2 border-white shadow bg-[#e7eef4] overflow-hidden">
-                <img src="https://picsum.photos/seed/kofi/300/300" alt="avatar" className="w-full h-full object-cover" />
+                <img src="https://picsum.photos/seed/kofi/300/300" alt={t('avatar', 'avatar')} className="w-full h-full object-cover" />
               </div>
               <div className="flex flex-col">
                 <h4 className="font-bold text-gray-900 text-sm">

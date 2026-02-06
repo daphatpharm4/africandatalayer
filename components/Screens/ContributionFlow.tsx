@@ -53,6 +53,35 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
   const [manualLatitude, setManualLatitude] = useState('');
   const [manualLongitude, setManualLongitude] = useState('');
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const typeOptions = [
+    { value: 'Fuel' as const, label: t('Fuel', 'Carburant') },
+    { value: 'Kiosk' as const, label: t('Kiosk', 'Kiosque') },
+  ];
+  const qualityOptions = [
+    { value: 'Premium', label: t('Premium', 'Premium') },
+    { value: 'Standard', label: t('Standard', 'Standard') },
+    { value: 'Low', label: t('Low', 'Faible') },
+  ];
+  const availabilityOptions = [
+    { value: 'Available', label: t('Available', 'Disponible') },
+    { value: 'Limited', label: t('Limited', 'Limite') },
+    { value: 'Out', label: t('Out', 'Rupture') },
+  ];
+  const queueLengthOptions = [
+    { value: 'Short', label: t('Short', 'Courte') },
+    { value: 'Moderate', label: t('Moderate', 'Moyenne') },
+    { value: 'Long', label: t('Long', 'Longue') },
+  ];
+  const paymentModeOptions = [
+    { value: 'Cash', label: t('Cash', 'Especes') },
+    { value: 'Mobile Money', label: t('Mobile Money', 'Mobile Money') },
+    { value: 'Cards', label: t('Cards', 'Cartes') },
+  ];
+  const reliabilityOptions = [
+    { value: 'Excellent', label: t('Excellent', 'Excellent') },
+    { value: 'Good', label: t('Good', 'Bon') },
+    { value: 'Congested', label: t('Congested', 'Sature') },
+  ];
 
   useEffect(() => {
     return () => {
@@ -279,7 +308,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
 
             <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
               {photoPreview ? (
-                <img src={photoPreview} alt="Captured station or kiosk" className="absolute inset-0 h-full w-full object-cover" />
+                <img src={photoPreview} alt={t('Captured station or kiosk', 'Station ou kiosque capture')} className="absolute inset-0 h-full w-full object-cover" />
               ) : (
                 <>
                   <Camera size={48} className="mb-4 opacity-40" />
@@ -309,20 +338,20 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
             )}
 
             <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-              <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Select Type</h4>
+              <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Select Type', 'Choisir type')}</h4>
               <div className="grid grid-cols-2 gap-4">
-                {['Fuel', 'Kiosk'].map(item => (
+                {typeOptions.map(({ value, label }) => (
                   <button
-                    key={item}
-                    onClick={() => setType(item as 'Fuel' | 'Kiosk')}
+                    key={value}
+                    onClick={() => setType(value)}
                     className={`h-14 rounded-xl flex items-center justify-center space-x-2 border-2 transition-all ${
-                      type === item ? 'bg-[#e7eef4] border-[#0f2b46] text-[#0f2b46]' : 'bg-white border-gray-100 text-gray-400'
+                      type === value ? 'bg-[#e7eef4] border-[#0f2b46] text-[#0f2b46]' : 'bg-white border-gray-100 text-gray-400'
                     }`}
                   >
-                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${type === item ? 'bg-[#0f2b46] text-white' : 'border-2 border-gray-200'}`}>
-                      {type === item && <Check size={12} />}
+                    <div className={`w-5 h-5 rounded-full flex items-center justify-center ${type === value ? 'bg-[#0f2b46] text-white' : 'border-2 border-gray-200'}`}>
+                      {type === value && <Check size={12} />}
                     </div>
-                    <span className="text-sm font-bold uppercase tracking-wide">{item}</span>
+                    <span className="text-sm font-bold uppercase tracking-wide">{label}</span>
                   </button>
                 ))}
               </div>
@@ -368,15 +397,15 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
                   <span className="absolute right-6 top-1/2 -translate-y-1/2 text-lg font-bold text-gray-300 uppercase">XAF</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {['Premium', 'Standard', 'Low'].map(item => (
+                  {qualityOptions.map(({ value, label }) => (
                     <button
-                      key={item}
-                      onClick={() => setQuality(item)}
+                      key={value}
+                      onClick={() => setQuality(value)}
                       className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                        quality === item ? 'bg-[#4c7c59] text-white' : 'bg-gray-50 text-gray-400'
+                        quality === value ? 'bg-[#4c7c59] text-white' : 'bg-gray-50 text-gray-400'
                       }`}
                     >
-                      {item}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -385,15 +414,15 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
               <div className="space-y-4">
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Kiosk Availability', 'Disponibilite kiosque')}</label>
                 <div className="flex p-1 bg-gray-50 rounded-xl">
-                  {['Available', 'Limited', 'Out'].map(item => (
+                  {availabilityOptions.map(({ value, label }) => (
                     <button
-                      key={item}
-                      onClick={() => setAvailability(item)}
+                      key={value}
+                      onClick={() => setAvailability(value)}
                       className={`flex-1 py-3 text-xs font-bold rounded-xl transition-all ${
-                        availability === item ? 'bg-white shadow text-[#0f2b46]' : 'text-gray-400'
+                        availability === value ? 'bg-white shadow text-[#0f2b46]' : 'text-gray-400'
                       }`}
                     >
-                      {item}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -511,15 +540,15 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Queue Length', 'Longueur de file')}</label>
                 <div className="flex p-1 bg-gray-50 rounded-xl mt-2">
-                  {['Short', 'Moderate', 'Long'].map(item => (
+                  {queueLengthOptions.map(({ value, label }) => (
                     <button
-                      key={item}
-                      onClick={() => setQueueLength((prev) => (prev === item ? '' : item))}
+                      key={value}
+                      onClick={() => setQueueLength((prev) => (prev === value ? '' : value))}
                       className={`flex-1 py-2 text-xs font-bold rounded-xl transition-all ${
-                        queueLength === item ? 'bg-white shadow text-[#0f2b46]' : 'text-gray-400'
+                        queueLength === value ? 'bg-white shadow text-[#0f2b46]' : 'text-gray-400'
                       }`}
                     >
-                      {item}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -527,19 +556,19 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
               <div>
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Payment Modes', 'Moyens de paiement')}</label>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {['Cash', 'Mobile Money', 'Cards'].map(item => (
+                  {paymentModeOptions.map(({ value, label }) => (
                     <button
-                      key={item}
+                      key={value}
                       onClick={() =>
                         setPaymentModes((prev) =>
-                          prev.includes(item) ? prev.filter(p => p !== item) : [...prev, item]
+                          prev.includes(value) ? prev.filter(p => p !== value) : [...prev, value]
                         )
                       }
                       className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${
-                        paymentModes.includes(item) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-400'
+                        paymentModes.includes(value) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-400'
                       }`}
                     >
-                      {item}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -598,15 +627,15 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
                 <div>
                   <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Reliability Rating', 'Niveau de fiabilite')}</label>
                   <div className="flex items-center space-x-2 mt-2">
-                    {['Excellent', 'Good', 'Congested'].map(item => (
+                    {reliabilityOptions.map(({ value, label }) => (
                       <button
-                        key={item}
-                      onClick={() => setReliability((prev) => (prev === item ? '' : item))}
+                        key={value}
+                      onClick={() => setReliability((prev) => (prev === value ? '' : value))}
                       className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                        reliability === item ? 'bg-[#4c7c59] text-white' : 'bg-gray-50 text-gray-400'
+                        reliability === value ? 'bg-[#4c7c59] text-white' : 'bg-gray-50 text-gray-400'
                       }`}
                     >
-                        {item}
+                        {label}
                       </button>
                     ))}
                   </div>
@@ -616,7 +645,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
 
             <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
               {secondPhotoPreview ? (
-                <img src={secondPhotoPreview} alt="Optional second capture" className="absolute inset-0 h-full w-full object-cover" />
+                <img src={secondPhotoPreview} alt={t('Optional second capture', 'Deuxieme capture optionnelle')} className="absolute inset-0 h-full w-full object-cover" />
               ) : (
                 <>
                   <Camera size={40} className="mb-3 opacity-40" />
@@ -850,7 +879,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language }) => 
             )}
             {step === totalSteps && (
               <div className="bg-white border border-gray-100 rounded-2xl p-4 text-center shadow-sm">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">XP Preview</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('XP Preview', 'Apercu XP')}</p>
                 <p className="text-sm font-semibold text-gray-900 mt-1">{t('You will earn', 'Vous gagnerez')} +{earnedXp} XP</p>
                 <p className="text-[10px] text-gray-500 mt-2">
                   {t('Tier', 'Niveau')} 1 ({TIER_1_XP}) + {t('Tier', 'Niveau')} 2 ({tier2Completed ? TIER_2_XP : 0}) + {t('Tier', 'Niveau')} 3 ({tier3Completed ? TIER_3_XP : 0})

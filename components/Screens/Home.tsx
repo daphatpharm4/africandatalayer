@@ -33,82 +33,85 @@ type MapPointGroup = {
   points: DataPoint[];
 };
 
-const MOCK_POINTS: DataPoint[] = [
-  {
-    id: '1',
-    name: 'Total Akwa',
-    type: Category.FUEL,
-    location: 'Gare des Grands Bus, Akwa, Douala',
-    coordinates: { latitude: 4.0516, longitude: 9.7072 },
-    price: 840,
-    fuelType: 'Super',
-    quality: 'Premium',
-    currency: 'XAF',
-    lastUpdated: '12 mins ago',
-    availability: 'High',
-    queueLength: 'Short',
-    trustScore: 98,
-    contributorTrust: 'Gold',
-    verified: true,
-    hours: 'Open 24 Hours • Daily',
-    paymentMethods: ['Cash', 'MTN MoMo', 'Orange Money', 'Cards']
-  },
-  {
-    id: '2',
-    name: 'MTN Mobile Money - Bonapriso',
-    type: Category.MOBILE_MONEY,
-    location: 'Rue des Ecoles, Bonapriso, Douala',
-    coordinates: { latitude: 4.0345, longitude: 9.7003 },
-    lastUpdated: '42 mins ago',
-    availability: 'High',
-    queueLength: 'Moderate',
-    trustScore: 94,
-    contributorTrust: 'Silver',
-    provider: 'MTN',
-    merchantId: 'M-129384',
-    reliability: 'Excellent',
-    verified: false
-  },
-  {
-    id: '3',
-    name: 'Tradex Gare des Grands Bus',
-    type: Category.FUEL,
-    location: 'Akwa, Douala',
-    coordinates: { latitude: 4.0582, longitude: 9.7136 },
-    price: 828,
-    fuelType: 'Diesel',
-    quality: 'Standard',
-    currency: 'XAF',
-    lastUpdated: '42 mins ago',
-    availability: 'High',
-    queueLength: 'Moderate',
-    trustScore: 92,
-    contributorTrust: 'Gold',
-    verified: true,
-    hours: 'Open 24 Hours • Daily'
-  },
-  {
-    id: '4',
-    name: 'Orange Money Kiosk',
-    type: Category.MOBILE_MONEY,
-    location: 'Marché Deido, Douala',
-    coordinates: { latitude: 4.0735, longitude: 9.7321 },
-    lastUpdated: '3h ago',
-    availability: 'Low',
-    queueLength: 'Long',
-    trustScore: 78,
-    contributorTrust: 'Bronze',
-    provider: 'Orange',
-    merchantId: 'O-99231',
-    reliability: 'Congested'
-  }
-];
-
 const CITY_CENTERS = {
   douala: { latitude: 4.0511, longitude: 9.7679 },
   yaounde: { latitude: 3.8480, longitude: 11.5021 }
 } as const;
 type CityKey = keyof typeof CITY_CENTERS;
+
+const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  return [
+    {
+      id: '1',
+      name: 'Total Akwa',
+      type: Category.FUEL,
+      location: 'Gare des Grands Bus, Akwa, Douala',
+      coordinates: { latitude: 4.0516, longitude: 9.7072 },
+      price: 840,
+      fuelType: 'Super',
+      quality: 'Premium',
+      currency: 'XAF',
+      lastUpdated: t('12 mins ago', 'il y a 12 min'),
+      availability: 'High',
+      queueLength: 'Short',
+      trustScore: 98,
+      contributorTrust: 'Gold',
+      verified: true,
+      hours: t('Open 24 Hours • Daily', 'Ouvert 24h • Tous les jours'),
+      paymentMethods: ['Cash', 'MTN MoMo', 'Orange Money', 'Cards']
+    },
+    {
+      id: '2',
+      name: 'MTN Mobile Money - Bonapriso',
+      type: Category.MOBILE_MONEY,
+      location: 'Rue des Ecoles, Bonapriso, Douala',
+      coordinates: { latitude: 4.0345, longitude: 9.7003 },
+      lastUpdated: t('42 mins ago', 'il y a 42 min'),
+      availability: 'High',
+      queueLength: 'Moderate',
+      trustScore: 94,
+      contributorTrust: 'Silver',
+      provider: 'MTN',
+      merchantId: 'M-129384',
+      reliability: 'Excellent',
+      verified: false
+    },
+    {
+      id: '3',
+      name: 'Tradex Gare des Grands Bus',
+      type: Category.FUEL,
+      location: 'Akwa, Douala',
+      coordinates: { latitude: 4.0582, longitude: 9.7136 },
+      price: 828,
+      fuelType: 'Diesel',
+      quality: 'Standard',
+      currency: 'XAF',
+      lastUpdated: t('42 mins ago', 'il y a 42 min'),
+      availability: 'High',
+      queueLength: 'Moderate',
+      trustScore: 92,
+      contributorTrust: 'Gold',
+      verified: true,
+      hours: t('Open 24 Hours • Daily', 'Ouvert 24h • Tous les jours')
+    },
+    {
+      id: '4',
+      name: 'Orange Money Kiosk',
+      type: Category.MOBILE_MONEY,
+      location: 'Marche Deido, Douala',
+      coordinates: { latitude: 4.0735, longitude: 9.7321 },
+      lastUpdated: t('3h ago', 'il y a 3h'),
+      availability: 'Low',
+      queueLength: 'Long',
+      trustScore: 78,
+      contributorTrust: 'Bronze',
+      provider: 'Orange',
+      merchantId: 'O-99231',
+      reliability: 'Congested'
+    }
+  ];
+};
 
 const createMarkerIcon = (color: string) =>
   L.divIcon({
@@ -140,7 +143,7 @@ const kioskIcon = createMarkerIcon('#1f2933');
 const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth, onContribute, onProfile, language }) => {
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
   const [activeCategory, setActiveCategory] = useState<Category | 'ALL'>('ALL');
-  const [points, setPoints] = useState<DataPoint[]>(MOCK_POINTS);
+  const [points, setPoints] = useState<DataPoint[]>(() => buildMockPoints(language));
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [selectedCity, setSelectedCity] = useState<CityKey>(() => {
     const saved = localStorage.getItem('adl_city');
@@ -227,7 +230,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
           setPoints(data.map(mapSubmissionToPoint));
         }
       } catch {
-        setPoints(MOCK_POINTS);
+        setPoints(buildMockPoints(language));
       } finally {
         setIsLoadingPoints(false);
       }
@@ -269,7 +272,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
           <div className="flex flex-col">
             <div className="flex items-center space-x-2">
               <BrandLogo size={18} className="shrink-0" />
-              <h2 className="text-lg font-bold text-[#1f2933] leading-tight">African Data Layer</h2>
+              <h2 className="text-lg font-bold text-[#1f2933] leading-tight">{t('African Data Layer', 'African Data Layer')}</h2>
               {isAdmin && (
                 <span className="px-2 py-0.5 rounded-full bg-[#e7eef4] text-[#0f2b46] text-[9px] font-bold uppercase tracking-widest">
                   {t('Admin', 'Admin')}
@@ -454,7 +457,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
 
         <button
           onClick={() => setViewMode(v => (v === 'map' ? 'list' : 'map'))}
-          className="fixed bottom-24 left-1/2 -translate-x-1/2 px-5 py-2.5 bg-[#1f2933] text-white rounded-full shadow-2xl flex items-center space-x-2 z-40 hover:bg-black active:scale-95 transition-all"
+          className="fixed bottom-[calc(6rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 px-5 py-2.5 bg-[#1f2933] text-white rounded-full shadow-2xl flex items-center space-x-2 z-40 hover:bg-black active:scale-95 transition-all"
         >
           {viewMode === 'map' ? <List size={16} /> : <MapIcon size={16} />}
           <span className="text-xs font-bold uppercase tracking-wider">{viewMode === 'map' ? t('List View', 'Vue liste') : t('Map View', 'Vue carte')}</span>
@@ -462,7 +465,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
 
         <button
           onClick={isAuthenticated ? onContribute : onAuth}
-          className="fixed bottom-24 right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
+          className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
           aria-label={isAuthenticated ? t('Contribute', 'Contribuer') : t('Sign in to contribute', 'Connectez-vous pour contribuer')}
         >
           <Plus size={22} />

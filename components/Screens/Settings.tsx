@@ -146,7 +146,7 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
           </button>
           <div className="text-center">
             <BrandLogo size={18} className="mx-auto mb-2" />
-            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">African Data Layer v2.4.0 (Build 892)</p>
+            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">{t('African Data Layer v2.4.0 (Build 892)', 'African Data Layer v2.4.0 (Compilation 892)')}</p>
           </div>
         </div>
       </div>

@@ -186,7 +186,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen w-full max-w-md mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-gray-100">
+    <div className="app-shell flex flex-col w-full max-w-md mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-gray-100">
       {isOffline && (
         <div className="bg-amber-600 text-white text-[10px] font-bold py-1.5 px-4 text-center z-50 tracking-widest uppercase">
           {t('Offline Mode • Local Sync Active', 'Mode hors ligne • Sync locale active')}

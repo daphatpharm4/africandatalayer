@@ -65,7 +65,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           {queue.map(item => (
             <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="relative h-32 bg-gray-200">
-                <img src={item.img} className="w-full h-full object-cover opacity-80" alt="submission" />
+                <img src={item.img} className="w-full h-full object-cover opacity-80" alt={t('submission', 'soumission')} />
                 <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur rounded-xl text-[8px] font-bold text-white uppercase tracking-widest">
                   {t('Live Capture: Verified', 'Capture live : verifiee')}
                 </div>
@@ -82,7 +82,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
                 <div className="bg-[#f9fafb] border border-gray-100 rounded-2xl p-3 space-y-2">
                   <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                    <span className="text-gray-400">Photo GPS</span>
+                    <span className="text-gray-400">{t('Photo GPS', 'Photo GPS')}</span>
                     <span className="text-gray-700">{item.exif}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">

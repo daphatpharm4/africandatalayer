@@ -28,6 +28,64 @@ interface Props {
 const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated, onAuth, language }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const translateAvailability = (value?: string) => {
+    if (!value || language === 'en') return value;
+    const normalized = value.toLowerCase();
+    if (normalized === 'high' || normalized === 'available') return 'Disponible';
+    if (normalized === 'low' || normalized === 'limited') return 'Limite';
+    if (normalized === 'out') return 'Rupture';
+    return value;
+  };
+  const translateQuality = (value?: string) => {
+    if (!value || language === 'en') return value;
+    const normalized = value.toLowerCase();
+    if (normalized === 'premium') return 'Premium';
+    if (normalized === 'standard') return 'Standard';
+    if (normalized === 'low') return 'Faible';
+    return value;
+  };
+  const translateQueueLength = (value?: string) => {
+    if (!value || language === 'en') return value;
+    const normalized = value.toLowerCase();
+    if (normalized === 'short') return 'Courte';
+    if (normalized === 'moderate') return 'Moyenne';
+    if (normalized === 'long') return 'Longue';
+    return value;
+  };
+  const translateContributorTrust = (value?: string) => {
+    if (!value || language === 'en') return value;
+    const normalized = value.toLowerCase();
+    if (normalized === 'gold') return 'Or';
+    if (normalized === 'silver') return 'Argent';
+    if (normalized === 'bronze') return 'Bronze';
+    return value;
+  };
+  const translateReliability = (value?: string) => {
+    if (!value || language === 'en') return value;
+    const normalized = value.toLowerCase();
+    if (normalized === 'excellent') return 'Excellent';
+    if (normalized === 'good') return 'Bon';
+    if (normalized === 'congested') return 'Sature';
+    if (normalized === 'poor') return 'Faible';
+    return value;
+  };
+  const translatePaymentMethod = (value: string) => {
+    if (language === 'en') return value;
+    const normalized = value.toLowerCase();
+    if (normalized === 'cash') return 'Especes';
+    if (normalized === 'mobile money') return 'Mobile Money';
+    if (normalized === 'cards') return 'Cartes';
+    if (normalized === 'mtn momo') return 'MTN MoMo';
+    if (normalized === 'orange money') return 'Orange Money';
+    return value;
+  };
+  const translatePaymentMethods = (values?: string[]) =>
+    values ? values.map((value) => translatePaymentMethod(value)) : values;
+  const translateHours = (value?: string) => {
+    if (!value || language === 'en') return value;
+    if (value === 'Open 24 Hours • Daily') return 'Ouvert 24h • Tous les jours';
+    return value;
+  };
 
   if (!point) return null;
 
@@ -46,7 +104,11 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
 
   const hasUserPhoto = Boolean(point.photoUrl);
   const heroImage = point.photoUrl || `https://picsum.photos/seed/${point.id}/800/400?grayscale&blur=2`;
-  const fuelSubtitle = [point.currency ? `${point.currency}/L` : null, point.fuelType ? `${t('Type', 'Type')}: ${point.fuelType}` : null, point.quality ?? null]
+  const fuelSubtitle = [
+    point.currency ? `${point.currency}/L` : null,
+    point.fuelType ? `${t('Type', 'Type')}: ${point.fuelType}` : null,
+    translateQuality(point.quality) ?? null
+  ]
     .filter(Boolean)
     .join(' • ');
 
@@ -101,7 +163,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
             </span>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900 tracking-tight">
-                {point.type === Category.FUEL ? (typeof point.price === 'number' ? `${point.price}` : '--') : point.availability}
+                {point.type === Category.FUEL ? (typeof point.price === 'number' ? `${point.price}` : '--') : translateAvailability(point.availability)}
               </span>
               <span className="text-[10px] text-gray-500 font-medium">
                 {point.type === Category.FUEL ? fuelSubtitle || t('Price details unavailable', 'Details de prix indisponibles') : t('Real-time status', 'Statut en temps reel')}
@@ -135,7 +197,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
                 <BadgeCheck className="text-[#4c7c59]" size={20} />
                 <h4 className="text-sm font-bold text-gray-900">{t('Contributor Trust', 'Confiance contributeur')}</h4>
               </div>
-              <span className="text-sm font-bold text-[#4c7c59]">{point.contributorTrust}</span>
+              <span className="text-sm font-bold text-[#4c7c59]">{translateContributorTrust(point.contributorTrust)}</span>
             </div>
             <p className="text-[11px] text-gray-500 leading-relaxed">
             {t('Weighted by recent verification accuracy and photo metadata match.', 'Pondere par la precision recente de verification et la coherence des metadonnees photo.')}
@@ -150,7 +212,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
                 <h4 className="text-sm font-bold text-gray-900 uppercase tracking-tight">{t('Reliability Indicator', 'Indicateur de fiabilite')}</h4>
               </div>
               <span className={`text-[10px] px-3 py-1 rounded-full font-bold uppercase tracking-wider ${getReliabilityColor(point.reliability)}`}>
-                {point.reliability || t('Unrated', 'Non evalue')}
+                {point.reliability ? translateReliability(point.reliability) : t('Unrated', 'Non evalue')}
               </span>
             </div>
             <p className="text-[11px] text-gray-500 leading-relaxed italic">
@@ -195,7 +257,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-bold text-gray-900">{t('Hours', 'Horaires')}</span>
-              <p className="text-xs text-gray-500 mt-0.5">{point.hours || t('Standard Business Hours', 'Horaires standards')}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{translateHours(point.hours) || t('Standard Business Hours', 'Horaires standards')}</p>
             </div>
           </div>
 
@@ -205,7 +267,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-bold text-gray-900">{t('Queue Length', 'Longueur de file')}</span>
-              <p className="text-xs text-gray-500 mt-0.5">{point.queueLength}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{translateQueueLength(point.queueLength)}</p>
             </div>
           </div>
 
@@ -240,7 +302,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
             <div className="flex flex-col">
               <span className="text-xs font-bold text-gray-900">{t('Accepted Payments', 'Paiements acceptes')}</span>
               <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                {point.paymentMethods?.join(', ') || t('Cash, Mobile Money', 'Especes, Mobile Money')}
+                {translatePaymentMethods(point.paymentMethods)?.join(', ') || t('Cash, Mobile Money', 'Especes, Mobile Money')}
               </p>
             </div>
           </div>
@@ -249,7 +311,7 @@ const Details: React.FC<Props> = ({ point, onBack, onContribute, isAuthenticated
         <div className="h-24"></div>
       </div>
 
-      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 w-full max-w-[calc(28rem-2rem)] px-4 flex items-center space-x-2 z-40">
+      <div className="fixed bottom-[calc(5rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 w-full max-w-[calc(28rem-2rem)] px-4 flex items-center space-x-2 z-40">
         <button
           onClick={isAuthenticated ? onContribute : onAuth}
           className="flex-1 h-14 bg-[#c86b4a] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-[#b85f3f] active:scale-95 transition-all"

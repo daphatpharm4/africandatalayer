@@ -127,7 +127,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
         <div className="flex flex-col items-center py-4 text-center">
           <div className="relative mb-4">
             <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl bg-[#e7eef4] overflow-hidden">
-              <img src="https://picsum.photos/seed/jeanpaul/300/300" alt="avatar" className="w-full h-full object-cover" />
+              <img src="https://picsum.photos/seed/jeanpaul/300/300" alt={t('avatar', 'avatar')} className="w-full h-full object-cover" />
             </div>
             <div className="absolute -bottom-1 -right-1 p-1 bg-[#4c7c59] rounded-full border-2 border-white">
               <BadgeCheck size={14} className="text-white" />
