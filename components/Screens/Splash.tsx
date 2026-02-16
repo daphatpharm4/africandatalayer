@@ -32,7 +32,7 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
     },
     {
       title: t('See the map', 'Voir la carte'),
-      desc: t('Browse live fuel stations and mobile money kiosks in your city.', 'Parcourez les stations-service et kiosques mobile money de votre ville.'),
+      desc: t('Browse Bonamoussadi points across pharmacies, fuel stations, and mobile money kiosks.', 'Parcourez les points de Bonamoussadi: pharmacies, stations-service et kiosques mobile money.'),
       icon: <MapPin size={46} className="text-[#0f2b46]" />,
       action: t('Next', 'Suivant')
     },

@@ -1,6 +1,6 @@
 # African Data Layer – MVP (Investor Demo)
 
-A mobile-first web application that allows users to crowdsource and submit data about local kiosks and fuel stations across Africa.
+A mobile-first web application that allows field agents to crowdsource and enrich local data points for pharmacies, mobile money kiosks, and fuel stations.
 
 ---
 
@@ -8,7 +8,7 @@ A mobile-first web application that allows users to crowdsource and submit data 
 
 - 📸 Mandatory live camera capture (no gallery upload)
 - 📍 GPS + photo metadata + IP location cross-check
-- ⛽ Fuel & Mobile Money (Orange / MTN) data entry forms
+- ⛽ Three verticals: Pharmacy, Mobile Money Kiosk, Fuel Station
 - 🎮 Gamified XP rewards and leaderboard
 - 📊 Mock dashboard for admins and investors
 - 🔍 Offline-ready design (static + PWA capability)
@@ -54,10 +54,14 @@ This repo includes serverless functions under `/api` for Auth.js (Google OAuth +
 - Optional (frontend): `VITE_ADMIN_EMAIL` (to show Impact tab for admin users)
 
 Endpoints:
-- `GET/POST /api/submissions`
+- `GET/POST /api/submissions` (default returns projected points; add `?view=events` for raw append-only events)
 - `GET/PUT /api/submissions/:id`
 - `GET/PUT /api/user`
 - `GET/POST /api/auth/*` (Auth.js)
+
+Bonamoussadi CSV import:
+- Dry run: `npm run import:bonamoussadi -- --csv /absolute/path/to/bonamoussadi_pharmacy_fuel_curated.csv --dry-run`
+- Write to Edge Config: `npm run import:bonamoussadi -- --csv /absolute/path/to/bonamoussadi_pharmacy_fuel_curated.csv --write`
 
 Local dev (recommended):
 - Backend: `npx vercel@latest dev --listen 3000`

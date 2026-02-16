@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Category, DataPoint } from '../../types';
-import type { Submission } from '../../shared/types';
+import type { ProjectedPoint } from '../../shared/types';
+import { BONAMOUSSADI_CENTER, bonamoussadiLeafletBounds, isWithinBonamoussadi } from '../../shared/geofence';
 import {
   Fuel,
   Landmark,
   List,
   Map as MapIcon,
   MapPin,
+  Pill,
   Plus,
   ShieldCheck,
   User
@@ -33,82 +35,55 @@ type MapPointGroup = {
   points: DataPoint[];
 };
 
-const CITY_CENTERS = {
-  douala: { latitude: 4.0511, longitude: 9.7679 },
-  yaounde: { latitude: 3.8480, longitude: 11.5021 }
-} as const;
-type CityKey = keyof typeof CITY_CENTERS;
+const MAP_BOUNDS = bonamoussadiLeafletBounds();
 
 const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   return [
     {
-      id: '1',
-      name: 'Total Akwa',
-      type: Category.FUEL,
-      location: 'Gare des Grands Bus, Akwa, Douala',
-      coordinates: { latitude: 4.0516, longitude: 9.7072 },
-      price: 840,
-      fuelType: 'Super',
-      quality: 'Premium',
-      currency: 'XAF',
-      lastUpdated: t('12 mins ago', 'il y a 12 min'),
+      id: 'mock-pharmacy-1',
+      name: 'Pharmacie de Bonamoussadi',
+      type: Category.PHARMACY,
+      location: 'Bonamoussadi, Douala',
+      coordinates: { latitude: 4.0868, longitude: 9.7357 },
+      lastUpdated: t('18 mins ago', 'il y a 18 min'),
       availability: 'High',
-      queueLength: 'Short',
-      trustScore: 98,
-      contributorTrust: 'Gold',
+      trustScore: 96,
+      openingHours: '08:00 - 22:00',
+      isOpenNow: true,
       verified: true,
-      hours: t('Open 24 Hours • Daily', 'Ouvert 24h • Tous les jours'),
-      paymentMethods: ['Cash', 'MTN MoMo', 'Orange Money', 'Cards']
+      gaps: ['openingHours']
     },
     {
-      id: '2',
-      name: 'MTN Mobile Money - Bonapriso',
-      type: Category.MOBILE_MONEY,
-      location: 'Rue des Ecoles, Bonapriso, Douala',
-      coordinates: { latitude: 4.0345, longitude: 9.7003 },
-      lastUpdated: t('42 mins ago', 'il y a 42 min'),
-      availability: 'High',
-      queueLength: 'Moderate',
-      trustScore: 94,
-      contributorTrust: 'Silver',
-      provider: 'MTN',
-      merchantId: 'M-129384',
-      reliability: 'Excellent',
-      verified: false
-    },
-    {
-      id: '3',
-      name: 'Tradex Gare des Grands Bus',
+      id: 'mock-fuel-1',
+      name: 'TOTAL Bonamoussadi 1',
       type: Category.FUEL,
-      location: 'Akwa, Douala',
-      coordinates: { latitude: 4.0582, longitude: 9.7136 },
-      price: 828,
-      fuelType: 'Diesel',
+      location: 'Bonamoussadi, Douala',
+      coordinates: { latitude: 4.0864, longitude: 9.7346 },
+      price: 845,
+      fuelType: 'Super',
       quality: 'Standard',
       currency: 'XAF',
-      lastUpdated: t('42 mins ago', 'il y a 42 min'),
+      lastUpdated: t('33 mins ago', 'il y a 33 min'),
       availability: 'High',
-      queueLength: 'Moderate',
       trustScore: 92,
-      contributorTrust: 'Gold',
+      hasFuelAvailable: true,
       verified: true,
-      hours: t('Open 24 Hours • Daily', 'Ouvert 24h • Tous les jours')
+      gaps: ['pricesByFuel']
     },
     {
-      id: '4',
-      name: 'Orange Money Kiosk',
+      id: 'mock-kiosk-1',
+      name: 'MTN Express Kiosk - Bonamoussadi',
       type: Category.MOBILE_MONEY,
-      location: 'Marche Deido, Douala',
-      coordinates: { latitude: 4.0735, longitude: 9.7321 },
-      lastUpdated: t('3h ago', 'il y a 3h'),
-      availability: 'Low',
-      queueLength: 'Long',
-      trustScore: 78,
-      contributorTrust: 'Bronze',
-      provider: 'Orange',
-      merchantId: 'O-99231',
-      reliability: 'Congested'
+      location: 'Bonamoussadi, Douala',
+      coordinates: { latitude: 4.0864, longitude: 9.7402 },
+      lastUpdated: t('1h ago', 'il y a 1h'),
+      availability: 'High',
+      trustScore: 88,
+      providers: ['MTN'],
+      hasCashAvailable: true,
+      verified: true,
+      gaps: ['merchantIdByProvider', 'openingHours']
     }
   ];
 };
@@ -137,21 +112,38 @@ const getClusterIcon = (color: string, count: number) => {
   return icon;
 };
 
+const pharmacyIcon = createMarkerIcon('#2f855a');
 const fuelIcon = createMarkerIcon('#0f2b46');
 const kioskIcon = createMarkerIcon('#1f2933');
 
+const MapSizeSync: React.FC<{ active: boolean }> = ({ active }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!active) return;
+    const rafId = requestAnimationFrame(() => {
+      map.invalidateSize({ animate: false });
+    });
+    const timeoutId = window.setTimeout(() => {
+      map.invalidateSize({ animate: false });
+    }, 140);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [active, map]);
+
+  return null;
+};
+
 const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth, onContribute, onProfile, language }) => {
   const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
-  const [activeCategory, setActiveCategory] = useState<Category | 'ALL'>('ALL');
+  const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [points, setPoints] = useState<DataPoint[]>(() => buildMockPoints(language));
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
-  const [selectedCity, setSelectedCity] = useState<CityKey>(() => {
-    const saved = localStorage.getItem('adl_city');
-    return saved === 'yaounde' ? 'yaounde' : 'douala';
-  });
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
-  const selectedCenter = CITY_CENTERS[selectedCity];
-  const selectedCityLabel = selectedCity === 'douala' ? t('Douala, Cameroon', 'Douala, Cameroun') : t('Yaounde, Cameroon', 'Yaounde, Cameroun');
+  const selectedCityLabel = t('Bonamoussadi, Douala, Cameroon', 'Bonamoussadi, Douala, Cameroun');
 
   const formatTimeAgo = (iso: string) => {
     const created = new Date(iso).getTime();
@@ -165,58 +157,84 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     return language === 'fr' ? `il y a ${days}j` : `${days}d ago`;
   };
 
-  const mapAvailability = (raw?: string): 'High' | 'Low' | 'Out' => {
-    if (!raw) return 'High';
-    const normalized = raw.toLowerCase();
-    if (normalized.includes('out')) return 'Out';
-    if (normalized.includes('limited') || normalized.includes('low')) return 'Low';
-    return 'High';
-  };
-
-  const parsePrice = (value: unknown): number | undefined => {
-    if (typeof value === 'number' && Number.isFinite(value)) return value;
-    if (typeof value === 'string') {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
+  const inferAvailability = (category: ProjectedPoint['category'], details: Record<string, unknown>): 'High' | 'Low' | 'Out' => {
+    if (category === 'pharmacy') {
+      if (typeof details.isOpenNow === 'boolean') return details.isOpenNow ? 'High' : 'Out';
+      return 'Low';
     }
-    return undefined;
+    if (category === 'fuel_station') {
+      if (typeof details.hasFuelAvailable === 'boolean') return details.hasFuelAvailable ? 'High' : 'Out';
+      return 'Low';
+    }
+    if (typeof details.hasCashAvailable === 'boolean') return details.hasCashAvailable ? 'High' : 'Out';
+    return 'Low';
   };
 
-  const mapSubmissionToPoint = (submission: Submission): DataPoint => {
-    const isFuel = submission.category === 'fuel_station';
-    const details = (submission.details ?? {}) as Record<string, unknown>;
-    const coords = submission.location;
+  const mapProjectedToPoint = (point: ProjectedPoint): DataPoint => {
+    const details = (point.details ?? {}) as Record<string, unknown>;
+    const type =
+      point.category === 'pharmacy'
+        ? Category.PHARMACY
+        : point.category === 'fuel_station'
+          ? Category.FUEL
+          : Category.MOBILE_MONEY;
     const name =
-      (details.siteName as string | undefined) ??
-      (isFuel ? t('Fuel Station', 'Station-service') : t('Money Kiosk', 'Kiosque mobile money'));
-    const availability = isFuel ? 'High' : mapAvailability(details.availability as string | undefined);
-    const paymentModes = Array.isArray(details.paymentModes) ? (details.paymentModes as string[]) : undefined;
-    const fuelPrice = parsePrice(details.fuelPrice ?? details.price);
-    const fuelType = typeof details.fuelType === 'string' ? details.fuelType : undefined;
+      (typeof details.name === 'string' && details.name) ||
+      (typeof details.siteName === 'string' && details.siteName) ||
+      (type === Category.PHARMACY
+        ? t('Pharmacy', 'Pharmacie')
+        : type === Category.FUEL
+          ? t('Fuel Station', 'Station-service')
+          : t('Mobile Money Kiosk', 'Kiosque mobile money'));
+    const pricesByFuel =
+      details.pricesByFuel && typeof details.pricesByFuel === 'object'
+        ? (details.pricesByFuel as Record<string, number>)
+        : undefined;
+    const derivedPrice =
+      typeof details.fuelPrice === 'number'
+        ? details.fuelPrice
+        : typeof details.price === 'number'
+          ? details.price
+          : pricesByFuel
+            ? Object.values(pricesByFuel).find((value) => Number.isFinite(value))
+            : undefined;
+    const providers = Array.isArray(details.providers) ? (details.providers as string[]) : [];
+    const paymentMethods = Array.isArray(details.paymentMethods)
+      ? (details.paymentMethods as string[])
+      : Array.isArray(details.paymentModes)
+        ? (details.paymentModes as string[])
+        : undefined;
 
     return {
-      id: submission.id,
+      id: point.pointId,
       name,
-      type: isFuel ? Category.FUEL : Category.MOBILE_MONEY,
-      location: coords
-        ? `GPS: ${coords.latitude.toFixed(4)}°, ${coords.longitude.toFixed(4)}°`
-        : t('Location unavailable', 'Localisation indisponible'),
-      coordinates: coords ? { latitude: coords.latitude, longitude: coords.longitude } : undefined,
-      price: fuelPrice,
-      fuelType,
-      currency: 'XAF',
+      type,
+      location: `GPS: ${point.location.latitude.toFixed(4)}°, ${point.location.longitude.toFixed(4)}°`,
+      coordinates: { latitude: point.location.latitude, longitude: point.location.longitude },
+      price: typeof derivedPrice === 'number' ? derivedPrice : undefined,
+      fuelType:
+        (typeof details.fuelType === 'string' && details.fuelType) ||
+        (Array.isArray(details.fuelTypes) ? String(details.fuelTypes[0] ?? '') : undefined),
+      fuelTypes: Array.isArray(details.fuelTypes) ? (details.fuelTypes as string[]) : undefined,
+      pricesByFuel: pricesByFuel,
       quality: typeof details.quality === 'string' ? details.quality : undefined,
-      lastUpdated: formatTimeAgo(submission.createdAt),
-      availability,
+      currency: 'XAF',
+      lastUpdated: formatTimeAgo(point.updatedAt),
+      availability: inferAvailability(point.category, details),
       queueLength: typeof details.queueLength === 'string' ? details.queueLength : undefined,
       trustScore: 85,
       contributorTrust: 'Silver',
       provider: typeof details.provider === 'string' ? details.provider : undefined,
+      providers,
       merchantId: typeof details.merchantId === 'string' ? details.merchantId : undefined,
-      hours: typeof details.hours === 'string' ? details.hours : undefined,
-      paymentMethods: paymentModes,
+      hasCashAvailable: typeof details.hasCashAvailable === 'boolean' ? details.hasCashAvailable : undefined,
+      hasFuelAvailable: typeof details.hasFuelAvailable === 'boolean' ? details.hasFuelAvailable : undefined,
+      openingHours: typeof details.openingHours === 'string' ? details.openingHours : undefined,
+      isOpenNow: typeof details.isOpenNow === 'boolean' ? details.isOpenNow : undefined,
+      paymentMethods,
       reliability: typeof details.reliability === 'string' ? details.reliability : undefined,
-      photoUrl: typeof submission.photoUrl === 'string' ? submission.photoUrl : undefined,
+      photoUrl: typeof point.photoUrl === 'string' ? point.photoUrl : undefined,
+      gaps: Array.isArray(point.gaps) ? point.gaps : [],
       verified: true
     };
   };
@@ -225,9 +243,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     const loadPoints = async () => {
       try {
         setIsLoadingPoints(true);
-        const data = await apiJson<Submission[]>('/api/submissions');
+        const data = await apiJson<ProjectedPoint[]>('/api/submissions');
         if (Array.isArray(data)) {
-          setPoints(data.map(mapSubmissionToPoint));
+          const mapped = data
+            .map(mapProjectedToPoint)
+            .filter((point) => isWithinBonamoussadi(point.coordinates));
+          setPoints(mapped);
         }
       } catch {
         setPoints(buildMockPoints(language));
@@ -238,20 +259,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     loadPoints();
   }, [language]);
 
-  useEffect(() => {
-    localStorage.setItem('adl_city', selectedCity);
-  }, [selectedCity]);
-
-  const filteredPoints = useMemo(() => {
-    const source = points;
-    if (activeCategory === 'ALL') return source;
-    return source.filter(p => p.type === activeCategory);
-  }, [activeCategory, points]);
+  const filteredPoints = useMemo(() => points.filter((point) => point.type === activeCategory), [activeCategory, points]);
 
   const mapPointGroups = useMemo<MapPointGroup[]>(() => {
     const groups = new Map<string, MapPointGroup>();
     for (const point of filteredPoints) {
-      if (!point.coordinates) continue;
+      if (!point.coordinates || !isWithinBonamoussadi(point.coordinates)) continue;
       const latitude = Number(point.coordinates.latitude.toFixed(5));
       const longitude = Number(point.coordinates.longitude.toFixed(5));
       const key = `${latitude}_${longitude}`;
@@ -264,6 +277,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     }
     return Array.from(groups.values());
   }, [filteredPoints]);
+
+  const categoryLabel = (type: Category) => {
+    if (type === Category.PHARMACY) return t('Pharmacy', 'Pharmacie');
+    if (type === Category.FUEL) return t('Fuel Station', 'Station-service');
+    return t('Mobile Money Kiosk', 'Kiosque mobile money');
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb]">
@@ -279,7 +298,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{t('GPS Centered', 'GPS centre')} • {selectedCityLabel}</span>
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{t('GPS Locked', 'GPS verrouille')} • {selectedCityLabel}</span>
           </div>
           <button
             onClick={isAuthenticated ? onProfile : onAuth}
@@ -297,25 +316,10 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
 
         <div className="flex p-1 bg-gray-100 rounded-xl mb-2">
           <button
-            onClick={() => setSelectedCity('douala')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all ${selectedCity === 'douala' ? 'bg-white shadow-sm text-[#0f2b46]' : 'text-gray-500'}`}
+            onClick={() => setActiveCategory(Category.PHARMACY)}
+            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all ${activeCategory === Category.PHARMACY ? 'bg-white shadow-sm text-[#0f2b46]' : 'text-gray-500'}`}
           >
-            {t('Douala', 'Douala')}
-          </button>
-          <button
-            onClick={() => setSelectedCity('yaounde')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all ${selectedCity === 'yaounde' ? 'bg-white shadow-sm text-[#0f2b46]' : 'text-gray-500'}`}
-          >
-            {t('Yaounde', 'Yaounde')}
-          </button>
-        </div>
-
-        <div className="flex p-1 bg-gray-100 rounded-xl mb-2">
-          <button
-            onClick={() => setActiveCategory('ALL')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all ${activeCategory === 'ALL' ? 'bg-white shadow-sm text-[#0f2b46]' : 'text-gray-500'}`}
-          >
-            {t('Both', 'Les deux')}
+            {t('Pharmacies', 'Pharmacies')}
           </button>
           <button
             onClick={() => setActiveCategory(Category.FUEL)}
@@ -334,89 +338,109 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
 
       <div className="flex-1 relative overflow-hidden flex flex-col">
         <div className={`${viewMode === 'map' ? 'flex-1' : 'hidden'} bg-[#e7eef4] relative overflow-hidden z-0`}>
-            <MapContainer
-              key={selectedCity}
-              center={[selectedCenter.latitude, selectedCenter.longitude]}
-              zoom={13}
-              scrollWheelZoom
-              className="absolute inset-0 h-full w-full"
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {mapPointGroups.map((group) => {
-                const singlePoint = group.points.length === 1 ? group.points[0] : null;
-                const hasFuel = group.points.some((point) => point.type === Category.FUEL);
-                const hasKiosk = group.points.some((point) => point.type === Category.MOBILE_MONEY);
-                const icon = singlePoint
-                  ? singlePoint.type === Category.FUEL
+          <MapContainer
+            center={[BONAMOUSSADI_CENTER.latitude, BONAMOUSSADI_CENTER.longitude]}
+            zoom={15}
+            minZoom={14}
+            maxBounds={MAP_BOUNDS}
+            maxBoundsViscosity={1.0}
+            scrollWheelZoom
+            className="absolute inset-0 h-full w-full"
+          >
+            <MapSizeSync active={viewMode === 'map'} />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {mapPointGroups.map((group) => {
+              const singlePoint = group.points.length === 1 ? group.points[0] : null;
+              const hasPharmacy = group.points.some((point) => point.type === Category.PHARMACY);
+              const hasFuel = group.points.some((point) => point.type === Category.FUEL);
+              const hasKiosk = group.points.some((point) => point.type === Category.MOBILE_MONEY);
+              const icon = singlePoint
+                ? singlePoint.type === Category.PHARMACY
+                  ? pharmacyIcon
+                  : singlePoint.type === Category.FUEL
                     ? fuelIcon
                     : kioskIcon
-                  : getClusterIcon(hasFuel && hasKiosk ? '#c86b4a' : hasFuel ? '#0f2b46' : '#1f2933', group.points.length);
-
-                return (
-                  <Marker
-                    key={group.key}
-                    position={[group.latitude, group.longitude]}
-                    icon={icon}
-                  >
-                    <Popup>
-                      {singlePoint ? (
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                            {singlePoint.type === Category.FUEL ? t('Fuel Station', 'Station-service') : t('Money Kiosk', 'Kiosque mobile money')}
-                          </span>
-                          <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
-                          <p className="text-[10px] text-gray-500">{singlePoint.location}</p>
-                          {singlePoint.type === Category.FUEL && (
-                            <p className="text-[10px] text-gray-600">
-                              {(singlePoint.fuelType ?? t('Fuel', 'Carburant'))} • {typeof singlePoint.price === 'number' ? `${singlePoint.price} XAF/L` : t('Price unavailable', 'Prix indisponible')}
-                            </p>
-                          )}
-                          <button
-                            className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
-                            onClick={() => onSelectPoint(singlePoint)}
-                          >
-                            {t('View Details', 'Voir details')}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-2 min-w-[220px]">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                            {language === 'fr' ? `${group.points.length} points au meme endroit` : `${group.points.length} points at this location`}
-                          </p>
-                          <div className="space-y-1.5">
-                            {group.points.map((point) => (
-                              <button
-                                key={point.id}
-                                className="w-full rounded-lg border border-gray-100 px-2 py-1.5 text-left hover:bg-gray-50"
-                                onClick={() => onSelectPoint(point)}
-                              >
-                                <p className="text-[11px] font-semibold text-gray-900 truncate">{point.name}</p>
-                                <p className="text-[9px] uppercase tracking-wider text-gray-500">
-                                  {point.type === Category.FUEL ? t('Fuel Station', 'Station-service') : t('Money Kiosk', 'Kiosque mobile money')}
-                                </p>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </Popup>
-                  </Marker>
+                : getClusterIcon(
+                  hasPharmacy && !hasFuel && !hasKiosk
+                    ? '#2f855a'
+                    : hasFuel && !hasPharmacy && !hasKiosk
+                      ? '#0f2b46'
+                      : hasKiosk && !hasPharmacy && !hasFuel
+                        ? '#1f2933'
+                        : '#c86b4a',
+                  group.points.length
                 );
-              })}
-            </MapContainer>
-            <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{t('GPS Locked', 'GPS verrouille')}</p>
-                  <p className="text-xs text-gray-500">{t('Centered on', 'Centre sur')} {selectedCityLabel}</p>
-                </div>
-                <div className="w-2 h-2 rounded-full bg-[#4c7c59] animate-pulse"></div>
+
+              return (
+                <Marker
+                  key={group.key}
+                  position={[group.latitude, group.longitude]}
+                  icon={icon}
+                >
+                  <Popup>
+                    {singlePoint ? (
+                      <div className="space-y-1">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                          {categoryLabel(singlePoint.type)}
+                        </span>
+                        <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
+                        <p className="text-[10px] text-gray-500">{singlePoint.location}</p>
+                        {singlePoint.type === Category.FUEL && (
+                          <p className="text-[10px] text-gray-600">
+                            {(singlePoint.fuelType ?? t('Fuel', 'Carburant'))} • {typeof singlePoint.price === 'number' ? `${singlePoint.price} XAF/L` : t('Price unavailable', 'Prix indisponible')}
+                          </p>
+                        )}
+                        {singlePoint.type === Category.PHARMACY && (
+                          <p className="text-[10px] text-gray-600">
+                            {singlePoint.isOpenNow ? t('Open now', 'Ouvert maintenant') : t('Status unavailable', 'Statut indisponible')}
+                          </p>
+                        )}
+                        <button
+                          className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
+                          onClick={() => onSelectPoint(singlePoint)}
+                        >
+                          {t('View Details', 'Voir details')}
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 min-w-[220px]">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                          {language === 'fr' ? `${group.points.length} points au meme endroit` : `${group.points.length} points at this location`}
+                        </p>
+                        <div className="space-y-1.5">
+                          {group.points.map((point) => (
+                            <button
+                              key={point.id}
+                              className="w-full rounded-lg border border-gray-100 px-2 py-1.5 text-left hover:bg-gray-50"
+                              onClick={() => onSelectPoint(point)}
+                            >
+                              <p className="text-[11px] font-semibold text-gray-900 truncate">{point.name}</p>
+                              <p className="text-[9px] uppercase tracking-wider text-gray-500">
+                                {categoryLabel(point.type)}
+                              </p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MapContainer>
+          <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{t('Bonamoussadi Geofence', 'Geofence Bonamoussadi')}</p>
+                <p className="text-xs text-gray-500">{t('Map blocked to', 'Carte bloquee sur')} {selectedCityLabel}</p>
               </div>
+              <div className="w-2 h-2 rounded-full bg-[#4c7c59] animate-pulse"></div>
             </div>
           </div>
+        </div>
         <div className={`${viewMode === 'list' ? 'flex-1 relative z-30 bg-[#f9fafb]' : 'hidden'}`}>
           <div className="h-full overflow-y-auto no-scrollbar p-4 space-y-3 pb-24">
             {isLoadingPoints && (
@@ -430,8 +454,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                 onClick={() => onSelectPoint(point)}
                 className="w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4 active:scale-[0.98] transition-transform"
               >
-                <div className={`p-3 rounded-xl ${point.type === Category.FUEL ? 'bg-[#e7eef4] text-[#0f2b46]' : 'bg-gray-100 text-gray-700'}`}>
-                  {point.type === Category.FUEL ? <Fuel size={20} /> : <Landmark size={20} />}
+                <div className={`p-3 rounded-xl ${point.type === Category.FUEL ? 'bg-[#e7eef4] text-[#0f2b46]' : point.type === Category.PHARMACY ? 'bg-[#eaf3ee] text-[#2f855a]' : 'bg-gray-100 text-gray-700'}`}>
+                  {point.type === Category.FUEL ? <Fuel size={20} /> : point.type === Category.PHARMACY ? <Pill size={20} /> : <Landmark size={20} />}
                 </div>
                 <div className="flex-1">
                   <div className="flex justify-between items-start">
@@ -441,6 +465,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                   <p className="text-xs text-gray-500 truncate mt-1">{point.location}</p>
                   {point.type === Category.FUEL && point.fuelType && (
                     <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">{t('Fuel', 'Carburant')}: {point.fuelType}</p>
+                  )}
+                  {point.type === Category.PHARMACY && (
+                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
+                      {point.isOpenNow ? t('Open now', 'Ouvert') : t('Closed / unknown', 'Ferme / inconnu')}
+                    </p>
                   )}
                   <div className="flex items-center space-x-2 mt-2">
                     <span className="text-[10px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis a jour')} {point.lastUpdated}</span>

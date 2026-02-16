@@ -1,21 +1,34 @@
 import exifr from "exifr";
 import { put } from "@vercel/blob";
 import { requireUser } from "../../lib/auth.js";
-import { getSubmissions, getUserProfile, setSubmissions, setUserProfile } from "../../lib/edgeConfig.js";
+import { getPointEvents, getSubmissions, getUserProfile, setPointEvents, setUserProfile } from "../../lib/edgeConfig.js";
+import {
+  isEnrichFieldAllowed,
+  listCreateMissingFields,
+  mergePointEventsWithLegacy,
+  normalizeEnrichPayload,
+  projectPointsFromEvents,
+} from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
-import type { Submission, SubmissionCategory, SubmissionLocation } from "../../shared/types.js";
+import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi } from "../../shared/geofence.js";
+import type {
+  PointEvent,
+  PointEventType,
+  SubmissionCategory,
+  SubmissionDetails,
+  SubmissionInput,
+  SubmissionLocation,
+} from "../../shared/types.js";
 
-const allowedCategories: SubmissionCategory[] = ["fuel_station", "mobile_money"];
+const allowedCategories: SubmissionCategory[] = ["pharmacy", "fuel_station", "mobile_money"];
+const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const INLINE_PHOTO_PREFIX = "data:image/";
 const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
-const MAX_EDGE_CONFIG_SUBMISSIONS_BYTES =
-  Number(process.env.MAX_EDGE_CONFIG_SUBMISSIONS_BYTES ?? "1800000") || 1800000;
-const TIER_1_XP = 5;
-const TIER_2_XP = 10;
-const TIER_3_XP = 20;
+const MAX_EDGE_CONFIG_EVENTS_BYTES = Number(process.env.MAX_EDGE_CONFIG_EVENTS_BYTES ?? "1800000") || 1800000;
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
+const BASE_EVENT_XP = 5;
 
 function parseLocation(input: unknown): SubmissionLocation | null {
   if (!input || typeof input !== "object") return null;
@@ -26,13 +39,30 @@ function parseLocation(input: unknown): SubmissionLocation | null {
   return { latitude, longitude };
 }
 
-function parseNumeric(input: unknown): number | null {
-  if (typeof input === "number" && Number.isFinite(input)) return input;
-  if (typeof input === "string") {
-    const parsed = Number(input);
-    if (Number.isFinite(parsed)) return parsed;
-  }
+function hasValue(input: unknown): boolean {
+  if (typeof input === "string") return Boolean(input.trim());
+  if (typeof input === "boolean") return true;
+  if (typeof input === "number") return Number.isFinite(input);
+  if (Array.isArray(input)) return input.length > 0;
+  if (input && typeof input === "object") return Object.keys(input as object).length > 0;
+  return false;
+}
+
+function normalizeCategory(input: string | undefined): SubmissionCategory | null {
+  if (!input) return null;
+  const raw = input.trim();
+  if (raw === "FUEL") return "fuel_station";
+  if (raw === "MOBILE_MONEY" || raw === "KIOSK") return "mobile_money";
+  if (raw === "PHARMACY") return "pharmacy";
+  if (raw === "fuel_station" || raw === "mobile_money" || raw === "pharmacy") return raw;
   return null;
+}
+
+function normalizeEventType(input: unknown): PointEventType {
+  if (typeof input === "string" && allowedEventTypes.includes(input as PointEventType)) {
+    return input as PointEventType;
+  }
+  return "CREATE_EVENT";
 }
 
 function haversineKm(a: SubmissionLocation, b: SubmissionLocation): number {
@@ -56,10 +86,10 @@ function isInlinePhotoData(value: unknown): value is string {
   return typeof value === "string" && value.startsWith(INLINE_PHOTO_PREFIX);
 }
 
-function stripInlinePhotoData(submission: Submission): Submission {
-  if (!isInlinePhotoData(submission.photoUrl)) return submission;
-  const { photoUrl: _photoUrl, ...rest } = submission;
-  const details = { ...(submission.details ?? {}), hasPhoto: true };
+function stripInlinePhotoData(event: PointEvent): PointEvent {
+  if (!isInlinePhotoData(event.photoUrl)) return event;
+  const { photoUrl: _photoUrl, ...rest } = event;
+  const details = { ...(event.details ?? {}), hasPhoto: true };
   return { ...rest, details };
 }
 
@@ -67,22 +97,13 @@ function estimateJsonBytes(input: unknown): number {
   return Buffer.byteLength(JSON.stringify(input), "utf8");
 }
 
-function compactSubmissionsForStorage(submissions: Submission[]): Submission[] {
-  if (estimateJsonBytes(submissions) <= MAX_EDGE_CONFIG_SUBMISSIONS_BYTES) return submissions;
-  const sorted = [...submissions].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-
-  while (sorted.length > 0 && estimateJsonBytes(sorted) > MAX_EDGE_CONFIG_SUBMISSIONS_BYTES) {
+function compactEventsForStorage(events: PointEvent[]): PointEvent[] {
+  if (estimateJsonBytes(events) <= MAX_EDGE_CONFIG_EVENTS_BYTES) return events;
+  const sorted = [...events].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  while (sorted.length > 0 && estimateJsonBytes(sorted) > MAX_EDGE_CONFIG_EVENTS_BYTES) {
     sorted.pop();
   }
   return sorted;
-}
-
-function hasValue(input: unknown): boolean {
-  if (typeof input === "string") return Boolean(input.trim());
-  if (Array.isArray(input)) return input.length > 0;
-  return Boolean(input);
 }
 
 function mimeToExtension(mime: string): string {
@@ -115,12 +136,12 @@ function parseImagePayload(imageBase64: string): { imageBuffer: Buffer; mime: st
 }
 
 async function uploadSubmissionPhoto(
-  submissionId: string,
+  eventId: string,
   imageBuffer: Buffer,
   mime: string,
-  ext: string
+  ext: string,
 ): Promise<string> {
-  const pathname = `submissions/${submissionId}-${Date.now()}.${ext}`;
+  const pathname = `submissions/${eventId}-${Date.now()}.${ext}`;
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   const uploaded = await put(pathname, imageBuffer, {
     access: "public",
@@ -182,218 +203,210 @@ async function getIpLocation(request: Request): Promise<SubmissionLocation | nul
   return await fetchIpLocation(ip);
 }
 
+function validateCreatePayload(category: SubmissionCategory, details: SubmissionDetails): string | null {
+  const missing = listCreateMissingFields(category, details);
+  if (missing.length > 0) return `Missing required fields: ${missing.join(", ")}`;
+  return null;
+}
+
+async function buildCombinedEvents(): Promise<PointEvent[]> {
+  const pointEvents = (await getPointEvents()).map(stripInlinePhotoData);
+  const legacySubmissions = await getSubmissions();
+  return mergePointEventsWithLegacy(pointEvents, legacySubmissions);
+}
+
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
-
   const url = new URL(request.url);
+  const view = url.searchParams.get("view");
   const lat = url.searchParams.get("lat");
   const lng = url.searchParams.get("lng");
   const radius = url.searchParams.get("radius");
 
-  let submissions = (await getSubmissions()).map(stripInlinePhotoData);
+  const allEvents = await buildCombinedEvents();
+  const inBoundsEvents = allEvents.filter((event) => isWithinBonamoussadi(event.location));
+
+  if (view === "events") {
+    const responseEvents = auth
+      ? inBoundsEvents
+      : inBoundsEvents.map(({ userId: _userId, ...rest }) => rest as Omit<PointEvent, "userId">);
+    return jsonResponse(responseEvents, { status: 200 });
+  }
+
+  let projected = projectPointsFromEvents(inBoundsEvents);
 
   if (lat && lng && radius) {
     const latitude = Number(lat);
     const longitude = Number(lng);
     const radiusKm = Number(radius);
-
     if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(radiusKm)) {
-      submissions = submissions.filter((submission) =>
-        haversineKm(submission.location, { latitude, longitude }) <= radiusKm
-      );
+      projected = projected.filter((point) => haversineKm(point.location, { latitude, longitude }) <= radiusKm);
     }
   }
 
-  if (!auth) {
-    const publicSubmissions = submissions.map(({ userId, ...rest }) => rest);
-    return jsonResponse(publicSubmissions, { status: 200 });
-  }
-
-  return jsonResponse(submissions, { status: 200 });
+  return jsonResponse(projected, { status: 200 });
 }
 
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
 
-  let body: any;
+  let body: SubmissionInput;
   try {
-    body = await request.json();
+    body = (await request.json()) as SubmissionInput;
   } catch {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  const rawCategory = body?.category as string | undefined;
-  const normalizedCategory =
-    rawCategory === "FUEL"
-      ? "fuel_station"
-      : rawCategory === "MOBILE_MONEY"
-        ? "mobile_money"
-        : rawCategory;
-  const category = normalizedCategory as SubmissionCategory;
-  if (!allowedCategories.includes(category)) {
+  const category = normalizeCategory(body?.category as string | undefined);
+  if (!category || !allowedCategories.includes(category)) {
     return errorResponse("Invalid category", 400);
   }
 
+  const eventType = normalizeEventType(body?.eventType);
   const location = parseLocation(body?.location);
-  const rawDetails = body?.details && typeof body.details === "object" ? { ...(body.details as Record<string, unknown>) } : {};
-  const tier2Completed =
-    hasValue(rawDetails.profession) ||
-    hasValue(rawDetails.phoneMasked) ||
-    hasValue(rawDetails.queueLength) ||
-    hasValue(rawDetails.paymentModes) ||
-    hasValue(rawDetails.problem) ||
-    hasValue(rawDetails.hours);
-  let tier3Completed =
-    hasValue(rawDetails.comment) || hasValue(rawDetails.merchantId) || hasValue(rawDetails.reliability);
-
-  if (category === "fuel_station") {
-    const parsedFuelPrice = parseNumeric(rawDetails.fuelPrice ?? rawDetails.price);
-    if (parsedFuelPrice === null) {
-      return errorResponse("Invalid fuel price", 400);
-    }
-    const rawFuelType = rawDetails.fuelType;
-    if (typeof rawFuelType === "string" && rawFuelType.trim()) {
-      rawDetails.fuelType = rawFuelType.trim();
-    }
-    rawDetails.price = parsedFuelPrice;
-    rawDetails.fuelPrice = parsedFuelPrice;
-  }
-
-  const newSubmission: Submission = {
-    id: crypto.randomUUID(),
-    userId: auth.id,
+  const details = normalizeEnrichPayload(
     category,
-    location: location ?? { latitude: 0, longitude: 0 },
-    details: rawDetails,
-    createdAt: new Date().toISOString(),
-  };
-
-  const ipLocation = await getIpLocation(request);
+    body?.details && typeof body.details === "object" ? ({ ...(body.details as SubmissionDetails) } as SubmissionDetails) : {},
+  );
 
   const imageBase64 = body?.imageBase64 as string | undefined;
-  if (!imageBase64) {
-    return errorResponse("Photo is required", 400);
-  }
-  const secondImageBase64 = body?.secondImageBase64 as string | undefined;
+  if (!imageBase64) return errorResponse("Photo is required", 400);
   const parsedPhoto = parseImagePayload(imageBase64);
-  if (!parsedPhoto) {
-    return errorResponse("Invalid photo format", 400);
-  }
+  if (!parsedPhoto) return errorResponse("Invalid photo format", 400);
   if (parsedPhoto.imageBuffer.byteLength > MAX_IMAGE_BYTES) {
     return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
   }
 
+  const ipLocation = await getIpLocation(request);
   let photoLocation: SubmissionLocation | null = null;
-  if (parsedPhoto) {
-    const { imageBuffer, mime, ext } = parsedPhoto;
 
-    try {
-      const gps = await exifr.gps(imageBuffer);
-      const latitude = gps?.latitude;
-      const longitude = gps?.longitude;
-      if (latitude && longitude) {
-        photoLocation = { latitude, longitude };
-
-        if (location) {
-          const distance = haversineKm(location, photoLocation);
-          if (distance > 1) {
-            return errorResponse("Photo GPS coordinates do not match submission location", 400);
-          }
-        }
-
-        if (ipLocation) {
-          const distance = haversineKm(ipLocation, photoLocation);
-          if (distance > IP_PHOTO_MATCH_KM) {
-            return errorResponse("Photo location does not match IP location", 400);
-          }
-        }
-      } else {
-        // iOS Safari capture can strip EXIF GPS metadata even with location enabled.
-        // Fall back to browser GPS/IP checks instead of hard-failing on metadata absence.
-        if (!location && !ipLocation) {
-          return errorResponse("Photo is missing GPS metadata", 400);
-        }
-        if (location && ipLocation) {
-          const distance = haversineKm(location, ipLocation);
-          if (distance > IP_PHOTO_MATCH_KM) {
-            return errorResponse("Device location does not match IP location", 400);
-          }
-        }
+  try {
+    const gps = await exifr.gps(parsedPhoto.imageBuffer);
+    const latitude = gps?.latitude;
+    const longitude = gps?.longitude;
+    if (latitude && longitude) {
+      photoLocation = { latitude, longitude };
+      if (location) {
+        const distance = haversineKm(location, photoLocation);
+        if (distance > 1) return errorResponse("Photo GPS coordinates do not match submission location", 400);
       }
-    } catch (error) {
-      if (!location && !ipLocation) {
-        return errorResponse("Unable to read photo GPS metadata", 400);
+      if (ipLocation) {
+        const distance = haversineKm(ipLocation, photoLocation);
+        if (distance > IP_PHOTO_MATCH_KM) return errorResponse("Photo location does not match IP location", 400);
       }
-      if (location && ipLocation) {
-        const distance = haversineKm(location, ipLocation);
-        if (distance > IP_PHOTO_MATCH_KM) {
-          return errorResponse("Device location does not match IP location", 400);
-        }
-      }
+    } else if (!location && !ipLocation) {
+      return errorResponse("Photo is missing GPS metadata", 400);
     }
-    try {
-      newSubmission.photoUrl = await uploadSubmissionPhoto(newSubmission.id, imageBuffer, mime, ext);
-      rawDetails.hasPhoto = true;
-    } catch (error) {
-      const raw = error instanceof Error ? error.message : String(error);
-      const lower = raw.toLowerCase();
-      if (lower.includes("blob") && lower.includes("token")) {
-        return errorResponse("Blob storage is not configured", 500);
-      }
-      return errorResponse("Unable to store photo", 500);
+  } catch {
+    if (!location && !ipLocation) {
+      return errorResponse("Unable to read photo GPS metadata", 400);
     }
   }
 
+  const finalLocation = photoLocation ?? location ?? ipLocation;
+  if (!finalLocation) return errorResponse("Missing or invalid location", 400);
+  if (!isWithinBonamoussadi(finalLocation)) {
+    return errorResponse(
+      `Location outside Bonamoussadi bounds (${BONAMOUSSADI_BOUNDS.south},${BONAMOUSSADI_BOUNDS.west})-(${BONAMOUSSADI_BOUNDS.north},${BONAMOUSSADI_BOUNDS.east})`,
+      400,
+    );
+  }
+
+  const existingEvents = await buildCombinedEvents();
+  const projectedExisting = projectPointsFromEvents(existingEvents);
+  let pointId = typeof body.pointId === "string" && body.pointId.trim() ? body.pointId.trim() : crypto.randomUUID();
+
+  if (eventType === "CREATE_EVENT") {
+    const createError = validateCreatePayload(category, details);
+    if (createError) return errorResponse(createError, 400);
+  } else {
+    if (!body.pointId || typeof body.pointId !== "string" || !body.pointId.trim()) {
+      return errorResponse("pointId is required for ENRICH_EVENT", 400);
+    }
+    pointId = body.pointId.trim();
+    const target = projectedExisting.find((point) => point.pointId === pointId);
+    if (!target) return errorResponse("Target point not found", 404);
+    if (target.category !== category) return errorResponse("Category mismatch for target point", 400);
+
+    const submittedEntries = Object.entries(details).filter(([, value]) => hasValue(value));
+    const allowedGaps = new Set(target.gaps);
+    const filteredEntries = submittedEntries.filter(([field]) => {
+      const canonical = field === "hours" ? "openingHours" : field === "merchantId" ? "merchantIdByProvider" : field;
+      return isEnrichFieldAllowed(category, canonical) && allowedGaps.has(canonical);
+    });
+    if (!filteredEntries.length) {
+      return errorResponse("ENRICH_EVENT must include at least one currently missing field", 400);
+    }
+    const filteredDetails: SubmissionDetails = {};
+    for (const [key, value] of filteredEntries) {
+      filteredDetails[key] = value;
+    }
+    Object.assign(details, filteredDetails);
+    for (const key of Object.keys(details)) {
+      if (!Object.prototype.hasOwnProperty.call(filteredDetails, key)) {
+        delete details[key];
+      }
+    }
+  }
+
+  const eventId = crypto.randomUUID();
+  let photoUrl: string | undefined;
+  try {
+    photoUrl = await uploadSubmissionPhoto(eventId, parsedPhoto.imageBuffer, parsedPhoto.mime, parsedPhoto.ext);
+  } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
+    const lower = raw.toLowerCase();
+    if (lower.includes("blob") && lower.includes("token")) return errorResponse("Blob storage is not configured", 500);
+    return errorResponse("Unable to store photo", 500);
+  }
+  details.hasPhoto = true;
+
+  const secondImageBase64 = body?.secondImageBase64 as string | undefined;
   if (secondImageBase64) {
     const parsedSecondPhoto = parseImagePayload(secondImageBase64);
-    if (!parsedSecondPhoto) {
-      return errorResponse("Invalid photo format", 400);
-    }
+    if (!parsedSecondPhoto) return errorResponse("Invalid photo format", 400);
     if (parsedSecondPhoto.imageBuffer.byteLength > MAX_IMAGE_BYTES) {
       return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
     }
     try {
       const secondPhotoUrl = await uploadSubmissionPhoto(
-        `${newSubmission.id}-second`,
+        `${eventId}-second`,
         parsedSecondPhoto.imageBuffer,
         parsedSecondPhoto.mime,
-        parsedSecondPhoto.ext
+        parsedSecondPhoto.ext,
       );
-      rawDetails.secondPhotoUrl = secondPhotoUrl;
-      rawDetails.hasSecondaryPhoto = true;
-      tier3Completed = true;
+      details.secondPhotoUrl = secondPhotoUrl;
+      details.hasSecondaryPhoto = true;
     } catch {
       return errorResponse("Unable to store photo", 500);
     }
   }
 
-  const xpAwarded = TIER_1_XP + (tier2Completed ? TIER_2_XP : 0) + (tier3Completed ? TIER_3_XP : 0);
-  rawDetails.tier2Completed = tier2Completed;
-  rawDetails.tier3Completed = tier3Completed;
-  rawDetails.xpAwarded = xpAwarded;
+  const now = new Date().toISOString();
+  const newEvent: PointEvent = {
+    id: eventId,
+    pointId,
+    eventType,
+    userId: auth.id,
+    category,
+    location: finalLocation,
+    details,
+    photoUrl,
+    createdAt: now,
+    source: typeof details.source === "string" ? details.source : undefined,
+    externalId: typeof details.externalId === "string" ? details.externalId : undefined,
+  };
 
-  if (photoLocation) {
-    newSubmission.location = photoLocation;
-  } else if (location) {
-    newSubmission.location = location;
-  } else if (ipLocation) {
-    newSubmission.location = ipLocation;
-  } else {
-    return errorResponse("Missing or invalid location", 400);
-  }
-
-  const submissions = (await getSubmissions()).map(stripInlinePhotoData);
-  const storedSubmission = stripInlinePhotoData(newSubmission);
-  submissions.push(storedSubmission);
-  const compactedSubmissions = compactSubmissionsForStorage(submissions);
-  await setSubmissions(compactedSubmissions);
+  const rawStoredEvents = await getPointEvents();
+  rawStoredEvents.push(newEvent);
+  await setPointEvents(compactEventsForStorage(rawStoredEvents));
 
   const profile = await getUserProfile(auth.id);
   if (profile) {
-    profile.XP = (profile.XP ?? 0) + xpAwarded;
+    profile.XP = (profile.XP ?? 0) + BASE_EVENT_XP;
     await setUserProfile(auth.id, profile);
   }
 
-  return jsonResponse(storedSubmission, { status: 201 });
+  return jsonResponse(newEvent, { status: 201 });
 }

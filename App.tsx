@@ -1,7 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { Screen, DataPoint } from './types';
+import { Screen, DataPoint, ContributionMode } from './types';
 import { getSession, signOut } from './lib/client/auth';
+import { apiFetch } from './lib/client/api';
+import { flushOfflineQueue } from './lib/client/offlineQueue';
+import type { SubmissionInput } from './shared/types';
 import Splash from './components/Screens/Splash';
 import Home from './components/Screens/Home';
 import Details from './components/Screens/Details';
@@ -27,6 +30,8 @@ const App: React.FC = () => {
   });
   const [history, setHistory] = useState<Screen[]>([]);
   const [authReturnScreen, setAuthReturnScreen] = useState<Screen>(Screen.SPLASH);
+  const [contributionMode, setContributionMode] = useState<ContributionMode>('CREATE');
+  const [contributionPoint, setContributionPoint] = useState<DataPoint | null>(null);
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const navigateTo = (screen: Screen, point: DataPoint | null = null) => {
@@ -66,8 +71,22 @@ const App: React.FC = () => {
       if (screen === Screen.AUTH) {
         setAuthReturnScreen(currentScreen);
       }
+      if (screen === Screen.CONTRIBUTE) {
+        setContributionMode('CREATE');
+        setContributionPoint(null);
+      }
       setCurrentScreen(screen);
     }
+  };
+
+  const openContribution = (mode: ContributionMode, point: DataPoint | null = null) => {
+    setContributionMode(mode);
+    setContributionPoint(point);
+    if (isAuthenticated) {
+      navigateTo(Screen.CONTRIBUTE);
+      return;
+    }
+    navigateTo(Screen.AUTH);
   };
 
   useEffect(() => {
@@ -76,9 +95,32 @@ const App: React.FC = () => {
   }, [language]);
 
   useEffect(() => {
-    const handleStatus = () => setIsOffline(!navigator.onLine);
+    const sendPayload = async (payload: SubmissionInput) => {
+      const response = await apiFetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const raw = await response.text();
+        throw new Error(raw || 'Unable to sync queued submission');
+      }
+    };
+
+    const handleStatus = async () => {
+      const online = navigator.onLine;
+      setIsOffline(!online);
+      if (online) {
+        try {
+          await flushOfflineQueue(sendPayload);
+        } catch {
+          // Queue remains in IndexedDB and will retry on next online cycle.
+        }
+      }
+    };
     window.addEventListener('online', handleStatus);
     window.addEventListener('offline', handleStatus);
+    void handleStatus();
     return () => {
       window.removeEventListener('online', handleStatus);
       window.removeEventListener('offline', handleStatus);
@@ -124,7 +166,7 @@ const App: React.FC = () => {
             isAuthenticated={isAuthenticated}
             isAdmin={isAdmin}
             onAuth={() => navigateTo(Screen.AUTH)}
-            onContribute={() => (isAuthenticated ? navigateTo(Screen.CONTRIBUTE) : navigateTo(Screen.AUTH))}
+            onContribute={() => openContribution('CREATE')}
             onProfile={() => switchTab(Screen.PROFILE)}
             language={language}
           />
@@ -134,7 +176,8 @@ const App: React.FC = () => {
           <Details
             point={selectedPoint}
             onBack={goBack}
-            onContribute={() => (isAuthenticated ? navigateTo(Screen.CONTRIBUTE) : navigateTo(Screen.AUTH))}
+            onEnrich={() => openContribution('ENRICH', selectedPoint)}
+            onAddNew={() => openContribution('CREATE')}
             isAuthenticated={isAuthenticated}
             onAuth={() => navigateTo(Screen.AUTH)}
             language={language}
@@ -143,7 +186,15 @@ const App: React.FC = () => {
       case Screen.AUTH:
         return <Auth language={language} onBack={goBack} onComplete={async () => { await refreshSession(); switchTab(Screen.HOME); }} />;
       case Screen.CONTRIBUTE:
-        return <ContributionFlow language={language} onBack={goBack} onComplete={() => switchTab(Screen.HOME)} />;
+        return (
+          <ContributionFlow
+            language={language}
+            onBack={goBack}
+            onComplete={() => switchTab(Screen.HOME)}
+            mode={contributionMode}
+            seedPoint={contributionPoint}
+          />
+        );
       case Screen.PROFILE:
         return <Profile language={language} onBack={goBack} onSettings={() => navigateTo(Screen.SETTINGS)} onRedeem={() => navigateTo(Screen.REWARDS)} />;
       case Screen.ANALYTICS:

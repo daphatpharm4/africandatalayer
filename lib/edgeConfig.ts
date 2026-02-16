@@ -1,5 +1,5 @@
 import { createClient } from "@vercel/edge-config";
-import type { Submission, UserProfile } from "../shared/types.js";
+import type { LegacySubmission, PointEvent, UserProfile } from "../shared/types.js";
 
 type EdgeConfigClient = ReturnType<typeof createClient>;
 
@@ -77,12 +77,20 @@ async function writeKey(key: string, value: unknown): Promise<void> {
   }
 }
 
-export async function getSubmissions(): Promise<Submission[]> {
-  return (await readKey<Submission[]>("submissions")) ?? [];
+export async function getSubmissions(): Promise<LegacySubmission[]> {
+  return (await readKey<LegacySubmission[]>("submissions")) ?? [];
 }
 
-export async function setSubmissions(data: Submission[]): Promise<void> {
+export async function setSubmissions(data: LegacySubmission[]): Promise<void> {
   await writeKey("submissions", data);
+}
+
+export async function getPointEvents(): Promise<PointEvent[]> {
+  return (await readKey<PointEvent[]>("point_events")) ?? [];
+}
+
+export async function setPointEvents(data: PointEvent[]): Promise<void> {
+  await writeKey("point_events", data);
 }
 
 function encodeKey(input: string): string {

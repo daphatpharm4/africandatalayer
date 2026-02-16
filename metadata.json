@@ -1,6 +1,6 @@
 {
   "name": "African Data Layer",
-  "description": "A professional crowdsourced data infrastructure platform for African cities, providing real-time intelligence on fuel prices, mobile money services, and urban infrastructure.",
+  "description": "A professional crowdsourced data infrastructure platform for Bonamoussadi, Douala, providing real-time intelligence on pharmacies, mobile money kiosks, and fuel stations.",
   "requestFramePermissions": [
     "camera",
     "geolocation",

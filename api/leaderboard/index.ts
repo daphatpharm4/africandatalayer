@@ -1,6 +1,7 @@
-import { getSubmissions, getUserProfile } from "../../lib/edgeConfig.js";
+import { getPointEvents, getSubmissions, getUserProfile } from "../../lib/edgeConfig.js";
+import { mergePointEventsWithLegacy } from "../../lib/server/pointProjection.js";
 import { jsonResponse } from "../../lib/server/http.js";
-import type { LeaderboardEntry, Submission } from "../../shared/types.js";
+import type { LeaderboardEntry, PointEvent } from "../../shared/types.js";
 
 type AggregateRow = {
   userId: string;
@@ -12,13 +13,13 @@ type AggregateRow = {
 
 const FALLBACK_XP = 5;
 
-function getXpAwarded(submission: Submission): number {
+function getXpAwarded(submission: PointEvent): number {
   const details = submission.details as Record<string, unknown> | undefined;
   const rawXp = details?.xpAwarded;
   return typeof rawXp === "number" && Number.isFinite(rawXp) ? rawXp : FALLBACK_XP;
 }
 
-function getLastLocationLabel(submission: Submission): string {
+function getLastLocationLabel(submission: PointEvent): string {
   const details = submission.details as Record<string, unknown> | undefined;
   const siteName = typeof details?.siteName === "string" ? details.siteName.trim() : "";
   if (siteName) return siteName;
@@ -34,7 +35,9 @@ function getDisplayName(userId: string, profileName?: string, profileEmail?: str
 }
 
 export async function GET(): Promise<Response> {
-  const submissions = await getSubmissions();
+  const pointEvents = await getPointEvents();
+  const legacySubmissions = await getSubmissions();
+  const submissions = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
   const rowsByUser = new Map<string, AggregateRow>();
 
   for (const submission of submissions) {

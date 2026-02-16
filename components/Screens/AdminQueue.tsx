@@ -20,7 +20,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     {
       id: 1,
       user: 'Jean-Paul E.',
-      type: t('Fuel', 'Carburant'),
+      type: t('Fuel Station', 'Station-service'),
       loc: 'Shell Akwa',
       val: `840 XAF`,
       trust: 92,
@@ -32,14 +32,26 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     {
       id: 2,
       user: 'Kofi M.',
-      type: t('Kiosk', 'Kiosque'),
-      loc: 'MTN Bonapriso',
-      val: t('Cash Available', 'Especes disponibles'),
+      type: t('Pharmacy', 'Pharmacie'),
+      loc: 'Pharmacie de Bonamoussadi',
+      val: t('Open now', 'Ouvert maintenant'),
       trust: 45,
       status: t('mismatch', 'non-correspondance'),
       img: 'https://picsum.photos/seed/a2/300/200',
       exif: '4.0472°N, 9.7208°E',
       device: '4.0589°N, 9.7121°E'
+    },
+    {
+      id: 3,
+      user: 'Amina T.',
+      type: t('Mobile Money Kiosk', 'Kiosque mobile money'),
+      loc: 'MTN Bonapriso',
+      val: t('Cash Available', 'Especes disponibles'),
+      trust: 81,
+      status: t('match', 'correspondance'),
+      img: 'https://picsum.photos/seed/a3/300/200',
+      exif: '4.0860°N, 9.7412°E',
+      device: '4.0864°N, 9.7402°E'
     }
   ];
 

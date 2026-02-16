@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 import { getSession } from '../../lib/client/auth';
-import type { Submission, UserProfile } from '../../shared/types';
+import type { PointEvent, UserProfile } from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -44,11 +44,16 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
     return `${date.toLocaleDateString([], { month: 'short', day: '2-digit' })} • ${time}`;
   };
 
-  const submissionToHistory = (submission: Submission) => {
+  const submissionToHistory = (submission: PointEvent) => {
     const details = (submission.details ?? {}) as Record<string, unknown>;
-    const siteName = typeof details.siteName === 'string' ? details.siteName : null;
+    const siteName = typeof details.siteName === 'string' ? details.siteName : typeof details.name === 'string' ? details.name : null;
     const locationLabel = siteName || `GPS: ${submission.location.latitude.toFixed(4)}°, ${submission.location.longitude.toFixed(4)}°`;
-    const typeLabel = submission.category === 'fuel_station' ? t('Fuel Price', 'Prix carburant') : t('Kiosk Availability', 'Disponibilite kiosque');
+    const typeLabel =
+      submission.category === 'fuel_station'
+        ? t('Fuel Station', 'Station-service')
+        : submission.category === 'pharmacy'
+          ? t('Pharmacy', 'Pharmacie')
+          : t('Mobile Money Kiosk', 'Kiosque mobile money');
     const rawXp = details.xpAwarded;
     const xpAwarded = typeof rawXp === 'number' && Number.isFinite(rawXp) ? rawXp : 5;
 
@@ -72,7 +77,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
         try {
           const [session, submissions] = await Promise.all([
             getSession(),
-            apiJson<Submission[]>('/api/submissions')
+            apiJson<PointEvent[]>('/api/submissions?view=events')
           ]);
           const userId = session?.user?.id?.toLowerCase().trim();
           if (!userId) {
@@ -90,7 +95,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
           const latest = ownSubmissions[0];
           if (latest) {
             const details = (latest.details ?? {}) as Record<string, unknown>;
-            const siteName = typeof details.siteName === 'string' ? details.siteName : null;
+            const siteName = typeof details.siteName === 'string' ? details.siteName : typeof details.name === 'string' ? details.name : null;
             setUserLocation(siteName || `GPS ${latest.location.latitude.toFixed(4)}°, ${latest.location.longitude.toFixed(4)}°`);
           } else {
             setUserLocation(t('No contributions yet', 'Pas encore de contributions'));

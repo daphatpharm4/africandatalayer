@@ -1,34 +1,28 @@
 import { requireUser } from "../../lib/auth.js";
-import { getSubmissions, setSubmissions } from "../../lib/edgeConfig.js";
+import { getPointEvents, getSubmissions, setPointEvents } from "../../lib/edgeConfig.js";
+import { mergePointEventsWithLegacy, normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
-import type { Submission } from "../../shared/types.js";
+import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
 
-const INLINE_PHOTO_PREFIX = "data:image/";
-const MAX_EDGE_CONFIG_SUBMISSIONS_BYTES =
-  Number(process.env.MAX_EDGE_CONFIG_SUBMISSIONS_BYTES ?? "1800000") || 1800000;
-
-function stripInlinePhotoData(submission: Submission): Submission {
-  if (typeof submission.photoUrl !== "string" || !submission.photoUrl.startsWith(INLINE_PHOTO_PREFIX)) {
-    return submission;
-  }
-  const { photoUrl: _photoUrl, ...rest } = submission;
-  const details = { ...(submission.details ?? {}), hasPhoto: true };
-  return { ...rest, details };
-}
+const MAX_EDGE_CONFIG_EVENTS_BYTES = Number(process.env.MAX_EDGE_CONFIG_EVENTS_BYTES ?? "1800000") || 1800000;
 
 function estimateJsonBytes(input: unknown): number {
   return Buffer.byteLength(JSON.stringify(input), "utf8");
 }
 
-function compactSubmissionsForStorage(submissions: Submission[]): Submission[] {
-  if (estimateJsonBytes(submissions) <= MAX_EDGE_CONFIG_SUBMISSIONS_BYTES) return submissions;
-  const sorted = [...submissions].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
-  while (sorted.length > 0 && estimateJsonBytes(sorted) > MAX_EDGE_CONFIG_SUBMISSIONS_BYTES) {
+function compactEventsForStorage(events: PointEvent[]): PointEvent[] {
+  if (estimateJsonBytes(events) <= MAX_EDGE_CONFIG_EVENTS_BYTES) return events;
+  const sorted = [...events].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  while (sorted.length > 0 && estimateJsonBytes(sorted) > MAX_EDGE_CONFIG_EVENTS_BYTES) {
     sorted.pop();
   }
   return sorted;
+}
+
+async function getCombinedEvents(): Promise<PointEvent[]> {
+  const pointEvents = await getPointEvents();
+  const legacySubmissions = await getSubmissions();
+  return mergePointEventsWithLegacy(pointEvents, legacySubmissions);
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -37,14 +31,25 @@ export async function GET(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const id = url.pathname.split("/").pop();
-
+  const view = url.searchParams.get("view");
   if (!id) return errorResponse("Missing submission id", 400);
 
-  const submissions = (await getSubmissions()).map(stripInlinePhotoData);
-  const submission = submissions.find((item) => item.id === id);
-  if (!submission) return errorResponse("Submission not found", 404);
+  const events = await getCombinedEvents();
 
-  return jsonResponse(submission, { status: 200 });
+  if (view === "event") {
+    const event = events.find((item) => item.id === id);
+    if (!event) return errorResponse("Submission event not found", 404);
+    return jsonResponse(event, { status: 200 });
+  }
+
+  const points = projectPointsFromEvents(events);
+  const point = points.find((item) => item.pointId === id || item.id === id);
+  if (point) return jsonResponse(point, { status: 200 });
+
+  const fallbackEvent = events.find((item) => item.id === id);
+  if (fallbackEvent) return jsonResponse(fallbackEvent, { status: 200 });
+
+  return errorResponse("Submission not found", 404);
 }
 
 export async function PUT(request: Request): Promise<Response> {
@@ -53,7 +58,6 @@ export async function PUT(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const id = url.pathname.split("/").pop();
-
   if (!id) return errorResponse("Missing submission id", 400);
 
   let body: any;
@@ -63,18 +67,29 @@ export async function PUT(request: Request): Promise<Response> {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  const submissions = (await getSubmissions()).map(stripInlinePhotoData);
-  const submission = submissions.find((item) => item.id === id);
-  if (!submission) return errorResponse("Submission not found", 404);
+  const details = body?.details && typeof body.details === "object" ? ({ ...(body.details as SubmissionDetails) } as SubmissionDetails) : null;
+  if (!details) return errorResponse("Missing details payload", 400);
 
-  if (submission.userId !== auth.id) {
-    return errorResponse("Forbidden", 403);
-  }
+  const rawPointEvents = await getPointEvents();
+  const combinedEvents = await getCombinedEvents();
+  const points = projectPointsFromEvents(combinedEvents);
+  const targetPoint = points.find((point) => point.pointId === id || point.id === id);
+  if (!targetPoint) return errorResponse("Submission not found", 404);
 
-  if (body?.details && typeof body.details === "object") {
-    submission.details = { ...submission.details, ...body.details };
-  }
+  const newEvent: PointEvent = {
+    id: crypto.randomUUID(),
+    pointId: targetPoint.pointId,
+    eventType: "ENRICH_EVENT",
+    userId: auth.id,
+    category: targetPoint.category,
+    location: targetPoint.location,
+    details: normalizeEnrichPayload(targetPoint.category, details),
+    photoUrl: typeof body?.photoUrl === "string" ? body.photoUrl : undefined,
+    createdAt: new Date().toISOString(),
+    source: "compat_put",
+  };
 
-  await setSubmissions(compactSubmissionsForStorage(submissions));
-  return jsonResponse(submission, { status: 200 });
+  rawPointEvents.push(newEvent);
+  await setPointEvents(compactEventsForStorage(rawPointEvents));
+  return jsonResponse(newEvent, { status: 200 });
 }

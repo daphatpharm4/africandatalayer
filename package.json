@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "seed:submissions": "node scripts/seed-edge-submissions.mjs"
+    "seed:submissions": "node scripts/seed-edge-submissions.mjs",
+    "import:bonamoussadi": "node scripts/import-bonamoussadi-csv.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.33.0",

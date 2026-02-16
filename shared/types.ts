@@ -1,4 +1,5 @@
-export type SubmissionCategory = "fuel_station" | "mobile_money";
+export type SubmissionCategory = "pharmacy" | "fuel_station" | "mobile_money";
+export type PointEventType = "CREATE_EVENT" | "ENRICH_EVENT";
 
 export interface SubmissionLocation {
   latitude: number;
@@ -7,20 +8,91 @@ export interface SubmissionLocation {
 
 export interface SubmissionDetails {
   name?: string;
+  siteName?: string;
+  openingHours?: string;
+  isOpenNow?: boolean;
+  providers?: string[];
+  hasCashAvailable?: boolean;
+  hasFuelAvailable?: boolean;
+  pricesByFuel?: Record<string, number>;
+  paymentMethods?: string[];
+  paymentModes?: string[];
   fuelType?: string;
   fuelPrice?: number;
+  price?: number;
+  fuelTypes?: string[];
+  quality?: string;
+  availability?: string;
+  queueLength?: string;
   provider?: string;
+  merchantId?: string;
+  merchantIdByProvider?: Record<string, string>;
+  reliability?: string;
+  phone?: string;
+  brand?: string;
+  operator?: string;
+  website?: string;
+  confidenceScore?: number;
+  lastSeenAt?: string;
+  hasPhoto?: boolean;
+  hasSecondaryPhoto?: boolean;
+  secondPhotoUrl?: string;
+  source?: string;
+  externalId?: string;
+  isImported?: boolean;
   [key: string]: unknown;
 }
 
-export interface Submission {
+export interface PointEvent {
   id: string;
+  pointId: string;
+  eventType: PointEventType;
   userId: string;
   category: SubmissionCategory;
   location: SubmissionLocation;
   details: SubmissionDetails;
   photoUrl?: string;
   createdAt: string;
+  source?: string;
+  externalId?: string;
+}
+
+export interface ProjectedPoint {
+  id: string;
+  pointId: string;
+  category: SubmissionCategory;
+  location: SubmissionLocation;
+  details: SubmissionDetails;
+  photoUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  source?: string;
+  externalId?: string;
+  gaps: string[];
+  eventsCount: number;
+  eventIds: string[];
+}
+
+export interface Submission extends PointEvent {}
+
+export interface LegacySubmission {
+  id: string;
+  userId: string;
+  category: Exclude<SubmissionCategory, "pharmacy">;
+  location: SubmissionLocation;
+  details: SubmissionDetails;
+  photoUrl?: string;
+  createdAt: string;
+}
+
+export interface SubmissionInput {
+  eventType?: PointEventType;
+  pointId?: string;
+  category: SubmissionCategory;
+  location?: SubmissionLocation;
+  details?: SubmissionDetails;
+  imageBase64?: string;
+  secondImageBase64?: string;
 }
 
 export interface UserProfile {

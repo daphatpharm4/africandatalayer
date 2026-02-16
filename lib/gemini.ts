@@ -6,7 +6,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 export async function searchLocations(query: string, lat?: number, lng?: number) {
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
-    contents: `Find ${query} in Douala, Cameroon. Provide names and exact locations.`,
+    contents: `Find ${query} in Bonamoussadi, Douala, Cameroon. Provide names and exact locations.`,
     config: {
       tools: [{ googleMaps: {} }],
       toolConfig: {
