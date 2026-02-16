@@ -11,6 +11,7 @@ import {
 } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi } from "../../shared/geofence.js";
+import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type {
   PointEvent,
   PointEventType,
@@ -212,7 +213,22 @@ function validateCreatePayload(category: SubmissionCategory, details: Submission
 async function buildCombinedEvents(): Promise<PointEvent[]> {
   const pointEvents = (await getPointEvents()).map(stripInlinePhotoData);
   const legacySubmissions = await getSubmissions();
-  return mergePointEventsWithLegacy(pointEvents, legacySubmissions);
+  const merged = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
+  const seenExternalIds = new Set(
+    merged
+      .map((event) => (typeof event.externalId === "string" ? event.externalId.trim() : ""))
+      .filter((value) => value.length > 0),
+  );
+  const seenPointIds = new Set(merged.map((event) => event.pointId));
+  for (const seedEvent of BONAMOUSSADI_CURATED_SEED_EVENTS) {
+    const externalId = typeof seedEvent.externalId === "string" ? seedEvent.externalId.trim() : "";
+    if (externalId && seenExternalIds.has(externalId)) continue;
+    if (seenPointIds.has(seedEvent.pointId)) continue;
+    merged.push(seedEvent);
+    if (externalId) seenExternalIds.add(externalId);
+    seenPointIds.add(seedEvent.pointId);
+  }
+  return merged;
 }
 
 export async function GET(request: Request): Promise<Response> {

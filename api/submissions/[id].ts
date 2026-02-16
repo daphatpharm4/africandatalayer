@@ -2,6 +2,7 @@ import { requireUser } from "../../lib/auth.js";
 import { getPointEvents, getSubmissions, setPointEvents } from "../../lib/edgeConfig.js";
 import { mergePointEventsWithLegacy, normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
 
 const MAX_EDGE_CONFIG_EVENTS_BYTES = Number(process.env.MAX_EDGE_CONFIG_EVENTS_BYTES ?? "1800000") || 1800000;
@@ -22,7 +23,22 @@ function compactEventsForStorage(events: PointEvent[]): PointEvent[] {
 async function getCombinedEvents(): Promise<PointEvent[]> {
   const pointEvents = await getPointEvents();
   const legacySubmissions = await getSubmissions();
-  return mergePointEventsWithLegacy(pointEvents, legacySubmissions);
+  const merged = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
+  const seenExternalIds = new Set(
+    merged
+      .map((event) => (typeof event.externalId === "string" ? event.externalId.trim() : ""))
+      .filter((value) => value.length > 0),
+  );
+  const seenPointIds = new Set(merged.map((event) => event.pointId));
+  for (const seedEvent of BONAMOUSSADI_CURATED_SEED_EVENTS) {
+    const externalId = typeof seedEvent.externalId === "string" ? seedEvent.externalId.trim() : "";
+    if (externalId && seenExternalIds.has(externalId)) continue;
+    if (seenPointIds.has(seedEvent.pointId)) continue;
+    merged.push(seedEvent);
+    if (externalId) seenExternalIds.add(externalId);
+    seenPointIds.add(seedEvent.pointId);
+  }
+  return merged;
 }
 
 export async function GET(request: Request): Promise<Response> {
