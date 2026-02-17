@@ -11,6 +11,7 @@ export interface SubmissionDetails {
   siteName?: string;
   openingHours?: string;
   isOpenNow?: boolean;
+  isOnDuty?: boolean;
   providers?: string[];
   hasCashAvailable?: boolean;
   hasFuelAvailable?: boolean;

@@ -21,4 +21,5 @@ test('enrich rules only allow defined enrichable fields', () => {
 test('gap computation for pharmacy marks missing opening hours by default', () => {
   const gaps = listMissingFields('pharmacy', { name: 'Pharmacie Makepe', isOpenNow: true });
   assert.ok(gaps.includes('openingHours'));
+  assert.ok(gaps.includes('isOnDuty'));
 });

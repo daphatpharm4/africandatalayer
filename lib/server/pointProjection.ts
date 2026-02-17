@@ -11,7 +11,7 @@ import type {
 type GapRules = Record<SubmissionCategory, readonly string[]>;
 
 const ENRICHABLE_FIELDS: GapRules = {
-  pharmacy: ["openingHours", "isOpenNow"],
+  pharmacy: ["openingHours", "isOpenNow", "isOnDuty"],
   mobile_money: ["merchantIdByProvider", "paymentMethods", "openingHours", "hasCashAvailable", "providers"],
   fuel_station: ["fuelTypes", "pricesByFuel", "quality", "paymentMethods", "openingHours", "hasFuelAvailable"],
 };
@@ -35,6 +35,21 @@ function trimString(input: unknown): string | undefined {
   if (typeof input !== "string") return undefined;
   const trimmed = input.trim();
   return trimmed || undefined;
+}
+
+function normalizeBoolean(input: unknown): boolean | undefined {
+  if (typeof input === "boolean") return input;
+  if (typeof input === "number") {
+    if (input === 1) return true;
+    if (input === 0) return false;
+    return undefined;
+  }
+  if (typeof input !== "string") return undefined;
+  const normalized = input.trim().toLowerCase();
+  if (!normalized) return undefined;
+  if (["true", "yes", "y", "1", "open", "available", "oui"].includes(normalized)) return true;
+  if (["false", "no", "n", "0", "closed", "unavailable", "non"].includes(normalized)) return false;
+  return undefined;
 }
 
 function normalizeProviders(input: unknown): string[] | undefined {
@@ -95,6 +110,19 @@ function normalizeDetailsForCategory(category: SubmissionCategory, raw: Submissi
     details.isOpenNow = !normalized.includes("out") && !normalized.includes("closed");
   }
 
+  if (category === "pharmacy") {
+    const raw = details as Record<string, unknown>;
+    const isOnDuty = normalizeBoolean(raw.isOnDuty ?? raw.isOnCall ?? raw.onDuty ?? raw.pharmacyDeGarde);
+    if (typeof isOnDuty === "boolean") details.isOnDuty = isOnDuty;
+
+    if (typeof details.isOnDuty !== "boolean" && typeof details.availability === "string") {
+      const normalized = details.availability.toLowerCase();
+      if (normalized.includes("on-call") || normalized.includes("on call") || normalized.includes("garde")) {
+        details.isOnDuty = true;
+      }
+    }
+  }
+
   return details;
 }
 
@@ -133,7 +161,13 @@ export function listCreateMissingFields(category: SubmissionCategory, details: S
 
 export function isEnrichFieldAllowed(category: SubmissionCategory, field: string): boolean {
   const canonicalField =
-    field === "merchantId" ? "merchantIdByProvider" : field === "hours" ? "openingHours" : field;
+    field === "merchantId"
+      ? "merchantIdByProvider"
+      : field === "hours"
+        ? "openingHours"
+        : field === "isOnCall" || field === "onDuty"
+          ? "isOnDuty"
+          : field;
   return ENRICHABLE_FIELDS[category].includes(canonicalField);
 }
 

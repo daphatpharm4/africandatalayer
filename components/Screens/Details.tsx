@@ -37,6 +37,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
     const map: Record<string, { en: string; fr: string }> = {
       openingHours: { en: 'Opening Hours', fr: 'Heures d\'ouverture' },
       isOpenNow: { en: 'Open Now Status', fr: 'Statut ouvert maintenant' },
+      isOnDuty: { en: 'On-call Pharmacy', fr: 'Pharmacie de garde' },
       merchantIdByProvider: { en: 'Merchant IDs by Provider', fr: 'ID marchands par operateur' },
       paymentMethods: { en: 'Payment Methods', fr: 'Moyens de paiement' },
       hasCashAvailable: { en: 'Cash Availability', fr: 'Disponibilite cash' },
@@ -61,7 +62,8 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
     { label: t('Payments', 'Paiements'), value: point.paymentMethods?.join(', ') },
     { label: t('Cash Available', 'Cash disponible'), value: typeof point.hasCashAvailable === 'boolean' ? (point.hasCashAvailable ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
     { label: t('Fuel Available', 'Carburant disponible'), value: typeof point.hasFuelAvailable === 'boolean' ? (point.hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
-    { label: t('Open Now', 'Ouvert maintenant'), value: typeof point.isOpenNow === 'boolean' ? (point.isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')) : undefined }
+    { label: t('Open Now', 'Ouvert maintenant'), value: typeof point.isOpenNow === 'boolean' ? (point.isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
+    { label: t('On-call Pharmacy', 'Pharmacie de garde'), value: typeof point.isOnDuty === 'boolean' ? (point.isOnDuty ? t('Yes', 'Oui') : t('No', 'Non')) : undefined }
   ];
 
   const visibleKnownFields = knownFields.filter((field) => field.value !== undefined && field.value !== '');

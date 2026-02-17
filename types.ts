@@ -47,6 +47,7 @@ export interface DataPoint {
   hasFuelAvailable?: boolean;
   openingHours?: string;
   isOpenNow?: boolean;
+  isOnDuty?: boolean;
   hours?: string;
   paymentMethods?: string[];
   reliability?: string;

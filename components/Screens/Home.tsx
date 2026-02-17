@@ -231,6 +231,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
       hasFuelAvailable: typeof details.hasFuelAvailable === 'boolean' ? details.hasFuelAvailable : undefined,
       openingHours: typeof details.openingHours === 'string' ? details.openingHours : undefined,
       isOpenNow: typeof details.isOpenNow === 'boolean' ? details.isOpenNow : undefined,
+      isOnDuty: typeof details.isOnDuty === 'boolean' ? details.isOnDuty : undefined,
       paymentMethods,
       reliability: typeof details.reliability === 'string' ? details.reliability : undefined,
       photoUrl: typeof point.photoUrl === 'string' ? point.photoUrl : undefined,
@@ -394,9 +395,14 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                           </p>
                         )}
                         {singlePoint.type === Category.PHARMACY && (
-                          <p className="text-[10px] text-gray-600">
-                            {singlePoint.isOpenNow ? t('Open now', 'Ouvert maintenant') : t('Status unavailable', 'Statut indisponible')}
-                          </p>
+                          <div className="text-[10px] text-gray-600 space-y-0.5">
+                            <p>
+                              {singlePoint.isOpenNow ? t('Open now', 'Ouvert maintenant') : t('Status unavailable', 'Statut indisponible')}
+                            </p>
+                            {typeof singlePoint.isOnDuty === 'boolean' && (
+                              <p>{singlePoint.isOnDuty ? t('On-call pharmacy', 'Pharmacie de garde') : t('Not on-call', 'Pas de garde')}</p>
+                            )}
+                          </div>
                         )}
                         <button
                           className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
@@ -467,9 +473,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                     <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">{t('Fuel', 'Carburant')}: {point.fuelType}</p>
                   )}
                   {point.type === Category.PHARMACY && (
-                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">
-                      {point.isOpenNow ? t('Open now', 'Ouvert') : t('Closed / unknown', 'Ferme / inconnu')}
-                    </p>
+                    <div className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider space-y-0.5">
+                      <p>{point.isOpenNow ? t('Open now', 'Ouvert') : t('Closed / unknown', 'Ferme / inconnu')}</p>
+                      {typeof point.isOnDuty === 'boolean' && (
+                        <p>{point.isOnDuty ? t('On-call pharmacy', 'Pharmacie de garde') : t('Not on-call', 'Pas de garde')}</p>
+                      )}
+                    </div>
                   )}
                   <div className="flex items-center space-x-2 mt-2">
                     <span className="text-[10px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis a jour')} {point.lastUpdated}</span>

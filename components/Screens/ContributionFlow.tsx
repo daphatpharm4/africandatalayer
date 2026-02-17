@@ -54,6 +54,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [siteName, setSiteName] = useState(seedPoint?.name ?? '');
   const [openingHours, setOpeningHours] = useState(seedPoint?.openingHours ?? '');
   const [isOpenNow, setIsOpenNow] = useState(seedPoint?.isOpenNow ?? true);
+  const [isOnDuty, setIsOnDuty] = useState(seedPoint?.isOnDuty ?? false);
   const [providers, setProviders] = useState<string[]>(seedPoint?.providers ?? []);
   const [hasCashAvailable, setHasCashAvailable] = useState(seedPoint?.hasCashAvailable ?? true);
   const [merchantId, setMerchantId] = useState(seedPoint?.merchantId ?? '');
@@ -67,6 +68,24 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
 
   const gaps = useMemo(() => seedPoint?.gaps ?? [], [seedPoint]);
   const isEnrichMode = mode === 'ENRICH' && Boolean(seedPoint);
+  const gapLabel = (gap: string) => {
+    const labels: Record<string, { en: string; fr: string }> = {
+      openingHours: { en: 'Opening Hours', fr: 'Heures d\'ouverture' },
+      isOpenNow: { en: 'Open Now Status', fr: 'Statut ouvert maintenant' },
+      isOnDuty: { en: 'On-call Pharmacy', fr: 'Pharmacie de garde' },
+      merchantIdByProvider: { en: 'Merchant IDs', fr: 'ID marchands' },
+      paymentMethods: { en: 'Payment Methods', fr: 'Moyens de paiement' },
+      hasCashAvailable: { en: 'Cash Availability', fr: 'Disponibilite cash' },
+      providers: { en: 'Providers', fr: 'Operateurs' },
+      fuelTypes: { en: 'Fuel Types', fr: 'Types de carburant' },
+      pricesByFuel: { en: 'Fuel Prices', fr: 'Prix carburant' },
+      quality: { en: 'Quality', fr: 'Qualite' },
+      hasFuelAvailable: { en: 'Fuel Availability', fr: 'Disponibilite carburant' }
+    };
+    const label = labels[gap];
+    if (!label) return gap;
+    return language === 'fr' ? label.fr : label.en;
+  };
 
   useEffect(() => {
     if (seedPoint) {
@@ -241,6 +260,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     for (const gap of gaps) {
       if (gap === 'openingHours' && openingHours.trim()) details.openingHours = openingHours.trim();
       if (gap === 'isOpenNow') details.isOpenNow = isOpenNow;
+      if (gap === 'isOnDuty') details.isOnDuty = isOnDuty;
       if (gap === 'providers' && providers.length) details.providers = providers;
       if (gap === 'hasCashAvailable') details.hasCashAvailable = hasCashAvailable;
       if (gap === 'merchantIdByProvider' && merchantId.trim()) details.merchantIdByProvider = { [merchantProvider]: merchantId.trim() };
@@ -523,7 +543,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       <div className="flex flex-wrap gap-2">
         {gaps.map((gap) => (
           <span key={gap} className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-[#fff8f4] text-[#b85f3f] border border-[#f5d5c6]">
-            {gap}
+            {gapLabel(gap)}
           </span>
         ))}
       </div>
@@ -559,6 +579,18 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
             className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isOpenNow ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
           >
             {isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')}
+          </button>
+        </div>
+      )}
+
+      {gaps.includes('isOnDuty') && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-gray-600">{t('On-call pharmacy', 'Pharmacie de garde')}</span>
+          <button
+            onClick={() => setIsOnDuty((prev) => !prev)}
+            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isOnDuty ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+          >
+            {isOnDuty ? t('Yes', 'Oui') : t('No', 'Non')}
           </button>
         </div>
       )}
