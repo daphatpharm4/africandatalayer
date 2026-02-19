@@ -1,4 +1,4 @@
-import { Pool, type QueryResult } from "pg";
+import { Pool, type PoolConfig, type QueryResult } from "pg";
 
 const NETWORK_ERROR_CODES = new Set([
   "ECONNREFUSED",
@@ -7,6 +7,9 @@ const NETWORK_ERROR_CODES = new Set([
   "ENETUNREACH",
   "ENOTFOUND",
   "ETIMEDOUT",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
   "53300",
   "57P01",
   "08001",
@@ -40,6 +43,24 @@ function resolveConnectionString(): string | null {
     process.env.POSTGRES_URL_NON_POOLING ??
     null
   );
+}
+
+function resolveSslConfig(connectionString: string): PoolConfig["ssl"] | undefined {
+  if (process.env.POSTGRES_SSL_NO_VERIFY === "true") {
+    return { rejectUnauthorized: false };
+  }
+
+  try {
+    const parsed = new URL(connectionString);
+    const sslMode = parsed.searchParams.get("sslmode")?.trim().toLowerCase();
+    if (sslMode === "no-verify") {
+      return { rejectUnauthorized: false };
+    }
+  } catch {
+    // Ignore URL parsing issues and let pg handle connection string validation.
+  }
+
+  return undefined;
 }
 
 function classifyDatabaseError(error: unknown): Error {
@@ -86,10 +107,12 @@ export function getPool(): Pool {
   }
 
   const max = Number(process.env.POSTGRES_POOL_MAX ?? "5") || 5;
+  const ssl = resolveSslConfig(connectionString);
 
   pool = new Pool({
     connectionString,
     max,
+    ssl,
   });
 
   pool.on("error", (error) => {

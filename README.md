@@ -47,6 +47,7 @@ Set these environment variables:
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 - `POSTGRES_URL` (or `POSTGRES_PRISMA_URL` / `POSTGRES_URL_NON_POOLING`)
+- Optional emergency fallback: `POSTGRES_SSL_NO_VERIFY=true` (only if TLS fails with `SELF_SIGNED_CERT_IN_CHAIN`)
 - `DATA_STORE_DRIVER` (`postgres`)
 - Optional: `DATA_READ_FALLBACK_EDGE` (`true` during migration, then `false`)
 - `BLOB_READ_WRITE_TOKEN` (for storing user-submitted photos)
