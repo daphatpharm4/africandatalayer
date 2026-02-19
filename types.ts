@@ -42,6 +42,7 @@ export interface DataPoint {
   contributorTrust?: string;
   provider?: string;
   providers?: string[];
+  operator?: string;
   merchantId?: string;
   hasCashAvailable?: boolean;
   hasFuelAvailable?: boolean;

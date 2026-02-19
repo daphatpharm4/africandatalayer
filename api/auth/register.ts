@@ -36,6 +36,7 @@ export async function POST(request: Request): Promise<Response> {
     occupation: "",
     XP: 0,
     passwordHash: bcrypt.hashSync(password, 10),
+    mapScope: "bonamoussadi",
   };
 
   await setUserProfile(email, profile);

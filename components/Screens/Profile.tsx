@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 import { getSession } from '../../lib/client/auth';
-import type { PointEvent, UserProfile } from '../../shared/types';
+import type { MapScope, PointEvent, UserProfile } from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -24,9 +24,14 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSavingMapScope, setIsSavingMapScope] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [userLocation, setUserLocation] = useState(t('Location not set', 'Position non definie'));
   const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
+  const normalizeMapScope = (value: unknown): MapScope =>
+    value === 'cameroon' || value === 'global' ? value : 'bonamoussadi';
+  const activeMapScope = normalizeMapScope(profile?.mapScope);
+  const isMapUnlocked = activeMapScope !== 'bonamoussadi';
 
   const formatHistoryDate = (iso: string) => {
     const date = new Date(iso);
@@ -116,6 +121,24 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
     loadProfile();
   }, [language]);
 
+  const handleToggleMapScope = async () => {
+    if (!profile?.isAdmin || isSavingMapScope) return;
+    const nextScope: MapScope = isMapUnlocked ? 'bonamoussadi' : 'cameroon';
+    try {
+      setIsSavingMapScope(true);
+      const updated = await apiJson<UserProfile>('/api/user', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mapScope: nextScope })
+      });
+      setProfile(updated);
+    } catch {
+      setLoadError(t('Unable to update map access.', 'Impossible de mettre a jour l\'acces carte.'));
+    } finally {
+      setIsSavingMapScope(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
@@ -183,6 +206,36 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
             </div>
           </div>
         </div>
+
+        {profile?.isAdmin && (
+          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  {t('Admin Map Access', 'Acces carte admin')}
+                </span>
+                <span className="text-sm font-bold text-gray-900">
+                  {t('Unlock Cameroon-wide map', 'Debloquer la carte nationale')}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleToggleMapScope}
+                disabled={isSavingMapScope}
+                className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${isMapUnlocked ? 'bg-[#4c7c59]' : 'bg-gray-200'} ${isSavingMapScope ? 'opacity-60' : ''}`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${isMapUnlocked ? 'translate-x-8' : 'translate-x-1'}`}
+                />
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              {isMapUnlocked
+                ? t('Explorer map is unlocked to Cameroon.', 'La carte Explorer est debloquee a l\'echelle du Cameroun.')
+                : t('Explorer map is locked to Bonamoussadi.', 'La carte Explorer est limitee a Bonamoussadi.')}
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <button

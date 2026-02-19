@@ -102,8 +102,16 @@ export default async function handler(request: Request): Promise<Response> {
         if (email && adminEmail && email === adminEmail) {
           const existing = await getUserProfile(email);
           if (existing) {
+            let shouldUpdate = false;
             if (!existing.isAdmin) {
               existing.isAdmin = true;
+              shouldUpdate = true;
+            }
+            if (!existing.mapScope) {
+              existing.mapScope = "bonamoussadi";
+              shouldUpdate = true;
+            }
+            if (shouldUpdate) {
               await setUserProfile(email, existing);
             }
           } else {
@@ -115,6 +123,7 @@ export default async function handler(request: Request): Promise<Response> {
               occupation: "",
               XP: 0,
               isAdmin: true,
+              mapScope: "bonamoussadi",
             };
             await setUserProfile(email, profile);
           }
@@ -125,7 +134,13 @@ export default async function handler(request: Request): Promise<Response> {
         if (!email) return true;
 
         const existing = await getUserProfile(email);
-        if (existing) return true;
+        if (existing) {
+          if (!existing.mapScope) {
+            existing.mapScope = "bonamoussadi";
+            await setUserProfile(email, existing);
+          }
+          return true;
+        }
 
         const profile: UserProfile = {
           id: email,
@@ -134,6 +149,7 @@ export default async function handler(request: Request): Promise<Response> {
           image: user?.image ?? "",
           occupation: "",
           XP: 0,
+          mapScope: "bonamoussadi",
         };
         await setUserProfile(email, profile);
         return true;

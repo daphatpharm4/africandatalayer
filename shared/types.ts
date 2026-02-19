@@ -1,5 +1,6 @@
 export type SubmissionCategory = "pharmacy" | "fuel_station" | "mobile_money";
 export type PointEventType = "CREATE_EVENT" | "ENRICH_EVENT";
+export type MapScope = "bonamoussadi" | "cameroon" | "global";
 
 export interface SubmissionLocation {
   latitude: number;
@@ -105,6 +106,7 @@ export interface UserProfile {
   XP: number;
   passwordHash?: string;
   isAdmin?: boolean;
+  mapScope?: MapScope;
 }
 
 export interface LeaderboardEntry {

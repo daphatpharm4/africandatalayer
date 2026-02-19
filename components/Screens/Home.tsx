@@ -2,8 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Category, DataPoint } from '../../types';
-import type { ProjectedPoint } from '../../shared/types';
-import { BONAMOUSSADI_CENTER, bonamoussadiLeafletBounds, isWithinBonamoussadi } from '../../shared/geofence';
+import type { MapScope, ProjectedPoint, UserProfile } from '../../shared/types';
+import {
+  BONAMOUSSADI_CENTER,
+  CAMEROON_CENTER,
+  bonamoussadiLeafletBounds,
+  cameroonLeafletBounds,
+  isWithinBonamoussadi
+} from '../../shared/geofence';
 import {
   Fuel,
   Landmark,
@@ -35,7 +41,11 @@ type MapPointGroup = {
   points: DataPoint[];
 };
 
-const MAP_BOUNDS = bonamoussadiLeafletBounds();
+const BONAMOUSSADI_MAP_BOUNDS = bonamoussadiLeafletBounds();
+const CAMEROON_MAP_BOUNDS = cameroonLeafletBounds();
+
+const normalizeMapScope = (scope: unknown): MapScope =>
+  scope === 'cameroon' || scope === 'global' ? scope : 'bonamoussadi';
 
 const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -44,13 +54,14 @@ const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
       id: 'mock-pharmacy-1',
       name: 'Pharmacie de Bonamoussadi',
       type: Category.PHARMACY,
-      location: 'Bonamoussadi, Douala',
+      location: 'GPS: 4.0868°, 9.7357°',
       coordinates: { latitude: 4.0868, longitude: 9.7357 },
       lastUpdated: t('18 mins ago', 'il y a 18 min'),
       availability: 'High',
       trustScore: 96,
       openingHours: '08:00 - 22:00',
       isOpenNow: true,
+      isOnDuty: true,
       verified: true,
       gaps: ['openingHours']
     },
@@ -58,9 +69,8 @@ const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
       id: 'mock-fuel-1',
       name: 'TOTAL Bonamoussadi 1',
       type: Category.FUEL,
-      location: 'Bonamoussadi, Douala',
+      location: 'GPS: 4.0864°, 9.7346°',
       coordinates: { latitude: 4.0864, longitude: 9.7346 },
-      price: 845,
       fuelType: 'Super',
       quality: 'Standard',
       currency: 'XAF',
@@ -68,6 +78,7 @@ const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
       availability: 'High',
       trustScore: 92,
       hasFuelAvailable: true,
+      paymentMethods: ['Cash', 'Mobile Money'],
       verified: true,
       gaps: ['pricesByFuel']
     },
@@ -75,12 +86,13 @@ const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
       id: 'mock-kiosk-1',
       name: 'MTN Express Kiosk - Bonamoussadi',
       type: Category.MOBILE_MONEY,
-      location: 'Bonamoussadi, Douala',
+      location: 'GPS: 4.0864°, 9.7402°',
       coordinates: { latitude: 4.0864, longitude: 9.7402 },
       lastUpdated: t('1h ago', 'il y a 1h'),
       availability: 'High',
       trustScore: 88,
       providers: ['MTN'],
+      operator: 'MTN',
       hasCashAvailable: true,
       verified: true,
       gaps: ['merchantIdByProvider', 'openingHours']
@@ -142,8 +154,30 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [points, setPoints] = useState<DataPoint[]>(() => buildMockPoints(language));
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
+  const [mapScope, setMapScope] = useState<MapScope>('bonamoussadi');
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
-  const selectedCityLabel = t('Bonamoussadi, Douala, Cameroon', 'Bonamoussadi, Douala, Cameroun');
+
+  const selectedCityLabel =
+    mapScope === 'cameroon'
+      ? t('Cameroon', 'Cameroun')
+      : mapScope === 'global'
+        ? t('Worldwide', 'Monde entier')
+        : t('Bonamoussadi, Douala, Cameroon', 'Bonamoussadi, Douala, Cameroun');
+
+  const mapCenter: [number, number] =
+    mapScope === 'cameroon'
+      ? [CAMEROON_CENTER.latitude, CAMEROON_CENTER.longitude]
+      : mapScope === 'global'
+        ? [20, 0]
+        : [BONAMOUSSADI_CENTER.latitude, BONAMOUSSADI_CENTER.longitude];
+  const mapZoom = mapScope === 'cameroon' ? 6 : mapScope === 'global' ? 2 : 15;
+  const mapMinZoom = mapScope === 'cameroon' ? 5 : mapScope === 'global' ? 2 : 14;
+  const mapBounds =
+    mapScope === 'bonamoussadi' ? BONAMOUSSADI_MAP_BOUNDS : mapScope === 'cameroon' ? CAMEROON_MAP_BOUNDS : undefined;
+  const mapLockLabel =
+    mapScope === 'bonamoussadi'
+      ? t('GPS Locked', 'GPS verrouille')
+      : t('GPS Unlocked (Admin)', 'GPS debloque (admin)');
 
   const formatTimeAgo = (iso: string) => {
     const created = new Date(iso).getTime();
@@ -198,12 +232,19 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
           : pricesByFuel
             ? Object.values(pricesByFuel).find((value) => Number.isFinite(value))
             : undefined;
-    const providers = Array.isArray(details.providers) ? (details.providers as string[]) : [];
+    const providers = Array.isArray(details.providers)
+      ? (details.providers as string[]).filter((value) => typeof value === 'string' && value.trim().length > 0)
+      : [];
     const paymentMethods = Array.isArray(details.paymentMethods)
       ? (details.paymentMethods as string[])
       : Array.isArray(details.paymentModes)
         ? (details.paymentModes as string[])
         : undefined;
+    const provider = typeof details.provider === 'string' && details.provider.trim() ? details.provider.trim() : providers[0];
+    const operator =
+      (typeof details.operator === 'string' && details.operator.trim()) ||
+      provider ||
+      (providers.length > 0 ? providers[0] : undefined);
 
     return {
       id: point.pointId,
@@ -224,15 +265,16 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
       queueLength: typeof details.queueLength === 'string' ? details.queueLength : undefined,
       trustScore: 85,
       contributorTrust: 'Silver',
-      provider: typeof details.provider === 'string' ? details.provider : undefined,
+      provider,
       providers,
+      operator,
       merchantId: typeof details.merchantId === 'string' ? details.merchantId : undefined,
       hasCashAvailable: typeof details.hasCashAvailable === 'boolean' ? details.hasCashAvailable : undefined,
       hasFuelAvailable: typeof details.hasFuelAvailable === 'boolean' ? details.hasFuelAvailable : undefined,
       openingHours: typeof details.openingHours === 'string' ? details.openingHours : undefined,
       isOpenNow: typeof details.isOpenNow === 'boolean' ? details.isOpenNow : undefined,
       isOnDuty: typeof details.isOnDuty === 'boolean' ? details.isOnDuty : undefined,
-      paymentMethods,
+      paymentMethods: paymentMethods?.filter((value) => typeof value === 'string' && value.trim().length > 0),
       reliability: typeof details.reliability === 'string' ? details.reliability : undefined,
       photoUrl: typeof point.photoUrl === 'string' ? point.photoUrl : undefined,
       gaps: Array.isArray(point.gaps) ? point.gaps : [],
@@ -240,15 +282,64 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     };
   };
 
+  const formatPaymentMethods = (paymentMethods: string[] | undefined) => {
+    if (!paymentMethods || paymentMethods.length === 0) {
+      return t('Accepted payments unavailable', 'Paiements acceptes indisponibles');
+    }
+    return paymentMethods.join(', ');
+  };
+
+  const formatExplorerPrimaryMeta = (point: DataPoint) => {
+    if (point.type === Category.PHARMACY) {
+      if (typeof point.isOnDuty === 'boolean') {
+        return point.isOnDuty ? t('Pharmacie de garde', 'Pharmacie de garde') : t('Pas de garde', 'Pas de garde');
+      }
+      return t('Statut de garde indisponible', 'Statut de garde indisponible');
+    }
+    if (point.type === Category.FUEL) {
+      return `${t('Paiements', 'Paiements')}: ${formatPaymentMethods(point.paymentMethods)}`;
+    }
+    const operator = point.operator || point.provider || point.providers?.[0];
+    return operator ? `${t('Operateur', 'Operateur')}: ${operator}` : t('Operateur indisponible', 'Operateur indisponible');
+  };
+
+  const formatPharmacyOpenStatus = (point: DataPoint) => {
+    if (point.type !== Category.PHARMACY) return null;
+    return point.isOpenNow ? t('Ouvert maintenant', 'Ouvert maintenant') : t('Statut indisponible', 'Statut indisponible');
+  };
+
+  useEffect(() => {
+    let isCancelled = false;
+    const loadMapScope = async () => {
+      if (!isAuthenticated || !isAdmin) {
+        setMapScope('bonamoussadi');
+        return;
+      }
+      try {
+        const profile = await apiJson<UserProfile>('/api/user');
+        if (!isCancelled) setMapScope(normalizeMapScope(profile?.mapScope));
+      } catch {
+        if (!isCancelled) setMapScope('bonamoussadi');
+      }
+    };
+    void loadMapScope();
+    return () => {
+      isCancelled = true;
+    };
+  }, [isAuthenticated, isAdmin]);
+
   useEffect(() => {
     const loadPoints = async () => {
       try {
         setIsLoadingPoints(true);
-        const data = await apiJson<ProjectedPoint[]>('/api/submissions');
+        const params = new URLSearchParams();
+        if (mapScope !== 'bonamoussadi') params.set('scope', mapScope);
+        const query = params.toString();
+        const data = await apiJson<ProjectedPoint[]>(query ? `/api/submissions?${query}` : '/api/submissions');
         if (Array.isArray(data)) {
           const mapped = data
             .map(mapProjectedToPoint)
-            .filter((point) => isWithinBonamoussadi(point.coordinates));
+            .filter((point) => (mapScope === 'bonamoussadi' ? isWithinBonamoussadi(point.coordinates) : true));
           setPoints(mapped);
         }
       } catch {
@@ -257,15 +348,16 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
         setIsLoadingPoints(false);
       }
     };
-    loadPoints();
-  }, [language]);
+    void loadPoints();
+  }, [language, mapScope]);
 
   const filteredPoints = useMemo(() => points.filter((point) => point.type === activeCategory), [activeCategory, points]);
 
   const mapPointGroups = useMemo<MapPointGroup[]>(() => {
     const groups = new Map<string, MapPointGroup>();
     for (const point of filteredPoints) {
-      if (!point.coordinates || !isWithinBonamoussadi(point.coordinates)) continue;
+      if (!point.coordinates) continue;
+      if (mapScope === 'bonamoussadi' && !isWithinBonamoussadi(point.coordinates)) continue;
       const latitude = Number(point.coordinates.latitude.toFixed(5));
       const longitude = Number(point.coordinates.longitude.toFixed(5));
       const key = `${latitude}_${longitude}`;
@@ -277,7 +369,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
       }
     }
     return Array.from(groups.values());
-  }, [filteredPoints]);
+  }, [filteredPoints, mapScope]);
 
   const categoryLabel = (type: Category) => {
     if (type === Category.PHARMACY) return t('Pharmacy', 'Pharmacie');
@@ -299,7 +391,9 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">{t('GPS Locked', 'GPS verrouille')} • {selectedCityLabel}</span>
+            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+              {mapLockLabel} • {selectedCityLabel}
+            </span>
           </div>
           <button
             onClick={isAuthenticated ? onProfile : onAuth}
@@ -341,11 +435,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
         {viewMode === 'map' && (
           <div className="flex-1 bg-[#e7eef4] relative overflow-hidden z-0 min-h-0">
             <MapContainer
-              center={[BONAMOUSSADI_CENTER.latitude, BONAMOUSSADI_CENTER.longitude]}
-              zoom={15}
-              minZoom={14}
-              maxBounds={MAP_BOUNDS}
-              maxBoundsViscosity={1.0}
+              key={`map-${mapScope}`}
+              center={mapCenter}
+              zoom={mapZoom}
+              minZoom={mapMinZoom}
+              maxBounds={mapBounds}
+              maxBoundsViscosity={mapBounds ? 1.0 : undefined}
               scrollWheelZoom
               className="absolute inset-0 h-full w-full"
             >
@@ -389,21 +484,9 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                             {categoryLabel(singlePoint.type)}
                           </span>
                           <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
-                          <p className="text-[10px] text-gray-500">{singlePoint.location}</p>
-                          {singlePoint.type === Category.FUEL && (
-                            <p className="text-[10px] text-gray-600">
-                              {(singlePoint.fuelType ?? t('Fuel', 'Carburant'))} • {typeof singlePoint.price === 'number' ? `${singlePoint.price} XAF/L` : t('Price unavailable', 'Prix indisponible')}
-                            </p>
-                          )}
+                          <p className="text-[10px] text-gray-600">{formatExplorerPrimaryMeta(singlePoint)}</p>
                           {singlePoint.type === Category.PHARMACY && (
-                            <div className="text-[10px] text-gray-600 space-y-0.5">
-                              <p>
-                                {singlePoint.isOpenNow ? t('Open now', 'Ouvert maintenant') : t('Status unavailable', 'Statut indisponible')}
-                              </p>
-                              {typeof singlePoint.isOnDuty === 'boolean' && (
-                                <p>{singlePoint.isOnDuty ? t('On-call pharmacy', 'Pharmacie de garde') : t('Not on-call', 'Pas de garde')}</p>
-                              )}
-                            </div>
+                            <p className="text-[10px] text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                           )}
                           <button
                             className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
@@ -441,8 +524,16 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
             <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{t('Bonamoussadi Geofence', 'Geofence Bonamoussadi')}</p>
-                  <p className="text-xs text-gray-500">{t('Map blocked to', 'Carte bloquee sur')} {selectedCityLabel}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                    {mapScope === 'bonamoussadi'
+                      ? t('Bonamoussadi Geofence', 'Geofence Bonamoussadi')
+                      : mapScope === 'cameroon'
+                        ? t('Cameroon Coverage', 'Couverture Cameroun')
+                        : t('Global Coverage', 'Couverture mondiale')}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {mapScope === 'bonamoussadi' ? t('Map blocked to', 'Carte bloquee sur') : t('Map unlocked to', 'Carte debloquee sur')} {selectedCityLabel}
+                  </p>
                 </div>
                 <div className="w-2 h-2 rounded-full bg-[#4c7c59] animate-pulse"></div>
               </div>
@@ -452,53 +543,45 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
         {viewMode === 'list' && (
           <div className="flex-1 relative z-30 bg-[#f9fafb] overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
             <div className="p-4 space-y-3 pb-24">
-            {isLoadingPoints && (
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
-                {t('Loading data points...', 'Chargement des points de donnees...')}
-              </div>
-            )}
-            {filteredPoints.map(point => (
-              <button
-                key={point.id}
-                onClick={() => onSelectPoint(point)}
-                className="w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4 active:scale-[0.98] transition-transform"
-              >
-                <div className={`p-3 rounded-xl ${point.type === Category.FUEL ? 'bg-[#e7eef4] text-[#0f2b46]' : point.type === Category.PHARMACY ? 'bg-[#eaf3ee] text-[#2f855a]' : 'bg-gray-100 text-gray-700'}`}>
-                  {point.type === Category.FUEL ? <Fuel size={20} /> : point.type === Category.PHARMACY ? <Pill size={20} /> : <Landmark size={20} />}
+              {isLoadingPoints && (
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+                  {t('Loading data points...', 'Chargement des points de donnees...')}
                 </div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-start">
-                    <h4 className="font-semibold text-gray-900 text-sm">{point.name}</h4>
-                    {typeof point.price === 'number' && <span className="font-bold text-gray-900 text-sm">{point.price} {point.currency}</span>}
+              )}
+              {filteredPoints.map((point) => (
+                <button
+                  key={point.id}
+                  onClick={() => onSelectPoint(point)}
+                  className="w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4 active:scale-[0.98] transition-transform"
+                >
+                  <div className={`p-3 rounded-xl ${point.type === Category.FUEL ? 'bg-[#e7eef4] text-[#0f2b46]' : point.type === Category.PHARMACY ? 'bg-[#eaf3ee] text-[#2f855a]' : 'bg-gray-100 text-gray-700'}`}>
+                    {point.type === Category.FUEL ? <Fuel size={20} /> : point.type === Category.PHARMACY ? <Pill size={20} /> : <Landmark size={20} />}
                   </div>
-                  <p className="text-xs text-gray-500 truncate mt-1">{point.location}</p>
-                  {point.type === Category.FUEL && point.fuelType && (
-                    <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">{t('Fuel', 'Carburant')}: {point.fuelType}</p>
-                  )}
-                  {point.type === Category.PHARMACY && (
-                    <div className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider space-y-0.5">
-                      <p>{point.isOpenNow ? t('Open now', 'Ouvert') : t('Closed / unknown', 'Ferme / inconnu')}</p>
-                      {typeof point.isOnDuty === 'boolean' && (
-                        <p>{point.isOnDuty ? t('On-call pharmacy', 'Pharmacie de garde') : t('Not on-call', 'Pas de garde')}</p>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <h4 className="font-semibold text-gray-900 text-sm">{point.name}</h4>
+                      {typeof point.price === 'number' && <span className="font-bold text-gray-900 text-sm">{point.price} {point.currency}</span>}
+                    </div>
+                    <p className="text-xs text-gray-500 truncate mt-1">{formatExplorerPrimaryMeta(point)}</p>
+                    {point.type === Category.PHARMACY && (
+                      <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">{formatPharmacyOpenStatus(point)}</p>
+                    )}
+                    <div className="flex items-center space-x-2 mt-2">
+                      <span className="text-[10px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis a jour')} {point.lastUpdated}</span>
+                      {point.verified && (
+                        <span className="text-[8px] px-1.5 py-0.5 bg-[#eaf3ee] text-[#4c7c59] rounded-full font-bold uppercase tracking-wider">{t('Verified', 'Verifie')}</span>
                       )}
                     </div>
-                  )}
-                  <div className="flex items-center space-x-2 mt-2">
-                    <span className="text-[10px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis a jour')} {point.lastUpdated}</span>
-                    {point.verified && (
-                      <span className="text-[8px] px-1.5 py-0.5 bg-[#eaf3ee] text-[#4c7c59] rounded-full font-bold uppercase tracking-wider">{t('Verified', 'Verifie')}</span>
-                    )}
                   </div>
-                </div>
-                <MapPin size={16} className="text-gray-300" />
-              </button>
-            ))}
-          </div>
+                  <MapPin size={16} className="text-gray-300" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
         <button
-          onClick={() => setViewMode(v => (v === 'map' ? 'list' : 'map'))}
+          onClick={() => setViewMode((v) => (v === 'map' ? 'list' : 'map'))}
           className="fixed bottom-[calc(6rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 px-5 py-2.5 bg-[#1f2933] text-white rounded-full shadow-2xl flex items-center space-x-2 z-40 hover:bg-black active:scale-95 transition-all"
         >
           {viewMode === 'map' ? <List size={16} /> : <MapIcon size={16} />}

@@ -10,9 +10,10 @@ import {
   projectPointsFromEvents,
 } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
-import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi } from "../../shared/geofence.js";
+import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../../shared/geofence.js";
 import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type {
+  MapScope,
   PointEvent,
   PointEventType,
   SubmissionCategory,
@@ -30,6 +31,7 @@ const MAX_EDGE_CONFIG_EVENTS_BYTES = Number(process.env.MAX_EDGE_CONFIG_EVENTS_B
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const BASE_EVENT_XP = 5;
+const allowedMapScopes: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
 
 function parseLocation(input: unknown): SubmissionLocation | null {
   if (!input || typeof input !== "object") return null;
@@ -64,6 +66,18 @@ function normalizeEventType(input: unknown): PointEventType {
     return input as PointEventType;
   }
   return "CREATE_EVENT";
+}
+
+function normalizeMapScope(input: string | null): MapScope {
+  if (!input) return "bonamoussadi";
+  const normalized = input.trim().toLowerCase();
+  if (!allowedMapScopes.has(normalized as MapScope)) return "bonamoussadi";
+  return normalized as MapScope;
+}
+
+function hasAdminToken(auth: Awaited<ReturnType<typeof requireUser>>): boolean {
+  if (!auth) return false;
+  return Boolean((auth.token as { isAdmin?: boolean }).isAdmin);
 }
 
 function haversineKm(a: SubmissionLocation, b: SubmissionLocation): number {
@@ -238,18 +252,27 @@ export async function GET(request: Request): Promise<Response> {
   const lat = url.searchParams.get("lat");
   const lng = url.searchParams.get("lng");
   const radius = url.searchParams.get("radius");
+  const requestedScope = normalizeMapScope(url.searchParams.get("scope"));
+  const canUseExpandedScope = requestedScope !== "bonamoussadi";
+  if (canUseExpandedScope && !auth) return errorResponse("Unauthorized", 401);
+  if (canUseExpandedScope && !hasAdminToken(auth)) return errorResponse("Forbidden", 403);
+  const effectiveScope = canUseExpandedScope ? requestedScope : "bonamoussadi";
 
   const allEvents = await buildCombinedEvents();
-  const inBoundsEvents = allEvents.filter((event) => isWithinBonamoussadi(event.location));
+  const scopedEvents = allEvents.filter((event) => {
+    if (effectiveScope === "global") return true;
+    if (effectiveScope === "cameroon") return isWithinCameroon(event.location);
+    return isWithinBonamoussadi(event.location);
+  });
 
   if (view === "events") {
     const responseEvents = auth
-      ? inBoundsEvents
-      : inBoundsEvents.map(({ userId: _userId, ...rest }) => rest as Omit<PointEvent, "userId">);
+      ? scopedEvents
+      : scopedEvents.map(({ userId: _userId, ...rest }) => rest as Omit<PointEvent, "userId">);
     return jsonResponse(responseEvents, { status: 200 });
   }
 
-  let projected = projectPointsFromEvents(inBoundsEvents);
+  let projected = projectPointsFromEvents(scopedEvents);
 
   if (lat && lng && radius) {
     const latitude = Number(lat);
