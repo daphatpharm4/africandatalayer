@@ -1,7 +1,14 @@
 import exifr from "exifr";
 import { put } from "@vercel/blob";
 import { requireUser } from "../../lib/auth.js";
-import { getPointEvents, getSubmissions, getUserProfile, setPointEvents, setUserProfile } from "../../lib/edgeConfig.js";
+import {
+  getLegacySubmissions,
+  getPointEvents,
+  getUserProfile,
+  insertPointEvent,
+  isStorageUnavailableError,
+  upsertUserProfile,
+} from "../../lib/server/storage/index.js";
 import {
   isEnrichFieldAllowed,
   listCreateMissingFields,
@@ -27,7 +34,6 @@ const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const INLINE_PHOTO_PREFIX = "data:image/";
 const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
-const MAX_EDGE_CONFIG_EVENTS_BYTES = Number(process.env.MAX_EDGE_CONFIG_EVENTS_BYTES ?? "1800000") || 1800000;
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const BASE_EVENT_XP = 5;
@@ -106,19 +112,6 @@ function stripInlinePhotoData(event: PointEvent): PointEvent {
   const { photoUrl: _photoUrl, ...rest } = event;
   const details = { ...(event.details ?? {}), hasPhoto: true };
   return { ...rest, details };
-}
-
-function estimateJsonBytes(input: unknown): number {
-  return Buffer.byteLength(JSON.stringify(input), "utf8");
-}
-
-function compactEventsForStorage(events: PointEvent[]): PointEvent[] {
-  if (estimateJsonBytes(events) <= MAX_EDGE_CONFIG_EVENTS_BYTES) return events;
-  const sorted = [...events].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  while (sorted.length > 0 && estimateJsonBytes(sorted) > MAX_EDGE_CONFIG_EVENTS_BYTES) {
-    sorted.pop();
-  }
-  return sorted;
 }
 
 function mimeToExtension(mime: string): string {
@@ -226,7 +219,7 @@ function validateCreatePayload(category: SubmissionCategory, details: Submission
 
 async function buildCombinedEvents(): Promise<PointEvent[]> {
   const pointEvents = (await getPointEvents()).map(stripInlinePhotoData);
-  const legacySubmissions = await getSubmissions();
+  const legacySubmissions = await getLegacySubmissions();
   const merged = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
   const seenExternalIds = new Set(
     merged
@@ -258,32 +251,39 @@ export async function GET(request: Request): Promise<Response> {
   if (canUseExpandedScope && !hasAdminToken(auth)) return errorResponse("Forbidden", 403);
   const effectiveScope = canUseExpandedScope ? requestedScope : "bonamoussadi";
 
-  const allEvents = await buildCombinedEvents();
-  const scopedEvents = allEvents.filter((event) => {
-    if (effectiveScope === "global") return true;
-    if (effectiveScope === "cameroon") return isWithinCameroon(event.location);
-    return isWithinBonamoussadi(event.location);
-  });
+  try {
+    const allEvents = await buildCombinedEvents();
+    const scopedEvents = allEvents.filter((event) => {
+      if (effectiveScope === "global") return true;
+      if (effectiveScope === "cameroon") return isWithinCameroon(event.location);
+      return isWithinBonamoussadi(event.location);
+    });
 
-  if (view === "events") {
-    const responseEvents = auth
-      ? scopedEvents
-      : scopedEvents.map(({ userId: _userId, ...rest }) => rest as Omit<PointEvent, "userId">);
-    return jsonResponse(responseEvents, { status: 200 });
-  }
-
-  let projected = projectPointsFromEvents(scopedEvents);
-
-  if (lat && lng && radius) {
-    const latitude = Number(lat);
-    const longitude = Number(lng);
-    const radiusKm = Number(radius);
-    if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(radiusKm)) {
-      projected = projected.filter((point) => haversineKm(point.location, { latitude, longitude }) <= radiusKm);
+    if (view === "events") {
+      const responseEvents = auth
+        ? scopedEvents
+        : scopedEvents.map(({ userId: _userId, ...rest }) => rest as Omit<PointEvent, "userId">);
+      return jsonResponse(responseEvents, { status: 200 });
     }
-  }
 
-  return jsonResponse(projected, { status: 200 });
+    let projected = projectPointsFromEvents(scopedEvents);
+
+    if (lat && lng && radius) {
+      const latitude = Number(lat);
+      const longitude = Number(lng);
+      const radiusKm = Number(radius);
+      if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(radiusKm)) {
+        projected = projected.filter((point) => haversineKm(point.location, { latitude, longitude }) <= radiusKm);
+      }
+    }
+
+    return jsonResponse(projected, { status: 200 });
+  } catch (error) {
+    if (isStorageUnavailableError(error)) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
+    throw error;
+  }
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -352,100 +352,105 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const existingEvents = await buildCombinedEvents();
-  const projectedExisting = projectPointsFromEvents(existingEvents);
-  let pointId = typeof body.pointId === "string" && body.pointId.trim() ? body.pointId.trim() : crypto.randomUUID();
+  try {
+    const existingEvents = await buildCombinedEvents();
+    const projectedExisting = projectPointsFromEvents(existingEvents);
+    let pointId = typeof body.pointId === "string" && body.pointId.trim() ? body.pointId.trim() : crypto.randomUUID();
 
-  if (eventType === "CREATE_EVENT") {
-    const createError = validateCreatePayload(category, details);
-    if (createError) return errorResponse(createError, 400);
-  } else {
-    if (!body.pointId || typeof body.pointId !== "string" || !body.pointId.trim()) {
-      return errorResponse("pointId is required for ENRICH_EVENT", 400);
-    }
-    pointId = body.pointId.trim();
-    const target = projectedExisting.find((point) => point.pointId === pointId);
-    if (!target) return errorResponse("Target point not found", 404);
-    if (target.category !== category) return errorResponse("Category mismatch for target point", 400);
+    if (eventType === "CREATE_EVENT") {
+      const createError = validateCreatePayload(category, details);
+      if (createError) return errorResponse(createError, 400);
+    } else {
+      if (!body.pointId || typeof body.pointId !== "string" || !body.pointId.trim()) {
+        return errorResponse("pointId is required for ENRICH_EVENT", 400);
+      }
+      pointId = body.pointId.trim();
+      const target = projectedExisting.find((point) => point.pointId === pointId);
+      if (!target) return errorResponse("Target point not found", 404);
+      if (target.category !== category) return errorResponse("Category mismatch for target point", 400);
 
-    const submittedEntries = Object.entries(details).filter(([, value]) => hasValue(value));
-    const allowedGaps = new Set(target.gaps);
-    const filteredEntries = submittedEntries.filter(([field]) => {
-      const canonical = field === "hours" ? "openingHours" : field === "merchantId" ? "merchantIdByProvider" : field;
-      return isEnrichFieldAllowed(category, canonical) && allowedGaps.has(canonical);
-    });
-    if (!filteredEntries.length) {
-      return errorResponse("ENRICH_EVENT must include at least one currently missing field", 400);
-    }
-    const filteredDetails: SubmissionDetails = {};
-    for (const [key, value] of filteredEntries) {
-      filteredDetails[key] = value;
-    }
-    Object.assign(details, filteredDetails);
-    for (const key of Object.keys(details)) {
-      if (!Object.prototype.hasOwnProperty.call(filteredDetails, key)) {
-        delete details[key];
+      const submittedEntries = Object.entries(details).filter(([, value]) => hasValue(value));
+      const allowedGaps = new Set(target.gaps);
+      const filteredEntries = submittedEntries.filter(([field]) => {
+        const canonical = field === "hours" ? "openingHours" : field === "merchantId" ? "merchantIdByProvider" : field;
+        return isEnrichFieldAllowed(category, canonical) && allowedGaps.has(canonical);
+      });
+      if (!filteredEntries.length) {
+        return errorResponse("ENRICH_EVENT must include at least one currently missing field", 400);
+      }
+      const filteredDetails: SubmissionDetails = {};
+      for (const [key, value] of filteredEntries) {
+        filteredDetails[key] = value;
+      }
+      Object.assign(details, filteredDetails);
+      for (const key of Object.keys(details)) {
+        if (!Object.prototype.hasOwnProperty.call(filteredDetails, key)) {
+          delete details[key];
+        }
       }
     }
-  }
 
-  const eventId = crypto.randomUUID();
-  let photoUrl: string | undefined;
-  try {
-    photoUrl = await uploadSubmissionPhoto(eventId, parsedPhoto.imageBuffer, parsedPhoto.mime, parsedPhoto.ext);
-  } catch (error) {
-    const raw = error instanceof Error ? error.message : String(error);
-    const lower = raw.toLowerCase();
-    if (lower.includes("blob") && lower.includes("token")) return errorResponse("Blob storage is not configured", 500);
-    return errorResponse("Unable to store photo", 500);
-  }
-  details.hasPhoto = true;
-
-  const secondImageBase64 = body?.secondImageBase64 as string | undefined;
-  if (secondImageBase64) {
-    const parsedSecondPhoto = parseImagePayload(secondImageBase64);
-    if (!parsedSecondPhoto) return errorResponse("Invalid photo format", 400);
-    if (parsedSecondPhoto.imageBuffer.byteLength > MAX_IMAGE_BYTES) {
-      return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
-    }
+    const eventId = crypto.randomUUID();
+    let photoUrl: string | undefined;
     try {
-      const secondPhotoUrl = await uploadSubmissionPhoto(
-        `${eventId}-second`,
-        parsedSecondPhoto.imageBuffer,
-        parsedSecondPhoto.mime,
-        parsedSecondPhoto.ext,
-      );
-      details.secondPhotoUrl = secondPhotoUrl;
-      details.hasSecondaryPhoto = true;
-    } catch {
+      photoUrl = await uploadSubmissionPhoto(eventId, parsedPhoto.imageBuffer, parsedPhoto.mime, parsedPhoto.ext);
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error);
+      const lower = raw.toLowerCase();
+      if (lower.includes("blob") && lower.includes("token")) return errorResponse("Blob storage is not configured", 500);
       return errorResponse("Unable to store photo", 500);
     }
+    details.hasPhoto = true;
+
+    const secondImageBase64 = body?.secondImageBase64 as string | undefined;
+    if (secondImageBase64) {
+      const parsedSecondPhoto = parseImagePayload(secondImageBase64);
+      if (!parsedSecondPhoto) return errorResponse("Invalid photo format", 400);
+      if (parsedSecondPhoto.imageBuffer.byteLength > MAX_IMAGE_BYTES) {
+        return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
+      }
+      try {
+        const secondPhotoUrl = await uploadSubmissionPhoto(
+          `${eventId}-second`,
+          parsedSecondPhoto.imageBuffer,
+          parsedSecondPhoto.mime,
+          parsedSecondPhoto.ext,
+        );
+        details.secondPhotoUrl = secondPhotoUrl;
+        details.hasSecondaryPhoto = true;
+      } catch {
+        return errorResponse("Unable to store photo", 500);
+      }
+    }
+
+    const now = new Date().toISOString();
+    const newEvent: PointEvent = {
+      id: eventId,
+      pointId,
+      eventType,
+      userId: auth.id,
+      category,
+      location: finalLocation,
+      details,
+      photoUrl,
+      createdAt: now,
+      source: typeof details.source === "string" ? details.source : undefined,
+      externalId: typeof details.externalId === "string" ? details.externalId : undefined,
+    };
+
+    await insertPointEvent(newEvent);
+
+    const profile = await getUserProfile(auth.id);
+    if (profile) {
+      profile.XP = (profile.XP ?? 0) + BASE_EVENT_XP;
+      await upsertUserProfile(auth.id, profile);
+    }
+
+    return jsonResponse(newEvent, { status: 201 });
+  } catch (error) {
+    if (isStorageUnavailableError(error)) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
+    throw error;
   }
-
-  const now = new Date().toISOString();
-  const newEvent: PointEvent = {
-    id: eventId,
-    pointId,
-    eventType,
-    userId: auth.id,
-    category,
-    location: finalLocation,
-    details,
-    photoUrl,
-    createdAt: now,
-    source: typeof details.source === "string" ? details.source : undefined,
-    externalId: typeof details.externalId === "string" ? details.externalId : undefined,
-  };
-
-  const rawStoredEvents = await getPointEvents();
-  rawStoredEvents.push(newEvent);
-  await setPointEvents(compactEventsForStorage(rawStoredEvents));
-
-  const profile = await getUserProfile(auth.id);
-  if (profile) {
-    profile.XP = (profile.XP ?? 0) + BASE_EVENT_XP;
-    await setUserProfile(auth.id, profile);
-  }
-
-  return jsonResponse(newEvent, { status: 201 });
 }

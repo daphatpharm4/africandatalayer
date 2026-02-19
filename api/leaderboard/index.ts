@@ -1,6 +1,6 @@
-import { getPointEvents, getSubmissions, getUserProfile } from "../../lib/edgeConfig.js";
+import { getLegacySubmissions, getPointEvents, getUserProfile, isStorageUnavailableError } from "../../lib/server/storage/index.js";
 import { mergePointEventsWithLegacy } from "../../lib/server/pointProjection.js";
-import { jsonResponse } from "../../lib/server/http.js";
+import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import type { LeaderboardEntry, PointEvent } from "../../shared/types.js";
 
 type AggregateRow = {
@@ -35,65 +35,72 @@ function getDisplayName(userId: string, profileName?: string, profileEmail?: str
 }
 
 export async function GET(): Promise<Response> {
-  const pointEvents = await getPointEvents();
-  const legacySubmissions = await getSubmissions();
-  const submissions = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
-  const rowsByUser = new Map<string, AggregateRow>();
+  try {
+    const pointEvents = await getPointEvents();
+    const legacySubmissions = await getLegacySubmissions();
+    const submissions = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
+    const rowsByUser = new Map<string, AggregateRow>();
 
-  for (const submission of submissions) {
-    const userId = typeof submission.userId === "string" ? submission.userId.toLowerCase().trim() : "";
-    if (!userId) continue;
+    for (const submission of submissions) {
+      const userId = typeof submission.userId === "string" ? submission.userId.toLowerCase().trim() : "";
+      if (!userId) continue;
 
-    const previous = rowsByUser.get(userId);
-    const xpAwarded = getXpAwarded(submission);
-    const createdAt = typeof submission.createdAt === "string" ? submission.createdAt : null;
-    const locationLabel = getLastLocationLabel(submission);
+      const previous = rowsByUser.get(userId);
+      const xpAwarded = getXpAwarded(submission);
+      const createdAt = typeof submission.createdAt === "string" ? submission.createdAt : null;
+      const locationLabel = getLastLocationLabel(submission);
 
-    if (!previous) {
-      rowsByUser.set(userId, {
-        userId,
-        xp: xpAwarded,
-        contributions: 1,
-        lastContributionAt: createdAt,
-        lastLocation: locationLabel,
-      });
-      continue;
+      if (!previous) {
+        rowsByUser.set(userId, {
+          userId,
+          xp: xpAwarded,
+          contributions: 1,
+          lastContributionAt: createdAt,
+          lastLocation: locationLabel,
+        });
+        continue;
+      }
+
+      previous.xp += xpAwarded;
+      previous.contributions += 1;
+
+      const nextDate = createdAt ? new Date(createdAt).getTime() : Number.NEGATIVE_INFINITY;
+      const prevDate = previous.lastContributionAt ? new Date(previous.lastContributionAt).getTime() : Number.NEGATIVE_INFINITY;
+      if (nextDate > prevDate) {
+        previous.lastContributionAt = createdAt;
+        previous.lastLocation = locationLabel;
+      }
     }
 
-    previous.xp += xpAwarded;
-    previous.contributions += 1;
+    const sorted = [...rowsByUser.values()].sort((a, b) => {
+      if (b.xp !== a.xp) return b.xp - a.xp;
+      if (b.contributions !== a.contributions) return b.contributions - a.contributions;
+      const bTime = b.lastContributionAt ? new Date(b.lastContributionAt).getTime() : 0;
+      const aTime = a.lastContributionAt ? new Date(a.lastContributionAt).getTime() : 0;
+      return bTime - aTime;
+    });
 
-    const nextDate = createdAt ? new Date(createdAt).getTime() : Number.NEGATIVE_INFINITY;
-    const prevDate = previous.lastContributionAt ? new Date(previous.lastContributionAt).getTime() : Number.NEGATIVE_INFINITY;
-    if (nextDate > prevDate) {
-      previous.lastContributionAt = createdAt;
-      previous.lastLocation = locationLabel;
+    const topRows = sorted.slice(0, 20);
+    const profiles = await Promise.all(topRows.map((row) => getUserProfile(row.userId)));
+
+    const leaderboard: LeaderboardEntry[] = topRows.map((row, index) => {
+      const profile = profiles[index];
+      return {
+        rank: index + 1,
+        userId: row.userId,
+        name: getDisplayName(row.userId, profile?.name, profile?.email),
+        xp: row.xp,
+        contributions: row.contributions,
+        lastContributionAt: row.lastContributionAt,
+        lastLocation: row.lastLocation,
+      };
+    });
+
+    return jsonResponse(leaderboard, { status: 200 });
+  } catch (error) {
+    if (isStorageUnavailableError(error)) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
+    throw error;
   }
-
-  const sorted = [...rowsByUser.values()].sort((a, b) => {
-    if (b.xp !== a.xp) return b.xp - a.xp;
-    if (b.contributions !== a.contributions) return b.contributions - a.contributions;
-    const bTime = b.lastContributionAt ? new Date(b.lastContributionAt).getTime() : 0;
-    const aTime = a.lastContributionAt ? new Date(a.lastContributionAt).getTime() : 0;
-    return bTime - aTime;
-  });
-
-  const topRows = sorted.slice(0, 20);
-  const profiles = await Promise.all(topRows.map((row) => getUserProfile(row.userId)));
-
-  const leaderboard: LeaderboardEntry[] = topRows.map((row, index) => {
-    const profile = profiles[index];
-    return {
-      rank: index + 1,
-      userId: row.userId,
-      name: getDisplayName(row.userId, profile?.name, profile?.email),
-      xp: row.xp,
-      contributions: row.contributions,
-      lastContributionAt: row.lastContributionAt,
-      lastLocation: row.lastLocation,
-    };
-  });
-
-  return jsonResponse(leaderboard, { status: 200 });
 }

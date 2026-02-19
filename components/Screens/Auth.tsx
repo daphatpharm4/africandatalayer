@@ -29,6 +29,8 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
           return t('An account already exists for this email.', 'Un compte existe deja pour cet email.');
         case 'validation_error':
           return t('Please check your details and try again.', 'Verifiez vos informations et reessayez.');
+        case 'storage_unavailable':
+          return t('Registration storage is temporarily unavailable. Please retry shortly.', 'Le stockage des inscriptions est temporairement indisponible. Reessayez bientot.');
         case 'configuration_error':
         case 'auth_unavailable':
           return t('Authentication service is temporarily unavailable. Please retry.', 'Service d\'authentification temporairement indisponible. Reessayez.');

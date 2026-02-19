@@ -38,20 +38,22 @@ npm run dev
 
 ## 🔐 Backend (Vercel Functions)
 
-This repo includes serverless functions under `/api` for Auth.js (Google OAuth + credentials), submissions, and user profiles. Deploy on Vercel to enable the backend, then set these environment variables:
+This repo includes serverless functions under `/api` for Auth.js (Google OAuth + credentials), submissions, and user profiles. Persistence now targets Supabase Postgres (with optional temporary Edge Config read fallback during migration).
+
+Set these environment variables:
 
 - `AUTH_SECRET` (or `NEXTAUTH_SECRET`)
 - `AUTH_URL` (e.g. `https://your-app.vercel.app`)
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
-- `EDGE_CONFIG`
-- `EDGE_CONFIG_ID`
-- `VERCEL_API_TOKEN`
+- `POSTGRES_URL` (or `POSTGRES_PRISMA_URL` / `POSTGRES_URL_NON_POOLING`)
+- `DATA_STORE_DRIVER` (`postgres`)
+- Optional: `DATA_READ_FALLBACK_EDGE` (`true` during migration, then `false`)
 - `BLOB_READ_WRITE_TOKEN` (for storing user-submitted photos)
 - Optional: `MAX_SUBMISSION_IMAGE_BYTES` (default `8388608`)
-- Optional: `MAX_EDGE_CONFIG_SUBMISSIONS_BYTES` (default `1800000`)
 - Optional: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
 - Optional (frontend): `VITE_ADMIN_EMAIL` (to show Impact tab for admin users)
+- Optional migration-only: `EDGE_CONFIG`, `EDGE_CONFIG_ID`, `VERCEL_API_TOKEN`
 
 Endpoints:
 - `GET/POST /api/submissions` (default returns projected points; add `?view=events` for raw append-only events)
@@ -59,9 +61,28 @@ Endpoints:
 - `GET/PUT /api/user`
 - `GET/POST /api/auth/*` (Auth.js)
 
+## 🗄️ Database Schema
+
+Apply the SQL migration in Supabase SQL Editor:
+
+- `supabase/migrations/20260219_init_adl.sql`
+
+## 🔁 Data Migration (Edge Config -> Postgres)
+
+- Dry run: `node scripts/migrate-edge-config-to-postgres.mjs --dry-run`
+- Write: `node scripts/migrate-edge-config-to-postgres.mjs --write`
+
 Bonamoussadi CSV import:
 - Dry run: `npm run import:bonamoussadi -- --csv /absolute/path/to/bonamoussadi_pharmacy_fuel_curated.csv --dry-run`
-- Write to Edge Config: `npm run import:bonamoussadi -- --csv /absolute/path/to/bonamoussadi_pharmacy_fuel_curated.csv --write`
+- Write to Postgres: `npm run import:bonamoussadi -- --csv /absolute/path/to/bonamoussadi_pharmacy_fuel_curated.csv --write`
+
+## 🚨 Security
+
+If credentials were shared publicly, rotate them before deploying:
+
+- Supabase service role keys
+- Postgres passwords / URLs
+- Any exposed API tokens (including Vercel tokens)
 
 Local dev (recommended):
 - Backend: `npx vercel@latest dev --listen 3000`

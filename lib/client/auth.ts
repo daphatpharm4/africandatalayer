@@ -22,6 +22,7 @@ export type AuthClientErrorCode =
   | "configuration_error"
   | "access_denied"
   | "auth_unavailable"
+  | "storage_unavailable"
   | "registration_conflict"
   | "validation_error"
   | "request_error"
@@ -88,17 +89,24 @@ async function safeReadJson<T>(response: Response): Promise<T | null> {
   }
 }
 
-async function extractResponseError(response: Response, fallback: string): Promise<string> {
+type ApiErrorPayload = {
+  message: string;
+  code?: string;
+};
+
+async function extractResponseErrorPayload(response: Response, fallback: string): Promise<ApiErrorPayload> {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (contentType.includes("application/json")) {
-    const payload = await safeReadJson<{ error?: unknown; message?: unknown }>(response);
+    const payload = await safeReadJson<{ error?: unknown; message?: unknown; code?: unknown }>(response);
     if (payload) {
-      return sanitizeErrorMessage(payload.error ?? payload.message, fallback);
+      const message = sanitizeErrorMessage(payload.error ?? payload.message, fallback);
+      const code = typeof payload.code === "string" && payload.code.trim() ? payload.code.trim() : undefined;
+      return { message, code };
     }
-    return fallback;
+    return { message: fallback };
   }
   const text = await response.text().catch(() => "");
-  return sanitizeErrorMessage(text, fallback);
+  return { message: sanitizeErrorMessage(text, fallback) };
 }
 
 function mapAuthJsError(errorType: string | null, errorCode: string | null): AuthClientError {
@@ -162,7 +170,7 @@ async function signInWithCredentialsOnce(email: string, password: string): Promi
   });
 
   if (!response.ok) {
-    const message = await extractResponseError(response, DEFAULT_SIGN_IN_ERROR);
+    const { message } = await extractResponseErrorPayload(response, DEFAULT_SIGN_IN_ERROR);
     const retryable = response.status >= 500;
     throw new AuthClientError(retryable ? "auth_unavailable" : "request_error", message, { retryable });
   }
@@ -220,7 +228,7 @@ export async function signOut(): Promise<void> {
     body,
   });
   if (!response.ok) {
-    const message = await extractResponseError(response, DEFAULT_SIGN_OUT_ERROR);
+    const { message } = await extractResponseErrorPayload(response, DEFAULT_SIGN_OUT_ERROR);
     const retryable = response.status >= 500;
     throw new AuthClientError(retryable ? "auth_unavailable" : "request_error", message, { retryable });
   }
@@ -234,12 +242,15 @@ export async function registerWithCredentials(email: string, password: string, n
   });
 
   if (!response.ok) {
-    const message = await extractResponseError(response, DEFAULT_SIGN_UP_ERROR);
+    const { message, code } = await extractResponseErrorPayload(response, DEFAULT_SIGN_UP_ERROR);
     if (response.status === 409) {
       throw new AuthClientError("registration_conflict", message);
     }
     if (response.status === 400) {
       throw new AuthClientError("validation_error", message);
+    }
+    if (response.status === 503 && code === "storage_unavailable") {
+      throw new AuthClientError("storage_unavailable", message, { retryable: true });
     }
     const retryable = response.status >= 500;
     throw new AuthClientError(retryable ? "auth_unavailable" : "request_error", message, { retryable });

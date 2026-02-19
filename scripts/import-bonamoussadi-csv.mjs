@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@vercel/edge-config";
+import { Pool } from "pg";
 
 const BONAMOUSSADI_BOUNDS = {
   south: 4.0755,
@@ -224,6 +224,91 @@ function planImports(rows, existingEvents) {
   return { importedEvents, summary };
 }
 
+function resolvePostgresUrl() {
+  return process.env.POSTGRES_URL ?? process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL_NON_POOLING ?? "";
+}
+
+function normalizeCreatedAt(input) {
+  if (typeof input === "string") {
+    const parsed = new Date(input);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  return new Date().toISOString();
+}
+
+function rowToEvent(row) {
+  return {
+    id: row.id,
+    pointId: row.point_id,
+    eventType: row.event_type,
+    userId: row.user_id,
+    category: row.category,
+    location: {
+      latitude: typeof row.latitude === "number" ? row.latitude : Number(row.latitude),
+      longitude: typeof row.longitude === "number" ? row.longitude : Number(row.longitude),
+    },
+    details: row.details && typeof row.details === "object" ? row.details : {},
+    photoUrl: row.photo_url ?? undefined,
+    createdAt: normalizeCreatedAt(row.created_at),
+    source: row.source ?? undefined,
+    externalId: row.external_id ?? undefined,
+  };
+}
+
+async function fetchExistingPointEvents(pool) {
+  const result = await pool.query(
+    `
+      select id, point_id, event_type, user_id, category, latitude, longitude, details, photo_url, created_at, source, external_id
+      from point_events
+      order by created_at asc
+    `,
+  );
+  return result.rows.map(rowToEvent);
+}
+
+async function upsertPointEvent(pool, event) {
+  const location = event.location ?? {};
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error(`Invalid event location for event ${event.id}`);
+  }
+
+  await pool.query(
+    `
+      insert into point_events (id, point_id, event_type, user_id, category, latitude, longitude, details, photo_url, created_at, source, external_id)
+      values ($1::uuid, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::timestamptz, $11, $12)
+      on conflict (id) do update
+      set
+        point_id = excluded.point_id,
+        event_type = excluded.event_type,
+        user_id = excluded.user_id,
+        category = excluded.category,
+        latitude = excluded.latitude,
+        longitude = excluded.longitude,
+        details = excluded.details,
+        photo_url = excluded.photo_url,
+        created_at = excluded.created_at,
+        source = excluded.source,
+        external_id = excluded.external_id
+    `,
+    [
+      event.id,
+      event.pointId,
+      event.eventType,
+      event.userId,
+      event.category,
+      latitude,
+      longitude,
+      JSON.stringify(event.details ?? {}),
+      typeof event.photoUrl === "string" ? event.photoUrl : null,
+      normalizeCreatedAt(event.createdAt),
+      typeof event.source === "string" ? event.source : null,
+      typeof event.externalId === "string" ? event.externalId : null,
+    ],
+  );
+}
+
 async function main() {
   loadEnv();
   const args = parseArgs(process.argv.slice(2));
@@ -231,48 +316,42 @@ async function main() {
   const csvText = readFileSync(csvPath, "utf8");
   const rows = parseCsv(csvText);
 
-  const edgeConfigConnection = process.env.EDGE_CONFIG;
-  if (!edgeConfigConnection) {
-    throw new Error("Missing EDGE_CONFIG in .env");
+  const postgresUrl = resolvePostgresUrl();
+  if (!postgresUrl) {
+    throw new Error("Missing POSTGRES_URL (or POSTGRES_PRISMA_URL / POSTGRES_URL_NON_POOLING) in .env");
   }
 
-  const edgeConfigId = process.env.EDGE_CONFIG_ID;
-  const token = process.env.VERCEL_API_TOKEN;
-  if (args.write && (!edgeConfigId || !token)) {
-    throw new Error("Writing requires EDGE_CONFIG_ID and VERCEL_API_TOKEN in .env");
+  const pool = new Pool({ connectionString: postgresUrl });
+
+  try {
+    const existingEvents = await fetchExistingPointEvents(pool);
+    const { importedEvents, summary: baseSummary } = planImports(rows, existingEvents);
+    const summary = {
+      csvPath,
+      ...baseSummary,
+    };
+
+    console.log(JSON.stringify(summary, null, 2));
+
+    if (args.dryRun) return;
+
+    await pool.query("begin");
+    for (const event of importedEvents) {
+      await upsertPointEvent(pool, event);
+    }
+    await pool.query("commit");
+
+    console.log(`Wrote ${importedEvents.length} imported events into point_events.`);
+  } catch (error) {
+    try {
+      await pool.query("rollback");
+    } catch {
+      // ignore rollback failures
+    }
+    throw error;
+  } finally {
+    await pool.end();
   }
-
-  const client = createClient(edgeConfigConnection);
-  const existingEventsRaw = await client.get("point_events");
-  const existingEvents = Array.isArray(existingEventsRaw) ? existingEventsRaw : [];
-  const { importedEvents, summary: baseSummary } = planImports(rows, existingEvents);
-  const summary = {
-    csvPath,
-    ...baseSummary,
-  };
-
-  console.log(JSON.stringify(summary, null, 2));
-
-  if (args.dryRun) return;
-
-  const mergedEvents = [...existingEvents, ...importedEvents];
-  const response = await fetch(`https://api.vercel.com/v1/edge-config/${edgeConfigId}/items`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      items: [{ operation: "upsert", key: "point_events", value: mergedEvents }],
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Failed to write point_events: ${response.status} ${text}`);
-  }
-
-  console.log(`Wrote ${importedEvents.length} imported events into point_events.`);
 }
 
 const isDirectRun = process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));

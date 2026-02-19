@@ -9,6 +9,8 @@ export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
-export function errorResponse(message: string, status: number): Response {
-  return jsonResponse({ error: message }, { status });
+export function errorResponse(message: string, status: number, options: { code?: string } = {}): Response {
+  const body: { error: string; code?: string } = { error: message };
+  if (options.code) body.code = options.code;
+  return jsonResponse(body, { status });
 }
