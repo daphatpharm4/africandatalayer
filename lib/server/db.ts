@@ -38,6 +38,7 @@ export function isStorageUnavailableError(error: unknown): error is StorageUnava
 
 function resolveConnectionString(): string | null {
   return (
+    process.env.ADL_POSTGRES_URL ??
     process.env.POSTGRES_URL ??
     process.env.POSTGRES_PRISMA_URL ??
     process.env.POSTGRES_URL_NON_POOLING ??
@@ -61,6 +62,17 @@ function resolveSslConfig(connectionString: string): PoolConfig["ssl"] | undefin
   }
 
   return undefined;
+}
+
+function applyNoVerifySslMode(connectionString: string): string {
+  try {
+    const parsed = new URL(connectionString);
+    parsed.searchParams.set("sslmode", "no-verify");
+    parsed.searchParams.delete("sslrootcert");
+    return parsed.toString();
+  } catch {
+    return connectionString;
+  }
 }
 
 function classifyDatabaseError(error: unknown): Error {
@@ -107,10 +119,12 @@ export function getPool(): Pool {
   }
 
   const max = Number(process.env.POSTGRES_POOL_MAX ?? "5") || 5;
-  const ssl = resolveSslConfig(connectionString);
+  const normalizedConnectionString =
+    process.env.POSTGRES_SSL_NO_VERIFY === "true" ? applyNoVerifySslMode(connectionString) : connectionString;
+  const ssl = resolveSslConfig(normalizedConnectionString);
 
   pool = new Pool({
-    connectionString,
+    connectionString: normalizedConnectionString,
     max,
     ssl,
   });

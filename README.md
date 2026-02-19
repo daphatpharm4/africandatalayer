@@ -46,6 +46,7 @@ Set these environment variables:
 - `AUTH_URL` (e.g. `https://your-app.vercel.app`)
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `ADL_POSTGRES_URL` (optional override if integration-managed `POSTGRES_URL` is locked)
 - `POSTGRES_URL` (or `POSTGRES_PRISMA_URL` / `POSTGRES_URL_NON_POOLING`)
 - Optional emergency fallback: `POSTGRES_SSL_NO_VERIFY=true` (only if TLS fails with `SELF_SIGNED_CERT_IN_CHAIN`)
 - `DATA_STORE_DRIVER` (`postgres`)
