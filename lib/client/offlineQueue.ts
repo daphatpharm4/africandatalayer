@@ -2,7 +2,8 @@ import type { SubmissionInput } from '../../shared/types';
 
 const DB_NAME = 'adl_offline_queue';
 const STORE_NAME = 'submission_queue';
-const DB_VERSION = 1;
+const SYNC_ERROR_STORE_NAME = 'submission_sync_errors';
+const DB_VERSION = 2;
 
 export type QueueStatus = 'pending' | 'syncing' | 'failed' | 'synced';
 
@@ -16,10 +17,39 @@ export interface QueueItem {
   updatedAt: string;
 }
 
+export interface SyncErrorRecord {
+  id: string;
+  queueItemId: string;
+  message: string;
+  createdAt: string;
+  payloadSummary: {
+    eventType: SubmissionInput['eventType'];
+    category: SubmissionInput['category'];
+    pointId?: string;
+    location?: SubmissionInput['location'];
+  };
+}
+
 export interface QueueSyncSummary {
   synced: number;
   failed: number;
+  syncedIds: string[];
+  failedIds: string[];
+  permanentFailures: number;
+  permanentFailureIds: string[];
+  permanentFailureMessages: string[];
   remaining: number;
+}
+
+function toQueueErrorInfo(error: unknown): { message: string; retryable: boolean } {
+  const fallback = 'Unable to sync queued submission';
+  if (error instanceof Error) {
+    const withRetryable = error as Error & { retryable?: unknown };
+    const retryable = typeof withRetryable.retryable === 'boolean' ? withRetryable.retryable : true;
+    const message = error.message?.trim() || fallback;
+    return { message, retryable };
+  }
+  return { message: String(error ?? fallback), retryable: true };
 }
 
 function ensureIndexedDb(): IDBFactory {
@@ -52,6 +82,9 @@ async function openDb(): Promise<IDBDatabase> {
       const nextDb = request.result;
       if (!nextDb.objectStoreNames.contains(STORE_NAME)) {
         nextDb.createObjectStore(STORE_NAME, { keyPath: 'id' });
+      }
+      if (!nextDb.objectStoreNames.contains(SYNC_ERROR_STORE_NAME)) {
+        nextDb.createObjectStore(SYNC_ERROR_STORE_NAME, { keyPath: 'id' });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -128,6 +161,32 @@ async function removeItem(id: string): Promise<void> {
   db.close();
 }
 
+async function putSyncErrorRecord(record: SyncErrorRecord): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(SYNC_ERROR_STORE_NAME, 'readwrite');
+  tx.objectStore(SYNC_ERROR_STORE_NAME).put(record);
+  await transactionDone(tx);
+  db.close();
+}
+
+export async function listSyncErrorRecords(): Promise<SyncErrorRecord[]> {
+  const db = await openDb();
+  const tx = db.transaction(SYNC_ERROR_STORE_NAME, 'readonly');
+  const request = tx.objectStore(SYNC_ERROR_STORE_NAME).getAll();
+  const result = await requestToPromise(request);
+  await transactionDone(tx);
+  db.close();
+  return (result as SyncErrorRecord[]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+}
+
+export async function clearSyncErrorRecords(): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(SYNC_ERROR_STORE_NAME, 'readwrite');
+  tx.objectStore(SYNC_ERROR_STORE_NAME).clear();
+  await transactionDone(tx);
+  db.close();
+}
+
 export async function getQueueStats(): Promise<{ pending: number; failed: number; total: number }> {
   const items = await listQueueItems();
   return {
@@ -141,6 +200,11 @@ export async function flushOfflineQueue(sendFn: (payload: SubmissionInput) => Pr
   const items = await listQueueItems();
   let synced = 0;
   let failed = 0;
+  const syncedIds: string[] = [];
+  const failedIds: string[] = [];
+  let permanentFailures = 0;
+  const permanentFailureIds: string[] = [];
+  const permanentFailureMessages = new Set<string>();
 
   for (const item of items) {
     await updateItem(item.id, (current) => ({
@@ -154,17 +218,49 @@ export async function flushOfflineQueue(sendFn: (payload: SubmissionInput) => Pr
       await sendFn(item.payload);
       await removeItem(item.id);
       synced += 1;
+      syncedIds.push(item.id);
     } catch (error) {
-      failed += 1;
-      await updateItem(item.id, (current) => ({
-        ...current,
-        status: 'failed',
-        updatedAt: new Date().toISOString(),
-        lastError: error instanceof Error ? error.message : String(error)
-      }));
+      const details = toQueueErrorInfo(error);
+      if (details.retryable) {
+        failed += 1;
+        failedIds.push(item.id);
+        await updateItem(item.id, (current) => ({
+          ...current,
+          status: 'failed',
+          updatedAt: new Date().toISOString(),
+          lastError: details.message,
+        }));
+        continue;
+      }
+
+      permanentFailures += 1;
+      permanentFailureIds.push(item.id);
+      permanentFailureMessages.add(details.message);
+      await putSyncErrorRecord({
+        id: crypto.randomUUID(),
+        queueItemId: item.id,
+        message: details.message,
+        createdAt: new Date().toISOString(),
+        payloadSummary: {
+          eventType: item.payload.eventType,
+          category: item.payload.category,
+          pointId: item.payload.pointId,
+          location: item.payload.location,
+        },
+      });
+      await removeItem(item.id);
     }
   }
 
   const remaining = (await listQueueItems()).length;
-  return { synced, failed, remaining };
+  return {
+    synced,
+    failed,
+    syncedIds,
+    failedIds,
+    permanentFailures,
+    permanentFailureIds,
+    permanentFailureMessages: Array.from(permanentFailureMessages),
+    remaining,
+  };
 }

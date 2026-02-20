@@ -2,9 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { Screen, DataPoint, ContributionMode } from './types';
 import { getSession, signOut } from './lib/client/auth';
-import { apiFetch } from './lib/client/api';
 import { flushOfflineQueue } from './lib/client/offlineQueue';
-import type { SubmissionInput } from './shared/types';
+import { sendSubmissionPayload } from './lib/client/submissionSync';
 import Splash from './components/Screens/Splash';
 import Home from './components/Screens/Home';
 import Details from './components/Screens/Details';
@@ -103,24 +102,12 @@ const App: React.FC = () => {
   }, [language]);
 
   useEffect(() => {
-    const sendPayload = async (payload: SubmissionInput) => {
-      const response = await apiFetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!response.ok) {
-        const raw = await response.text();
-        throw new Error(raw || 'Unable to sync queued submission');
-      }
-    };
-
     const handleStatus = async () => {
       const online = navigator.onLine;
       setIsOffline(!online);
       if (online) {
         try {
-          await flushOfflineQueue(sendPayload);
+          await flushOfflineQueue(sendSubmissionPayload);
         } catch {
           // Queue remains in IndexedDB and will retry on next online cycle.
         }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
   Award,
   BadgeCheck,
@@ -7,10 +8,12 @@ import {
   Gift,
   MapPin,
   Settings as SettingsIcon,
+  Trash2,
   Wallet
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 import { getSession } from '../../lib/client/auth';
+import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type { MapScope, PointEvent, UserProfile } from '../../shared/types';
 
 interface Props {
@@ -28,6 +31,10 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   const [loadError, setLoadError] = useState('');
   const [userLocation, setUserLocation] = useState(t('Location not set', 'Position non definie'));
   const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
+  const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
+  const [isLoadingSyncErrors, setIsLoadingSyncErrors] = useState(true);
+  const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
+  const [syncErrorActionError, setSyncErrorActionError] = useState('');
   const normalizeMapScope = (value: unknown): MapScope =>
     value === 'cameroon' || value === 'global' ? value : 'bonamoussadi';
   const activeMapScope = normalizeMapScope(profile?.mapScope);
@@ -69,6 +76,12 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
       type: typeLabel,
       xp: xpAwarded
     };
+  };
+
+  const categoryLabel = (category: SyncErrorRecord['payloadSummary']['category']) => {
+    if (category === 'fuel_station') return t('Fuel Station', 'Station-service');
+    if (category === 'pharmacy') return t('Pharmacy', 'Pharmacie');
+    return t('Mobile Money Kiosk', 'Kiosque mobile money');
   };
 
   useEffect(() => {
@@ -120,6 +133,41 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
     };
     loadProfile();
   }, [language]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSyncErrors = async () => {
+      try {
+        setIsLoadingSyncErrors(true);
+        const records = await listSyncErrorRecords();
+        if (!cancelled) setSyncErrors(records);
+      } catch {
+        if (!cancelled) setSyncErrors([]);
+      } finally {
+        if (!cancelled) setIsLoadingSyncErrors(false);
+      }
+    };
+
+    void loadSyncErrors();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleClearSyncErrors = async () => {
+    if (isClearingSyncErrors) return;
+    setSyncErrorActionError('');
+    try {
+      setIsClearingSyncErrors(true);
+      await clearSyncErrorRecords();
+      setSyncErrors([]);
+    } catch {
+      setSyncErrorActionError(t('Unable to clear sync errors.', 'Impossible d\'effacer les erreurs de synchronisation.'));
+    } finally {
+      setIsClearingSyncErrors(false);
+    }
+  };
 
   const handleToggleMapScope = async () => {
     if (!profile?.isAdmin || isSavingMapScope) return;
@@ -306,6 +354,62 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
               </div>
             ))}
           </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Sync Errors', 'Erreurs de synchronisation')}</h4>
+            {syncErrors.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearSyncErrors}
+                disabled={isClearingSyncErrors}
+                className={`text-[10px] font-bold uppercase flex items-center space-x-1 ${isClearingSyncErrors ? 'text-gray-300' : 'text-[#c86b4a]'}`}
+              >
+                <Trash2 size={12} />
+                <span>{isClearingSyncErrors ? t('Clearing...', 'Suppression...') : t('Clear', 'Effacer')}</span>
+              </button>
+            )}
+          </div>
+
+          {syncErrorActionError && (
+            <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-xs text-red-600">
+              {syncErrorActionError}
+            </div>
+          )}
+
+          {isLoadingSyncErrors && (
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+              {t('Loading sync errors...', 'Chargement des erreurs de synchronisation...')}
+            </div>
+          )}
+
+          {!isLoadingSyncErrors && syncErrors.length === 0 && (
+            <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+              {t('No sync errors on this device.', 'Aucune erreur de synchronisation sur cet appareil.')}
+            </div>
+          )}
+
+          {!isLoadingSyncErrors && syncErrors.length > 0 && (
+            <div className="space-y-3">
+              {syncErrors.map((record) => (
+                <div key={record.id} className="bg-white p-4 rounded-2xl border border-red-100 shadow-sm space-y-2">
+                  <div className="flex items-start space-x-2 text-red-600">
+                    <AlertTriangle size={14} className="mt-[1px]" />
+                    <span className="text-xs font-semibold">{record.message}</span>
+                  </div>
+                  <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">
+                    {formatHistoryDate(record.createdAt)} • {categoryLabel(record.payloadSummary.category)}
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    {record.payloadSummary.location
+                      ? `GPS: ${record.payloadSummary.location.latitude.toFixed(4)}°, ${record.payloadSummary.location.longitude.toFixed(4)}°`
+                      : t('GPS unavailable', 'GPS indisponible')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="h-24"></div>
       </div>

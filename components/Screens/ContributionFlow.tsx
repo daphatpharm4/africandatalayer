@@ -9,8 +9,8 @@ import {
   Fuel,
   ShieldCheck
 } from 'lucide-react';
-import { apiFetch } from '../../lib/client/api';
-import { enqueueSubmission, flushOfflineQueue, getQueueStats } from '../../lib/client/offlineQueue';
+import { enqueueSubmission, flushOfflineQueue, getQueueStats, type QueueSyncSummary } from '../../lib/client/offlineQueue';
+import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
 import type { SubmissionCategory, SubmissionInput } from '../../shared/types';
 import { Category, ContributionMode, DataPoint } from '../../types';
 
@@ -116,36 +116,21 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     return () => window.removeEventListener('online', onOnline);
   }, []);
 
-  const readErrorMessage = async (response: Response): Promise<string> => {
-    const contentType = response.headers.get('content-type') ?? '';
-    if (contentType.includes('application/json')) {
-      try {
-        const data = await response.json();
-        const raw = typeof data === 'string' ? data : data?.error ?? data?.message ?? JSON.stringify(data);
-        return String(raw);
-      } catch {
-        return await response.text();
-      }
-    }
-    return await response.text();
-  };
-
-  const sendPayload = async (payload: SubmissionInput): Promise<void> => {
-    const response = await apiFetch('/api/submissions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (!response.ok) {
-      const message = await readErrorMessage(response);
-      throw new Error(message.replace(/^Error:\s*/i, ''));
-    }
-  };
-
-  const syncQueuedItems = async (): Promise<void> => {
+  const syncQueuedItems = async (): Promise<QueueSyncSummary | null> => {
     try {
-      const summary = await flushOfflineQueue(sendPayload);
-      if (summary.failed > 0) {
+      const summary = await flushOfflineQueue(sendSubmissionPayload);
+      if (summary.permanentFailures > 0) {
+        const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetee par la validation serveur.');
+        const rejectedMessage = t(
+          `${summary.permanentFailures} queued item(s) were rejected: ${reason}`,
+          `${summary.permanentFailures} element(s) en file ont ete rejetes : ${reason}`
+        );
+        if (summary.failed > 0) {
+          setSyncMessage(`${rejectedMessage} ${t(`${summary.failed} item(s) still pending sync.`, `${summary.failed} element(s) en attente de synchronisation.`)}`);
+        } else {
+          setSyncMessage(rejectedMessage);
+        }
+      } else if (summary.failed > 0) {
         setSyncMessage(t(`Saved offline. ${summary.failed} item(s) still pending sync.`, `${summary.failed} element(s) en attente de synchronisation.`));
       } else if (summary.synced > 0) {
         setSyncMessage(t('Saved offline and synced successfully.', 'Enregistre hors ligne puis synchronise avec succes.'));
@@ -155,8 +140,10 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
           setSyncMessage(t(`${stats.total} item(s) queued for sync.`, `${stats.total} element(s) en file de synchronisation.`));
         }
       }
+      return summary;
     } catch (error) {
       setSyncMessage(error instanceof Error ? error.message : t('Saved offline. Sync will retry automatically.', 'Enregistre hors ligne. La synchronisation reessaiera automatiquement.'));
+      return null;
     }
   };
 
@@ -324,6 +311,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     const details = isEnrichMode ? buildEnrichDetails() : buildCreateDetails();
     if (!validateBeforeSubmit(details)) return;
 
+    setSyncMessage('');
     setIsSubmitting(true);
     try {
       const imageBase64 = await fileToBase64(photoFile);
@@ -336,17 +324,25 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         imageBase64
       };
 
-      await enqueueSubmission(payload);
+      const queuedItem = await enqueueSubmission(payload);
+      let summary: QueueSyncSummary | null = null;
       if (navigator.onLine) {
-        await syncQueuedItems();
+        summary = await syncQueuedItems();
       } else {
         const stats = await getQueueStats();
         setSyncMessage(t(`Saved offline. ${stats.total} item(s) pending sync.`, `Enregistre hors ligne. ${stats.total} element(s) en attente de synchronisation.`));
       }
 
+      if (summary && summary.permanentFailureIds.includes(queuedItem.id)) {
+        const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetee par la validation serveur.');
+        setErrorMessage(reason);
+        return;
+      }
+
       setSubmitted(true);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : t('Submission failed.', 'Echec de la soumission.'));
+      const syncError = toSubmissionSyncError(error);
+      setErrorMessage(syncError.message || t('Submission failed.', 'Echec de la soumission.'));
     } finally {
       setIsSubmitting(false);
     }

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Camera, MapPin, ShieldCheck, Trash2, User, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Camera, MapPin, ShieldCheck, Trash2, User, X } from 'lucide-react';
 import { apiFetch, apiJson } from '../../lib/client/api';
+import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type {
   AdminSubmissionEvent,
   SubmissionDetails,
@@ -144,6 +145,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [items, setItems] = useState<AdminSubmissionEvent[]>([]);
   const [selectedItem, setSelectedItem] = useState<AdminSubmissionEvent | null>(null);
+  const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
+  const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,6 +180,24 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       cancelled = true;
     };
   }, [language]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSyncErrors = async () => {
+      try {
+        const records = await listSyncErrorRecords();
+        if (!cancelled) setSyncErrors(records);
+      } catch {
+        if (!cancelled) setSyncErrors([]);
+      }
+    };
+
+    void loadSyncErrors();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setDeleteError('');
@@ -242,6 +263,17 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
+  const handleClearSyncErrors = async () => {
+    if (isClearingSyncErrors) return;
+    try {
+      setIsClearingSyncErrors(true);
+      await clearSyncErrorRecords();
+      setSyncErrors([]);
+    } finally {
+      setIsClearingSyncErrors(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-[#1f2933] text-white px-4 h-14 flex items-center justify-between">
@@ -257,6 +289,30 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           <span>{t('Global Admin Scope', 'Portee admin globale')}</span>
           <span>{items.length} {t('items', 'elements')}</span>
         </div>
+
+        {syncErrors.length > 0 && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-2 text-red-700">
+                <AlertTriangle size={14} />
+                <span className="text-[10px] font-bold uppercase tracking-widest">
+                  {t('Local Sync Errors', 'Erreurs locales de synchronisation')} ({syncErrors.length})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleClearSyncErrors}
+                disabled={isClearingSyncErrors}
+                className={`text-[10px] font-bold uppercase tracking-widest ${isClearingSyncErrors ? 'text-red-300' : 'text-red-700'}`}
+              >
+                {isClearingSyncErrors ? t('Clearing...', 'Suppression...') : t('Clear', 'Effacer')}
+              </button>
+            </div>
+            <div className="text-xs text-red-700">
+              {syncErrors[0]?.message ?? t('Unknown sync error.', 'Erreur de synchronisation inconnue.')}
+            </div>
+          </div>
+        )}
 
         {isLoading && (
           <div className="bg-white border border-gray-100 rounded-2xl p-5 text-xs text-gray-500">
