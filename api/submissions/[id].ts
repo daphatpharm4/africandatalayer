@@ -1,5 +1,5 @@
 import { requireUser } from "../../lib/auth.js";
-import { getLegacySubmissions, getPointEvents, insertPointEvent, isStorageUnavailableError } from "../../lib/server/storage/index.js";
+import { deletePointEvent, getLegacySubmissions, getPointEvents, insertPointEvent, isStorageUnavailableError } from "../../lib/server/storage/index.js";
 import { mergePointEventsWithLegacy, normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { canViewEventDetail, toSubmissionAuthContext } from "../../lib/server/submissionAccess.js";
@@ -104,6 +104,37 @@ export async function PUT(request: Request): Promise<Response> {
 
     await insertPointEvent(newEvent);
     return jsonResponse(newEvent, { status: 200 });
+  } catch (error) {
+    if (isStorageUnavailableError(error)) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
+    throw error;
+  }
+}
+
+export async function DELETE(request: Request): Promise<Response> {
+  const auth = await requireUser(request);
+  if (!auth) return errorResponse("Unauthorized", 401);
+  const viewer = toSubmissionAuthContext(auth);
+  if (!viewer) return errorResponse("Unauthorized", 401);
+  if (!viewer.isAdmin) return errorResponse("Forbidden", 403);
+
+  const url = new URL(request.url);
+  const id = url.pathname.split("/").pop();
+  const view = url.searchParams.get("view");
+  if (!id) return errorResponse("Missing submission id", 400);
+  if (view !== "event") return errorResponse("Use view=event for event deletion", 400);
+
+  try {
+    const deleted = await deletePointEvent(id);
+    if (deleted) return jsonResponse({ ok: true, id }, { status: 200 });
+
+    const combined = await getCombinedEvents();
+    const existsReadOnly = combined.some((event) => event.id === id);
+    if (existsReadOnly) {
+      return errorResponse("Submission source is read-only and cannot be deleted", 409);
+    }
+    return errorResponse("Submission event not found", 404);
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });

@@ -5,6 +5,7 @@ export interface StorageStore {
   upsertUserProfile(userId: string, profile: UserProfile): Promise<void>;
   getPointEvents(): Promise<PointEvent[]>;
   insertPointEvent(event: PointEvent): Promise<void>;
+  deletePointEvent(eventId: string): Promise<boolean>;
   bulkUpsertPointEvents(events: PointEvent[]): Promise<void>;
   getLegacySubmissions(): Promise<LegacySubmission[]>;
 }

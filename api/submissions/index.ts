@@ -28,6 +28,7 @@ import {
   buildPhotoFraudMetadata,
   buildSubmissionFraudCheck,
   extractPhotoMetadata,
+  extractPhotoMetadataFromUrl,
   haversineKm,
   parseSubmissionFraudCheck,
 } from "../../lib/server/submissionFraud.js";
@@ -49,6 +50,7 @@ const allowedCategories: SubmissionCategory[] = ["pharmacy", "fuel_station", "mo
 const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const SUBMISSION_PHOTO_MATCH_KM = DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM;
+const MAX_FORENSICS_FALLBACK_LOOKUPS = Number(process.env.ADMIN_FORENSICS_FALLBACK_LIMIT ?? "25") || 25;
 const INLINE_PHOTO_PREFIX = "data:image/";
 const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
@@ -232,6 +234,48 @@ function getEventFraudCheck(event: PointEvent): SubmissionFraudCheck | null {
   return parseSubmissionFraudCheck(details?.fraudCheck);
 }
 
+function getSecondaryPhotoUrl(event: PointEvent): string | null {
+  const details = event.details as Record<string, unknown> | undefined;
+  const secondPhotoUrl = details?.secondPhotoUrl;
+  if (typeof secondPhotoUrl !== "string") return null;
+  const normalized = secondPhotoUrl.trim();
+  return normalized || null;
+}
+
+async function buildFallbackFraudCheck(event: PointEvent): Promise<SubmissionFraudCheck | null> {
+  const primaryUrl = typeof event.photoUrl === "string" ? event.photoUrl.trim() : "";
+  const secondaryUrl = getSecondaryPhotoUrl(event);
+  if (!primaryUrl && !secondaryUrl) return null;
+
+  const primaryExtracted = primaryUrl ? await extractPhotoMetadataFromUrl(primaryUrl) : null;
+  const secondaryExtracted = secondaryUrl ? await extractPhotoMetadataFromUrl(secondaryUrl) : null;
+  const primaryPhoto = buildPhotoFraudMetadata({
+    extracted: primaryExtracted,
+    submissionLocation: event.location,
+    ipLocation: null,
+    submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
+    ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
+  });
+  const secondaryPhoto = buildPhotoFraudMetadata({
+    extracted: secondaryExtracted,
+    submissionLocation: event.location,
+    ipLocation: null,
+    submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
+    ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
+  });
+  if (!primaryPhoto && !secondaryPhoto) return null;
+
+  return buildSubmissionFraudCheck({
+    submissionLocation: event.location,
+    effectiveLocation: event.location,
+    ipLocation: null,
+    primaryPhoto,
+    secondaryPhoto,
+    submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
+    ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
+  });
+}
+
 async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSubmissionEvent[]> {
   const sortedEvents = [...events].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const userIds = Array.from(
@@ -246,24 +290,37 @@ async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSu
     userIds.map(async (userId) => [userId, await getUserProfile(userId)] as const),
   );
   const profileByUserId = new Map(profileEntries);
+  const output: AdminSubmissionEvent[] = [];
+  let fallbackLookups = 0;
 
-  return sortedEvents.map((event) => {
+  for (const event of sortedEvents) {
     const normalizedUserId = normalizeActorId(event.userId);
     const profile = profileByUserId.get(normalizedUserId) ?? null;
     const emailFromProfile = typeof profile?.email === "string" ? profile.email.trim().toLowerCase() : "";
     const email = emailFromProfile || (normalizedUserId.includes("@") ? normalizedUserId : null);
     const name = getUserDisplayName(normalizedUserId, profile?.name ?? null, email);
+    let fraudCheck = getEventFraudCheck(event);
+    if (!fraudCheck && fallbackLookups < MAX_FORENSICS_FALLBACK_LOOKUPS) {
+      fallbackLookups += 1;
+      try {
+        fraudCheck = await buildFallbackFraudCheck(event);
+      } catch {
+        fraudCheck = null;
+      }
+    }
 
-    return {
+    output.push({
       event,
       user: {
         id: normalizedUserId || event.userId,
         name,
         email,
       },
-      fraudCheck: getEventFraudCheck(event),
-    };
-  });
+      fraudCheck,
+    });
+  }
+
+  return output;
 }
 
 async function buildCombinedEvents(): Promise<PointEvent[]> {

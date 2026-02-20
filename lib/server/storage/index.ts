@@ -67,6 +67,11 @@ export async function insertPointEvent(event: PointEvent): Promise<void> {
   await primary.insertPointEvent(event);
 }
 
+export async function deletePointEvent(eventId: string): Promise<boolean> {
+  const primary = getPrimaryStore();
+  return await primary.deletePointEvent(eventId);
+}
+
 export async function bulkUpsertPointEvents(events: PointEvent[]): Promise<void> {
   const primary = getPrimaryStore();
   await primary.bulkUpsertPointEvents(events);

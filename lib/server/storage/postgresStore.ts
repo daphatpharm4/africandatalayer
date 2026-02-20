@@ -197,6 +197,18 @@ async function insertPointEvent(event: PointEvent): Promise<void> {
   );
 }
 
+async function deletePointEvent(eventId: string): Promise<boolean> {
+  const normalizedId = normalizeEventId(eventId);
+  const result = await query(
+    `
+      delete from point_events
+      where id = $1::uuid
+    `,
+    [normalizedId],
+  );
+  return result.rowCount > 0;
+}
+
 async function bulkUpsertPointEvents(events: PointEvent[]): Promise<void> {
   if (!events.length) return;
 
@@ -221,6 +233,7 @@ export const postgresStore: StorageStore = {
   upsertUserProfile,
   getPointEvents,
   insertPointEvent,
+  deletePointEvent,
   bulkUpsertPointEvents,
   getLegacySubmissions,
 };

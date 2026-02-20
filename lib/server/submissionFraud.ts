@@ -5,6 +5,8 @@ export const DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM = 1;
 
 const EARTH_RADIUS_KM = 6371;
 const KM_PRECISION = 3;
+const REMOTE_FETCH_TIMEOUT_MS = Number(process.env.ADMIN_FORENSICS_FETCH_TIMEOUT_MS ?? "4000") || 4000;
+const MAX_REMOTE_METADATA_BYTES = Number(process.env.ADMIN_FORENSICS_MAX_IMAGE_BYTES ?? "8388608") || 8388608;
 
 export interface ExtractedPhotoMetadata {
   gps: SubmissionLocation | null;
@@ -122,6 +124,28 @@ export async function extractPhotoMetadata(imageBuffer: Buffer): Promise<Extract
     deviceMake: normalizeString(parsed.Make),
     deviceModel: normalizeString(parsed.Model),
   };
+}
+
+function isHttpUrl(input: string): boolean {
+  return /^https?:\/\//i.test(input);
+}
+
+export async function extractPhotoMetadataFromUrl(photoUrl: string): Promise<ExtractedPhotoMetadata | null> {
+  if (!photoUrl || !isHttpUrl(photoUrl)) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REMOTE_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(photoUrl, { signal: controller.signal });
+    if (!response.ok) return null;
+    const arrayBuffer = await response.arrayBuffer();
+    if (!arrayBuffer.byteLength || arrayBuffer.byteLength > MAX_REMOTE_METADATA_BYTES) return null;
+    return await extractPhotoMetadata(Buffer.from(arrayBuffer));
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export function buildPhotoFraudMetadata(params: BuildPhotoFraudMetadataParams): SubmissionPhotoMetadata | null {

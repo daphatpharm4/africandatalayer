@@ -27,6 +27,14 @@ async function insertPointEvent(event: PointEvent): Promise<void> {
   await setPointEvents(compactEventsForStorage(existing));
 }
 
+async function deletePointEvent(eventId: string): Promise<boolean> {
+  const existing = await getPointEvents();
+  const filtered = existing.filter((event) => event.id !== eventId);
+  if (filtered.length === existing.length) return false;
+  await setPointEvents(compactEventsForStorage(filtered));
+  return true;
+}
+
 async function bulkUpsertPointEvents(events: PointEvent[]): Promise<void> {
   const deduped = new Map<string, PointEvent>();
   for (const event of events) {
@@ -41,6 +49,7 @@ export const edgeConfigStore: StorageStore = {
   upsertUserProfile,
   getPointEvents,
   insertPointEvent,
+  deletePointEvent,
   bulkUpsertPointEvents,
   getLegacySubmissions: getSubmissions,
 };

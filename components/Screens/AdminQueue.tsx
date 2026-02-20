@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Camera, MapPin, ShieldCheck, User, X } from 'lucide-react';
-import { apiJson } from '../../lib/client/api';
+import { ArrowLeft, Camera, MapPin, ShieldCheck, Trash2, User, X } from 'lucide-react';
+import { apiFetch, apiJson } from '../../lib/client/api';
 import type {
   AdminSubmissionEvent,
   SubmissionDetails,
@@ -57,6 +57,13 @@ function getSecondaryImageUrl(item: AdminSubmissionEvent): string | null {
   const details = item.event.details as SubmissionDetails;
   if (typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim()) return details.secondPhotoUrl;
   return null;
+}
+
+function isReadOnlySubmission(item: AdminSubmissionEvent): boolean {
+  const source = typeof item.event.source === 'string' ? item.event.source.trim().toLowerCase() : '';
+  if (source === 'legacy_submission' || source === 'osm_overpass') return true;
+  if (item.event.id.startsWith('legacy-event-')) return true;
+  return false;
 }
 
 function getMatchState(fraudCheck: SubmissionFraudCheck | null): MatchState {
@@ -132,6 +139,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   const [items, setItems] = useState<AdminSubmissionEvent[]>([]);
   const [selectedItem, setSelectedItem] = useState<AdminSubmissionEvent | null>(null);
 
@@ -141,6 +151,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       try {
         setIsLoading(true);
         setError('');
+        setDeleteError('');
+        setActionMessage('');
         const data = await apiJson<AdminSubmissionEvent[]>('/api/submissions?view=admin_events&scope=global');
         if (cancelled) return;
         const safeItems = Array.isArray(data) ? data : [];
@@ -166,9 +178,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     };
   }, [language]);
 
+  useEffect(() => {
+    setDeleteError('');
+    setActionMessage('');
+  }, [selectedItem?.event.id]);
+
   const selectedFraudCheck = selectedItem?.fraudCheck ?? null;
   const selectedPrimaryPhoto = selectedItem ? getPrimaryImageUrl(selectedItem) : null;
   const selectedSecondaryPhoto = selectedItem ? getSecondaryImageUrl(selectedItem) : null;
+  const isSelectedReadOnly = selectedItem ? isReadOnlySubmission(selectedItem) : false;
   const unavailableLabel = t('Unavailable', 'Indisponible');
 
   const listItems = useMemo(() => {
@@ -182,6 +200,47 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       };
     });
   }, [items, language]);
+
+  const handleDeleteSelected = async () => {
+    if (!selectedItem) return;
+    if (isReadOnlySubmission(selectedItem)) {
+      setDeleteError(t('This submission source is read-only and cannot be deleted.', 'Cette source de soumission est en lecture seule et ne peut pas etre supprimee.'));
+      return;
+    }
+
+    const confirmed = window.confirm(
+      t('Delete this submission event permanently?', 'Supprimer definitivement cet evenement de soumission ?')
+    );
+    if (!confirmed) return;
+
+    setIsDeleting(true);
+    setDeleteError('');
+    setActionMessage('');
+    try {
+      const response = await apiFetch(`/api/submissions/${encodeURIComponent(selectedItem.event.id)}?view=event`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const message = (await response.text()) || t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
+        setDeleteError(message);
+        return;
+      }
+
+      const deletedId = selectedItem.event.id;
+      const nextItems = items.filter((item) => item.event.id !== deletedId);
+      setItems(nextItems);
+      setSelectedItem(nextItems[0] ?? null);
+      setActionMessage(t('Submission deleted successfully.', 'Soumission supprimee avec succes.'));
+    } catch (deleteActionError) {
+      const message =
+        deleteActionError instanceof Error
+          ? deleteActionError.message
+          : t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
+      setDeleteError(message);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
@@ -211,6 +270,18 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           </div>
         )}
 
+        {!isLoading && !error && actionMessage && (
+          <div className="bg-[#eaf3ee] border border-[#d2e6d8] rounded-2xl p-4 text-xs text-[#2f855a]">
+            {actionMessage}
+          </div>
+        )}
+
+        {!isLoading && !error && deleteError && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-xs text-red-600">
+            {deleteError}
+          </div>
+        )}
+
         {!isLoading && !error && selectedItem && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between">
@@ -221,6 +292,33 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 className="h-8 w-8 rounded-full border border-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center"
               >
                 <X size={14} />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                {isSelectedReadOnly
+                  ? t('Read-only source', 'Source en lecture seule')
+                  : t('Admin action', 'Action admin')}
+              </p>
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={isDeleting || isSelectedReadOnly}
+                className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center space-x-2 ${
+                  isDeleting || isSelectedReadOnly
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
+                }`}
+              >
+                <Trash2 size={14} />
+                <span>
+                  {isDeleting
+                    ? t('Deleting...', 'Suppression...')
+                    : isSelectedReadOnly
+                      ? t('Cannot delete', 'Suppression impossible')
+                      : t('Delete submission', 'Supprimer soumission')}
+                </span>
               </button>
             </div>
 
