@@ -7,6 +7,27 @@ export interface SubmissionLocation {
   longitude: number;
 }
 
+export interface SubmissionPhotoMetadata {
+  gps: SubmissionLocation | null;
+  capturedAt: string | null;
+  deviceMake: string | null;
+  deviceModel: string | null;
+  submissionDistanceKm: number | null;
+  submissionGpsMatch: boolean | null;
+  ipDistanceKm: number | null;
+  ipGpsMatch: boolean | null;
+}
+
+export interface SubmissionFraudCheck {
+  submissionLocation: SubmissionLocation | null;
+  effectiveLocation: SubmissionLocation;
+  ipLocation: SubmissionLocation | null;
+  primaryPhoto: SubmissionPhotoMetadata | null;
+  secondaryPhoto: SubmissionPhotoMetadata | null;
+  submissionMatchThresholdKm: number;
+  ipMatchThresholdKm: number;
+}
+
 export interface SubmissionDetails {
   name?: string;
   siteName?: string;
@@ -39,6 +60,7 @@ export interface SubmissionDetails {
   hasPhoto?: boolean;
   hasSecondaryPhoto?: boolean;
   secondPhotoUrl?: string;
+  fraudCheck?: SubmissionFraudCheck;
   source?: string;
   externalId?: string;
   isImported?: boolean;
@@ -76,6 +98,16 @@ export interface ProjectedPoint {
 }
 
 export interface Submission extends PointEvent {}
+
+export interface AdminSubmissionEvent {
+  event: PointEvent;
+  user: {
+    id: string;
+    name: string;
+    email: string | null;
+  };
+  fraudCheck: SubmissionFraudCheck | null;
+}
 
 export interface LegacySubmission {
   id: string;

@@ -1,4 +1,3 @@
-import exifr from "exifr";
 import { put } from "@vercel/blob";
 import { requireUser } from "../../lib/auth.js";
 import {
@@ -17,14 +16,31 @@ import {
   projectPointsFromEvents,
 } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import {
+  filterEventsForViewer,
+  redactEventUserIds,
+  resolveAdminViewAccess,
+  toSubmissionAuthContext,
+  normalizeActorId,
+} from "../../lib/server/submissionAccess.js";
+import {
+  DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM,
+  buildPhotoFraudMetadata,
+  buildSubmissionFraudCheck,
+  extractPhotoMetadata,
+  haversineKm,
+  parseSubmissionFraudCheck,
+} from "../../lib/server/submissionFraud.js";
 import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../../shared/geofence.js";
 import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type {
+  AdminSubmissionEvent,
   MapScope,
   PointEvent,
   PointEventType,
   SubmissionCategory,
   SubmissionDetails,
+  SubmissionFraudCheck,
   SubmissionInput,
   SubmissionLocation,
 } from "../../shared/types.js";
@@ -32,6 +48,7 @@ import type {
 const allowedCategories: SubmissionCategory[] = ["pharmacy", "fuel_station", "mobile_money"];
 const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
+const SUBMISSION_PHOTO_MATCH_KM = DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM;
 const INLINE_PHOTO_PREFIX = "data:image/";
 const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
@@ -79,23 +96,6 @@ function normalizeMapScope(input: string | null): MapScope {
   const normalized = input.trim().toLowerCase();
   if (!allowedMapScopes.has(normalized as MapScope)) return "bonamoussadi";
   return normalized as MapScope;
-}
-
-function hasAdminToken(auth: Awaited<ReturnType<typeof requireUser>>): boolean {
-  if (!auth) return false;
-  return Boolean((auth.token as { isAdmin?: boolean }).isAdmin);
-}
-
-function haversineKm(a: SubmissionLocation, b: SubmissionLocation): number {
-  const toRad = (deg: number) => (deg * Math.PI) / 180;
-  const dLat = toRad(b.latitude - a.latitude);
-  const dLon = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-  const sinLat = Math.sin(dLat / 2);
-  const sinLon = Math.sin(dLon / 2);
-  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
-  return 2 * 6371 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
 function stripBase64Prefix(imageBase64: string): string {
@@ -217,6 +217,55 @@ function validateCreatePayload(category: SubmissionCategory, details: Submission
   return null;
 }
 
+function getUserDisplayName(userId: string, name: string | null, email: string | null): string {
+  if (name && name.trim()) return name.trim();
+  if (email) {
+    const atIndex = email.indexOf("@");
+    if (atIndex > 0) return email.slice(0, atIndex);
+    return email;
+  }
+  return userId || "Contributor";
+}
+
+function getEventFraudCheck(event: PointEvent): SubmissionFraudCheck | null {
+  const details = event.details as Record<string, unknown> | undefined;
+  return parseSubmissionFraudCheck(details?.fraudCheck);
+}
+
+async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSubmissionEvent[]> {
+  const sortedEvents = [...events].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const userIds = Array.from(
+    new Set(
+      sortedEvents
+        .map((event) => normalizeActorId(event.userId))
+        .filter((value) => value.length > 0),
+    ),
+  );
+
+  const profileEntries = await Promise.all(
+    userIds.map(async (userId) => [userId, await getUserProfile(userId)] as const),
+  );
+  const profileByUserId = new Map(profileEntries);
+
+  return sortedEvents.map((event) => {
+    const normalizedUserId = normalizeActorId(event.userId);
+    const profile = profileByUserId.get(normalizedUserId) ?? null;
+    const emailFromProfile = typeof profile?.email === "string" ? profile.email.trim().toLowerCase() : "";
+    const email = emailFromProfile || (normalizedUserId.includes("@") ? normalizedUserId : null);
+    const name = getUserDisplayName(normalizedUserId, profile?.name ?? null, email);
+
+    return {
+      event,
+      user: {
+        id: normalizedUserId || event.userId,
+        name,
+        email,
+      },
+      fraudCheck: getEventFraudCheck(event),
+    };
+  });
+}
+
 async function buildCombinedEvents(): Promise<PointEvent[]> {
   const pointEvents = (await getPointEvents()).map(stripInlinePhotoData);
   const legacySubmissions = await getLegacySubmissions();
@@ -240,6 +289,7 @@ async function buildCombinedEvents(): Promise<PointEvent[]> {
 
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
+  const authContext = toSubmissionAuthContext(auth);
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
   const lat = url.searchParams.get("lat");
@@ -247,8 +297,8 @@ export async function GET(request: Request): Promise<Response> {
   const radius = url.searchParams.get("radius");
   const requestedScope = normalizeMapScope(url.searchParams.get("scope"));
   const canUseExpandedScope = requestedScope !== "bonamoussadi";
-  if (canUseExpandedScope && !auth) return errorResponse("Unauthorized", 401);
-  if (canUseExpandedScope && !hasAdminToken(auth)) return errorResponse("Forbidden", 403);
+  if (canUseExpandedScope && !authContext) return errorResponse("Unauthorized", 401);
+  if (canUseExpandedScope && !authContext.isAdmin) return errorResponse("Forbidden", 403);
   const effectiveScope = canUseExpandedScope ? requestedScope : "bonamoussadi";
 
   try {
@@ -260,10 +310,19 @@ export async function GET(request: Request): Promise<Response> {
     });
 
     if (view === "events") {
-      const responseEvents = auth
-        ? scopedEvents
-        : scopedEvents.map(({ userId: _userId, ...rest }) => rest as Omit<PointEvent, "userId">);
+      if (!authContext) {
+        return jsonResponse(redactEventUserIds(scopedEvents), { status: 200 });
+      }
+      const responseEvents = filterEventsForViewer(scopedEvents, authContext);
       return jsonResponse(responseEvents, { status: 200 });
+    }
+
+    if (view === "admin_events") {
+      const adminAccess = resolveAdminViewAccess(authContext);
+      if (adminAccess === "unauthorized") return errorResponse("Unauthorized", 401);
+      if (adminAccess === "forbidden") return errorResponse("Forbidden", 403);
+      const adminEvents = await buildAdminSubmissionEvents(scopedEvents);
+      return jsonResponse(adminEvents, { status: 200 });
     }
 
     let projected = projectPointsFromEvents(scopedEvents);
@@ -319,16 +378,15 @@ export async function POST(request: Request): Promise<Response> {
 
   const ipLocation = await getIpLocation(request);
   let photoLocation: SubmissionLocation | null = null;
+  let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null = null;
 
   try {
-    const gps = await exifr.gps(parsedPhoto.imageBuffer);
-    const latitude = gps?.latitude;
-    const longitude = gps?.longitude;
-    if (latitude && longitude) {
-      photoLocation = { latitude, longitude };
+    primaryPhotoMetadata = await extractPhotoMetadata(parsedPhoto.imageBuffer);
+    if (primaryPhotoMetadata.gps) {
+      photoLocation = primaryPhotoMetadata.gps;
       if (location) {
         const distance = haversineKm(location, photoLocation);
-        if (distance > 1) return errorResponse("Photo GPS coordinates do not match submission location", 400);
+        if (distance > SUBMISSION_PHOTO_MATCH_KM) return errorResponse("Photo GPS coordinates do not match submission location", 400);
       }
       if (ipLocation) {
         const distance = haversineKm(ipLocation, photoLocation);
@@ -402,6 +460,7 @@ export async function POST(request: Request): Promise<Response> {
     }
     details.hasPhoto = true;
 
+    let secondaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null = null;
     const secondImageBase64 = body?.secondImageBase64 as string | undefined;
     if (secondImageBase64) {
       const parsedSecondPhoto = parseImagePayload(secondImageBase64);
@@ -409,6 +468,13 @@ export async function POST(request: Request): Promise<Response> {
       if (parsedSecondPhoto.imageBuffer.byteLength > MAX_IMAGE_BYTES) {
         return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
       }
+
+      try {
+        secondaryPhotoMetadata = await extractPhotoMetadata(parsedSecondPhoto.imageBuffer);
+      } catch {
+        secondaryPhotoMetadata = null;
+      }
+
       try {
         const secondPhotoUrl = await uploadSubmissionPhoto(
           `${eventId}-second`,
@@ -422,6 +488,30 @@ export async function POST(request: Request): Promise<Response> {
         return errorResponse("Unable to store photo", 500);
       }
     }
+
+    const primaryPhotoFraud = buildPhotoFraudMetadata({
+      extracted: primaryPhotoMetadata,
+      submissionLocation: location,
+      ipLocation,
+      submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
+      ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
+    });
+    const secondaryPhotoFraud = buildPhotoFraudMetadata({
+      extracted: secondaryPhotoMetadata,
+      submissionLocation: location,
+      ipLocation,
+      submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
+      ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
+    });
+    details.fraudCheck = buildSubmissionFraudCheck({
+      submissionLocation: location,
+      effectiveLocation: finalLocation,
+      ipLocation,
+      primaryPhoto: primaryPhotoFraud,
+      secondaryPhoto: secondaryPhotoFraud,
+      submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
+      ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
+    });
 
     const now = new Date().toISOString();
     const newEvent: PointEvent = {

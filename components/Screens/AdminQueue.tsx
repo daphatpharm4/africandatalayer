@@ -1,59 +1,187 @@
-import React from 'react';
-import {
-  ArrowLeft,
-  ShieldCheck,
-  XCircle,
-  CheckCircle,
-  AlertTriangle,
-  Flag,
-  MapPin
-} from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Camera, MapPin, ShieldCheck, User, X } from 'lucide-react';
+import { apiJson } from '../../lib/client/api';
+import type {
+  AdminSubmissionEvent,
+  SubmissionDetails,
+  SubmissionFraudCheck,
+  SubmissionLocation,
+  SubmissionPhotoMetadata,
+} from '../../shared/types';
 
 interface Props {
   onBack: () => void;
   language: 'en' | 'fr';
 }
 
+type MatchState = 'match' | 'mismatch' | 'unavailable';
+
+function formatLocation(location: SubmissionLocation | null | undefined, unavailable: string): string {
+  if (!location) return unavailable;
+  return `${location.latitude.toFixed(5)}°, ${location.longitude.toFixed(5)}°`;
+}
+
+function formatDistance(distanceKm: number | null | undefined, unavailable: string): string {
+  if (typeof distanceKm !== 'number' || !Number.isFinite(distanceKm)) return unavailable;
+  return `${distanceKm.toFixed(3)} km`;
+}
+
+function formatDate(iso: string | null | undefined, unavailable: string): string {
+  if (!iso) return unavailable;
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return unavailable;
+  return parsed.toLocaleString();
+}
+
+function categoryLabel(category: AdminSubmissionEvent['event']['category'], language: 'en' | 'fr'): string {
+  if (category === 'pharmacy') return language === 'fr' ? 'Pharmacie' : 'Pharmacy';
+  if (category === 'fuel_station') return language === 'fr' ? 'Station-service' : 'Fuel Station';
+  return language === 'fr' ? 'Kiosque mobile money' : 'Mobile Money Kiosk';
+}
+
+function getSiteName(item: AdminSubmissionEvent, language: 'en' | 'fr'): string {
+  const details = item.event.details as SubmissionDetails;
+  if (typeof details.siteName === 'string' && details.siteName.trim()) return details.siteName.trim();
+  if (typeof details.name === 'string' && details.name.trim()) return details.name.trim();
+  return language === 'fr' ? 'Soumission sans nom' : 'Unnamed submission';
+}
+
+function getPrimaryImageUrl(item: AdminSubmissionEvent): string | null {
+  if (typeof item.event.photoUrl === 'string' && item.event.photoUrl.trim()) return item.event.photoUrl;
+  const details = item.event.details as SubmissionDetails;
+  if (typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim()) return details.secondPhotoUrl;
+  return null;
+}
+
+function getSecondaryImageUrl(item: AdminSubmissionEvent): string | null {
+  const details = item.event.details as SubmissionDetails;
+  if (typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim()) return details.secondPhotoUrl;
+  return null;
+}
+
+function getMatchState(fraudCheck: SubmissionFraudCheck | null): MatchState {
+  const match = fraudCheck?.primaryPhoto?.submissionGpsMatch;
+  if (match === true) return 'match';
+  if (match === false) return 'mismatch';
+  return 'unavailable';
+}
+
+function matchStateLabel(state: MatchState, language: 'en' | 'fr'): string {
+  if (state === 'match') return language === 'fr' ? 'OK' : 'Match';
+  if (state === 'mismatch') return language === 'fr' ? 'Ecart' : 'Mismatch';
+  return language === 'fr' ? 'Indisponible' : 'Unavailable';
+}
+
+function matchStateClass(state: MatchState): string {
+  if (state === 'match') return 'text-[#4c7c59] bg-[#eaf3ee] border-[#d2e6d8]';
+  if (state === 'mismatch') return 'text-[#c86b4a] bg-[#fdf0ea] border-[#f4d5c6]';
+  return 'text-gray-500 bg-gray-100 border-gray-200';
+}
+
+const DetailMetadataBlock: React.FC<{
+  label: string;
+  metadata: SubmissionPhotoMetadata | null;
+  thresholdKm: number;
+  unavailable: string;
+  language: 'en' | 'fr';
+}> = ({ label, metadata, thresholdKm, unavailable, language }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const status = metadata?.submissionGpsMatch;
+  const statusText =
+    status === true ? t('Match', 'OK') : status === false ? t('Mismatch', 'Ecart') : t('Unavailable', 'Indisponible');
+  const statusClass =
+    status === true ? 'text-[#4c7c59]' : status === false ? 'text-[#c86b4a]' : 'text-gray-500';
+
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-[#f9fafb] p-4 space-y-2">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{label}</div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('Photo EXIF GPS', 'GPS EXIF photo')}</span>
+        <span className="text-gray-800">{formatLocation(metadata?.gps, unavailable)}</span>
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('Capture Time', 'Heure de capture')}</span>
+        <span className="text-gray-800">{formatDate(metadata?.capturedAt, unavailable)}</span>
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('Device', 'Appareil')}</span>
+        <span className="text-gray-800">
+          {metadata?.deviceMake || metadata?.deviceModel ? `${metadata?.deviceMake ?? ''} ${metadata?.deviceModel ?? ''}`.trim() : unavailable}
+        </span>
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('Distance to Submission GPS', 'Distance au GPS soumis')}</span>
+        <span className="text-gray-800">{formatDistance(metadata?.submissionDistanceKm, unavailable)}</span>
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('Distance to IP GPS', 'Distance au GPS IP')}</span>
+        <span className="text-gray-800">{formatDistance(metadata?.ipDistanceKm, unavailable)}</span>
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('Submission GPS Match', 'Correspondance GPS soumission')}</span>
+        <span className={statusClass}>{statusText}</span>
+      </div>
+      <div className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">
+        {t('Threshold', 'Seuil')}: {thresholdKm} km
+      </div>
+    </div>
+  );
+};
+
 const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
-  const queue = [
-    {
-      id: 1,
-      user: 'Jean-Paul E.',
-      type: t('Fuel Station', 'Station-service'),
-      loc: 'Shell Akwa',
-      val: `840 XAF`,
-      trust: 92,
-      status: t('match', 'correspondance'),
-      img: 'https://picsum.photos/seed/a1/300/200',
-      exif: '4.0511°N, 9.7012°E',
-      device: '4.0510°N, 9.7015°E'
-    },
-    {
-      id: 2,
-      user: 'Kofi M.',
-      type: t('Pharmacy', 'Pharmacie'),
-      loc: 'Pharmacie de Bonamoussadi',
-      val: t('Open now', 'Ouvert maintenant'),
-      trust: 45,
-      status: t('mismatch', 'non-correspondance'),
-      img: 'https://picsum.photos/seed/a2/300/200',
-      exif: '4.0472°N, 9.7208°E',
-      device: '4.0589°N, 9.7121°E'
-    },
-    {
-      id: 3,
-      user: 'Amina T.',
-      type: t('Mobile Money Kiosk', 'Kiosque mobile money'),
-      loc: 'MTN Bonapriso',
-      val: t('Cash Available', 'Especes disponibles'),
-      trust: 81,
-      status: t('match', 'correspondance'),
-      img: 'https://picsum.photos/seed/a3/300/200',
-      exif: '4.0860°N, 9.7412°E',
-      device: '4.0864°N, 9.7402°E'
-    }
-  ];
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [items, setItems] = useState<AdminSubmissionEvent[]>([]);
+  const [selectedItem, setSelectedItem] = useState<AdminSubmissionEvent | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        setIsLoading(true);
+        setError('');
+        const data = await apiJson<AdminSubmissionEvent[]>('/api/submissions?view=admin_events&scope=global');
+        if (cancelled) return;
+        const safeItems = Array.isArray(data) ? data : [];
+        setItems(safeItems);
+        setSelectedItem((prev) => {
+          if (!prev) return safeItems[0] ?? null;
+          return safeItems.find((item) => item.event.id === prev.event.id) ?? safeItems[0] ?? null;
+        });
+      } catch (loadError) {
+        if (cancelled) return;
+        const message = loadError instanceof Error ? loadError.message : t('Unable to load submissions.', 'Impossible de charger les soumissions.');
+        setError(message);
+        setItems([]);
+        setSelectedItem(null);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [language]);
+
+  const selectedFraudCheck = selectedItem?.fraudCheck ?? null;
+  const selectedPrimaryPhoto = selectedItem ? getPrimaryImageUrl(selectedItem) : null;
+  const selectedSecondaryPhoto = selectedItem ? getSecondaryImageUrl(selectedItem) : null;
+  const unavailableLabel = t('Unavailable', 'Indisponible');
+
+  const listItems = useMemo(() => {
+    return items.map((item) => {
+      const state = getMatchState(item.fraudCheck);
+      return {
+        item,
+        state,
+        siteName: getSiteName(item, language),
+        preview: getPrimaryImageUrl(item),
+      };
+    });
+  }, [items, language]);
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
@@ -61,86 +189,166 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         <button onClick={onBack} className="p-2 -ml-2 hover:text-[#c86b4a] transition-colors">
           <ArrowLeft size={20} />
         </button>
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em]">{t('Validator Queue', 'File de validation')}</h3>
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em]">{t('Submission Forensics', 'Analyse forensique')}</h3>
         <ShieldCheck size={18} className="text-[#c86b4a]" />
       </div>
 
-      <div className="p-4 space-y-6">
-        <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl flex items-start space-x-3">
-          <AlertTriangle className="text-amber-600 shrink-0" size={18} />
-          <p className="text-[10px] text-amber-700 font-bold uppercase tracking-wider leading-relaxed">
-            {t('Demo validator view • compare EXIF GPS vs device location before approval.', 'Vue demo validateur • comparer GPS EXIF vs GPS appareil avant approbation.')}
-          </p>
+      <div className="p-4 space-y-4">
+        <div className="bg-white border border-gray-100 rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest text-gray-500 flex items-center justify-between">
+          <span>{t('Global Admin Scope', 'Portee admin globale')}</span>
+          <span>{items.length} {t('items', 'elements')}</span>
         </div>
 
-        <div className="space-y-4">
-          {queue.map(item => (
-            <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="relative h-32 bg-gray-200">
-                <img src={item.img} className="w-full h-full object-cover opacity-80" alt={t('submission', 'soumission')} />
-                <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 backdrop-blur rounded-xl text-[8px] font-bold text-white uppercase tracking-widest">
-                  {t('Live Capture: Verified', 'Capture live : verifiee')}
+        {isLoading && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-5 text-xs text-gray-500">
+            {t('Loading submissions...', 'Chargement des soumissions...')}
+          </div>
+        )}
+
+        {!isLoading && error && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-5 text-xs text-red-600">
+            {error}
+          </div>
+        )}
+
+        {!isLoading && !error && selectedItem && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-bold text-gray-900">{t('Submission Detail', 'Detail de la soumission')}</h4>
+              <button
+                type="button"
+                onClick={() => setSelectedItem(null)}
+                className="h-8 w-8 rounded-full border border-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 text-[11px]">
+              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Submitter', 'Soumis par')}</div>
+                <div className="text-gray-900 font-semibold">{selectedItem.user.name}</div>
+                <div className="text-gray-600">{selectedItem.user.email ?? unavailableLabel}</div>
+                <div className="text-gray-500">ID: {selectedItem.user.id}</div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Submission Metadata', 'Metadonnees soumission')}</div>
+                <div>{t('Time', 'Heure')}: {formatDate(selectedItem.event.createdAt, unavailableLabel)}</div>
+                <div>{t('Event Type', 'Type d\'evenement')}: {selectedItem.event.eventType}</div>
+                <div>{t('Category', 'Categorie')}: {categoryLabel(selectedItem.event.category, language)}</div>
+                <div>Point ID: {selectedItem.event.pointId}</div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Location', 'Localisation')}</div>
+                <div>{t('Submission GPS', 'GPS soumis')}: {formatLocation(selectedFraudCheck?.submissionLocation, unavailableLabel)}</div>
+                <div>{t('Effective GPS', 'GPS effectif')}: {formatLocation(selectedFraudCheck?.effectiveLocation, unavailableLabel)}</div>
+                <div>{t('IP GPS', 'GPS IP')}: {formatLocation(selectedFraudCheck?.ipLocation, unavailableLabel)}</div>
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Photos', 'Photos')}</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
+                    {selectedPrimaryPhoto ? (
+                      <img src={selectedPrimaryPhoto} alt={t('Primary photo', 'Photo principale')} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center px-2">
+                        {t('Primary photo unavailable', 'Photo principale indisponible')}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
+                    {selectedSecondaryPhoto ? (
+                      <img src={selectedSecondaryPhoto} alt={t('Secondary photo', 'Photo secondaire')} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center px-2">
+                        {t('Secondary photo unavailable', 'Photo secondaire indisponible')}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="p-4 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900">{item.loc}</h4>
-                    <p className="text-[10px] text-gray-400 font-medium uppercase">{item.user} • {item.type}</p>
-                  </div>
-                  <span className="text-sm font-bold text-[#0f2b46]">{item.val}</span>
-                </div>
-
-                <div className="bg-[#f9fafb] border border-gray-100 rounded-2xl p-3 space-y-2">
-                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                    <span className="text-gray-400">{t('Photo GPS', 'Photo GPS')}</span>
-                    <span className="text-gray-700">{item.exif}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                    <span className="text-gray-400">{t('Device GPS', 'GPS appareil')}</span>
-                    <span className="text-gray-700">{item.device}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                    <span className="text-gray-400">{t('Match Status', 'Etat correspondance')}</span>
-                    <span className={item.status === t('match', 'correspondance') ? 'text-[#4c7c59]' : 'text-[#c86b4a]'}>
-                      {item.status === t('match', 'correspondance') ? t('Match', 'OK') : t('Mismatch', 'Ecart')}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-[#e7eef4] rounded-2xl p-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                  <span>{t('Map Comparison', 'Comparaison carte')}</span>
-                  <MapPin size={14} />
-                </div>
-
-                <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest">
-                  <span className="text-gray-400">{t('Trust Score', 'Score de confiance')}</span>
-                  <span className={item.trust > 80 ? 'text-[#4c7c59]' : 'text-[#c86b4a]'}>{item.trust}%</span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3 pt-2">
-                  <button className="h-10 border border-red-100 text-red-600 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-red-50">
-                    <XCircle size={14} />
-                    <span>{t('Reject', 'Rejeter')}</span>
-                  </button>
-                  <button className="h-10 border border-amber-100 text-[#c86b4a] rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-[#f7e8e1]">
-                    <Flag size={14} />
-                    <span>{t('Flag', 'Signaler')}</span>
-                  </button>
-                  <button className="h-10 bg-[#4c7c59] text-white rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-[#3f6a4d]">
-                    <CheckCircle size={14} />
-                    <span>{t('Approve', 'Approuver')}</span>
-                  </button>
+              <div className="space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Fraud Metadata', 'Metadonnees anti-fraude')}</div>
+                <DetailMetadataBlock
+                  label={t('Primary Photo Metadata', 'Metadonnees photo principale')}
+                  metadata={selectedFraudCheck?.primaryPhoto ?? null}
+                  thresholdKm={selectedFraudCheck?.submissionMatchThresholdKm ?? 1}
+                  unavailable={unavailableLabel}
+                  language={language}
+                />
+                <DetailMetadataBlock
+                  label={t('Secondary Photo Metadata', 'Metadonnees photo secondaire')}
+                  metadata={selectedFraudCheck?.secondaryPhoto ?? null}
+                  thresholdKm={selectedFraudCheck?.submissionMatchThresholdKm ?? 1}
+                  unavailable={unavailableLabel}
+                  language={language}
+                />
+                <div className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                  {t('IP Match Threshold', 'Seuil correspondance IP')}: {selectedFraudCheck?.ipMatchThresholdKm ?? 50} km
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        )}
 
-        <div className="text-center py-12">
-          <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">{t('Sample Admin UI • Demonstration Only', 'Interface admin exemple • demonstration')}</p>
-        </div>
+        {!isLoading && !error && listItems.length === 0 && (
+          <div className="bg-white border border-gray-100 rounded-2xl p-6 text-xs text-gray-500 text-center">
+            {t('No submissions found.', 'Aucune soumission trouvee.')}
+          </div>
+        )}
+
+        {!isLoading && !error && listItems.length > 0 && (
+          <div className="space-y-3">
+            {listItems.map(({ item, state, siteName, preview }) => {
+              const isSelected = selectedItem?.event.id === item.event.id;
+              return (
+                <button
+                  key={item.event.id}
+                  type="button"
+                  onClick={() => setSelectedItem(item)}
+                  className={`w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
+                    isSelected ? 'border-[#0f2b46]' : 'border-gray-100 hover:border-[#d5e1eb]'
+                  }`}
+                >
+                  <div className="flex">
+                    <div className="w-24 h-24 bg-gray-100 shrink-0 flex items-center justify-center">
+                      {preview ? (
+                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" />
+                      ) : (
+                        <Camera size={18} className="text-gray-300" />
+                      )}
+                    </div>
+                    <div className="flex-1 p-3 space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-bold text-gray-900 leading-tight">{siteName}</h4>
+                          <p className="text-[10px] uppercase tracking-widest text-gray-400">{categoryLabel(item.event.category, language)}</p>
+                        </div>
+                        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg border ${matchStateClass(state)}`}>
+                          {matchStateLabel(state, language)}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-gray-600 flex items-center gap-1">
+                        <User size={12} />
+                        <span>{item.user.name}</span>
+                        <span className="text-gray-400">•</span>
+                        <span className="truncate">{item.user.email ?? item.user.id}</span>
+                      </div>
+                      <div className="text-[11px] text-gray-500 flex items-center gap-1">
+                        <MapPin size={12} />
+                        <span>{formatDate(item.event.createdAt, unavailableLabel)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

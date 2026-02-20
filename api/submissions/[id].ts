@@ -2,6 +2,7 @@ import { requireUser } from "../../lib/auth.js";
 import { getLegacySubmissions, getPointEvents, insertPointEvent, isStorageUnavailableError } from "../../lib/server/storage/index.js";
 import { mergePointEventsWithLegacy, normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import { canViewEventDetail, toSubmissionAuthContext } from "../../lib/server/submissionAccess.js";
 import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
 
@@ -29,6 +30,8 @@ async function getCombinedEvents(): Promise<PointEvent[]> {
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
+  const viewer = toSubmissionAuthContext(auth);
+  if (!viewer) return errorResponse("Unauthorized", 401);
 
   const url = new URL(request.url);
   const id = url.pathname.split("/").pop();
@@ -48,6 +51,7 @@ export async function GET(request: Request): Promise<Response> {
   if (view === "event") {
     const event = events.find((item) => item.id === id);
     if (!event) return errorResponse("Submission event not found", 404);
+    if (!canViewEventDetail(event, viewer)) return errorResponse("Forbidden", 403);
     return jsonResponse(event, { status: 200 });
   }
 
