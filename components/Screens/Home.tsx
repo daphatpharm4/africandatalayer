@@ -589,11 +589,17 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
         </button>
 
         <button
-          onClick={isAuthenticated ? onContribute : onAuth}
+          onClick={isAdmin ? onContribute : isAuthenticated ? onContribute : onAuth}
           className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
-          aria-label={isAuthenticated ? t('Contribute', 'Contribuer') : t('Sign in to contribute', 'Connectez-vous pour contribuer')}
+          aria-label={
+            isAdmin
+              ? t('Open submission forensics', 'Ouvrir forensique des soumissions')
+              : isAuthenticated
+                ? t('Contribute', 'Contribuer')
+                : t('Sign in to contribute', 'Connectez-vous pour contribuer')
+          }
         >
-          <Plus size={22} />
+          {isAdmin ? <ShieldCheck size={22} /> : <Plus size={22} />}
         </button>
 
         {!isAuthenticated && (
