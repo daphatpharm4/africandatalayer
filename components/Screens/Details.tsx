@@ -40,7 +40,8 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
       isOnDuty: { en: 'On-call Pharmacy', fr: 'Pharmacie de garde' },
       merchantIdByProvider: { en: 'Merchant IDs by Provider', fr: 'ID marchands par operateur' },
       paymentMethods: { en: 'Payment Methods', fr: 'Moyens de paiement' },
-      hasCashAvailable: { en: 'Cash Availability', fr: 'Disponibilite cash' },
+      hasCashAvailable: { en: 'Min 50,000 XAF Available', fr: 'Minimum 50 000 XAF disponible' },
+      hasMin50000XafAvailable: { en: 'Min 50,000 XAF Available', fr: 'Minimum 50 000 XAF disponible' },
       providers: { en: 'Providers', fr: 'Operateurs' },
       fuelTypes: { en: 'Fuel Types', fr: 'Types de carburant' },
       pricesByFuel: { en: 'Prices by Fuel', fr: 'Prix par carburant' },
@@ -60,7 +61,19 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
     { label: t('Fuel Type', 'Type de carburant'), value: point.fuelType },
     { label: t('Providers', 'Operateurs'), value: point.providers?.join(', ') },
     { label: t('Payments', 'Paiements'), value: point.paymentMethods?.join(', ') },
-    { label: t('Cash Available', 'Cash disponible'), value: typeof point.hasCashAvailable === 'boolean' ? (point.hasCashAvailable ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
+    {
+      label: t('Min 50,000 XAF Available', 'Minimum 50 000 XAF disponible'),
+      value:
+        typeof point.hasMin50000XafAvailable === 'boolean'
+          ? point.hasMin50000XafAvailable
+            ? t('Yes', 'Oui')
+            : t('No', 'Non')
+          : typeof point.hasCashAvailable === 'boolean'
+            ? point.hasCashAvailable
+              ? t('Yes', 'Oui')
+              : t('No', 'Non')
+            : undefined
+    },
     { label: t('Fuel Available', 'Carburant disponible'), value: typeof point.hasFuelAvailable === 'boolean' ? (point.hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
     { label: t('Open Now', 'Ouvert maintenant'), value: typeof point.isOpenNow === 'boolean' ? (point.isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
     { label: t('On-call Pharmacy', 'Pharmacie de garde'), value: typeof point.isOnDuty === 'boolean' ? (point.isOnDuty ? t('Yes', 'Oui') : t('No', 'Non')) : undefined }

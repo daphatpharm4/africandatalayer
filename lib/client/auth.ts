@@ -1,4 +1,5 @@
 import { apiFetch, apiJson, buildUrl } from "./api";
+import { normalizeIdentifier } from "../shared/identifier";
 
 export interface AuthSession {
   user?: {
@@ -112,7 +113,7 @@ async function extractResponseErrorPayload(response: Response, fallback: string)
 function mapAuthJsError(errorType: string | null, errorCode: string | null): AuthClientError {
   switch (errorType) {
     case "CredentialsSignin":
-      return new AuthClientError("invalid_credentials", "Invalid email or password.", { retryable: true });
+      return new AuthClientError("invalid_credentials", "Invalid phone/email or password.", { retryable: true });
     case "Callback":
     case "CallbackRouteError":
       return new AuthClientError("callback_error", DEFAULT_SIGN_IN_ERROR, { retryable: true });
@@ -122,7 +123,7 @@ function mapAuthJsError(errorType: string | null, errorCode: string | null): Aut
       return new AuthClientError("access_denied", "Access denied for this account.");
     default:
       if (errorCode === "credentials") {
-        return new AuthClientError("invalid_credentials", "Invalid email or password.", { retryable: true });
+        return new AuthClientError("invalid_credentials", "Invalid phone/email or password.", { retryable: true });
       }
       return new AuthClientError("unknown_error", DEFAULT_SIGN_IN_ERROR, { retryable: true });
   }
@@ -151,11 +152,13 @@ export async function getSession(): Promise<AuthSession | null> {
   }
 }
 
-async function signInWithCredentialsOnce(email: string, password: string): Promise<void> {
+async function signInWithCredentialsOnce(identifier: string, password: string): Promise<void> {
+  const normalizedIdentifier = normalizeIdentifier(identifier)?.value ?? identifier.trim();
   const csrfToken = await getCsrfToken();
   const body = new URLSearchParams();
   body.set("csrfToken", csrfToken);
-  body.set("email", email);
+  body.set("identifier", normalizedIdentifier);
+  body.set("email", normalizedIdentifier);
   body.set("password", password);
   body.set("callbackUrl", window.location.origin);
   body.set("json", "true");
@@ -195,7 +198,7 @@ async function signInWithCredentialsOnce(email: string, password: string): Promi
 }
 
 export async function signInWithCredentials(
-  email: string,
+  identifier: string,
   password: string,
   options: SignInWithCredentialsOptions = {}
 ): Promise<void> {
@@ -204,7 +207,7 @@ export async function signInWithCredentials(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      await signInWithCredentialsOnce(email, password);
+      await signInWithCredentialsOnce(identifier, password);
       return;
     } catch (error) {
       const authError = toAuthClientError(error, DEFAULT_SIGN_IN_ERROR);
@@ -234,11 +237,12 @@ export async function signOut(): Promise<void> {
   }
 }
 
-export async function registerWithCredentials(email: string, password: string, name?: string): Promise<void> {
+export async function registerWithCredentials(identifier: string, password: string, name?: string): Promise<void> {
+  const normalizedIdentifier = normalizeIdentifier(identifier)?.value ?? identifier.trim();
   const response = await apiFetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({ identifier: normalizedIdentifier, email: normalizedIdentifier, password, name }),
   });
 
   if (!response.ok) {

@@ -1,6 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
-import L from 'leaflet';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { Category, DataPoint } from '../../types';
 import type { MapScope, ProjectedPoint, UserProfile } from '../../shared/types';
 import {
@@ -22,6 +20,7 @@ import {
   User
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
+import { detectLowEndDevice } from '../../lib/client/deviceProfile';
 import BrandLogo from '../BrandLogo';
 
 interface Props {
@@ -40,6 +39,8 @@ type MapPointGroup = {
   longitude: number;
   points: DataPoint[];
 };
+
+const HomeMap = React.lazy(() => import('./HomeMap'));
 
 const BONAMOUSSADI_MAP_BOUNDS = bonamoussadiLeafletBounds();
 const CAMEROON_MAP_BOUNDS = cameroonLeafletBounds();
@@ -93,68 +94,21 @@ const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
       trustScore: 88,
       providers: ['MTN'],
       operator: 'MTN',
-      hasCashAvailable: true,
+      hasMin50000XafAvailable: true,
       verified: true,
       gaps: ['merchantIdByProvider', 'openingHours']
     }
   ];
 };
 
-const createMarkerIcon = (color: string) =>
-  L.divIcon({
-    className: '',
-    html: `<div style="width:26px;height:26px;border-radius:9999px;background:${color};border:2px solid #ffffff;box-shadow:0 8px 16px rgba(15,43,70,0.35);display:flex;align-items:center;justify-content:center;"></div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13]
-  });
-
-const clusterIconCache = new Map<string, L.DivIcon>();
-
-const getClusterIcon = (color: string, count: number) => {
-  const key = `${color}_${count}`;
-  const cached = clusterIconCache.get(key);
-  if (cached) return cached;
-  const icon = L.divIcon({
-    className: '',
-    html: `<div style="min-width:28px;height:28px;padding:0 8px;border-radius:9999px;background:${color};border:2px solid #ffffff;box-shadow:0 8px 16px rgba(15,43,70,0.35);display:flex;align-items:center;justify-content:center;color:#ffffff;font-size:11px;font-weight:700;line-height:1;">${count}</div>`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14]
-  });
-  clusterIconCache.set(key, icon);
-  return icon;
-};
-
-const pharmacyIcon = createMarkerIcon('#2f855a');
-const fuelIcon = createMarkerIcon('#0f2b46');
-const kioskIcon = createMarkerIcon('#1f2933');
-
-const MapSizeSync: React.FC<{ active: boolean }> = ({ active }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!active) return;
-    const rafId = requestAnimationFrame(() => {
-      map.invalidateSize({ animate: false });
-    });
-    const timeoutId = window.setTimeout(() => {
-      map.invalidateSize({ animate: false });
-    }, 140);
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      window.clearTimeout(timeoutId);
-    };
-  }, [active, map]);
-
-  return null;
-};
-
 const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth, onContribute, onProfile, language }) => {
-  const [viewMode, setViewMode] = useState<'map' | 'list'>('map');
+  const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
+  const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [points, setPoints] = useState<DataPoint[]>(() => buildMockPoints(language));
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [mapScope, setMapScope] = useState<MapScope>('bonamoussadi');
+  const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const selectedCityLabel =
@@ -200,7 +154,13 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
       if (typeof details.hasFuelAvailable === 'boolean') return details.hasFuelAvailable ? 'High' : 'Out';
       return 'Low';
     }
-    if (typeof details.hasCashAvailable === 'boolean') return details.hasCashAvailable ? 'High' : 'Out';
+    const hasMin50000XafAvailable =
+      typeof details.hasMin50000XafAvailable === 'boolean'
+        ? details.hasMin50000XafAvailable
+        : typeof details.hasCashAvailable === 'boolean'
+          ? details.hasCashAvailable
+          : undefined;
+    if (typeof hasMin50000XafAvailable === 'boolean') return hasMin50000XafAvailable ? 'High' : 'Out';
     return 'Low';
   };
 
@@ -269,7 +229,18 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
       providers,
       operator,
       merchantId: typeof details.merchantId === 'string' ? details.merchantId : undefined,
-      hasCashAvailable: typeof details.hasCashAvailable === 'boolean' ? details.hasCashAvailable : undefined,
+      hasMin50000XafAvailable:
+        typeof details.hasMin50000XafAvailable === 'boolean'
+          ? details.hasMin50000XafAvailable
+          : typeof details.hasCashAvailable === 'boolean'
+            ? details.hasCashAvailable
+            : undefined,
+      hasCashAvailable:
+        typeof details.hasCashAvailable === 'boolean'
+          ? details.hasCashAvailable
+          : typeof details.hasMin50000XafAvailable === 'boolean'
+            ? details.hasMin50000XafAvailable
+            : undefined,
       hasFuelAvailable: typeof details.hasFuelAvailable === 'boolean' ? details.hasFuelAvailable : undefined,
       openingHours: typeof details.openingHours === 'string' ? details.openingHours : undefined,
       isOpenNow: typeof details.isOpenNow === 'boolean' ? details.isOpenNow : undefined,
@@ -408,6 +379,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
           <ShieldCheck size={12} />
           <span>{t('Offline-first sync ready', 'Synchronisation hors ligne prete')}</span>
         </div>
+        {isLowEndDevice && (
+          <div className="mb-3 rounded-xl border border-[#d5e1eb] bg-[#f2f6fa] px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+            {t('Lite Mode Active (Low-end device)', 'Mode Lite actif (appareil entree de gamme)')}
+          </div>
+        )}
 
         <div className="flex p-1 bg-gray-100 rounded-xl mb-2">
           <button
@@ -433,112 +409,32 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
 
       <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
         {viewMode === 'map' && (
-          <div className="flex-1 bg-[#e7eef4] relative overflow-hidden z-0 min-h-0">
-            <MapContainer
-              key={`map-${mapScope}`}
-              center={mapCenter}
-              zoom={mapZoom}
-              minZoom={mapMinZoom}
-              maxBounds={mapBounds}
-              maxBoundsViscosity={mapBounds ? 1.0 : undefined}
-              scrollWheelZoom
-              className="absolute inset-0 h-full w-full"
-            >
-              <MapSizeSync active={viewMode === 'map'} />
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {mapPointGroups.map((group) => {
-                const singlePoint = group.points.length === 1 ? group.points[0] : null;
-                const hasPharmacy = group.points.some((point) => point.type === Category.PHARMACY);
-                const hasFuel = group.points.some((point) => point.type === Category.FUEL);
-                const hasKiosk = group.points.some((point) => point.type === Category.MOBILE_MONEY);
-                const icon = singlePoint
-                  ? singlePoint.type === Category.PHARMACY
-                    ? pharmacyIcon
-                    : singlePoint.type === Category.FUEL
-                      ? fuelIcon
-                      : kioskIcon
-                  : getClusterIcon(
-                    hasPharmacy && !hasFuel && !hasKiosk
-                      ? '#2f855a'
-                      : hasFuel && !hasPharmacy && !hasKiosk
-                        ? '#0f2b46'
-                        : hasKiosk && !hasPharmacy && !hasFuel
-                          ? '#1f2933'
-                          : '#c86b4a',
-                    group.points.length
-                  );
-
-                return (
-                  <Marker
-                    key={group.key}
-                    position={[group.latitude, group.longitude]}
-                    icon={icon}
-                  >
-                    <Popup>
-                      {singlePoint ? (
-                        <div className="space-y-1">
-                          <span className="text-[9px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                            {categoryLabel(singlePoint.type)}
-                          </span>
-                          <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
-                          <p className="text-[10px] text-gray-600">{formatExplorerPrimaryMeta(singlePoint)}</p>
-                          {singlePoint.type === Category.PHARMACY && (
-                            <p className="text-[10px] text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
-                          )}
-                          <button
-                            className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
-                            onClick={() => onSelectPoint(singlePoint)}
-                          >
-                            {t('View Details', 'Voir details')}
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="space-y-2 min-w-[220px]">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                            {language === 'fr' ? `${group.points.length} points au meme endroit` : `${group.points.length} points at this location`}
-                          </p>
-                          <div className="space-y-1.5">
-                            {group.points.map((point) => (
-                              <button
-                                key={point.id}
-                                className="w-full rounded-lg border border-gray-100 px-2 py-1.5 text-left hover:bg-gray-50"
-                                onClick={() => onSelectPoint(point)}
-                              >
-                                <p className="text-[11px] font-semibold text-gray-900 truncate">{point.name}</p>
-                                <p className="text-[9px] uppercase tracking-wider text-gray-500">
-                                  {categoryLabel(point.type)}
-                                </p>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </Popup>
-                  </Marker>
-                );
-              })}
-            </MapContainer>
-            <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                    {mapScope === 'bonamoussadi'
-                      ? t('Bonamoussadi Geofence', 'Geofence Bonamoussadi')
-                      : mapScope === 'cameroon'
-                        ? t('Cameroon Coverage', 'Couverture Cameroun')
-                        : t('Global Coverage', 'Couverture mondiale')}
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    {mapScope === 'bonamoussadi' ? t('Map blocked to', 'Carte bloquee sur') : t('Map unlocked to', 'Carte debloquee sur')} {selectedCityLabel}
-                  </p>
+          <Suspense
+            fallback={
+              <div className="flex-1 bg-[#e7eef4] relative overflow-hidden z-0 min-h-0 p-4">
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+                  {t('Loading map...', 'Chargement de la carte...')}
                 </div>
-                <div className="w-2 h-2 rounded-full bg-[#4c7c59] animate-pulse"></div>
               </div>
-            </div>
-          </div>
+            }
+          >
+            <HomeMap
+              mapScope={mapScope}
+              mapCenter={mapCenter}
+              mapZoom={mapZoom}
+              mapMinZoom={mapMinZoom}
+              mapBounds={mapBounds}
+              mapPointGroups={mapPointGroups}
+              selectedCityLabel={selectedCityLabel}
+              onSelectPoint={onSelectPoint}
+              categoryLabel={categoryLabel}
+              formatExplorerPrimaryMeta={formatExplorerPrimaryMeta}
+              formatPharmacyOpenStatus={formatPharmacyOpenStatus}
+              language={language}
+              t={t}
+              isLowEndDevice={isLowEndDevice}
+            />
+          </Suspense>
         )}
         {viewMode === 'list' && (
           <div className="flex-1 relative z-30 bg-[#f9fafb] overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>

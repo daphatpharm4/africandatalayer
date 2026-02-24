@@ -7,6 +7,7 @@ import type { UserProfile } from "../../shared/types.js";
 import { errorResponse } from "../../lib/server/http.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { getAuthSecret, getSessionCookieName, isSecureRequest } from "../../lib/auth.js";
+import { inferDefaultDisplayName, normalizeEmail, normalizeIdentifier } from "../../lib/shared/identifier.js";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
@@ -15,28 +16,37 @@ const providers: AppProviders = [
   Credentials({
     name: "Credentials",
     credentials: {
+      identifier: { label: "Phone or email", type: "text" },
       email: { label: "Email", type: "text" },
       password: { label: "Password", type: "password" },
     },
     async authorize(credentials) {
-      const email = typeof credentials?.email === "string" ? credentials.email.toLowerCase().trim() : "";
+      const rawIdentifier =
+        typeof credentials?.identifier === "string"
+          ? credentials.identifier
+          : typeof credentials?.email === "string"
+            ? credentials.email
+            : "";
+      const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
       const password = typeof credentials?.password === "string" ? credentials.password : "";
 
-      if (!email || !password) return null;
+      if (!normalizedIdentifier || !password) return null;
+      const identifier = normalizedIdentifier.value;
 
-      const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+      const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
       const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-      if (adminEmail && adminPassword && email === adminEmail && password === adminPassword) {
-        return { id: email, name: "Admin", email };
+      if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail && password === adminPassword) {
+        return { id: identifier, name: "Admin", email: identifier };
       }
 
-      const profile = await getUserProfile(email);
+      const profile = await getUserProfile(identifier);
       if (!profile?.passwordHash) return null;
 
       const valid = bcrypt.compareSync(password, profile.passwordHash);
       if (!valid) return null;
 
-      return { id: profile.id, name: profile.name || email, email };
+      const fallbackName = inferDefaultDisplayName(profile.email ?? profile.phone ?? profile.id);
+      return { id: profile.id, name: profile.name || fallbackName, email: profile.email ?? undefined };
     },
   }),
 ];
@@ -98,8 +108,8 @@ export default async function handler(request: Request): Promise<Response> {
       },
       callbacks: {
         async signIn({ user, account }) {
-          const email = user?.email?.toLowerCase().trim();
-          const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+          const email = normalizeEmail(user?.email);
+          const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
 
           if (email && adminEmail && email === adminEmail) {
             const existing = await getUserProfile(email);
@@ -119,8 +129,9 @@ export default async function handler(request: Request): Promise<Response> {
             } else {
               const profile: UserProfile = {
                 id: email,
-                name: user?.name ?? email.split("@")[0],
+                name: user?.name ?? inferDefaultDisplayName(email),
                 email,
+                phone: null,
                 image: user?.image ?? "",
                 occupation: "",
                 XP: 0,
@@ -146,8 +157,9 @@ export default async function handler(request: Request): Promise<Response> {
 
           const profile: UserProfile = {
             id: email,
-            name: user?.name ?? "",
+            name: user?.name ?? inferDefaultDisplayName(email),
             email,
+            phone: null,
             image: user?.image ?? "",
             occupation: "",
             XP: 0,
@@ -157,8 +169,8 @@ export default async function handler(request: Request): Promise<Response> {
           return true;
         },
         async jwt({ token, user }) {
-          const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
-          const email = (user?.email ?? token?.email ?? "").toLowerCase();
+          const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
+          const email = normalizeEmail(user?.email ?? token?.email);
           if (adminEmail && email && adminEmail === email) {
             (token as { isAdmin?: boolean }).isAdmin = true;
           } else {

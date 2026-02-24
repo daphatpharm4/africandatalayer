@@ -12,13 +12,13 @@ type GapRules = Record<SubmissionCategory, readonly string[]>;
 
 const ENRICHABLE_FIELDS: GapRules = {
   pharmacy: ["openingHours", "isOpenNow", "isOnDuty"],
-  mobile_money: ["merchantIdByProvider", "paymentMethods", "openingHours", "hasCashAvailable", "providers"],
+  mobile_money: ["merchantIdByProvider", "paymentMethods", "openingHours", "hasMin50000XafAvailable", "providers"],
   fuel_station: ["fuelTypes", "pricesByFuel", "quality", "paymentMethods", "openingHours", "hasFuelAvailable"],
 };
 
 const CREATE_REQUIRED_FIELDS: GapRules = {
   pharmacy: ["name", "isOpenNow"],
-  mobile_money: ["providers", "hasCashAvailable"],
+  mobile_money: ["providers", "hasMin50000XafAvailable"],
   fuel_station: ["name", "hasFuelAvailable"],
 };
 
@@ -77,8 +77,15 @@ function normalizeDetailsForCategory(category: SubmissionCategory, raw: Submissi
   if (category === "mobile_money") {
     const providers = normalizeProviders(details.providers ?? details.provider);
     if (providers) details.providers = providers;
-    if (typeof details.hasCashAvailable !== "boolean" && typeof details.availability === "string") {
-      details.hasCashAvailable = !details.availability.toLowerCase().includes("out");
+    const cashThreshold =
+      normalizeBoolean(details.hasMin50000XafAvailable) ??
+      normalizeBoolean(details.hasCashAvailable) ??
+      (typeof details.availability === "string" ? !details.availability.toLowerCase().includes("out") : undefined);
+    if (typeof cashThreshold === "boolean") {
+      details.hasMin50000XafAvailable = cashThreshold;
+    }
+    if ("hasCashAvailable" in details) {
+      delete details.hasCashAvailable;
     }
     if (details.merchantId && providers?.length && !details.merchantIdByProvider) {
       details.merchantIdByProvider = { [providers[0]]: details.merchantId };
@@ -163,6 +170,8 @@ export function isEnrichFieldAllowed(category: SubmissionCategory, field: string
   const canonicalField =
     field === "merchantId"
       ? "merchantIdByProvider"
+      : field === "hasCashAvailable"
+        ? "hasMin50000XafAvailable"
       : field === "hours"
         ? "openingHours"
         : field === "isOnCall" || field === "onDuty"

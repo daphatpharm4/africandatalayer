@@ -28,6 +28,15 @@ export interface SubmissionFraudCheck {
   ipMatchThresholdKm: number;
 }
 
+export interface ClientDeviceInfo {
+  deviceId: string;
+  platform?: string;
+  userAgent?: string;
+  deviceMemoryGb?: number | null;
+  hardwareConcurrency?: number | null;
+  isLowEnd?: boolean;
+}
+
 export interface SubmissionDetails {
   name?: string;
   siteName?: string;
@@ -36,6 +45,7 @@ export interface SubmissionDetails {
   isOnDuty?: boolean;
   providers?: string[];
   hasCashAvailable?: boolean;
+  hasMin50000XafAvailable?: boolean;
   hasFuelAvailable?: boolean;
   pricesByFuel?: Record<string, number>;
   paymentMethods?: string[];
@@ -61,6 +71,7 @@ export interface SubmissionDetails {
   hasSecondaryPhoto?: boolean;
   secondPhotoUrl?: string;
   fraudCheck?: SubmissionFraudCheck;
+  clientDevice?: ClientDeviceInfo;
   source?: string;
   externalId?: string;
   isImported?: boolean;
@@ -132,7 +143,8 @@ export interface SubmissionInput {
 export interface UserProfile {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
+  phone?: string | null;
   image?: string;
   occupation?: string;
   XP: number;

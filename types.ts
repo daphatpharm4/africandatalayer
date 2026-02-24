@@ -45,6 +45,7 @@ export interface DataPoint {
   operator?: string;
   merchantId?: string;
   hasCashAvailable?: boolean;
+  hasMin50000XafAvailable?: boolean;
   hasFuelAvailable?: boolean;
   openingHours?: string;
   isOpenNow?: boolean;

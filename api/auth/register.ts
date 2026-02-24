@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import type { UserProfile } from "../../shared/types.js";
 
 export async function POST(request: Request): Promise<Response> {
@@ -11,12 +12,13 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  const email = (body?.email as string | undefined)?.toLowerCase().trim();
+  const rawIdentifier = (body?.identifier as string | undefined) ?? (body?.email as string | undefined);
+  const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
   const password = body?.password as string | undefined;
   const name = (body?.name as string | undefined)?.trim() ?? "";
 
-  if (!email || !password) {
-    return errorResponse("Email and password are required", 400);
+  if (!normalizedIdentifier || !password) {
+    return errorResponse("Phone/email and password are required", 400);
   }
 
   if (password.length < 8) {
@@ -24,15 +26,17 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const existing = await getUserProfile(email);
+    const identifier = normalizedIdentifier.value;
+    const existing = await getUserProfile(identifier);
     if (existing) {
       return errorResponse("User already exists", 409);
     }
 
     const profile: UserProfile = {
-      id: email,
-      name: name || email.split("@")[0],
-      email,
+      id: identifier,
+      name: name || inferDefaultDisplayName(identifier),
+      email: normalizedIdentifier.type === "email" ? identifier : null,
+      phone: normalizedIdentifier.type === "phone" ? identifier : null,
       image: "",
       occupation: "",
       XP: 0,
@@ -40,7 +44,7 @@ export async function POST(request: Request): Promise<Response> {
       mapScope: "bonamoussadi",
     };
 
-    await upsertUserProfile(email, profile);
+    await upsertUserProfile(identifier, profile);
     return jsonResponse({ ok: true }, { status: 201 });
   } catch (error) {
     if (isStorageUnavailableError(error)) {

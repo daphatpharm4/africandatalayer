@@ -10,6 +10,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { enqueueSubmission, flushOfflineQueue, getQueueStats, type QueueSyncSummary } from '../../lib/client/offlineQueue';
+import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/deviceProfile';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
 import type { SubmissionCategory, SubmissionInput } from '../../shared/types';
 import { Category, ContributionMode, DataPoint } from '../../types';
@@ -28,6 +29,9 @@ const providerOptions = ['MTN', 'Orange', 'Airtel'];
 const paymentMethodOptions = ['Cash', 'Mobile Money', 'Card'];
 const fuelTypeOptions = ['Super', 'Diesel', 'Gas'];
 const openingHourPresets = ['08:00 - 20:00', '09:00 - 19:00', '24/7'];
+const MAX_UPLOAD_DIMENSION = 1600;
+const IMAGE_QUALITY_LOW_END = 0.72;
+const IMAGE_QUALITY_DEFAULT = 0.82;
 
 const pointTypeToVertical = (type: Category): Vertical => {
   if (type === Category.PHARMACY) return 'pharmacy';
@@ -56,7 +60,9 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [isOpenNow, setIsOpenNow] = useState(seedPoint?.isOpenNow ?? true);
   const [isOnDuty, setIsOnDuty] = useState(seedPoint?.isOnDuty ?? false);
   const [providers, setProviders] = useState<string[]>(seedPoint?.providers ?? []);
-  const [hasCashAvailable, setHasCashAvailable] = useState(seedPoint?.hasCashAvailable ?? true);
+  const [hasMin50000XafAvailable, setHasMin50000XafAvailable] = useState(
+    seedPoint?.hasMin50000XafAvailable ?? seedPoint?.hasCashAvailable ?? true
+  );
   const [merchantId, setMerchantId] = useState(seedPoint?.merchantId ?? '');
   const [merchantProvider, setMerchantProvider] = useState(seedPoint?.providers?.[0] ?? providerOptions[0]);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(seedPoint?.paymentMethods ?? []);
@@ -65,6 +71,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [priceFuelType, setPriceFuelType] = useState(seedPoint?.fuelType ?? fuelTypeOptions[0]);
   const [priceValue, setPriceValue] = useState(seedPoint?.price ? String(seedPoint.price) : '');
   const [quality, setQuality] = useState(seedPoint?.quality ?? 'Standard');
+  const [isLowEndDevice] = useState<boolean>(() => detectLowEndDevice());
 
   const gaps = useMemo(() => seedPoint?.gaps ?? [], [seedPoint]);
   const isEnrichMode = mode === 'ENRICH' && Boolean(seedPoint);
@@ -75,7 +82,8 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       isOnDuty: { en: 'On-call Pharmacy', fr: 'Pharmacie de garde' },
       merchantIdByProvider: { en: 'Merchant IDs', fr: 'ID marchands' },
       paymentMethods: { en: 'Payment Methods', fr: 'Moyens de paiement' },
-      hasCashAvailable: { en: 'Cash Availability', fr: 'Disponibilite cash' },
+      hasCashAvailable: { en: 'Min 50,000 XAF Available', fr: 'Minimum 50 000 XAF disponible' },
+      hasMin50000XafAvailable: { en: 'Min 50,000 XAF Available', fr: 'Minimum 50 000 XAF disponible' },
       providers: { en: 'Providers', fr: 'Operateurs' },
       fuelTypes: { en: 'Fuel Types', fr: 'Types de carburant' },
       pricesByFuel: { en: 'Fuel Prices', fr: 'Prix carburant' },
@@ -195,39 +203,80 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     });
   };
 
-  const fileToBase64 = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === 'string') {
-          resolve(reader.result);
-          return;
-        }
-        reject(new Error('Unable to read file.'));
-      };
-      reader.onerror = () => reject(new Error('Unable to read file.'));
-      reader.readAsDataURL(file);
-    });
+  const fileToBase64 = async (file: File) => {
+    const readAsDataUrl = (target: Blob) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result === 'string') {
+            resolve(reader.result);
+            return;
+          }
+          reject(new Error('Unable to read file.'));
+        };
+        reader.onerror = () => reject(new Error('Unable to read file.'));
+        reader.readAsDataURL(target);
+      });
+
+    if (!file.type.startsWith('image/')) {
+      return await readAsDataUrl(file);
+    }
+
+    const loadImage = (objectUrl: string) =>
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('Unable to decode image.'));
+        img.src = objectUrl;
+      });
+
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const img = await loadImage(objectUrl);
+      const maxDimension = Math.max(img.width, img.height);
+      const scale = maxDimension > MAX_UPLOAD_DIMENSION ? MAX_UPLOAD_DIMENSION / maxDimension : 1;
+      const width = Math.max(1, Math.round(img.width * scale));
+      const height = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return await readAsDataUrl(file);
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      const quality = isLowEndDevice ? IMAGE_QUALITY_LOW_END : IMAGE_QUALITY_DEFAULT;
+      const compressed = canvas.toDataURL('image/jpeg', quality);
+      return compressed;
+    } catch {
+      return await readAsDataUrl(file);
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  };
 
   const toggleListValue = (current: string[], value: string): string[] => {
     return current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
   };
 
   const buildCreateDetails = (): Record<string, unknown> => {
+    const clientDevice = getClientDeviceInfo();
     if (vertical === 'pharmacy') {
       return {
         name: siteName.trim(),
         isOpenNow,
-        openingHours: openingHours.trim() || undefined
+        openingHours: openingHours.trim() || undefined,
+        clientDevice
       };
     }
     if (vertical === 'mobile_money') {
       return {
         providers,
-        hasCashAvailable,
+        hasMin50000XafAvailable,
         openingHours: openingHours.trim() || undefined,
         paymentMethods: paymentMethods.length ? paymentMethods : undefined,
-        merchantIdByProvider: merchantId.trim() ? { [merchantProvider]: merchantId.trim() } : undefined
+        merchantIdByProvider: merchantId.trim() ? { [merchantProvider]: merchantId.trim() } : undefined,
+        clientDevice
       };
     }
     const parsedPrice = Number(priceValue);
@@ -238,18 +287,19 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       pricesByFuel: Number.isFinite(parsedPrice) ? { [priceFuelType]: parsedPrice } : undefined,
       quality,
       openingHours: openingHours.trim() || undefined,
-      paymentMethods: paymentMethods.length ? paymentMethods : undefined
+      paymentMethods: paymentMethods.length ? paymentMethods : undefined,
+      clientDevice
     };
   };
 
   const buildEnrichDetails = (): Record<string, unknown> => {
-    const details: Record<string, unknown> = {};
+    const details: Record<string, unknown> = { clientDevice: getClientDeviceInfo() };
     for (const gap of gaps) {
       if (gap === 'openingHours' && openingHours.trim()) details.openingHours = openingHours.trim();
       if (gap === 'isOpenNow') details.isOpenNow = isOpenNow;
       if (gap === 'isOnDuty') details.isOnDuty = isOnDuty;
       if (gap === 'providers' && providers.length) details.providers = providers;
-      if (gap === 'hasCashAvailable') details.hasCashAvailable = hasCashAvailable;
+      if (gap === 'hasCashAvailable' || gap === 'hasMin50000XafAvailable') details.hasMin50000XafAvailable = hasMin50000XafAvailable;
       if (gap === 'merchantIdByProvider' && merchantId.trim()) details.merchantIdByProvider = { [merchantProvider]: merchantId.trim() };
       if (gap === 'paymentMethods' && paymentMethods.length) details.paymentMethods = paymentMethods;
       if (gap === 'fuelTypes' && fuelTypes.length) details.fuelTypes = fuelTypes;
@@ -288,7 +338,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         setErrorMessage(t('Fuel station name is required.', 'Le nom de la station-service est requis.'));
         return false;
       }
-    } else if (Object.keys(details).length === 0) {
+    } else if (Object.keys(details).filter((field) => field !== 'clientDevice').length === 0) {
       setErrorMessage(t('Fill at least one gap field to enrich this point.', 'Renseignez au moins un champ manquant pour enrichir ce point.'));
       return false;
     }
@@ -500,12 +550,12 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
             ))}
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Cash available', 'Cash disponible')}</span>
+            <span className="text-xs font-semibold text-gray-600">{t('Min 50,000 XAF available', 'Minimum 50 000 XAF disponible')}</span>
             <button
-              onClick={() => setHasCashAvailable((prev) => !prev)}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasCashAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+              onClick={() => setHasMin50000XafAvailable((prev) => !prev)}
+              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasMin50000XafAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
             >
-              {hasCashAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
+              {hasMin50000XafAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
           </div>
         </div>
@@ -608,14 +658,14 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         </div>
       )}
 
-      {gaps.includes('hasCashAvailable') && (
+      {(gaps.includes('hasCashAvailable') || gaps.includes('hasMin50000XafAvailable')) && (
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">{t('Cash available', 'Cash disponible')}</span>
+          <span className="text-xs font-semibold text-gray-600">{t('Min 50,000 XAF available', 'Minimum 50 000 XAF disponible')}</span>
           <button
-            onClick={() => setHasCashAvailable((prev) => !prev)}
-            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasCashAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+            onClick={() => setHasMin50000XafAvailable((prev) => !prev)}
+            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasMin50000XafAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
           >
-            {hasCashAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
+            {hasMin50000XafAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
           </button>
         </div>
       )}

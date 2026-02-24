@@ -26,9 +26,10 @@ function getLastLocationLabel(submission: PointEvent): string {
   return `GPS ${submission.location.latitude.toFixed(4)}°, ${submission.location.longitude.toFixed(4)}°`;
 }
 
-function getDisplayName(userId: string, profileName?: string, profileEmail?: string): string {
+function getDisplayName(userId: string, profileName?: string, profileEmail?: string | null, profilePhone?: string | null): string {
   if (profileName && profileName.trim()) return profileName.trim();
-  const source = profileEmail && profileEmail.trim() ? profileEmail.trim() : userId.trim();
+  const source =
+    profileEmail && profileEmail.trim() ? profileEmail.trim() : profilePhone && profilePhone.trim() ? profilePhone.trim() : userId.trim();
   const atIndex = source.indexOf("@");
   if (atIndex > 0) return source.slice(0, atIndex);
   return source || "Contributor";
@@ -88,7 +89,7 @@ export async function GET(): Promise<Response> {
       return {
         rank: index + 1,
         userId: row.userId,
-        name: getDisplayName(row.userId, profile?.name, profile?.email),
+        name: getDisplayName(row.userId, profile?.name, profile?.email, profile?.phone),
         xp: row.xp,
         contributions: row.contributions,
         lastContributionAt: row.lastContributionAt,

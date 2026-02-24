@@ -36,6 +36,7 @@ import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../
 import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type {
   AdminSubmissionEvent,
+  ClientDeviceInfo,
   MapScope,
   PointEvent,
   PointEventType,
@@ -74,6 +75,34 @@ function hasValue(input: unknown): boolean {
   if (Array.isArray(input)) return input.length > 0;
   if (input && typeof input === "object") return Object.keys(input as object).length > 0;
   return false;
+}
+
+function trimString(input: unknown, maxLen = 256): string | null {
+  if (typeof input !== "string") return null;
+  const value = input.trim();
+  if (!value) return null;
+  return value.slice(0, maxLen);
+}
+
+function sanitizeClientDevice(input: unknown): ClientDeviceInfo | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Record<string, unknown>;
+  const deviceId = trimString(raw.deviceId, 128);
+  if (!deviceId) return null;
+  const platform = trimString(raw.platform, 64);
+  const userAgent = trimString(raw.userAgent, 256);
+  const memory = typeof raw.deviceMemoryGb === "number" && Number.isFinite(raw.deviceMemoryGb) ? raw.deviceMemoryGb : null;
+  const cpu = typeof raw.hardwareConcurrency === "number" && Number.isFinite(raw.hardwareConcurrency) ? raw.hardwareConcurrency : null;
+  const isLowEnd = raw.isLowEnd === true;
+
+  return {
+    deviceId,
+    platform: platform ?? undefined,
+    userAgent: userAgent ?? undefined,
+    deviceMemoryGb: memory,
+    hardwareConcurrency: cpu,
+    isLowEnd,
+  };
 }
 
 function normalizeCategory(input: string | undefined): SubmissionCategory | null {
@@ -424,6 +453,14 @@ export async function POST(request: Request): Promise<Response> {
     category,
     body?.details && typeof body.details === "object" ? ({ ...(body.details as SubmissionDetails) } as SubmissionDetails) : {},
   );
+  const requestUserAgent = trimString(request.headers.get("user-agent"), 256);
+  const clientDevice = sanitizeClientDevice((details as Record<string, unknown>).clientDevice);
+  if (clientDevice) {
+    if (!clientDevice.userAgent && requestUserAgent) clientDevice.userAgent = requestUserAgent;
+    details.clientDevice = clientDevice;
+  } else if ("clientDevice" in details) {
+    delete details.clientDevice;
+  }
 
   const imageBase64 = body?.imageBase64 as string | undefined;
   if (!imageBase64) return errorResponse("Photo is required", 400);
@@ -487,7 +524,14 @@ export async function POST(request: Request): Promise<Response> {
       const submittedEntries = Object.entries(details).filter(([, value]) => hasValue(value));
       const allowedGaps = new Set(target.gaps);
       const filteredEntries = submittedEntries.filter(([field]) => {
-        const canonical = field === "hours" ? "openingHours" : field === "merchantId" ? "merchantIdByProvider" : field;
+        const canonical =
+          field === "hours"
+            ? "openingHours"
+            : field === "merchantId"
+              ? "merchantIdByProvider"
+              : field === "hasCashAvailable"
+                ? "hasMin50000XafAvailable"
+                : field;
         return isEnrichFieldAllowed(category, canonical) && allowedGaps.has(canonical);
       });
       if (!filteredEntries.length) {
@@ -502,6 +546,9 @@ export async function POST(request: Request): Promise<Response> {
         if (!Object.prototype.hasOwnProperty.call(filteredDetails, key)) {
           delete details[key];
         }
+      }
+      if (clientDevice) {
+        details.clientDevice = clientDevice;
       }
     }
 
@@ -586,6 +633,23 @@ export async function POST(request: Request): Promise<Response> {
     };
 
     await insertPointEvent(newEvent);
+
+    const exifDeviceMake = primaryPhotoMetadata?.deviceMake ?? null;
+    const exifDeviceModel = primaryPhotoMetadata?.deviceModel ?? null;
+    const logPayload = {
+      eventId,
+      userId: auth.id,
+      category,
+      deviceId: clientDevice?.deviceId ?? null,
+      clientPlatform: clientDevice?.platform ?? null,
+      clientUserAgent: clientDevice?.userAgent ?? requestUserAgent ?? null,
+      clientMemoryGb: clientDevice?.deviceMemoryGb ?? null,
+      clientCpuCores: clientDevice?.hardwareConcurrency ?? null,
+      clientIsLowEnd: clientDevice?.isLowEnd ?? null,
+      exifDeviceMake,
+      exifDeviceModel,
+    };
+    console.info("[SUBMISSION_DEVICE]", JSON.stringify(logPayload));
 
     const profile = await getUserProfile(auth.id);
     if (profile) {

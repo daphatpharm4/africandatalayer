@@ -213,7 +213,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
             {isLoading ? (
               <span className="inline-block h-4 w-40 rounded-full bg-gray-200 animate-pulse"></span>
             ) : (
-              profile?.name || profile?.email || t('Contributor', 'Contributeur')
+              profile?.name || profile?.phone || profile?.email || t('Contributor', 'Contributeur')
             )}
           </h2>
           {!isLoading && (

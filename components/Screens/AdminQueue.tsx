@@ -4,6 +4,7 @@ import { apiFetch, apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type {
   AdminSubmissionEvent,
+  ClientDeviceInfo,
   SubmissionDetails,
   SubmissionFraudCheck,
   SubmissionLocation,
@@ -58,6 +59,22 @@ function getSecondaryImageUrl(item: AdminSubmissionEvent): string | null {
   const details = item.event.details as SubmissionDetails;
   if (typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim()) return details.secondPhotoUrl;
   return null;
+}
+
+function getClientDevice(item: AdminSubmissionEvent): ClientDeviceInfo | null {
+  const details = item.event.details as SubmissionDetails;
+  if (!details.clientDevice || typeof details.clientDevice !== 'object') return null;
+  const raw = details.clientDevice as Record<string, unknown>;
+  if (typeof raw.deviceId !== 'string' || !raw.deviceId.trim()) return null;
+  return {
+    deviceId: raw.deviceId.trim(),
+    platform: typeof raw.platform === 'string' ? raw.platform.trim() : undefined,
+    userAgent: typeof raw.userAgent === 'string' ? raw.userAgent.trim() : undefined,
+    deviceMemoryGb: typeof raw.deviceMemoryGb === 'number' && Number.isFinite(raw.deviceMemoryGb) ? raw.deviceMemoryGb : null,
+    hardwareConcurrency:
+      typeof raw.hardwareConcurrency === 'number' && Number.isFinite(raw.hardwareConcurrency) ? raw.hardwareConcurrency : null,
+    isLowEnd: raw.isLowEnd === true
+  };
 }
 
 function isReadOnlySubmission(item: AdminSubmissionEvent): boolean {
@@ -207,6 +224,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const selectedFraudCheck = selectedItem?.fraudCheck ?? null;
   const selectedPrimaryPhoto = selectedItem ? getPrimaryImageUrl(selectedItem) : null;
   const selectedSecondaryPhoto = selectedItem ? getSecondaryImageUrl(selectedItem) : null;
+  const selectedClientDevice = selectedItem ? getClientDevice(selectedItem) : null;
   const isSelectedReadOnly = selectedItem ? isReadOnlySubmission(selectedItem) : false;
   const unavailableLabel = t('Unavailable', 'Indisponible');
 
@@ -392,6 +410,16 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 <div>{t('Event Type', 'Type d\'evenement')}: {selectedItem.event.eventType}</div>
                 <div>{t('Category', 'Categorie')}: {categoryLabel(selectedItem.event.category, language)}</div>
                 <div>Point ID: {selectedItem.event.pointId}</div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Client Device', 'Appareil client')}</div>
+                <div>{t('Device ID', 'Device ID')}: {selectedClientDevice?.deviceId ?? unavailableLabel}</div>
+                <div>{t('Platform', 'Plateforme')}: {selectedClientDevice?.platform ?? unavailableLabel}</div>
+                <div>
+                  {t('Low-end flag', 'Indicateur entree de gamme')}:{' '}
+                  {selectedClientDevice ? (selectedClientDevice.isLowEnd === true ? t('Yes', 'Oui') : t('No', 'Non')) : unavailableLabel}
+                </div>
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">

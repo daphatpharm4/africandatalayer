@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronLeft, Mail, Lock, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
 import { AuthClientError, getSession, registerWithCredentials, signInWithCredentials, signInWithGoogle } from '../../lib/client/auth';
+import { normalizeIdentifier } from '../../lib/shared/identifier';
 import BrandLogo from '../BrandLogo';
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
 
 const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -24,9 +25,9 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
     if (isAuthClientError(error)) {
       switch (error.code) {
         case 'invalid_credentials':
-          return t('Invalid email or password.', 'Email ou mot de passe invalide.');
+          return t('Invalid phone/email or password.', 'Telephone/email ou mot de passe invalide.');
         case 'registration_conflict':
-          return t('An account already exists for this email.', 'Un compte existe deja pour cet email.');
+          return t('An account already exists for this phone/email.', 'Un compte existe deja pour ce telephone/email.');
         case 'validation_error':
           return t('Please check your details and try again.', 'Verifiez vos informations et reessayez.');
         case 'storage_unavailable':
@@ -53,9 +54,9 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
   };
 
   const handleSubmit = async () => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !password) {
-      setErrorMessage(t('Email and password are required.', 'Email et mot de passe requis.'));
+    const normalizedIdentifier = normalizeIdentifier(identifier)?.value ?? '';
+    if (!normalizedIdentifier || !password) {
+      setErrorMessage(t('Phone/email and password are required.', 'Telephone/email et mot de passe requis.'));
       return;
     }
 
@@ -65,11 +66,11 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
 
     try {
       if (mode === 'signup') {
-        await registerWithCredentials(normalizedEmail, password);
+        await registerWithCredentials(normalizedIdentifier, password);
         accountCreated = true;
-        await signInWithCredentials(normalizedEmail, password, { maxAttempts: 6, retryDelayMs: 500 });
+        await signInWithCredentials(normalizedIdentifier, password, { maxAttempts: 6, retryDelayMs: 500 });
       } else {
-        await signInWithCredentials(normalizedEmail, password);
+        await signInWithCredentials(normalizedIdentifier, password);
       }
       const session = await getSession();
       if (!session?.user) {
@@ -115,14 +116,14 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
           </button>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Email Address', 'Adresse email')}</label>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Phone or email', 'Telephone ou email')}</label>
             <div className="relative group">
               <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#0f2b46] transition-colors" />
               <input
-                type="email"
-                placeholder={t('name@email.com', 'nom@email.com')}
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                type="text"
+                placeholder={t('+2376XXXXXXXX or name@email.com', '+2376XXXXXXXX ou nom@email.com')}
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
                 className="w-full h-14 bg-white border border-gray-100 rounded-xl pl-12 pr-4 text-sm focus:border-[#0f2b46] focus:outline-none transition-all shadow-sm"
               />
             </div>

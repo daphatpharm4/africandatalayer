@@ -1,5 +1,6 @@
 import { apiFetch } from './api';
 import type { SubmissionInput } from '../../shared/types';
+import { getClientDeviceInfo } from './deviceProfile';
 
 const DEFAULT_SYNC_ERROR = 'Unable to sync submission right now.';
 
@@ -71,13 +72,25 @@ export function toSubmissionSyncError(error: unknown): SubmissionSyncError {
   return new SubmissionSyncError(DEFAULT_SYNC_ERROR, { retryable: true, cause: error });
 }
 
+function withClientDevice(payload: SubmissionInput): SubmissionInput {
+  const details =
+    payload.details && typeof payload.details === 'object'
+      ? { ...(payload.details as Record<string, unknown>) }
+      : {};
+  if (!details.clientDevice) {
+    details.clientDevice = getClientDeviceInfo();
+  }
+  return { ...payload, details };
+}
+
 export async function sendSubmissionPayload(payload: SubmissionInput): Promise<void> {
+  const enrichedPayload = withClientDevice(payload);
   let response: Response;
   try {
     response = await apiFetch('/api/submissions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(enrichedPayload),
     });
   } catch (error) {
     throw new SubmissionSyncError(DEFAULT_SYNC_ERROR, { retryable: true, cause: error });

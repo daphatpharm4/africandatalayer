@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { query } from "../db.js";
 import type { LegacySubmission, MapScope, PointEvent, PointEventType, SubmissionCategory, UserProfile } from "../../../shared/types.js";
+import { normalizeEmail, normalizePhone } from "../../shared/identifier.js";
 import type { StorageStore } from "./types.js";
 
 const VALID_MAP_SCOPES: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
@@ -67,9 +68,12 @@ function parseLocation(input: unknown): { latitude: number; longitude: number } 
 }
 
 function rowToUserProfile(row: Record<string, unknown>): UserProfile {
+  const email = typeof row.email === "string" && row.email.trim() ? row.email.toLowerCase().trim() : null;
+  const phone = typeof row.phone === "string" && row.phone.trim() ? row.phone.trim() : null;
   return {
     id: String(row.id ?? "").toLowerCase().trim(),
-    email: String(row.email ?? "").toLowerCase().trim(),
+    email,
+    phone,
     name: typeof row.name === "string" ? row.name : "",
     image: typeof row.image === "string" ? row.image : "",
     occupation: typeof row.occupation === "string" ? row.occupation : "",
@@ -105,7 +109,7 @@ async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const id = normalizeUserId(userId);
   const result = await query<Record<string, unknown>>(
     `
-      select id, email, name, image, occupation, xp, password_hash, is_admin, map_scope
+      select id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope
       from user_profiles
       where id = $1
       limit 1
@@ -119,9 +123,12 @@ async function getUserProfile(userId: string): Promise<UserProfile | null> {
 }
 
 async function upsertUserProfile(userId: string, profile: UserProfile): Promise<void> {
-  const id = normalizeUserId(userId || profile.id || profile.email);
-  const email = normalizeUserId(profile.email || id);
-  const name = typeof profile.name === "string" && profile.name.trim() ? profile.name.trim() : email.split("@")[0] || "Contributor";
+  const idCandidate = userId || profile.id || profile.email || profile.phone || "";
+  const id = normalizeUserId(idCandidate);
+  const email = normalizeEmail(profile.email);
+  const phone = normalizePhone(profile.phone);
+  const defaultLabel = email ?? phone ?? id;
+  const name = typeof profile.name === "string" && profile.name.trim() ? profile.name.trim() : defaultLabel || "Contributor";
   const image = typeof profile.image === "string" ? profile.image : "";
   const occupation = typeof profile.occupation === "string" ? profile.occupation : "";
   const xp = parseXp(profile.XP);
@@ -131,11 +138,12 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
 
   await query(
     `
-      insert into user_profiles (id, email, name, image, occupation, xp, password_hash, is_admin, map_scope, updated_at)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+      insert into user_profiles (id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope, updated_at)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
       on conflict (id) do update
       set
         email = excluded.email,
+        phone = excluded.phone,
         name = excluded.name,
         image = excluded.image,
         occupation = excluded.occupation,
@@ -145,7 +153,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
         map_scope = excluded.map_scope,
         updated_at = now()
     `,
-    [id, email, name, image, occupation, xp, passwordHash, isAdmin, mapScope],
+    [id, email, phone, name, image, occupation, xp, passwordHash, isAdmin, mapScope],
   );
 }
 
