@@ -5,6 +5,7 @@ import { normalizeEmail, normalizePhone } from "../../shared/identifier.js";
 import type { StorageStore } from "./types.js";
 
 const VALID_MAP_SCOPES: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
+let phoneColumnState: "unknown" | "present" | "missing" = "unknown";
 
 function normalizeUserId(input: string): string {
   return input.toLowerCase().trim();
@@ -84,6 +85,29 @@ function rowToUserProfile(row: Record<string, unknown>): UserProfile {
   };
 }
 
+function isMissingPhoneColumnError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const pgError = error as Error & { code?: string };
+  const message = error.message.toLowerCase();
+  return pgError.code === "42703" && message.includes("phone");
+}
+
+async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
+  const result = await query<Record<string, unknown>>(
+    `
+      select id, email, name, image, occupation, xp, password_hash, is_admin, map_scope
+      from user_profiles
+      where id = $1
+      limit 1
+    `,
+    [id],
+  );
+
+  const row = result.rows[0];
+  if (!row) return null;
+  return rowToUserProfile(row);
+}
+
 function rowToPointEvent(row: Record<string, unknown>): PointEvent {
   const details = row.details && typeof row.details === "object" ? (row.details as PointEvent["details"]) : {};
 
@@ -107,19 +131,76 @@ function rowToPointEvent(row: Record<string, unknown>): PointEvent {
 
 async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const id = normalizeUserId(userId);
-  const result = await query<Record<string, unknown>>(
-    `
-      select id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope
-      from user_profiles
-      where id = $1
-      limit 1
-    `,
-    [id],
-  );
+  if (phoneColumnState === "missing") {
+    return await getUserProfileLegacy(id);
+  }
 
-  const row = result.rows[0];
-  if (!row) return null;
-  return rowToUserProfile(row);
+  try {
+    const result = await query<Record<string, unknown>>(
+      `
+        select id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope
+        from user_profiles
+        where id = $1
+        limit 1
+      `,
+      [id],
+    );
+
+    const row = result.rows[0];
+    if (!row) return null;
+    if (phoneColumnState === "unknown") phoneColumnState = "present";
+    return rowToUserProfile(row);
+  } catch (error) {
+    if (!isMissingPhoneColumnError(error)) throw error;
+    phoneColumnState = "missing";
+    return await getUserProfileLegacy(id);
+  }
+}
+
+async function upsertUserProfileLegacy(params: {
+  id: string;
+  email: string | null;
+  name: string;
+  image: string;
+  occupation: string;
+  xp: number;
+  passwordHash: string | null;
+  isAdmin: boolean;
+  mapScope: MapScope;
+}): Promise<void> {
+  const legacyEmail = params.email ?? normalizeEmail(params.id);
+  if (!legacyEmail) {
+    throw new Error("Database migration required: phone-only identifiers need user_profiles.phone column");
+  }
+
+  await query(
+    `
+      insert into user_profiles (id, email, name, image, occupation, xp, password_hash, is_admin, map_scope, updated_at)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+      on conflict (id) do update
+      set
+        email = excluded.email,
+        name = excluded.name,
+        image = excluded.image,
+        occupation = excluded.occupation,
+        xp = excluded.xp,
+        password_hash = coalesce(excluded.password_hash, user_profiles.password_hash),
+        is_admin = excluded.is_admin,
+        map_scope = excluded.map_scope,
+        updated_at = now()
+    `,
+    [
+      params.id,
+      legacyEmail,
+      params.name,
+      params.image,
+      params.occupation,
+      params.xp,
+      params.passwordHash,
+      params.isAdmin,
+      params.mapScope,
+    ],
+  );
 }
 
 async function upsertUserProfile(userId: string, profile: UserProfile): Promise<void> {
@@ -136,25 +217,41 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   const isAdmin = profile.isAdmin === true;
   const mapScope = normalizeMapScope(profile.mapScope);
 
-  await query(
-    `
-      insert into user_profiles (id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope, updated_at)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
-      on conflict (id) do update
-      set
-        email = excluded.email,
-        phone = excluded.phone,
-        name = excluded.name,
-        image = excluded.image,
-        occupation = excluded.occupation,
-        xp = excluded.xp,
-        password_hash = coalesce(excluded.password_hash, user_profiles.password_hash),
-        is_admin = excluded.is_admin,
-        map_scope = excluded.map_scope,
-        updated_at = now()
-    `,
-    [id, email, phone, name, image, occupation, xp, passwordHash, isAdmin, mapScope],
-  );
+  const runWithPhone = async () => {
+    await query(
+      `
+        insert into user_profiles (id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope, updated_at)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+        on conflict (id) do update
+        set
+          email = excluded.email,
+          phone = excluded.phone,
+          name = excluded.name,
+          image = excluded.image,
+          occupation = excluded.occupation,
+          xp = excluded.xp,
+          password_hash = coalesce(excluded.password_hash, user_profiles.password_hash),
+          is_admin = excluded.is_admin,
+          map_scope = excluded.map_scope,
+          updated_at = now()
+      `,
+      [id, email, phone, name, image, occupation, xp, passwordHash, isAdmin, mapScope],
+    );
+  };
+
+  if (phoneColumnState === "missing") {
+    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, mapScope });
+    return;
+  }
+
+  try {
+    await runWithPhone();
+    if (phoneColumnState === "unknown") phoneColumnState = "present";
+  } catch (error) {
+    if (!isMissingPhoneColumnError(error)) throw error;
+    phoneColumnState = "missing";
+    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, mapScope });
+  }
 }
 
 async function getPointEvents(): Promise<PointEvent[]> {
