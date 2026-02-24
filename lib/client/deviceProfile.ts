@@ -79,7 +79,12 @@ export function detectLowEndFromHints(hints: DeviceHints): boolean {
   const saveDataEnabled = hints.saveData === true;
   const userAgentLow =
     ua.includes("itel") || ua.includes("android go") || ua.includes("go edition") || ua.includes("infinix smart");
-  return memoryLow || cpuLow || networkLow || saveDataEnabled || userAgentLow;
+  if (userAgentLow || memoryLow || networkLow || saveDataEnabled) return true;
+
+  const cpuOnlyLowSignal = cpuLow && hints.deviceMemoryGb === null && !ua.includes("android");
+  if (cpuOnlyLowSignal) return false;
+
+  return cpuLow;
 }
 
 export function detectLowEndDevice(): boolean {

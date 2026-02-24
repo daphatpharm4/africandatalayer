@@ -37,3 +37,15 @@ test('keeps normal modern device out of low-end mode', () => {
   });
   assert.equal(isLowEnd, false);
 });
+
+test('does not flag modern iPhone as low-end from CPU hint alone', () => {
+  const isLowEnd = detectLowEndFromHints({
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+    platform: 'iPhone',
+    deviceMemoryGb: null,
+    hardwareConcurrency: 4,
+    effectiveType: null,
+    saveData: null,
+  });
+  assert.equal(isLowEnd, false);
+});
