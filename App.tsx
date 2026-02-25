@@ -1,21 +1,27 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { Screen, DataPoint, ContributionMode } from './types';
 import { getSession, signOut } from './lib/client/auth';
 import { flushOfflineQueue } from './lib/client/offlineQueue';
 import { sendSubmissionPayload } from './lib/client/submissionSync';
 import Splash from './components/Screens/Splash';
 import Home from './components/Screens/Home';
-import Details from './components/Screens/Details';
-import Auth from './components/Screens/Auth';
-import ContributionFlow from './components/Screens/ContributionFlow';
-import Profile from './components/Screens/Profile';
-import Analytics from './components/Screens/Analytics';
-import Settings from './components/Screens/Settings';
-import QualityInfo from './components/Screens/QualityInfo';
-import RewardsCatalog from './components/Screens/RewardsCatalog';
-import AdminQueue from './components/Screens/AdminQueue';
 import Navigation from './components/Navigation';
+
+const Details = lazy(() => import('./components/Screens/Details'));
+const Auth = lazy(() => import('./components/Screens/Auth'));
+const ContributionFlow = lazy(() => import('./components/Screens/ContributionFlow'));
+const Profile = lazy(() => import('./components/Screens/Profile'));
+const Analytics = lazy(() => import('./components/Screens/Analytics'));
+const Settings = lazy(() => import('./components/Screens/Settings'));
+const QualityInfo = lazy(() => import('./components/Screens/QualityInfo'));
+const RewardsCatalog = lazy(() => import('./components/Screens/RewardsCatalog'));
+const AdminQueue = lazy(() => import('./components/Screens/AdminQueue'));
+
+interface WindowWithIdleCallback extends Window {
+  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+  cancelIdleCallback?: (handle: number) => void;
+}
 
 const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SPLASH);
@@ -106,10 +112,22 @@ const App: React.FC = () => {
       const online = navigator.onLine;
       setIsOffline(!online);
       if (online) {
-        try {
-          await flushOfflineQueue(sendSubmissionPayload);
-        } catch {
-          // Queue remains in IndexedDB and will retry on next online cycle.
+        const runSync = async () => {
+          try {
+            await flushOfflineQueue(sendSubmissionPayload);
+          } catch {
+            // Queue remains in IndexedDB and will retry on next online cycle.
+          }
+        };
+        const windowWithIdle = window as WindowWithIdleCallback;
+        if (typeof windowWithIdle.requestIdleCallback === 'function') {
+          windowWithIdle.requestIdleCallback(() => {
+            void runSync();
+          }, { timeout: 2000 });
+        } else {
+          window.setTimeout(() => {
+            void runSync();
+          }, 0);
         }
       }
     };
@@ -240,7 +258,17 @@ const App: React.FC = () => {
       )}
 
       <main className="flex-1 overflow-hidden relative">
-        {renderScreen()}
+        <Suspense
+          fallback={
+            <div className="h-full w-full bg-[#f9fafb] p-4">
+              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+                {t('Loading screen...', 'Chargement de l\'ecran...')}
+              </div>
+            </div>
+          }
+        >
+          {renderScreen()}
+        </Suspense>
       </main>
 
       {!([Screen.SPLASH, Screen.AUTH, Screen.CONTRIBUTE].includes(currentScreen)) && (

@@ -12,6 +12,7 @@ type AggregateRow = {
 };
 
 const FALLBACK_XP = 5;
+const LEADERBOARD_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=300";
 
 function getXpAwarded(submission: PointEvent): number {
   const details = submission.details as Record<string, unknown> | undefined;
@@ -97,7 +98,12 @@ export async function GET(): Promise<Response> {
       };
     });
 
-    return jsonResponse(leaderboard, { status: 200 });
+    return jsonResponse(leaderboard, {
+      status: 200,
+      headers: {
+        "cache-control": LEADERBOARD_CACHE_CONTROL,
+      },
+    });
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });

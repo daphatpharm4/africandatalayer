@@ -58,6 +58,7 @@ const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
 const BASE_EVENT_XP = 5;
 const allowedMapScopes: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
+const PUBLIC_READ_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=300";
 
 function parseLocation(input: unknown): SubmissionLocation | null {
   if (!input || typeof input !== "object") return null;
@@ -386,6 +387,7 @@ export async function GET(request: Request): Promise<Response> {
   if (canUseExpandedScope && !authContext) return errorResponse("Unauthorized", 401);
   if (canUseExpandedScope && !authContext.isAdmin) return errorResponse("Forbidden", 403);
   const effectiveScope = canUseExpandedScope ? requestedScope : "bonamoussadi";
+  const canUsePublicCache = !authContext && !canUseExpandedScope;
 
   try {
     const allEvents = await buildCombinedEvents();
@@ -397,7 +399,12 @@ export async function GET(request: Request): Promise<Response> {
 
     if (view === "events") {
       if (!authContext) {
-        return jsonResponse(redactEventUserIds(scopedEvents), { status: 200 });
+        return jsonResponse(redactEventUserIds(scopedEvents), {
+          status: 200,
+          headers: {
+            "cache-control": PUBLIC_READ_CACHE_CONTROL,
+          },
+        });
       }
       const responseEvents = filterEventsForViewer(scopedEvents, authContext);
       return jsonResponse(responseEvents, { status: 200 });
@@ -422,7 +429,14 @@ export async function GET(request: Request): Promise<Response> {
       }
     }
 
-    return jsonResponse(projected, { status: 200 });
+    return jsonResponse(projected, {
+      status: 200,
+      headers: canUsePublicCache
+        ? {
+            "cache-control": PUBLIC_READ_CACHE_CONTROL,
+          }
+        : undefined,
+    });
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
