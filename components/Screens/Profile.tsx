@@ -27,7 +27,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSavingMapScope, setIsSavingMapScope] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [userLocation, setUserLocation] = useState(t('Location not set', 'Position non definie'));
   const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
@@ -36,8 +35,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
   const [syncErrorActionError, setSyncErrorActionError] = useState('');
   const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
-    if (value === 'global') return 'global';
-    if (value === 'cameroon') return isAdminMode ? 'global' : 'cameroon';
+    if (isAdminMode) return 'global';
+    if (value === 'cameroon' || value === 'global') return value;
     return 'bonamoussadi';
   };
   const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
@@ -172,24 +171,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
     }
   };
 
-  const handleToggleMapScope = async () => {
-    if (!profile?.isAdmin || isSavingMapScope) return;
-    const nextScope: MapScope = isMapUnlocked ? 'bonamoussadi' : 'global';
-    try {
-      setIsSavingMapScope(true);
-      const updated = await apiJson<UserProfile>('/api/user', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mapScope: nextScope })
-      });
-      setProfile(updated);
-    } catch {
-      setLoadError(t('Unable to update map access.', 'Impossible de mettre a jour l\'acces carte.'));
-    } finally {
-      setIsSavingMapScope(false);
-    }
-  };
-
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
@@ -269,16 +250,9 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
                   {t('Unlock worldwide map', 'Debloquer la carte mondiale')}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={handleToggleMapScope}
-                disabled={isSavingMapScope}
-                className={`relative inline-flex h-7 w-14 items-center rounded-full transition-colors ${isMapUnlocked ? 'bg-[#4c7c59]' : 'bg-gray-200'} ${isSavingMapScope ? 'opacity-60' : ''}`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${isMapUnlocked ? 'translate-x-8' : 'translate-x-1'}`}
-                />
-              </button>
+              <span className="inline-flex items-center rounded-full bg-[#eaf3ee] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#4c7c59]">
+                {t('Enabled', 'Active')}
+              </span>
             </div>
             <p className="text-xs text-gray-500">
               {isMapUnlocked

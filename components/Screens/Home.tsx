@@ -1,6 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { Category, DataPoint } from '../../types';
-import type { MapScope, ProjectedPoint, UserProfile } from '../../shared/types';
+import type { MapScope, ProjectedPoint } from '../../shared/types';
 import {
   BONAMOUSSADI_CENTER,
   CAMEROON_CENTER,
@@ -46,8 +46,8 @@ const BONAMOUSSADI_MAP_BOUNDS = bonamoussadiLeafletBounds();
 const CAMEROON_MAP_BOUNDS = cameroonLeafletBounds();
 
 const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
-  if (scope === 'global') return 'global';
-  if (scope === 'cameroon') return isAdminMode ? 'global' : 'cameroon';
+  if (isAdminMode) return 'global';
+  if (scope === 'cameroon' || scope === 'global') return scope;
   return 'bonamoussadi';
 };
 
@@ -110,7 +110,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [points, setPoints] = useState<DataPoint[]>(() => buildMockPoints(language));
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
-  const [mapScope, setMapScope] = useState<MapScope>('bonamoussadi');
+  const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? 'global' : 'bonamoussadi'));
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
@@ -283,23 +283,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
   };
 
   useEffect(() => {
-    let isCancelled = false;
-    const loadMapScope = async () => {
-      if (!isAuthenticated || !isAdmin) {
-        setMapScope('bonamoussadi');
-        return;
-      }
-      try {
-        const profile = await apiJson<UserProfile>('/api/user');
-        if (!isCancelled) setMapScope(normalizeMapScope(profile?.mapScope, Boolean(isAdmin)));
-      } catch {
-        if (!isCancelled) setMapScope('bonamoussadi');
-      }
-    };
-    void loadMapScope();
-    return () => {
-      isCancelled = true;
-    };
+    if (!isAuthenticated || !isAdmin) {
+      setMapScope('bonamoussadi');
+      return;
+    }
+    setMapScope('global');
   }, [isAuthenticated, isAdmin]);
 
   useEffect(() => {

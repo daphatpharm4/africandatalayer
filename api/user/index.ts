@@ -15,10 +15,17 @@ function normalizeMapScope(input: unknown): MapScope | null {
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
+  const authIsAdmin = (auth.token as { isAdmin?: unknown } | undefined)?.isAdmin === true;
 
   try {
     const profile = await getUserProfile(auth.id);
     if (!profile) return errorResponse("Profile not found", 404);
+
+    if (authIsAdmin && (!profile.isAdmin || profile.mapScope !== "global")) {
+      profile.isAdmin = true;
+      profile.mapScope = "global";
+      await upsertUserProfile(auth.id, profile);
+    }
 
     return jsonResponse(profile, { status: 200 });
   } catch (error) {

@@ -60,9 +60,6 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [isOpenNow, setIsOpenNow] = useState(seedPoint?.isOpenNow ?? true);
   const [isOnDuty, setIsOnDuty] = useState(seedPoint?.isOnDuty ?? false);
   const [providers, setProviders] = useState<string[]>(seedPoint?.providers ?? []);
-  const [hasMin50000XafAvailable, setHasMin50000XafAvailable] = useState(
-    seedPoint?.hasMin50000XafAvailable ?? seedPoint?.hasCashAvailable ?? true
-  );
   const [merchantId, setMerchantId] = useState(seedPoint?.merchantId ?? '');
   const [merchantProvider, setMerchantProvider] = useState(seedPoint?.providers?.[0] ?? providerOptions[0]);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(seedPoint?.paymentMethods ?? []);
@@ -82,8 +79,6 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       isOnDuty: { en: 'On-call Pharmacy', fr: 'Pharmacie de garde' },
       merchantIdByProvider: { en: 'Merchant IDs', fr: 'ID marchands' },
       paymentMethods: { en: 'Payment Methods', fr: 'Moyens de paiement' },
-      hasCashAvailable: { en: 'Min 50,000 XAF Available', fr: 'Minimum 50 000 XAF disponible' },
-      hasMin50000XafAvailable: { en: 'Min 50,000 XAF Available', fr: 'Minimum 50 000 XAF disponible' },
       providers: { en: 'Providers', fr: 'Operateurs' },
       fuelTypes: { en: 'Fuel Types', fr: 'Types de carburant' },
       pricesByFuel: { en: 'Fuel Prices', fr: 'Prix carburant' },
@@ -272,7 +267,6 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     if (vertical === 'mobile_money') {
       return {
         providers,
-        hasMin50000XafAvailable,
         openingHours: openingHours.trim() || undefined,
         paymentMethods: paymentMethods.length ? paymentMethods : undefined,
         merchantIdByProvider: merchantId.trim() ? { [merchantProvider]: merchantId.trim() } : undefined,
@@ -299,7 +293,6 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       if (gap === 'isOpenNow') details.isOpenNow = isOpenNow;
       if (gap === 'isOnDuty') details.isOnDuty = isOnDuty;
       if (gap === 'providers' && providers.length) details.providers = providers;
-      if (gap === 'hasCashAvailable' || gap === 'hasMin50000XafAvailable') details.hasMin50000XafAvailable = hasMin50000XafAvailable;
       if (gap === 'merchantIdByProvider' && merchantId.trim()) details.merchantIdByProvider = { [merchantProvider]: merchantId.trim() };
       if (gap === 'paymentMethods' && paymentMethods.length) details.paymentMethods = paymentMethods;
       if (gap === 'fuelTypes' && fuelTypes.length) details.fuelTypes = fuelTypes;
@@ -549,15 +542,6 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
               </button>
             ))}
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Min 50,000 XAF available', 'Minimum 50 000 XAF disponible')}</span>
-            <button
-              onClick={() => setHasMin50000XafAvailable((prev) => !prev)}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasMin50000XafAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {hasMin50000XafAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
-          </div>
         </div>
       );
     }
@@ -655,18 +639,6 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
               </button>
             ))}
           </div>
-        </div>
-      )}
-
-      {(gaps.includes('hasCashAvailable') || gaps.includes('hasMin50000XafAvailable')) && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">{t('Min 50,000 XAF available', 'Minimum 50 000 XAF disponible')}</span>
-          <button
-            onClick={() => setHasMin50000XafAvailable((prev) => !prev)}
-            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasMin50000XafAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
-          >
-            {hasMin50000XafAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
-          </button>
         </div>
       )}
 

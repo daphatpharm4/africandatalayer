@@ -20,7 +20,7 @@ import {
 } from 'recharts';
 import { getSession } from '../../lib/client/auth';
 import { apiJson } from '../../lib/client/api';
-import type { LeaderboardEntry, MapScope, PointEvent, ProjectedPoint, SubmissionCategory, UserProfile } from '../../shared/types';
+import type { LeaderboardEntry, MapScope, PointEvent, ProjectedPoint, SubmissionCategory } from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -38,8 +38,8 @@ const HEATMAP_COLORS: Record<HeatLevel, string> = {
 };
 
 const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
-  if (scope === 'global') return 'global';
-  if (scope === 'cameroon') return isAdminMode ? 'global' : 'cameroon';
+  if (isAdminMode) return 'global';
+  if (scope === 'cameroon' || scope === 'global') return scope;
   return 'bonamoussadi';
 };
 
@@ -97,9 +97,7 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
     const loadAdminAnalytics = async () => {
       try {
         setIsLoadingAdminData(true);
-
-        const profile = await apiJson<UserProfile>('/api/user');
-        const scope = normalizeMapScope(profile?.mapScope, true);
+        const scope = normalizeMapScope('global', true);
 
         const pointParams = new URLSearchParams();
         if (scope !== 'bonamoussadi') pointParams.set('scope', scope);

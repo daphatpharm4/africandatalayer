@@ -12,13 +12,13 @@ type GapRules = Record<SubmissionCategory, readonly string[]>;
 
 const ENRICHABLE_FIELDS: GapRules = {
   pharmacy: ["openingHours", "isOpenNow", "isOnDuty"],
-  mobile_money: ["merchantIdByProvider", "paymentMethods", "openingHours", "hasMin50000XafAvailable", "providers"],
+  mobile_money: ["merchantIdByProvider", "paymentMethods", "openingHours", "providers"],
   fuel_station: ["fuelTypes", "pricesByFuel", "quality", "paymentMethods", "openingHours", "hasFuelAvailable"],
 };
 
 const CREATE_REQUIRED_FIELDS: GapRules = {
   pharmacy: ["name", "isOpenNow"],
-  mobile_money: ["providers", "hasMin50000XafAvailable"],
+  mobile_money: ["providers"],
   fuel_station: ["name", "hasFuelAvailable"],
 };
 

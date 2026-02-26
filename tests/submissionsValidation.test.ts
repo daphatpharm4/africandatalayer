@@ -24,10 +24,9 @@ test('gap computation for pharmacy marks missing opening hours by default', () =
   assert.ok(gaps.includes('isOnDuty'));
 });
 
-test('mobile money aliases legacy hasCashAvailable into hasMin50000XafAvailable', () => {
-  const gaps = listMissingFields('mobile_money', {
-    providers: ['MTN'],
-    hasCashAvailable: true,
-  });
-  assert.equal(gaps.includes('hasMin50000XafAvailable'), false);
+test('mobile money create validation only requires providers', () => {
+  const missingWithoutProviders = listCreateMissingFields('mobile_money', {});
+  const missingWithProviders = listCreateMissingFields('mobile_money', { providers: ['MTN'] });
+  assert.ok(missingWithoutProviders.includes('providers'));
+  assert.equal(missingWithProviders.length, 0);
 });
