@@ -119,8 +119,8 @@ export default async function handler(request: Request): Promise<Response> {
                 existing.isAdmin = true;
                 shouldUpdate = true;
               }
-              if (!existing.mapScope) {
-                existing.mapScope = "bonamoussadi";
+              if (existing.mapScope !== "global") {
+                existing.mapScope = "global";
                 shouldUpdate = true;
               }
               if (shouldUpdate) {
@@ -136,7 +136,7 @@ export default async function handler(request: Request): Promise<Response> {
                 occupation: "",
                 XP: 0,
                 isAdmin: true,
-                mapScope: "bonamoussadi",
+                mapScope: "global",
               };
               await upsertUserProfile(email, profile);
             }

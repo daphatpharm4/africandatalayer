@@ -1,6 +1,6 @@
 import React from 'react';
 import { Screen } from '../types';
-import { Map, PlusCircle, BarChart2, Medal, ShieldCheck, User } from 'lucide-react';
+import { Map, PlusCircle, BarChart2, Medal, User } from 'lucide-react';
 
 interface Props {
   currentScreen: Screen;
@@ -15,9 +15,9 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
   const navItems = [
     { id: Screen.HOME, label: t('Explore', 'Explorer'), icon: Map },
     {
-      id: isAdmin ? Screen.ADMIN : Screen.CONTRIBUTE,
-      label: isAdmin ? t('Forensics', 'Forensique') : t('Contribute', 'Contribuer'),
-      icon: isAdmin ? ShieldCheck : PlusCircle
+      id: Screen.CONTRIBUTE,
+      label: t('Contribute', 'Contribuer'),
+      icon: PlusCircle
     },
     {
       id: Screen.ANALYTICS,

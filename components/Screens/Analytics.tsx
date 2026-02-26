@@ -37,8 +37,11 @@ const HEATMAP_COLORS: Record<HeatLevel, string> = {
   Low: 'bg-gray-200'
 };
 
-const normalizeMapScope = (scope: unknown): MapScope =>
-  scope === 'cameroon' || scope === 'global' ? scope : 'bonamoussadi';
+const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
+  if (scope === 'global') return 'global';
+  if (scope === 'cameroon') return isAdminMode ? 'global' : 'cameroon';
+  return 'bonamoussadi';
+};
 
 const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
   const adminMode = Boolean(isAdmin);
@@ -96,7 +99,7 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
         setIsLoadingAdminData(true);
 
         const profile = await apiJson<UserProfile>('/api/user');
-        const scope = normalizeMapScope(profile?.mapScope);
+        const scope = normalizeMapScope(profile?.mapScope, true);
 
         const pointParams = new URLSearchParams();
         if (scope !== 'bonamoussadi') pointParams.set('scope', scope);

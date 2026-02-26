@@ -69,10 +69,6 @@ const App: React.FC = () => {
 
   const switchTab = (screen: Screen) => {
     setHistory([]);
-    if (screen === Screen.CONTRIBUTE && isAdmin) {
-      setCurrentScreen(Screen.ADMIN);
-      return;
-    }
     if (screen === Screen.CONTRIBUTE && !isAuthenticated) {
       setAuthReturnScreen(currentScreen);
       setCurrentScreen(Screen.AUTH);
@@ -89,10 +85,6 @@ const App: React.FC = () => {
   };
 
   const openContribution = (mode: ContributionMode, point: DataPoint | null = null) => {
-    if (isAdmin) {
-      switchTab(Screen.ADMIN);
-      return;
-    }
     setContributionMode(mode);
     setContributionPoint(point);
     if (isAuthenticated) {

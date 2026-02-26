@@ -448,6 +448,8 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
+  const authContext = toSubmissionAuthContext(auth);
+  const isAdminUser = authContext?.isAdmin === true;
 
   let body: SubmissionInput;
   try {
@@ -511,7 +513,7 @@ export async function POST(request: Request): Promise<Response> {
 
   const finalLocation = photoLocation ?? location ?? ipLocation;
   if (!finalLocation) return errorResponse("Missing or invalid location", 400);
-  if (!isWithinBonamoussadi(finalLocation)) {
+  if (!isAdminUser && !isWithinBonamoussadi(finalLocation)) {
     return errorResponse(
       `Location outside Bonamoussadi bounds (${BONAMOUSSADI_BOUNDS.south},${BONAMOUSSADI_BOUNDS.west})-(${BONAMOUSSADI_BOUNDS.north},${BONAMOUSSADI_BOUNDS.east})`,
       400,

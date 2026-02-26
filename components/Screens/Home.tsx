@@ -45,8 +45,11 @@ const HomeMap = React.lazy(() => import('./HomeMap'));
 const BONAMOUSSADI_MAP_BOUNDS = bonamoussadiLeafletBounds();
 const CAMEROON_MAP_BOUNDS = cameroonLeafletBounds();
 
-const normalizeMapScope = (scope: unknown): MapScope =>
-  scope === 'cameroon' || scope === 'global' ? scope : 'bonamoussadi';
+const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
+  if (scope === 'global') return 'global';
+  if (scope === 'cameroon') return isAdminMode ? 'global' : 'cameroon';
+  return 'bonamoussadi';
+};
 
 const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -288,7 +291,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
       }
       try {
         const profile = await apiJson<UserProfile>('/api/user');
-        if (!isCancelled) setMapScope(normalizeMapScope(profile?.mapScope));
+        if (!isCancelled) setMapScope(normalizeMapScope(profile?.mapScope, Boolean(isAdmin)));
       } catch {
         if (!isCancelled) setMapScope('bonamoussadi');
       }
@@ -485,17 +488,15 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
         </button>
 
         <button
-          onClick={isAdmin ? onContribute : isAuthenticated ? onContribute : onAuth}
+          onClick={isAuthenticated ? onContribute : onAuth}
           className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
           aria-label={
-            isAdmin
-              ? t('Open submission forensics', 'Ouvrir forensique des soumissions')
-              : isAuthenticated
-                ? t('Contribute', 'Contribuer')
-                : t('Sign in to contribute', 'Connectez-vous pour contribuer')
+            isAuthenticated
+              ? t('Contribute', 'Contribuer')
+              : t('Sign in to contribute', 'Connectez-vous pour contribuer')
           }
         >
-          {isAdmin ? <ShieldCheck size={22} /> : <Plus size={22} />}
+          <Plus size={22} />
         </button>
 
         {!isAuthenticated && (

@@ -35,9 +35,12 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   const [isLoadingSyncErrors, setIsLoadingSyncErrors] = useState(true);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
   const [syncErrorActionError, setSyncErrorActionError] = useState('');
-  const normalizeMapScope = (value: unknown): MapScope =>
-    value === 'cameroon' || value === 'global' ? value : 'bonamoussadi';
-  const activeMapScope = normalizeMapScope(profile?.mapScope);
+  const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
+    if (value === 'global') return 'global';
+    if (value === 'cameroon') return isAdminMode ? 'global' : 'cameroon';
+    return 'bonamoussadi';
+  };
+  const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
   const isMapUnlocked = activeMapScope !== 'bonamoussadi';
 
   const formatHistoryDate = (iso: string) => {
@@ -171,7 +174,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
 
   const handleToggleMapScope = async () => {
     if (!profile?.isAdmin || isSavingMapScope) return;
-    const nextScope: MapScope = isMapUnlocked ? 'bonamoussadi' : 'cameroon';
+    const nextScope: MapScope = isMapUnlocked ? 'bonamoussadi' : 'global';
     try {
       setIsSavingMapScope(true);
       const updated = await apiJson<UserProfile>('/api/user', {
@@ -263,7 +266,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
                   {t('Admin Map Access', 'Acces carte admin')}
                 </span>
                 <span className="text-sm font-bold text-gray-900">
-                  {t('Unlock Cameroon-wide map', 'Debloquer la carte nationale')}
+                  {t('Unlock worldwide map', 'Debloquer la carte mondiale')}
                 </span>
               </div>
               <button
@@ -279,7 +282,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
             </div>
             <p className="text-xs text-gray-500">
               {isMapUnlocked
-                ? t('Explorer map is unlocked to Cameroon.', 'La carte Explorer est debloquee a l\'echelle du Cameroun.')
+                ? t('Explorer map is unlocked worldwide.', 'La carte Explorer est debloquee dans le monde entier.')
                 : t('Explorer map is locked to Bonamoussadi.', 'La carte Explorer est limitee a Bonamoussadi.')}
             </p>
           </div>
