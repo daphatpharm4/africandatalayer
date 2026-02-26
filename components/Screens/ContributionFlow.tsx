@@ -29,6 +29,7 @@ const providerOptions = ['MTN', 'Orange', 'Airtel'];
 const paymentMethodOptions = ['Cash', 'Mobile Money', 'Card'];
 const fuelTypeOptions = ['Super', 'Diesel', 'Gas'];
 const openingHourPresets = ['08:00 - 20:00', '09:00 - 19:00', '24/7'];
+const MAX_SUBMISSION_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_UPLOAD_DIMENSION = 1600;
 const IMAGE_QUALITY_LOW_END = 0.72;
 const IMAGE_QUALITY_DEFAULT = 0.82;
@@ -214,6 +215,11 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       });
 
     if (!file.type.startsWith('image/')) {
+      return await readAsDataUrl(file);
+    }
+
+    // Keep original capture when possible so EXIF (GPS/time/device) reaches server-side forensics.
+    if (file.size <= MAX_SUBMISSION_IMAGE_BYTES) {
       return await readAsDataUrl(file);
     }
 
