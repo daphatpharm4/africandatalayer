@@ -51,64 +51,12 @@ const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
   return 'bonamoussadi';
 };
 
-const buildMockPoints = (language: 'en' | 'fr'): DataPoint[] => {
-  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
-  return [
-    {
-      id: 'mock-pharmacy-1',
-      name: 'Pharmacie de Bonamoussadi',
-      type: Category.PHARMACY,
-      location: 'GPS: 4.0868°, 9.7357°',
-      coordinates: { latitude: 4.0868, longitude: 9.7357 },
-      lastUpdated: t('18 mins ago', 'il y a 18 min'),
-      availability: 'High',
-      trustScore: 96,
-      openingHours: '08:00 - 22:00',
-      isOpenNow: true,
-      isOnDuty: true,
-      verified: true,
-      gaps: ['openingHours']
-    },
-    {
-      id: 'mock-fuel-1',
-      name: 'TOTAL Bonamoussadi 1',
-      type: Category.FUEL,
-      location: 'GPS: 4.0864°, 9.7346°',
-      coordinates: { latitude: 4.0864, longitude: 9.7346 },
-      fuelType: 'Super',
-      quality: 'Standard',
-      currency: 'XAF',
-      lastUpdated: t('33 mins ago', 'il y a 33 min'),
-      availability: 'High',
-      trustScore: 92,
-      hasFuelAvailable: true,
-      paymentMethods: ['Cash', 'Mobile Money'],
-      verified: true,
-      gaps: ['pricesByFuel']
-    },
-    {
-      id: 'mock-kiosk-1',
-      name: 'MTN Express Kiosk - Bonamoussadi',
-      type: Category.MOBILE_MONEY,
-      location: 'GPS: 4.0864°, 9.7402°',
-      coordinates: { latitude: 4.0864, longitude: 9.7402 },
-      lastUpdated: t('1h ago', 'il y a 1h'),
-      availability: 'High',
-      trustScore: 88,
-      providers: ['MTN'],
-      operator: 'MTN',
-      hasMin50000XafAvailable: true,
-      verified: true,
-      gaps: ['merchantIdByProvider', 'openingHours']
-    }
-  ];
-};
 
 const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth, onContribute, onProfile, language }) => {
   const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
   const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
-  const [points, setPoints] = useState<DataPoint[]>(() => buildMockPoints(language));
+  const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? 'global' : 'bonamoussadi'));
   const isLowEndDevice = deviceRuntime.lowEnd;
@@ -305,7 +253,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
           setPoints(mapped);
         }
       } catch {
-        setPoints(buildMockPoints(language));
+        setPoints([]);
       } finally {
         setIsLoadingPoints(false);
       }

@@ -1,5 +1,5 @@
 
-import React, { Suspense, lazy, useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useRef } from 'react';
 import { Screen, DataPoint, ContributionMode } from './types';
 import { getSession, signOut } from './lib/client/auth';
 import { flushOfflineQueue } from './lib/client/offlineQueue';
@@ -7,6 +7,7 @@ import { sendSubmissionPayload } from './lib/client/submissionSync';
 import Splash from './components/Screens/Splash';
 import Home from './components/Screens/Home';
 import Navigation from './components/Navigation';
+import ErrorBoundary from './components/ErrorBoundary';
 
 const Details = lazy(() => import('./components/Screens/Details'));
 const Auth = lazy(() => import('./components/Screens/Auth'));
@@ -24,6 +25,7 @@ interface WindowWithIdleCallback extends Window {
 }
 
 const App: React.FC = () => {
+  const isSyncingRef = useRef(false);
   const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SPLASH);
   const [selectedPoint, setSelectedPoint] = useState<DataPoint | null>(null);
   const [isOffline, setIsOffline] = useState(false);
@@ -105,10 +107,14 @@ const App: React.FC = () => {
       setIsOffline(!online);
       if (online) {
         const runSync = async () => {
+          if (isSyncingRef.current) return;
+          isSyncingRef.current = true;
           try {
             await flushOfflineQueue(sendSubmissionPayload);
-          } catch {
-            // Queue remains in IndexedDB and will retry on next online cycle.
+          } catch (error) {
+            console.error('[App] Offline queue sync failed:', error);
+          } finally {
+            isSyncingRef.current = false;
           }
         };
         const windowWithIdle = window as WindowWithIdleCallback;
@@ -242,6 +248,7 @@ const App: React.FC = () => {
   };
 
   return (
+    <ErrorBoundary>
     <div className="app-shell flex flex-col w-full max-w-md mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-gray-100">
       {isOffline && (
         <div className="bg-amber-600 text-white text-[10px] font-bold py-1.5 px-4 text-center z-50 tracking-widest uppercase">
@@ -264,15 +271,16 @@ const App: React.FC = () => {
       </main>
 
       {!([Screen.SPLASH, Screen.AUTH, Screen.CONTRIBUTE].includes(currentScreen)) && (
-        <Navigation 
-          currentScreen={currentScreen} 
-          onNavigate={(scr) => switchTab(scr)} 
+        <Navigation
+          currentScreen={currentScreen}
+          onNavigate={(scr) => switchTab(scr)}
           isAuthenticated={isAuthenticated}
           isAdmin={isAdmin}
           language={language}
         />
       )}
     </div>
+    </ErrorBoundary>
   );
 };
 

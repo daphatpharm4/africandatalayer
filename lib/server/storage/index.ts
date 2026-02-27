@@ -2,7 +2,7 @@ import type { PointEvent, UserProfile } from "../../../shared/types.js";
 import { isStorageUnavailableError } from "../db.js";
 import { edgeConfigStore } from "./edgeConfigStore.js";
 import { edgeFallbackStore } from "./edgeFallbackStore.js";
-import { postgresStore } from "./postgresStore.js";
+import { postgresStore, getUserProfilesBatch as postgresGetUserProfilesBatch } from "./postgresStore.js";
 import type { StorageStore } from "./types.js";
 
 type StorageDriver = "postgres" | "edge";
@@ -88,3 +88,18 @@ export async function getLegacySubmissions() {
 }
 
 export { isStorageUnavailableError };
+
+export async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProfile>> {
+  if (resolveDriver() === "postgres") {
+    return await postgresGetUserProfilesBatch(ids);
+  }
+  // Fallback: fetch individually for non-postgres drivers.
+  const entries = await Promise.all(
+    ids.map(async (id) => [id, await getUserProfile(id)] as const),
+  );
+  const map = new Map<string, UserProfile>();
+  for (const [id, profile] of entries) {
+    if (profile) map.set(id, profile);
+  }
+  return map;
+}

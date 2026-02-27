@@ -9,9 +9,12 @@ export type QueueStatus = 'pending' | 'syncing' | 'failed' | 'synced';
 
 export interface QueueItem {
   id: string;
+  idempotencyKey: string;
   payload: SubmissionInput;
   status: QueueStatus;
   attempts: number;
+  retryCount: number;
+  nextRetryAt?: string;
   lastError?: string;
   createdAt: string;
   updatedAt: string;
@@ -104,9 +107,11 @@ export async function enqueueSubmission(payload: SubmissionInput): Promise<Queue
   const now = new Date().toISOString();
   const item: QueueItem = {
     id: crypto.randomUUID(),
+    idempotencyKey: crypto.randomUUID(),
     payload,
     status: 'pending',
     attempts: 0,
+    retryCount: 0,
     createdAt: now,
     updatedAt: now
   };
@@ -196,8 +201,11 @@ export async function getQueueStats(): Promise<{ pending: number; failed: number
   };
 }
 
-export async function flushOfflineQueue(sendFn: (payload: SubmissionInput) => Promise<void>): Promise<QueueSyncSummary> {
+export async function flushOfflineQueue(
+  sendFn: (payload: SubmissionInput, options?: { idempotencyKey?: string }) => Promise<void>,
+): Promise<QueueSyncSummary> {
   const items = await listQueueItems();
+  const now = Date.now();
   let synced = 0;
   let failed = 0;
   const syncedIds: string[] = [];
@@ -207,6 +215,13 @@ export async function flushOfflineQueue(sendFn: (payload: SubmissionInput) => Pr
   const permanentFailureMessages = new Set<string>();
 
   for (const item of items) {
+    // Skip items not yet ready for retry (exponential backoff).
+    if (item.nextRetryAt && new Date(item.nextRetryAt).getTime() > now) {
+      failed += 1;
+      failedIds.push(item.id);
+      continue;
+    }
+
     await updateItem(item.id, (current) => ({
       ...current,
       status: 'syncing',
@@ -215,7 +230,7 @@ export async function flushOfflineQueue(sendFn: (payload: SubmissionInput) => Pr
     }));
 
     try {
-      await sendFn(item.payload);
+      await sendFn(item.payload, { idempotencyKey: item.idempotencyKey });
       await removeItem(item.id);
       synced += 1;
       syncedIds.push(item.id);
@@ -224,9 +239,15 @@ export async function flushOfflineQueue(sendFn: (payload: SubmissionInput) => Pr
       if (details.retryable) {
         failed += 1;
         failedIds.push(item.id);
+        const retryCount = (item.retryCount ?? 0) + 1;
+        const baseDelay = Math.min(30000, 1000 * Math.pow(2, retryCount));
+        const jitter = Math.random() * 1000;
+        const nextRetryAt = new Date(now + baseDelay + jitter).toISOString();
         await updateItem(item.id, (current) => ({
           ...current,
           status: 'failed',
+          retryCount,
+          nextRetryAt,
           updatedAt: new Date().toISOString(),
           lastError: details.message,
         }));

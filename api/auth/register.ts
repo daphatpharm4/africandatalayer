@@ -4,18 +4,25 @@ import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import type { UserProfile } from "../../shared/types.js";
 
+interface RegisterBody {
+  identifier?: string;
+  email?: string;
+  password?: string;
+  name?: string;
+}
+
 export async function POST(request: Request): Promise<Response> {
-  let body: any;
+  let body: RegisterBody;
   try {
-    body = await request.json();
+    body = (await request.json()) as RegisterBody;
   } catch {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  const rawIdentifier = (body?.identifier as string | undefined) ?? (body?.email as string | undefined);
+  const rawIdentifier = body?.identifier ?? body?.email;
   const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
-  const password = body?.password as string | undefined;
-  const name = (body?.name as string | undefined)?.trim() ?? "";
+  const password = body?.password;
+  const name = body?.name?.trim() ?? "";
 
   if (!normalizedIdentifier || !password) {
     return errorResponse("Phone/email and password are required", 400);

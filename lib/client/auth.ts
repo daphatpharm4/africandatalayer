@@ -1,5 +1,6 @@
 import { apiFetch, apiJson, buildUrl } from "./api";
 import { normalizeIdentifier } from "../shared/identifier";
+import { looksLikeHtml, sanitizeErrorMessage } from "./errorUtils";
 
 export interface AuthSession {
   user?: {
@@ -70,17 +71,6 @@ function normalizeDelayMs(value: number | undefined): number {
   return Math.max(0, Math.floor(value as number));
 }
 
-function looksLikeHtml(input: string): boolean {
-  const value = input.trim().toLowerCase();
-  return value.startsWith("<!doctype") || value.startsWith("<html") || value.includes("<body");
-}
-
-function sanitizeErrorMessage(input: unknown, fallback: string): string {
-  if (typeof input !== "string") return fallback;
-  const trimmed = input.trim();
-  if (!trimmed || looksLikeHtml(trimmed) || trimmed.length > 240) return fallback;
-  return trimmed;
-}
 
 async function safeReadJson<T>(response: Response): Promise<T | null> {
   try {

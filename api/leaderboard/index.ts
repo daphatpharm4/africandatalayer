@@ -1,4 +1,4 @@
-import { getLegacySubmissions, getPointEvents, getUserProfile, isStorageUnavailableError } from "../../lib/server/storage/index.js";
+import { getLegacySubmissions, getPointEvents, getUserProfilesBatch, isStorageUnavailableError } from "../../lib/server/storage/index.js";
 import { mergePointEventsWithLegacy } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import type { LeaderboardEntry, PointEvent } from "../../shared/types.js";
@@ -82,11 +82,11 @@ export async function GET(): Promise<Response> {
       return bTime - aTime;
     });
 
-    const topRows = sorted.slice(0, 20);
-    const profiles = await Promise.all(topRows.map((row) => getUserProfile(row.userId)));
+    const topRows = sorted.slice(0, 100);
+    const profileMap = await getUserProfilesBatch(topRows.map((row) => row.userId));
 
     const leaderboard: LeaderboardEntry[] = topRows.map((row, index) => {
-      const profile = profiles[index];
+      const profile = profileMap.get(row.userId);
       return {
         rank: index + 1,
         userId: row.userId,

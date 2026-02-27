@@ -35,8 +35,16 @@ const providers: AppProviders = [
 
       const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
       const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-      if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail && password === adminPassword) {
-        return { id: identifier, name: "Admin", email: identifier };
+      if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail) {
+        let adminMatch = false;
+        if (adminPassword.startsWith("$2")) {
+          adminMatch = await bcrypt.compare(password, adminPassword);
+        } else {
+          // Fallback for plain-text password (legacy). Update ADMIN_PASSWORD to a bcrypt hash.
+          console.warn("[auth] ADMIN_PASSWORD is not a bcrypt hash. Please update it to a bcrypt hash.");
+          adminMatch = password === adminPassword;
+        }
+        if (adminMatch) return { id: identifier, name: "Admin", email: identifier };
       }
 
       const profile = await getUserProfile(identifier);

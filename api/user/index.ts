@@ -36,13 +36,18 @@ export async function GET(request: Request): Promise<Response> {
   }
 }
 
+interface UpdateUserBody {
+  occupation?: unknown;
+  mapScope?: unknown;
+}
+
 export async function PUT(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
 
-  let body: any;
+  let body: UpdateUserBody;
   try {
-    body = await request.json();
+    body = (await request.json()) as UpdateUserBody;
   } catch {
     return errorResponse("Invalid JSON body", 400);
   }

@@ -215,6 +215,11 @@ function isPrivateIp(ip: string): boolean {
   return false;
 }
 
+interface IpApiResponse {
+  latitude?: unknown;
+  longitude?: unknown;
+}
+
 async function fetchIpLocation(ip: string): Promise<SubmissionLocation | null> {
   const target = `https://ipapi.co/${ip}/json/`;
   const controller = new AbortController();
@@ -222,7 +227,7 @@ async function fetchIpLocation(ip: string): Promise<SubmissionLocation | null> {
   try {
     const res = await fetch(target, { signal: controller.signal });
     if (!res.ok) return null;
-    const data: any = await res.json();
+    const data = (await res.json()) as IpApiResponse;
     const latitude = Number(data?.latitude);
     const longitude = Number(data?.longitude);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
@@ -665,7 +670,9 @@ export async function POST(request: Request): Promise<Response> {
       exifDeviceMake,
       exifDeviceModel,
     };
-    console.info("[SUBMISSION_DEVICE]", JSON.stringify(logPayload));
+    if (process.env.NODE_ENV !== "production") {
+      console.info("[SUBMISSION_DEVICE]", JSON.stringify(logPayload));
+    }
 
     const profile = await getUserProfile(auth.id);
     if (profile) {

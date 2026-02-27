@@ -254,6 +254,38 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   }
 }
 
+async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProfile>> {
+  if (!ids.length) return new Map();
+  const normalizedIds = ids.map(normalizeUserId);
+
+  const fetchRows = async (includePhone: boolean): Promise<UserProfile[]> => {
+    const cols = includePhone
+      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope"
+      : "id, email, name, image, occupation, xp, password_hash, is_admin, map_scope";
+    const result = await query<Record<string, unknown>>(
+      `select ${cols} from user_profiles where id = ANY($1::text[])`,
+      [normalizedIds],
+    );
+    return result.rows.map(rowToUserProfile);
+  };
+
+  let rows: UserProfile[];
+  if (phoneColumnState === "missing") {
+    rows = await fetchRows(false);
+  } else {
+    try {
+      rows = await fetchRows(true);
+      if (phoneColumnState === "unknown") phoneColumnState = "present";
+    } catch (error) {
+      if (!isMissingPhoneColumnError(error)) throw error;
+      phoneColumnState = "missing";
+      rows = await fetchRows(false);
+    }
+  }
+
+  return new Map(rows.map((profile) => [profile.id, profile]));
+}
+
 async function getPointEvents(): Promise<PointEvent[]> {
   const result = await query<Record<string, unknown>>(
     `
@@ -342,3 +374,5 @@ export const postgresStore: StorageStore = {
   bulkUpsertPointEvents,
   getLegacySubmissions,
 };
+
+export { getUserProfilesBatch };

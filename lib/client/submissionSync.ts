@@ -1,19 +1,13 @@
 import { apiFetch } from './api';
 import type { SubmissionInput } from '../../shared/types';
 import { getClientDeviceInfo } from './deviceProfile';
+import { sanitizeErrorMessage as sanitizeBase } from './errorUtils';
 
 const DEFAULT_SYNC_ERROR = 'Unable to sync submission right now.';
 
-function looksLikeHtml(input: string): boolean {
-  const normalized = input.trim().toLowerCase();
-  return normalized.startsWith('<!doctype') || normalized.startsWith('<html') || normalized.includes('<body');
-}
-
 function sanitizeErrorMessage(input: unknown, fallback = DEFAULT_SYNC_ERROR): string {
-  if (typeof input !== 'string') return fallback;
-  const trimmed = input.trim();
-  if (!trimmed || trimmed.length > 280 || looksLikeHtml(trimmed)) return fallback;
-  return trimmed.replace(/^Error:\s*/i, '');
+  const result = sanitizeBase(input, fallback);
+  return result === fallback ? fallback : result.replace(/^Error:\s*/i, '');
 }
 
 async function extractResponseMessage(response: Response): Promise<string> {
@@ -83,13 +77,17 @@ function withClientDevice(payload: SubmissionInput): SubmissionInput {
   return { ...payload, details };
 }
 
-export async function sendSubmissionPayload(payload: SubmissionInput): Promise<void> {
+export async function sendSubmissionPayload(payload: SubmissionInput, options?: { idempotencyKey?: string }): Promise<void> {
   const enrichedPayload = withClientDevice(payload);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (options?.idempotencyKey) {
+    headers['X-Idempotency-Key'] = options.idempotencyKey;
+  }
   let response: Response;
   try {
     response = await apiFetch('/api/submissions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(enrichedPayload),
     });
   } catch (error) {
