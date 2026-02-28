@@ -1,0 +1,42 @@
+field_name,data_type,required,description,example
+snapshot_date,date,YES,Date of current snapshot,2026-02-27
+baseline_snapshot_date,date,YES,Reference snapshot date used for delta comparison,2026-02-20
+country,text,YES,Country name,Cameroon
+city,text,YES,City name,Douala
+zone,text,NO,Neighborhood or operational zone,Bonamoussadi
+vertical_id,text,YES,Normalized vertical identifier,pharmacy
+site_id,text,YES,Unique stable ID for the location point,PHA-BON-0001
+site_name,text,NO,Common name of outlet or asset,Pharmacie Centrale
+site_type,text,YES,Type of point within vertical,formal_pharmacy
+formal_status,text,NO,Formal informal or unknown,formal
+latitude,decimal,YES,Latitude in WGS84,4.0931
+longitude,decimal,YES,Longitude in WGS84,9.7485
+products_or_services,text,YES,Semicolon separated list of products or services,antibiotics;painkillers
+brand_or_campaign,text,NO,Brand name or campaign name,Paracetamol
+sku_or_offer,text,NO,SKU pack or offer name,500mg_10_tabs
+unit_price_local,decimal,NO,Observed unit price in local currency,1200
+currency,text,NO,ISO currency code,XAF
+availability_status,text,YES,in_stock low_stock out_of_stock or not_applicable,in_stock
+supplier_source,text,NO,Primary supplier or source origin,regional_distributor_A
+aggregation_point,text,NO,Where products are aggregated before last mile,Akwa_wholesale_hub
+sales_method,text,NO,How products are sold retail wholesale digital subscription,counter_retail
+actors_chain,text,YES,Source to consumer chain summary,manufacturer->distributor->retailer->consumer
+target_companies_to_contact,text,NO,Priority organizations for outreach and partnerships,WHO;UNICEF;local_distributor_B
+likely_problems,text,NO,Known or suspected operational problems,stockout_risk;counterfeit_risk
+known_data_gaps,text,NO,Missing fields or weak confidence areas,missing_batch_number
+evidence_photo_count,integer,YES,Count of photos captured for this record,3
+evidence_photo_urls,text,NO,Semicolon separated URLs or local paths to evidence photos,/photos/pha-bon-0001-1.jpg
+evidence_timestamp,datetime,YES,Timestamp when evidence was captured,2026-02-27T09:14:00Z
+collector_id,text,YES,Agent ID who captured the snapshot,AGT-014
+validator_id,text,NO,Reviewer ID who validated the submission,VAL-003
+confidence_score,decimal,YES,0 to 1 confidence score,0.92
+delta_type,text,YES,new removed changed unchanged,changed
+delta_field,text,NO,Primary field that changed for changed records,unit_price_local
+previous_value,text,NO,Value in baseline snapshot,1000
+current_value,text,NO,Value in current snapshot,1200
+delta_magnitude,decimal,NO,Numeric magnitude where applicable,200
+delta_direction,text,NO,increase decrease stable or not_applicable,increase
+delta_summary,text,YES,One line summary of what changed,Price increased and supplier switched
+follow_up_action,text,NO,Required next action with owner and due date,Verify supplier invoice by 2026-03-01 owner AGT-014
+status,text,YES,not_started in_progress validated rejected escalated,validated
+notes,text,NO,Free text notes for additional context,Observed peak demand before noon

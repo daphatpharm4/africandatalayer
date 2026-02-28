@@ -33,6 +33,100 @@ const MAX_SUBMISSION_IMAGE_BYTES = 8 * 1024 * 1024;
 const MAX_UPLOAD_DIMENSION = 1600;
 const IMAGE_QUALITY_LOW_END = 0.72;
 const IMAGE_QUALITY_DEFAULT = 0.82;
+const JPEG_MIME_TYPES = new Set(['image/jpeg', 'image/jpg']);
+
+function dataUrlToBytes(dataUrl: string): Uint8Array | null {
+  const commaIndex = dataUrl.indexOf(',');
+  if (commaIndex === -1) return null;
+  const base64 = dataUrl.slice(commaIndex + 1);
+  if (!base64) return null;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i] ?? 0);
+  }
+  return `data:${mime};base64,${btoa(binary)}`;
+}
+
+function extractJpegExifSegment(bytes: Uint8Array): Uint8Array | null {
+  if (bytes.length < 4) return null;
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+
+  let offset = 2;
+  while (offset + 4 <= bytes.length) {
+    if (bytes[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = bytes[offset + 1];
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    if (marker === 0xda || marker === 0xd9) break;
+
+    const segmentLength = ((bytes[offset + 2] ?? 0) << 8) | (bytes[offset + 3] ?? 0);
+    if (segmentLength < 2) break;
+    const segmentEnd = offset + 2 + segmentLength;
+    if (segmentEnd > bytes.length) break;
+
+    if (marker === 0xe1 && segmentLength >= 8) {
+      const signature = String.fromCharCode(
+        bytes[offset + 4] ?? 0,
+        bytes[offset + 5] ?? 0,
+        bytes[offset + 6] ?? 0,
+        bytes[offset + 7] ?? 0,
+        bytes[offset + 8] ?? 0,
+        bytes[offset + 9] ?? 0,
+      );
+      if (signature === 'Exif\0\0') {
+        return bytes.slice(offset, segmentEnd);
+      }
+    }
+
+    offset = segmentEnd;
+  }
+
+  return null;
+}
+
+function injectExifIntoJpeg(compressedBytes: Uint8Array, exifSegment: Uint8Array): Uint8Array | null {
+  if (compressedBytes.length < 2) return null;
+  if (compressedBytes[0] !== 0xff || compressedBytes[1] !== 0xd8) return null;
+  if (!exifSegment.length) return null;
+
+  const merged = new Uint8Array(compressedBytes.length + exifSegment.length);
+  merged[0] = compressedBytes[0];
+  merged[1] = compressedBytes[1];
+  merged.set(exifSegment, 2);
+  merged.set(compressedBytes.slice(2), 2 + exifSegment.length);
+  return merged;
+}
+
+async function preserveJpegExif(originalFile: File, compressedDataUrl: string): Promise<string> {
+  if (!JPEG_MIME_TYPES.has((originalFile.type || '').toLowerCase())) return compressedDataUrl;
+
+  const originalBytes = new Uint8Array(await originalFile.arrayBuffer());
+  const exifSegment = extractJpegExifSegment(originalBytes);
+  if (!exifSegment) return compressedDataUrl;
+
+  const compressedBytes = dataUrlToBytes(compressedDataUrl);
+  if (!compressedBytes) return compressedDataUrl;
+  if (extractJpegExifSegment(compressedBytes)) return compressedDataUrl;
+
+  const merged = injectExifIntoJpeg(compressedBytes, exifSegment);
+  if (!merged) return compressedDataUrl;
+  return bytesToDataUrl(merged, 'image/jpeg');
+}
 
 const pointTypeToVertical = (type: Category): Vertical => {
   if (type === Category.PHARMACY) return 'pharmacy';
@@ -248,7 +342,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       ctx.drawImage(img, 0, 0, width, height);
       const quality = isLowEndDevice ? IMAGE_QUALITY_LOW_END : IMAGE_QUALITY_DEFAULT;
       const compressed = canvas.toDataURL('image/jpeg', quality);
-      return compressed;
+      return await preserveJpegExif(file, compressed);
     } catch {
       return await readAsDataUrl(file);
     } finally {

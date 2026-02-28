@@ -7,6 +7,7 @@ const EARTH_RADIUS_KM = 6371;
 const KM_PRECISION = 3;
 const REMOTE_FETCH_TIMEOUT_MS = Number(process.env.ADMIN_FORENSICS_FETCH_TIMEOUT_MS ?? "4000") || 4000;
 const MAX_REMOTE_METADATA_BYTES = Number(process.env.ADMIN_FORENSICS_MAX_IMAGE_BYTES ?? "8388608") || 8388608;
+const EXIF_DATE_TIME_REGEX = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?$/;
 
 export interface ExtractedPhotoMetadata {
   gps: SubmissionLocation | null;
@@ -45,10 +46,87 @@ function parseDateIso(input: unknown): string | null {
     if (Number.isNaN(input.getTime())) return null;
     return input.toISOString();
   }
-  if (typeof input === "string" || typeof input === "number") {
+  if (typeof input === "string") {
+    const value = input.trim();
+    if (!value) return null;
+    const exifMatch = value.match(EXIF_DATE_TIME_REGEX);
+    if (exifMatch) {
+      const year = Number(exifMatch[1]);
+      const month = Number(exifMatch[2]);
+      const day = Number(exifMatch[3]);
+      const hour = Number(exifMatch[4]);
+      const minute = Number(exifMatch[5]);
+      const second = Number(exifMatch[6]);
+      const millisRaw = exifMatch[7] ?? "0";
+      const millis = Number(millisRaw.slice(0, 3).padEnd(3, "0"));
+      const utcDate = new Date(Date.UTC(year, month - 1, day, hour, minute, second, millis));
+      if (!Number.isNaN(utcDate.getTime())) return utcDate.toISOString();
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return null;
+    return parsed.toISOString();
+  }
+  if (typeof input === "number") {
     const parsed = new Date(input);
     if (Number.isNaN(parsed.getTime())) return null;
     return parsed.toISOString();
+  }
+  if (typeof input === "object") {
+    const value = input as {
+      toDate?: () => unknown;
+      toISOString?: () => string;
+      value?: unknown;
+      rawValue?: unknown;
+      year?: unknown;
+      month?: unknown;
+      day?: unknown;
+      hour?: unknown;
+      minute?: unknown;
+      second?: unknown;
+      millisecond?: unknown;
+    };
+    if (typeof value.toDate === "function") {
+      try {
+        const converted = value.toDate();
+        const parsed = parseDateIso(converted);
+        if (parsed) return parsed;
+      } catch {
+        // fall through
+      }
+    }
+    if (typeof value.toISOString === "function") {
+      try {
+        const iso = value.toISOString();
+        const parsed = parseDateIso(iso);
+        if (parsed) return parsed;
+      } catch {
+        // fall through
+      }
+    }
+    const fromValue = parseDateIso(value.value ?? value.rawValue);
+    if (fromValue) return fromValue;
+
+    const year = Number(value.year);
+    const month = Number(value.month);
+    const day = Number(value.day);
+    if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+      const hour = Number(value.hour);
+      const minute = Number(value.minute);
+      const second = Number(value.second);
+      const millisecond = Number(value.millisecond);
+      const utcDate = new Date(
+        Date.UTC(
+          year,
+          month - 1,
+          day,
+          Number.isFinite(hour) ? hour : 0,
+          Number.isFinite(minute) ? minute : 0,
+          Number.isFinite(second) ? second : 0,
+          Number.isFinite(millisecond) ? millisecond : 0,
+        ),
+      );
+      if (!Number.isNaN(utcDate.getTime())) return utcDate.toISOString();
+    }
   }
   return null;
 }
@@ -80,6 +158,111 @@ function roundKm(input: number): number {
   return Number(input.toFixed(KM_PRECISION));
 }
 
+function toFiniteNumber(input: unknown): number | null {
+  if (typeof input === "number" && Number.isFinite(input)) return input;
+  if (typeof input === "string") {
+    const parsed = Number(input.trim());
+    if (Number.isFinite(parsed)) return parsed;
+    return null;
+  }
+  return null;
+}
+
+function toRationalNumber(input: unknown): number | null {
+  const direct = toFiniteNumber(input);
+  if (direct !== null) return direct;
+  if (!input || typeof input !== "object") return null;
+
+  const rational = input as {
+    numerator?: unknown;
+    denominator?: unknown;
+    num?: unknown;
+    den?: unknown;
+    value?: unknown;
+  };
+  const numerator = toFiniteNumber(rational.numerator ?? rational.num);
+  const denominator = toFiniteNumber(rational.denominator ?? rational.den);
+  if (numerator !== null && denominator !== null && denominator !== 0) {
+    return numerator / denominator;
+  }
+  if ("value" in rational) return toRationalNumber(rational.value);
+  return null;
+}
+
+function parseDmsCoordinate(input: unknown): number | null {
+  const direct = toRationalNumber(input);
+  if (direct !== null) return direct;
+  if (!Array.isArray(input) || input.length === 0) return null;
+  const degrees = toRationalNumber(input[0]);
+  if (degrees === null) return null;
+  const minutes = toRationalNumber(input[1]) ?? 0;
+  const seconds = toRationalNumber(input[2]) ?? 0;
+  return degrees + minutes / 60 + seconds / 3600;
+}
+
+function applyHemisphere(value: number, ref: unknown, negativeChar: "S" | "W"): number {
+  if (typeof ref !== "string") return value;
+  const normalized = ref.trim().toUpperCase();
+  if (!normalized) return value;
+  if (normalized.startsWith(negativeChar)) return -Math.abs(value);
+  return Math.abs(value);
+}
+
+function toGpsLocation(latInput: unknown, lonInput: unknown): SubmissionLocation | null {
+  const latitude = toFiniteNumber(latInput);
+  const longitude = toFiniteNumber(lonInput);
+  if (latitude === null || longitude === null) return null;
+  return { latitude, longitude };
+}
+
+function extractGps(parsed: Record<string, unknown>): SubmissionLocation | null {
+  const direct =
+    toGpsLocation(parsed.latitude, parsed.longitude) ??
+    toGpsLocation(parsed.lat, parsed.lon) ??
+    toGpsLocation(parsed.lat, parsed.lng);
+  if (direct) return direct;
+
+  const gpsContainer = parsed.gps && typeof parsed.gps === "object" ? (parsed.gps as Record<string, unknown>) : null;
+  if (gpsContainer) {
+    const nested =
+      toGpsLocation(gpsContainer.latitude, gpsContainer.longitude) ??
+      toGpsLocation(gpsContainer.lat, gpsContainer.lon) ??
+      toGpsLocation(gpsContainer.lat, gpsContainer.lng);
+    if (nested) return nested;
+  }
+
+  const rawLatitude = parseDmsCoordinate(parsed.GPSLatitude ?? gpsContainer?.GPSLatitude);
+  const rawLongitude = parseDmsCoordinate(parsed.GPSLongitude ?? gpsContainer?.GPSLongitude);
+  if (rawLatitude === null || rawLongitude === null) return null;
+
+  const latitude = applyHemisphere(rawLatitude, parsed.GPSLatitudeRef ?? gpsContainer?.GPSLatitudeRef, "S");
+  const longitude = applyHemisphere(rawLongitude, parsed.GPSLongitudeRef ?? gpsContainer?.GPSLongitudeRef, "W");
+  return { latitude, longitude };
+}
+
+async function safeParseExif(
+  imageBuffer: Buffer,
+  options: Parameters<typeof exifr.parse>[1],
+): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed = await exifr.parse(imageBuffer, options);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function safeParseGps(imageBuffer: Buffer): Promise<Record<string, unknown> | null> {
+  try {
+    const parsed = await exifr.gps(imageBuffer);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as unknown as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export function haversineKm(a: SubmissionLocation, b: SubmissionLocation): number {
   const toRad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = toRad(b.latitude - a.latitude);
@@ -93,13 +276,36 @@ export function haversineKm(a: SubmissionLocation, b: SubmissionLocation): numbe
 }
 
 export async function extractPhotoMetadata(imageBuffer: Buffer): Promise<ExtractedPhotoMetadata> {
-  const parsed = (await exifr.parse(imageBuffer, {
+  const parsed = await safeParseExif(imageBuffer, {
     gps: true,
     exif: true,
     tiff: true,
-  })) as Record<string, unknown> | null;
+    pick: [
+      "latitude",
+      "longitude",
+      "lat",
+      "lon",
+      "lng",
+      "gps",
+      "GPSLatitude",
+      "GPSLongitude",
+      "GPSLatitudeRef",
+      "GPSLongitudeRef",
+      "DateTimeOriginal",
+      "DateTimeDigitized",
+      "CreateDate",
+      "ModifyDate",
+      "Make",
+      "Model",
+    ],
+  });
+  const gpsOnly = await safeParseGps(imageBuffer);
+  const merged = {
+    ...(parsed ?? {}),
+    ...(gpsOnly ?? {}),
+  };
 
-  if (!parsed) {
+  if (!Object.keys(merged).length) {
     return {
       gps: null,
       capturedAt: null,
@@ -107,22 +313,19 @@ export async function extractPhotoMetadata(imageBuffer: Buffer): Promise<Extract
       deviceModel: null,
     };
   }
-
-  const latitude = typeof parsed.latitude === "number" ? parsed.latitude : Number(parsed.latitude);
-  const longitude = typeof parsed.longitude === "number" ? parsed.longitude : Number(parsed.longitude);
-  const gps = Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null;
+  const gps = extractGps(merged);
 
   const capturedAt =
-    parseDateIso(parsed.DateTimeOriginal) ??
-    parseDateIso(parsed.DateTimeDigitized) ??
-    parseDateIso(parsed.CreateDate) ??
-    parseDateIso(parsed.ModifyDate);
+    parseDateIso(merged.DateTimeOriginal) ??
+    parseDateIso(merged.DateTimeDigitized) ??
+    parseDateIso(merged.CreateDate) ??
+    parseDateIso(merged.ModifyDate);
 
   return {
     gps,
     capturedAt,
-    deviceMake: normalizeString(parsed.Make),
-    deviceModel: normalizeString(parsed.Model),
+    deviceMake: normalizeString(merged.Make),
+    deviceModel: normalizeString(merged.Model),
   };
 }
 
