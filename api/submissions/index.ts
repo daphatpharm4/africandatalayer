@@ -30,6 +30,7 @@ import {
   extractPhotoMetadata,
   extractPhotoMetadataFromUrl,
   haversineKm,
+  isPhotoMetadataEffectivelyEmpty,
   parseSubmissionFraudCheck,
 } from "../../lib/server/submissionFraud.js";
 import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../../shared/geofence.js";
@@ -277,37 +278,68 @@ function getSecondaryPhotoUrl(event: PointEvent): string | null {
   return normalized || null;
 }
 
-async function buildFallbackFraudCheck(event: PointEvent): Promise<SubmissionFraudCheck | null> {
+function shouldRunFallbackFraudCheck(event: PointEvent, fraudCheck: SubmissionFraudCheck | null): boolean {
   const primaryUrl = typeof event.photoUrl === "string" ? event.photoUrl.trim() : "";
   const secondaryUrl = getSecondaryPhotoUrl(event);
-  if (!primaryUrl && !secondaryUrl) return null;
+  if (!fraudCheck) return Boolean(primaryUrl || secondaryUrl);
+  if (primaryUrl && isPhotoMetadataEffectivelyEmpty(fraudCheck.primaryPhoto)) return true;
+  if (secondaryUrl && isPhotoMetadataEffectivelyEmpty(fraudCheck.secondaryPhoto)) return true;
+  return false;
+}
 
-  const primaryExtracted = primaryUrl ? await extractPhotoMetadataFromUrl(primaryUrl) : null;
-  const secondaryExtracted = secondaryUrl ? await extractPhotoMetadataFromUrl(secondaryUrl) : null;
-  const primaryPhoto = buildPhotoFraudMetadata({
+function mergePhotoFraudMetadata(
+  existing: SubmissionFraudCheck["primaryPhoto"],
+  recovered: SubmissionFraudCheck["primaryPhoto"],
+  hasPhotoUrl: boolean,
+): SubmissionFraudCheck["primaryPhoto"] {
+  if (!hasPhotoUrl) return existing ?? null;
+  if (existing && !isPhotoMetadataEffectivelyEmpty(existing)) return existing;
+  if (recovered) return recovered;
+  return existing ?? null;
+}
+
+async function buildFallbackFraudCheck(
+  event: PointEvent,
+  existingFraudCheck: SubmissionFraudCheck | null,
+): Promise<SubmissionFraudCheck | null> {
+  const primaryUrl = typeof event.photoUrl === "string" ? event.photoUrl.trim() : "";
+  const secondaryUrl = getSecondaryPhotoUrl(event);
+  if (!primaryUrl && !secondaryUrl) return existingFraudCheck;
+
+  const needsPrimaryRecovery = Boolean(primaryUrl) && isPhotoMetadataEffectivelyEmpty(existingFraudCheck?.primaryPhoto);
+  const needsSecondaryRecovery = Boolean(secondaryUrl) && isPhotoMetadataEffectivelyEmpty(existingFraudCheck?.secondaryPhoto);
+  const primaryExtracted = needsPrimaryRecovery ? await extractPhotoMetadataFromUrl(primaryUrl) : null;
+  const secondaryExtracted = needsSecondaryRecovery ? await extractPhotoMetadataFromUrl(secondaryUrl) : null;
+  const recoveredPrimaryPhoto = buildPhotoFraudMetadata({
     extracted: primaryExtracted,
     submissionLocation: event.location,
     ipLocation: null,
     submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
     ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
   });
-  const secondaryPhoto = buildPhotoFraudMetadata({
+  const recoveredSecondaryPhoto = buildPhotoFraudMetadata({
     extracted: secondaryExtracted,
     submissionLocation: event.location,
     ipLocation: null,
     submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
     ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
   });
+  const primaryPhoto = mergePhotoFraudMetadata(existingFraudCheck?.primaryPhoto ?? null, recoveredPrimaryPhoto, Boolean(primaryUrl));
+  const secondaryPhoto = mergePhotoFraudMetadata(
+    existingFraudCheck?.secondaryPhoto ?? null,
+    recoveredSecondaryPhoto,
+    Boolean(secondaryUrl),
+  );
   if (!primaryPhoto && !secondaryPhoto) return null;
 
   return buildSubmissionFraudCheck({
-    submissionLocation: event.location,
-    effectiveLocation: event.location,
-    ipLocation: null,
+    submissionLocation: existingFraudCheck?.submissionLocation ?? event.location,
+    effectiveLocation: existingFraudCheck?.effectiveLocation ?? event.location,
+    ipLocation: existingFraudCheck?.ipLocation ?? null,
     primaryPhoto,
     secondaryPhoto,
-    submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
-    ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
+    submissionMatchThresholdKm: existingFraudCheck?.submissionMatchThresholdKm ?? SUBMISSION_PHOTO_MATCH_KM,
+    ipMatchThresholdKm: existingFraudCheck?.ipMatchThresholdKm ?? IP_PHOTO_MATCH_KM,
   });
 }
 
@@ -335,12 +367,12 @@ async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSu
     const email = emailFromProfile || (normalizedUserId.includes("@") ? normalizedUserId : null);
     const name = getUserDisplayName(normalizedUserId, profile?.name ?? null, email);
     let fraudCheck = getEventFraudCheck(event);
-    if (!fraudCheck && fallbackLookups < MAX_FORENSICS_FALLBACK_LOOKUPS) {
+    if (shouldRunFallbackFraudCheck(event, fraudCheck) && fallbackLookups < MAX_FORENSICS_FALLBACK_LOOKUPS) {
       fallbackLookups += 1;
       try {
-        fraudCheck = await buildFallbackFraudCheck(event);
+        fraudCheck = await buildFallbackFraudCheck(event, fraudCheck);
       } catch {
-        fraudCheck = null;
+        fraudCheck = fraudCheck ?? null;
       }
     }
 
@@ -496,7 +528,12 @@ export async function POST(request: Request): Promise<Response> {
   let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null = null;
 
   try {
-    primaryPhotoMetadata = await extractPhotoMetadata(parsedPhoto.imageBuffer);
+    primaryPhotoMetadata = await extractPhotoMetadata(parsedPhoto.imageBuffer, {
+      source: "upload_buffer",
+      mime: parsedPhoto.mime,
+      ext: parsedPhoto.ext,
+      byteLength: parsedPhoto.imageBuffer.byteLength,
+    });
     if (primaryPhotoMetadata.gps) {
       photoLocation = primaryPhotoMetadata.gps;
       if (location) {
@@ -511,6 +548,15 @@ export async function POST(request: Request): Promise<Response> {
       return errorResponse("Photo is missing GPS metadata", 400);
     }
   } catch {
+    primaryPhotoMetadata = {
+      gps: null,
+      capturedAt: null,
+      deviceMake: null,
+      deviceModel: null,
+      exifStatus: "parse_error",
+      exifReason: `Unexpected EXIF extraction failure (mime=${parsedPhoto.mime}; ext=${parsedPhoto.ext}; bytes=${parsedPhoto.imageBuffer.byteLength})`,
+      exifSource: "upload_buffer",
+    };
     if (!location && !ipLocation) {
       return errorResponse("Unable to read photo GPS metadata", 400);
     }
@@ -595,9 +641,22 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       try {
-        secondaryPhotoMetadata = await extractPhotoMetadata(parsedSecondPhoto.imageBuffer);
+        secondaryPhotoMetadata = await extractPhotoMetadata(parsedSecondPhoto.imageBuffer, {
+          source: "upload_buffer",
+          mime: parsedSecondPhoto.mime,
+          ext: parsedSecondPhoto.ext,
+          byteLength: parsedSecondPhoto.imageBuffer.byteLength,
+        });
       } catch {
-        secondaryPhotoMetadata = null;
+        secondaryPhotoMetadata = {
+          gps: null,
+          capturedAt: null,
+          deviceMake: null,
+          deviceModel: null,
+          exifStatus: "parse_error",
+          exifReason: `Unexpected EXIF extraction failure (mime=${parsedSecondPhoto.mime}; ext=${parsedSecondPhoto.ext}; bytes=${parsedSecondPhoto.imageBuffer.byteLength})`,
+          exifSource: "upload_buffer",
+        };
       }
 
       try {

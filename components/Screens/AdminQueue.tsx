@@ -18,6 +18,22 @@ interface Props {
 
 type MatchState = 'match' | 'mismatch' | 'unavailable';
 
+function exifStatusLabel(status: SubmissionPhotoMetadata['exifStatus'] | null | undefined, language: 'en' | 'fr'): string {
+  if (status === 'ok') return language === 'fr' ? 'EXIF present' : 'EXIF present';
+  if (status === 'fallback_recovered') return language === 'fr' ? 'Recupere via URL' : 'Recovered via URL';
+  if (status === 'missing') return language === 'fr' ? 'EXIF absent' : 'EXIF missing';
+  if (status === 'unsupported_format') return language === 'fr' ? 'Format non supporte' : 'Unsupported format';
+  if (status === 'parse_error') return language === 'fr' ? 'Erreur de lecture EXIF' : 'EXIF parse error';
+  return language === 'fr' ? 'Indisponible' : 'Unavailable';
+}
+
+function exifSourceLabel(source: SubmissionPhotoMetadata['exifSource'] | null | undefined, language: 'en' | 'fr'): string {
+  if (source === 'upload_buffer') return language === 'fr' ? 'Upload initial' : 'Initial upload';
+  if (source === 'remote_url') return language === 'fr' ? 'Photo distante' : 'Remote photo';
+  if (source === 'none') return language === 'fr' ? 'Aucune source' : 'No source';
+  return language === 'fr' ? 'Indisponible' : 'Unavailable';
+}
+
 function formatLocation(location: SubmissionLocation | null | undefined, unavailable: string): string {
   if (!location) return unavailable;
   return `${location.latitude.toFixed(5)}°, ${location.longitude.toFixed(5)}°`;
@@ -116,10 +132,25 @@ const DetailMetadataBlock: React.FC<{
     status === true ? t('Match', 'OK') : status === false ? t('Mismatch', 'Ecart') : t('Unavailable', 'Indisponible');
   const statusClass =
     status === true ? 'text-[#4c7c59]' : status === false ? 'text-[#c86b4a]' : 'text-gray-500';
+  const exifStatusText = metadata ? exifStatusLabel(metadata.exifStatus, language) : unavailable;
+  const exifReasonText = metadata?.exifReason ?? unavailable;
+  const exifSourceText = metadata ? exifSourceLabel(metadata.exifSource, language) : unavailable;
 
   return (
     <div className="rounded-2xl border border-gray-100 bg-[#f9fafb] p-4 space-y-2">
       <div className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{label}</div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('EXIF Status', 'Statut EXIF')}</span>
+        <span className="text-gray-800">{exifStatusText}</span>
+      </div>
+      <div className="flex items-center justify-between text-[11px]">
+        <span className="text-gray-500">{t('EXIF Source', 'Source EXIF')}</span>
+        <span className="text-gray-800">{exifSourceText}</span>
+      </div>
+      <div className="text-[11px]">
+        <div className="text-gray-500">{t('EXIF Reason', 'Raison EXIF')}</div>
+        <div className="text-gray-800 break-words">{exifReasonText}</div>
+      </div>
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-gray-500">{t('Photo EXIF GPS', 'GPS EXIF photo')}</span>
         <span className="text-gray-800">{formatLocation(metadata?.gps, unavailable)}</span>

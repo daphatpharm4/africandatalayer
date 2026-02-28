@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "seed:submissions": "node scripts/seed-edge-submissions.mjs",
     "import:bonamoussadi": "node scripts/import-bonamoussadi-csv.mjs",
-    "migrate:edge-to-postgres": "node scripts/migrate-edge-config-to-postgres.mjs"
+    "migrate:edge-to-postgres": "node scripts/migrate-edge-config-to-postgres.mjs",
+    "backfill:exif": "node scripts/backfill-fraud-exif.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.33.0",

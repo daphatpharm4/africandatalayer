@@ -7,6 +7,9 @@ export interface SubmissionLocation {
   longitude: number;
 }
 
+export type SubmissionExifStatus = "ok" | "missing" | "parse_error" | "unsupported_format" | "fallback_recovered";
+export type SubmissionExifSource = "upload_buffer" | "remote_url" | "none";
+
 export interface SubmissionPhotoMetadata {
   gps: SubmissionLocation | null;
   capturedAt: string | null;
@@ -16,6 +19,9 @@ export interface SubmissionPhotoMetadata {
   submissionGpsMatch: boolean | null;
   ipDistanceKm: number | null;
   ipGpsMatch: boolean | null;
+  exifStatus: SubmissionExifStatus;
+  exifReason: string | null;
+  exifSource: SubmissionExifSource;
 }
 
 export interface SubmissionFraudCheck {
