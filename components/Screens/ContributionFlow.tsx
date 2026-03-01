@@ -30,7 +30,9 @@ const providerOptions = ['MTN', 'Orange', 'Airtel'];
 const paymentMethodOptions = ['Cash', 'Mobile Money', 'Card'];
 const fuelTypeOptions = ['Super', 'Diesel', 'Gas'];
 const openingHourPresets = ['08:00 - 20:00', '09:00 - 19:00', '24/7'];
-const MAX_SUBMISSION_IMAGE_BYTES = 8 * 1024 * 1024;
+// Vercel serverless payload limit is 4.5MB; base64 adds ~33% overhead.
+// Keep raw threshold at 3MB so base64 + JSON stays under 4.5MB.
+const MAX_SUBMISSION_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_UPLOAD_DIMENSION = 1600;
 const IMAGE_QUALITY_LOW_END = 0.72;
 const IMAGE_QUALITY_DEFAULT = 0.82;
