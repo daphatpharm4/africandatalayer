@@ -136,6 +136,14 @@ export interface LegacySubmission {
   createdAt: string;
 }
 
+export interface ClientExifData {
+  latitude?: number | null;
+  longitude?: number | null;
+  capturedAt?: string | null;
+  deviceMake?: string | null;
+  deviceModel?: string | null;
+}
+
 export interface SubmissionInput {
   eventType?: PointEventType;
   pointId?: string;
@@ -144,6 +152,7 @@ export interface SubmissionInput {
   details?: SubmissionDetails;
   imageBase64?: string;
   secondImageBase64?: string;
+  clientExif?: ClientExifData | null;
 }
 
 export interface UserProfile {

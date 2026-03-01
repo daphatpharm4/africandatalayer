@@ -1,5 +1,6 @@
 import exifr from "exifr";
 import type {
+  ClientExifData,
   SubmissionExifSource,
   SubmissionExifStatus,
   SubmissionFraudCheck,
@@ -572,6 +573,38 @@ export async function extractPhotoMetadataFromUrl(photoUrl: string): Promise<Ext
   } finally {
     clearTimeout(timeout);
   }
+}
+
+export function applyClientExifFallback(
+  metadata: ExtractedPhotoMetadata,
+  clientExif: ClientExifData | null | undefined,
+): ExtractedPhotoMetadata {
+  if (!clientExif) return metadata;
+  if (hasExifSignal(metadata)) return metadata;
+
+  const gps: SubmissionLocation | null =
+    typeof clientExif.latitude === "number" &&
+    typeof clientExif.longitude === "number" &&
+    Number.isFinite(clientExif.latitude) &&
+    Number.isFinite(clientExif.longitude)
+      ? { latitude: clientExif.latitude, longitude: clientExif.longitude }
+      : null;
+
+  const capturedAt = typeof clientExif.capturedAt === "string" && clientExif.capturedAt.trim() ? clientExif.capturedAt.trim() : null;
+  const deviceMake = typeof clientExif.deviceMake === "string" && clientExif.deviceMake.trim() ? clientExif.deviceMake.trim() : null;
+  const deviceModel = typeof clientExif.deviceModel === "string" && clientExif.deviceModel.trim() ? clientExif.deviceModel.trim() : null;
+
+  if (!gps && !capturedAt && !deviceMake && !deviceModel) return metadata;
+
+  return {
+    gps,
+    capturedAt,
+    deviceMake,
+    deviceModel,
+    exifStatus: "fallback_recovered",
+    exifReason: `EXIF recovered from client-side extraction (server got ${metadata.exifStatus}: ${metadata.exifReason ?? "no details"})`,
+    exifSource: "upload_buffer",
+  };
 }
 
 export function buildPhotoFraudMetadata(params: BuildPhotoFraudMetadataParams): SubmissionPhotoMetadata | null {

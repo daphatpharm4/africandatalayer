@@ -12,8 +12,9 @@ import {
 import { enqueueSubmission, flushOfflineQueue, getQueueStats, type QueueSyncSummary } from '../../lib/client/offlineQueue';
 import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/deviceProfile';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
-import type { SubmissionCategory, SubmissionInput } from '../../shared/types';
+import type { ClientExifData, SubmissionCategory, SubmissionInput } from '../../shared/types';
 import { Category, ContributionMode, DataPoint } from '../../types';
+import exifr from 'exifr';
 
 interface Props {
   onBack: () => void;
@@ -126,6 +127,36 @@ async function preserveJpegExif(originalFile: File, compressedDataUrl: string): 
   const merged = injectExifIntoJpeg(compressedBytes, exifSegment);
   if (!merged) return compressedDataUrl;
   return bytesToDataUrl(merged, 'image/jpeg');
+}
+
+async function extractClientExif(file: File): Promise<ClientExifData | null> {
+  try {
+    const [exifData, gpsData] = await Promise.all([
+      exifr.parse(file, { gps: true, exif: true, tiff: true, pick: [
+        'latitude', 'longitude', 'GPSLatitude', 'GPSLongitude',
+        'DateTimeOriginal', 'DateTimeDigitized', 'CreateDate', 'ModifyDate',
+        'Make', 'Model',
+      ] }).catch(() => null),
+      exifr.gps(file).catch(() => null),
+    ]);
+    const merged = { ...(exifData ?? {}), ...(gpsData ?? {}) } as Record<string, unknown>;
+    const lat = typeof merged.latitude === 'number' ? merged.latitude : null;
+    const lng = typeof merged.longitude === 'number' ? merged.longitude : null;
+    const rawDate = merged.DateTimeOriginal ?? merged.DateTimeDigitized ?? merged.CreateDate ?? merged.ModifyDate;
+    let capturedAt: string | null = null;
+    if (rawDate instanceof Date) {
+      capturedAt = rawDate.toISOString();
+    } else if (typeof rawDate === 'string' && rawDate.trim()) {
+      const m = rawDate.match(/^(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
+      capturedAt = m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}` : rawDate;
+    }
+    const deviceMake = typeof merged.Make === 'string' ? merged.Make : null;
+    const deviceModel = typeof merged.Model === 'string' ? merged.Model : null;
+    if (lat == null && lng == null && !capturedAt && !deviceMake && !deviceModel) return null;
+    return { latitude: lat, longitude: lng, capturedAt, deviceMake, deviceModel };
+  } catch {
+    return null;
+  }
 }
 
 const pointTypeToVertical = (type: Category): Vertical => {
@@ -457,14 +488,18 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     setSyncMessage('');
     setIsSubmitting(true);
     try {
-      const imageBase64 = await fileToBase64(photoFile);
+      const [imageBase64, clientExif] = await Promise.all([
+        fileToBase64(photoFile),
+        extractClientExif(photoFile),
+      ]);
       const payload: SubmissionInput = {
         eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
         category: vertical,
         pointId: isEnrichMode && seedPoint ? seedPoint.id : undefined,
         location: location ?? manual ?? undefined,
         details,
-        imageBase64
+        imageBase64,
+        clientExif,
       };
 
       const queuedItem = await enqueueSubmission(payload);

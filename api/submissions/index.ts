@@ -25,6 +25,7 @@ import {
 } from "../../lib/server/submissionAccess.js";
 import {
   DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM,
+  applyClientExifFallback,
   buildPhotoFraudMetadata,
   buildSubmissionFraudCheck,
   extractPhotoMetadata,
@@ -38,6 +39,7 @@ import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedE
 import type {
   AdminSubmissionEvent,
   ClientDeviceInfo,
+  ClientExifData,
   MapScope,
   PointEvent,
   PointEventType,
@@ -524,6 +526,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const ipLocation = await getIpLocation(request);
+  const clientExif = (body as unknown as Record<string, unknown>)?.clientExif as ClientExifData | null | undefined;
   let photoLocation: SubmissionLocation | null = null;
   let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null = null;
 
@@ -534,6 +537,7 @@ export async function POST(request: Request): Promise<Response> {
       ext: parsedPhoto.ext,
       byteLength: parsedPhoto.imageBuffer.byteLength,
     });
+    primaryPhotoMetadata = applyClientExifFallback(primaryPhotoMetadata, clientExif);
     if (primaryPhotoMetadata.gps) {
       photoLocation = primaryPhotoMetadata.gps;
       if (location) {
@@ -557,8 +561,12 @@ export async function POST(request: Request): Promise<Response> {
       exifReason: `Unexpected EXIF extraction failure (mime=${parsedPhoto.mime}; ext=${parsedPhoto.ext}; bytes=${parsedPhoto.imageBuffer.byteLength})`,
       exifSource: "upload_buffer",
     };
-    if (!location && !ipLocation) {
+    primaryPhotoMetadata = applyClientExifFallback(primaryPhotoMetadata, clientExif);
+    if (!primaryPhotoMetadata.gps && !location && !ipLocation) {
       return errorResponse("Unable to read photo GPS metadata", 400);
+    }
+    if (primaryPhotoMetadata.gps) {
+      photoLocation = primaryPhotoMetadata.gps;
     }
   }
 
