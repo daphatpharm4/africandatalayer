@@ -184,6 +184,70 @@ const DetailMetadataBlock: React.FC<{
   );
 };
 
+interface GroupedPoint {
+  pointId: string;
+  events: AdminSubmissionEvent[];
+  category: AdminSubmissionEvent['event']['category'];
+  siteName: string;
+  latestEvent: AdminSubmissionEvent;
+  createdEvent: AdminSubmissionEvent | null;
+  enrichEvents: AdminSubmissionEvent[];
+  allPhotos: { url: string; eventType: string; createdAt: string; metadata: SubmissionPhotoMetadata | null }[];
+}
+
+function groupEventsByPoint(items: AdminSubmissionEvent[], language: 'en' | 'fr'): GroupedPoint[] {
+  const groups = new Map<string, AdminSubmissionEvent[]>();
+  for (const item of items) {
+    const pid = item.event.pointId;
+    const existing = groups.get(pid);
+    if (existing) {
+      existing.push(item);
+    } else {
+      groups.set(pid, [item]);
+    }
+  }
+  const result: GroupedPoint[] = [];
+  for (const [pointId, events] of groups) {
+    const sorted = [...events].sort((a, b) => new Date(a.event.createdAt).getTime() - new Date(b.event.createdAt).getTime());
+    const latestEvent = sorted[sorted.length - 1]!;
+    const createdEvent = sorted.find((e) => e.event.eventType === 'CREATE_EVENT') ?? null;
+    const enrichEvents = sorted.filter((e) => e.event.eventType === 'ENRICH_EVENT');
+    const allPhotos: GroupedPoint['allPhotos'] = [];
+    for (const ev of sorted) {
+      const photoUrl = ev.event.photoUrl;
+      if (photoUrl && typeof photoUrl === 'string' && photoUrl.trim()) {
+        allPhotos.push({
+          url: photoUrl,
+          eventType: ev.event.eventType,
+          createdAt: ev.event.createdAt,
+          metadata: ev.fraudCheck?.primaryPhoto ?? null,
+        });
+      }
+      const details = ev.event.details as SubmissionDetails;
+      const secondUrl = typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim() ? details.secondPhotoUrl : null;
+      if (secondUrl) {
+        allPhotos.push({
+          url: secondUrl,
+          eventType: ev.event.eventType + ' (secondary)',
+          createdAt: ev.event.createdAt,
+          metadata: ev.fraudCheck?.secondaryPhoto ?? null,
+        });
+      }
+    }
+    result.push({
+      pointId,
+      events: sorted,
+      category: latestEvent.event.category,
+      siteName: getSiteName(createdEvent ?? latestEvent, language),
+      latestEvent,
+      createdEvent,
+      enrichEvents,
+      allPhotos,
+    });
+  }
+  return result.sort((a, b) => new Date(b.latestEvent.event.createdAt).getTime() - new Date(a.latestEvent.event.createdAt).getTime());
+}
+
 const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [isLoading, setIsLoading] = useState(true);
@@ -192,7 +256,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [items, setItems] = useState<AdminSubmissionEvent[]>([]);
-  const [selectedItem, setSelectedItem] = useState<AdminSubmissionEvent | null>(null);
+  const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
 
@@ -208,16 +272,17 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         if (cancelled) return;
         const safeItems = Array.isArray(data) ? data : [];
         setItems(safeItems);
-        setSelectedItem((prev) => {
-          if (!prev) return safeItems[0] ?? null;
-          return safeItems.find((item) => item.event.id === prev.event.id) ?? safeItems[0] ?? null;
+        setSelectedPointId((prev) => {
+          if (!prev) return safeItems[0]?.event.pointId ?? null;
+          if (safeItems.some((item) => item.event.pointId === prev)) return prev;
+          return safeItems[0]?.event.pointId ?? null;
         });
       } catch (loadError) {
         if (cancelled) return;
         const message = loadError instanceof Error ? loadError.message : t('Unable to load submissions.', 'Impossible de charger les soumissions.');
         setError(message);
         setItems([]);
-        setSelectedItem(null);
+        setSelectedPointId(null);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -250,36 +315,25 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   useEffect(() => {
     setDeleteError('');
     setActionMessage('');
-  }, [selectedItem?.event.id]);
+  }, [selectedPointId]);
 
-  const selectedFraudCheck = selectedItem?.fraudCheck ?? null;
-  const selectedPrimaryPhoto = selectedItem ? getPrimaryImageUrl(selectedItem) : null;
-  const selectedSecondaryPhoto = selectedItem ? getSecondaryImageUrl(selectedItem) : null;
-  const selectedClientDevice = selectedItem ? getClientDevice(selectedItem) : null;
-  const isSelectedReadOnly = selectedItem ? isReadOnlySubmission(selectedItem) : false;
+  const groupedPoints = useMemo(() => groupEventsByPoint(items, language), [items, language]);
+  const selectedGroup = useMemo(() => groupedPoints.find((g) => g.pointId === selectedPointId) ?? null, [groupedPoints, selectedPointId]);
   const unavailableLabel = t('Unavailable', 'Indisponible');
 
-  const listItems = useMemo(() => {
-    return items.map((item) => {
-      const state = getMatchState(item.fraudCheck);
-      return {
-        item,
-        state,
-        siteName: getSiteName(item, language),
-        preview: getPrimaryImageUrl(item),
-      };
-    });
-  }, [items, language]);
-
   const handleDeleteSelected = async () => {
-    if (!selectedItem) return;
-    if (isReadOnlySubmission(selectedItem)) {
-      setDeleteError(t('This submission source is read-only and cannot be deleted.', 'Cette source de soumission est en lecture seule et ne peut pas etre supprimee.'));
+    if (!selectedGroup) return;
+    const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
+    if (hasReadOnly) {
+      setDeleteError(t('This point contains read-only events that cannot be deleted.', 'Ce point contient des evenements en lecture seule qui ne peuvent pas etre supprimes.'));
       return;
     }
 
+    const evtCount = selectedGroup.events.length;
     const confirmed = window.confirm(
-      t('Delete this submission event permanently?', 'Supprimer definitivement cet evenement de soumission ?')
+      evtCount > 1
+        ? t(`Delete all ${evtCount} events for this point permanently?`, `Supprimer definitivement les ${evtCount} evenements de ce point ?`)
+        : t('Delete this submission event permanently?', 'Supprimer definitivement cet evenement de soumission ?')
     );
     if (!confirmed) return;
 
@@ -287,20 +341,22 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     setDeleteError('');
     setActionMessage('');
     try {
-      const response = await apiFetch(`/api/submissions/${encodeURIComponent(selectedItem.event.id)}?view=event`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) {
-        const message = (await response.text()) || t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
-        setDeleteError(message);
-        return;
+      for (const ev of selectedGroup.events) {
+        const response = await apiFetch(`/api/submissions/${encodeURIComponent(ev.event.id)}?view=event`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          const message = (await response.text()) || t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
+          setDeleteError(message);
+          return;
+        }
       }
 
-      const deletedId = selectedItem.event.id;
-      const nextItems = items.filter((item) => item.event.id !== deletedId);
+      const deletedIds = new Set(selectedGroup.events.map((e) => e.event.id));
+      const nextItems = items.filter((item) => !deletedIds.has(item.event.id));
       setItems(nextItems);
-      setSelectedItem(nextItems[0] ?? null);
-      setActionMessage(t('Submission deleted successfully.', 'Soumission supprimee avec succes.'));
+      setSelectedPointId(nextItems[0]?.event.pointId ?? null);
+      setActionMessage(t('Point deleted successfully.', 'Point supprime avec succes.'));
     } catch (deleteActionError) {
       const message =
         deleteActionError instanceof Error
@@ -387,13 +443,18 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           </div>
         )}
 
-        {!isLoading && !error && selectedItem && (
+        {!isLoading && !error && selectedGroup && (() => {
+          const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
+          const latestFraudCheck = selectedGroup.latestEvent.fraudCheck ?? null;
+          const latestDevice = getClientDevice(selectedGroup.latestEvent);
+          const contributors = [...new Map(selectedGroup.events.map((e) => [e.user.id, e.user])).values()];
+          return (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-gray-900">{t('Submission Detail', 'Detail de la soumission')}</h4>
+              <h4 className="text-sm font-bold text-gray-900">{t('Point Detail', 'Detail du point')}</h4>
               <button
                 type="button"
-                onClick={() => setSelectedItem(null)}
+                onClick={() => setSelectedPointId(null)}
                 className="h-8 w-8 rounded-full border border-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center"
               >
                 <X size={14} />
@@ -402,16 +463,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-                {isSelectedReadOnly
-                  ? t('Read-only source', 'Source en lecture seule')
-                  : t('Admin action', 'Action admin')}
+                {selectedGroup.events.length} {t('event(s)', 'evenement(s)')}
               </p>
               <button
                 type="button"
                 onClick={handleDeleteSelected}
-                disabled={isDeleting || isSelectedReadOnly}
+                disabled={isDeleting || hasReadOnly}
                 className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center space-x-2 ${
-                  isDeleting || isSelectedReadOnly
+                  isDeleting || hasReadOnly
                     ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                     : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
                 }`}
@@ -420,126 +479,161 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 <span>
                   {isDeleting
                     ? t('Deleting...', 'Suppression...')
-                    : isSelectedReadOnly
+                    : hasReadOnly
                       ? t('Cannot delete', 'Suppression impossible')
-                      : t('Delete submission', 'Supprimer soumission')}
+                      : t('Delete point', 'Supprimer point')}
                 </span>
               </button>
             </div>
 
             <div className="grid grid-cols-1 gap-3 text-[11px]">
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Submitter', 'Soumis par')}</div>
-                <div className="text-gray-900 font-semibold">{selectedItem.user.name}</div>
-                <div className="text-gray-600">{selectedItem.user.email ?? unavailableLabel}</div>
-                <div className="text-gray-500">ID: {selectedItem.user.id}</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Contributors', 'Contributeurs')}</div>
+                {contributors.map((user) => (
+                  <div key={user.id} className="space-y-0.5">
+                    <div className="text-gray-900 font-semibold">{user.name}</div>
+                    <div className="text-gray-600">{user.email ?? unavailableLabel}</div>
+                  </div>
+                ))}
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Submission Metadata', 'Metadonnees soumission')}</div>
-                <div>{t('Time', 'Heure')}: {formatDate(selectedItem.event.createdAt, unavailableLabel)}</div>
-                <div>{t('Event Type', 'Type d\'evenement')}: {selectedItem.event.eventType}</div>
-                <div>{t('Category', 'Categorie')}: {categoryLabel(selectedItem.event.category, language)}</div>
-                <div>Point ID: {selectedItem.event.pointId}</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Point Metadata', 'Metadonnees du point')}</div>
+                <div>{t('Category', 'Categorie')}: {categoryLabel(selectedGroup.category, language)}</div>
+                <div>Point ID: {selectedGroup.pointId}</div>
+                <div>{t('Events', 'Evenements')}: {selectedGroup.events.length}</div>
               </div>
 
-              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Client Device', 'Appareil client')}</div>
-                <div>{t('Device ID', 'Device ID')}: {selectedClientDevice?.deviceId ?? unavailableLabel}</div>
-                <div>{t('Platform', 'Plateforme')}: {selectedClientDevice?.platform ?? unavailableLabel}</div>
-                <div>
-                  {t('Low-end flag', 'Indicateur entree de gamme')}:{' '}
-                  {selectedClientDevice ? (selectedClientDevice.isLowEnd === true ? t('Yes', 'Oui') : t('No', 'Non')) : unavailableLabel}
-                </div>
+              <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Event Timeline', 'Historique des evenements')}</div>
+                {selectedGroup.events.map((ev, idx) => {
+                  const device = getClientDevice(ev);
+                  return (
+                    <div key={ev.event.id} className={`p-2 rounded-xl ${idx === 0 ? 'bg-[#eaf3ee] border border-[#d2e6d8]' : 'bg-gray-50 border border-gray-100'}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                          {ev.event.eventType === 'CREATE_EVENT' ? t('Create', 'Creation') : t('Enrich', 'Enrichissement')}
+                        </span>
+                        <span className="text-[10px] text-gray-500">{formatDate(ev.event.createdAt, unavailableLabel)}</span>
+                      </div>
+                      <div className="text-gray-600 mt-1">{t('By', 'Par')}: {ev.user.name}</div>
+                      {device && <div className="text-gray-500">{t('Device', 'Appareil')}: {device.platform ?? 'Unknown'}</div>}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Location', 'Localisation')}</div>
-                <div>{t('Submission GPS', 'GPS soumis')}: {formatLocation(selectedFraudCheck?.submissionLocation, unavailableLabel)}</div>
-                <div>{t('Effective GPS', 'GPS effectif')}: {formatLocation(selectedFraudCheck?.effectiveLocation, unavailableLabel)}</div>
-                <div>{t('IP GPS', 'GPS IP')}: {formatLocation(selectedFraudCheck?.ipLocation, unavailableLabel)}</div>
+                <div>{t('Submission GPS', 'GPS soumis')}: {formatLocation(latestFraudCheck?.submissionLocation, unavailableLabel)}</div>
+                <div>{t('Effective GPS', 'GPS effectif')}: {formatLocation(latestFraudCheck?.effectiveLocation, unavailableLabel)}</div>
+                <div>{t('IP GPS', 'GPS IP')}: {formatLocation(latestFraudCheck?.ipLocation, unavailableLabel)}</div>
+              </div>
+
+              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Client Device', 'Appareil client')}</div>
+                <div>{t('Device ID', 'Device ID')}: {latestDevice?.deviceId ?? unavailableLabel}</div>
+                <div>{t('Platform', 'Plateforme')}: {latestDevice?.platform ?? unavailableLabel}</div>
+                <div>
+                  {t('Low-end flag', 'Indicateur entree de gamme')}:{' '}
+                  {latestDevice ? (latestDevice.isLowEnd === true ? t('Yes', 'Oui') : t('No', 'Non')) : unavailableLabel}
+                </div>
               </div>
 
               <div className="space-y-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Photos', 'Photos')}</div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  {t('All Photos', 'Toutes les photos')} ({selectedGroup.allPhotos.length})
+                </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
-                    {selectedPrimaryPhoto ? (
-                      <img src={selectedPrimaryPhoto} alt={t('Primary photo', 'Photo principale')} className="h-full w-full object-cover" />
-                    ) : (
+                  {selectedGroup.allPhotos.length === 0 && (
+                    <div className="col-span-2 rounded-2xl border border-gray-100 bg-gray-50 h-28 flex items-center justify-center">
                       <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center px-2">
-                        {t('Primary photo unavailable', 'Photo principale indisponible')}
+                        {t('No photos available', 'Aucune photo disponible')}
                       </div>
-                    )}
-                  </div>
-                  <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
-                    {selectedSecondaryPhoto ? (
-                      <img src={selectedSecondaryPhoto} alt={t('Secondary photo', 'Photo secondaire')} className="h-full w-full object-cover" />
-                    ) : (
-                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center px-2">
-                        {t('Secondary photo unavailable', 'Photo secondaire indisponible')}
+                    </div>
+                  )}
+                  {selectedGroup.allPhotos.map((photo, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
+                        <img src={photo.url} alt={`${t('Photo', 'Photo')} ${idx + 1}`} className="h-full w-full object-cover" />
                       </div>
-                    )}
-                  </div>
+                      <div className="text-[10px] text-gray-500 text-center">
+                        {photo.eventType === 'CREATE_EVENT' ? t('Create', 'Creation') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="space-y-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Fraud Metadata', 'Metadonnees anti-fraude')}</div>
-                <DetailMetadataBlock
-                  label={t('Primary Photo Metadata', 'Metadonnees photo principale')}
-                  metadata={selectedFraudCheck?.primaryPhoto ?? null}
-                  thresholdKm={selectedFraudCheck?.submissionMatchThresholdKm ?? 1}
-                  unavailable={unavailableLabel}
-                  language={language}
-                />
-                <DetailMetadataBlock
-                  label={t('Secondary Photo Metadata', 'Metadonnees photo secondaire')}
-                  metadata={selectedFraudCheck?.secondaryPhoto ?? null}
-                  thresholdKm={selectedFraudCheck?.submissionMatchThresholdKm ?? 1}
-                  unavailable={unavailableLabel}
-                  language={language}
-                />
+                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  {t('Photo EXIF Metadata', 'Metadonnees EXIF des photos')}
+                </div>
+                {selectedGroup.allPhotos.length === 0 && (
+                  <div className="text-[11px] text-gray-500">{unavailableLabel}</div>
+                )}
+                {selectedGroup.allPhotos.map((photo, idx) => (
+                  <DetailMetadataBlock
+                    key={idx}
+                    label={`${t('Photo', 'Photo')} ${idx + 1} — ${photo.eventType === 'CREATE_EVENT' ? t('Create', 'Creation') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}`}
+                    metadata={photo.metadata}
+                    thresholdKm={latestFraudCheck?.submissionMatchThresholdKm ?? 1}
+                    unavailable={unavailableLabel}
+                    language={language}
+                  />
+                ))}
                 <div className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-                  {t('IP Match Threshold', 'Seuil correspondance IP')}: {selectedFraudCheck?.ipMatchThresholdKm ?? 50} km
+                  {t('IP Match Threshold', 'Seuil correspondance IP')}: {latestFraudCheck?.ipMatchThresholdKm ?? 50} km
                 </div>
               </div>
             </div>
           </div>
-        )}
+          );
+        })()}
 
-        {!isLoading && !error && listItems.length === 0 && (
+        {!isLoading && !error && groupedPoints.length === 0 && (
           <div className="bg-white border border-gray-100 rounded-2xl p-6 text-xs text-gray-500 text-center">
             {t('No submissions found.', 'Aucune soumission trouvee.')}
           </div>
         )}
 
-        {!isLoading && !error && listItems.length > 0 && (
+        {!isLoading && !error && groupedPoints.length > 0 && (
           <div className="space-y-3">
-            {listItems.map(({ item, state, siteName, preview }) => {
-              const isSelected = selectedItem?.event.id === item.event.id;
+            {groupedPoints.map((group) => {
+              const isSelected = selectedPointId === group.pointId;
+              const state = getMatchState(group.latestEvent.fraudCheck);
+              const preview = group.allPhotos[0]?.url ?? null;
+              const contributors = [...new Set(group.events.map((e) => e.user.name))];
               return (
                 <button
-                  key={item.event.id}
+                  key={group.pointId}
                   type="button"
-                  onClick={() => setSelectedItem(item)}
+                  onClick={() => setSelectedPointId(group.pointId)}
                   className={`w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
                     isSelected ? 'border-[#0f2b46]' : 'border-gray-100 hover:border-[#d5e1eb]'
                   }`}
                 >
                   <div className="flex">
-                    <div className="w-24 h-24 bg-gray-100 shrink-0 flex items-center justify-center">
+                    <div className="w-24 h-24 bg-gray-100 shrink-0 flex items-center justify-center relative">
                       {preview ? (
                         <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" />
                       ) : (
                         <Camera size={18} className="text-gray-300" />
                       )}
+                      {group.allPhotos.length > 1 && (
+                        <div className="absolute top-1 right-1 bg-[#0f2b46] text-white text-[9px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                          {group.allPhotos.length}
+                        </div>
+                      )}
                     </div>
                     <div className="flex-1 p-3 space-y-2">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <h4 className="text-sm font-bold text-gray-900 leading-tight">{siteName}</h4>
-                          <p className="text-[10px] uppercase tracking-widest text-gray-400">{categoryLabel(item.event.category, language)}</p>
+                          <h4 className="text-sm font-bold text-gray-900 leading-tight">{group.siteName}</h4>
+                          <p className="text-[10px] uppercase tracking-widest text-gray-400">
+                            {categoryLabel(group.category, language)}
+                            {group.events.length > 1 && ` · ${group.events.length} ${t('events', 'evenements')}`}
+                          </p>
                         </div>
                         <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg border ${matchStateClass(state)}`}>
                           {matchStateLabel(state, language)}
@@ -547,13 +641,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       </div>
                       <div className="text-[11px] text-gray-600 flex items-center gap-1">
                         <User size={12} />
-                        <span>{item.user.name}</span>
-                        <span className="text-gray-400">•</span>
-                        <span className="truncate">{item.user.email ?? item.user.id}</span>
+                        <span className="truncate">{contributors.join(', ')}</span>
                       </div>
                       <div className="text-[11px] text-gray-500 flex items-center gap-1">
                         <MapPin size={12} />
-                        <span>{formatDate(item.event.createdAt, unavailableLabel)}</span>
+                        <span>{formatDate(group.latestEvent.event.createdAt, unavailableLabel)}</span>
                       </div>
                     </div>
                   </div>

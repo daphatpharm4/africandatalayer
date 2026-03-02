@@ -131,34 +131,73 @@ async function preserveJpegExif(originalFile: File, compressedDataUrl: string): 
   return bytesToDataUrl(merged, 'image/jpeg');
 }
 
-async function extractClientExif(file: File): Promise<ClientExifData | null> {
+function parseDeviceFromUserAgent(): { make: string | null; model: string | null } {
+  const ua = navigator.userAgent;
+  // iPhone detection
+  const iphoneMatch = ua.match(/iPhone/);
+  if (iphoneMatch) return { make: 'Apple', model: 'iPhone' };
+  // iPad detection
+  const ipadMatch = ua.match(/iPad/);
+  if (ipadMatch) return { make: 'Apple', model: 'iPad' };
+  // Android device detection
+  const androidMatch = ua.match(/;\s*([^;)]+)\s+Build\//);
+  if (androidMatch) return { make: null, model: androidMatch[1]?.trim() ?? null };
+  return { make: null, model: null };
+}
+
+async function extractClientExif(
+  file: File,
+  deviceLocation: { latitude: number; longitude: number } | null,
+): Promise<ClientExifData | null> {
+  // Step 1: Try extracting EXIF from the raw file (works on Android, some iOS versions)
+  let lat: number | null = null;
+  let lng: number | null = null;
+  let capturedAt: string | null = null;
+  let deviceMake: string | null = null;
+  let deviceModel: string | null = null;
+
   try {
+    const buffer = await file.arrayBuffer();
     const [exifData, gpsData] = await Promise.all([
-      exifr.parse(file, { gps: true, exif: true, tiff: true, pick: [
+      exifr.parse(buffer, { gps: true, exif: true, tiff: true, pick: [
         'latitude', 'longitude', 'GPSLatitude', 'GPSLongitude',
         'DateTimeOriginal', 'DateTimeDigitized', 'CreateDate', 'ModifyDate',
         'Make', 'Model',
       ] }).catch(() => null),
-      exifr.gps(file).catch(() => null),
+      exifr.gps(buffer).catch(() => null),
     ]);
     const merged = { ...(exifData ?? {}), ...(gpsData ?? {}) } as Record<string, unknown>;
-    const lat = typeof merged.latitude === 'number' ? merged.latitude : null;
-    const lng = typeof merged.longitude === 'number' ? merged.longitude : null;
+    lat = typeof merged.latitude === 'number' ? merged.latitude : null;
+    lng = typeof merged.longitude === 'number' ? merged.longitude : null;
     const rawDate = merged.DateTimeOriginal ?? merged.DateTimeDigitized ?? merged.CreateDate ?? merged.ModifyDate;
-    let capturedAt: string | null = null;
     if (rawDate instanceof Date) {
       capturedAt = rawDate.toISOString();
     } else if (typeof rawDate === 'string' && rawDate.trim()) {
       const m = rawDate.match(/^(\d{4}):(\d{2}):(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
       capturedAt = m ? `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}` : rawDate;
     }
-    const deviceMake = typeof merged.Make === 'string' ? merged.Make : null;
-    const deviceModel = typeof merged.Model === 'string' ? merged.Model : null;
-    if (lat == null && lng == null && !capturedAt && !deviceMake && !deviceModel) return null;
-    return { latitude: lat, longitude: lng, capturedAt, deviceMake, deviceModel };
+    deviceMake = typeof merged.Make === 'string' ? merged.Make : null;
+    deviceModel = typeof merged.Model === 'string' ? merged.Model : null;
   } catch {
-    return null;
+    // EXIF parsing failed entirely -- fall through to device fallback
   }
+
+  // Step 2: Fill gaps with browser APIs (critical for iOS which strips EXIF from <input capture>)
+  if (lat == null && lng == null && deviceLocation) {
+    lat = deviceLocation.latitude;
+    lng = deviceLocation.longitude;
+  }
+  if (!capturedAt) {
+    capturedAt = new Date().toISOString();
+  }
+  if (!deviceMake && !deviceModel) {
+    const parsed = parseDeviceFromUserAgent();
+    deviceMake = parsed.make;
+    deviceModel = parsed.model;
+  }
+
+  if (lat == null && lng == null && !capturedAt && !deviceMake && !deviceModel) return null;
+  return { latitude: lat, longitude: lng, capturedAt, deviceMake, deviceModel };
 }
 
 const pointTypeToVertical = (type: Category): Vertical => {
@@ -492,7 +531,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     try {
       const [imageBase64, clientExif] = await Promise.all([
         fileToBase64(photoFile),
-        extractClientExif(photoFile),
+        extractClientExif(photoFile, location ?? manual ?? null),
       ]);
       const payload: SubmissionInput = {
         eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
