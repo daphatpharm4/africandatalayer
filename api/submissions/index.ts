@@ -49,8 +49,7 @@ import type {
   SubmissionInput,
   SubmissionLocation,
 } from "../../shared/types.js";
-
-const allowedCategories: SubmissionCategory[] = ["pharmacy", "fuel_station", "mobile_money"];
+import { isValidCategory, normalizeCategoryAlias } from "../../shared/verticals.js";
 const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const SUBMISSION_PHOTO_MATCH_KM = DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM;
@@ -112,10 +111,8 @@ function sanitizeClientDevice(input: unknown): ClientDeviceInfo | null {
 function normalizeCategory(input: string | undefined): SubmissionCategory | null {
   if (!input) return null;
   const raw = input.trim();
-  if (raw === "FUEL") return "fuel_station";
-  if (raw === "MOBILE_MONEY" || raw === "KIOSK") return "mobile_money";
-  if (raw === "PHARMACY") return "pharmacy";
-  if (raw === "fuel_station" || raw === "mobile_money" || raw === "pharmacy") return raw;
+  const resolved = normalizeCategoryAlias(raw);
+  if (resolved && isValidCategory(resolved)) return resolved as SubmissionCategory;
   return null;
 }
 
@@ -498,7 +495,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const category = normalizeCategory(body?.category as string | undefined);
-  if (!category || !allowedCategories.includes(category)) {
+  if (!category) {
     return errorResponse("Invalid category", 400);
   }
 

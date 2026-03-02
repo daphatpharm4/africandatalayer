@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { query } from "../db.js";
 import type { LegacySubmission, MapScope, PointEvent, PointEventType, SubmissionCategory, UserProfile } from "../../../shared/types.js";
+import { isValidCategory } from "../../../shared/verticals.js";
 import { normalizeEmail, normalizePhone } from "../../shared/identifier.js";
 import type { StorageStore } from "./types.js";
 
@@ -51,7 +52,7 @@ function normalizeCreatedAt(input: unknown): string {
 }
 
 function parseCategory(input: unknown): SubmissionCategory {
-  if (input === "pharmacy" || input === "fuel_station" || input === "mobile_money") return input;
+  if (typeof input === "string" && isValidCategory(input)) return input as SubmissionCategory;
   return "mobile_money";
 }
 

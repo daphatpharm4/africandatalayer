@@ -3,6 +3,7 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Category, DataPoint } from '../../types';
 import type { MapScope } from '../../shared/types';
+import { LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 
 type MapPointGroup = {
   key: string;
@@ -52,9 +53,17 @@ const getClusterIcon = (color: string, count: number) => {
   return icon;
 };
 
-const pharmacyIcon = createMarkerIcon('#2f855a');
-const fuelIcon = createMarkerIcon('#0f2b46');
-const kioskIcon = createMarkerIcon('#1f2933');
+const markerIconCache = new Map<string, L.DivIcon>();
+
+const getMarkerIconForType = (type: Category): L.DivIcon => {
+  const verticalId = LEGACY_CATEGORY_MAP[type] ?? type;
+  const color = VERTICALS[verticalId]?.color ?? '#374151';
+  const cached = markerIconCache.get(color);
+  if (cached) return cached;
+  const icon = createMarkerIcon(color);
+  markerIconCache.set(color, icon);
+  return icon;
+};
 
 const MapSizeSync: React.FC<{ active: boolean }> = ({ active }) => {
   const map = useMap();
@@ -116,25 +125,15 @@ const HomeMap: React.FC<Props> = ({
         />
         {mapPointGroups.map((group) => {
           const singlePoint = group.points.length === 1 ? group.points[0] : null;
-          const hasPharmacy = group.points.some((point) => point.type === Category.PHARMACY);
-          const hasFuel = group.points.some((point) => point.type === Category.FUEL);
-          const hasKiosk = group.points.some((point) => point.type === Category.MOBILE_MONEY);
           const icon = singlePoint
-            ? singlePoint.type === Category.PHARMACY
-              ? pharmacyIcon
-              : singlePoint.type === Category.FUEL
-                ? fuelIcon
-                : kioskIcon
-            : getClusterIcon(
-              hasPharmacy && !hasFuel && !hasKiosk
-                ? '#2f855a'
-                : hasFuel && !hasPharmacy && !hasKiosk
-                  ? '#0f2b46'
-                  : hasKiosk && !hasPharmacy && !hasFuel
-                    ? '#1f2933'
-                    : '#c86b4a',
-              group.points.length
-            );
+            ? getMarkerIconForType(singlePoint.type)
+            : (() => {
+              const types = new Set(group.points.map((p) => LEGACY_CATEGORY_MAP[p.type] ?? p.type));
+              const color = types.size === 1
+                ? (VERTICALS[Array.from(types)[0]]?.color ?? '#c86b4a')
+                : '#c86b4a';
+              return getClusterIcon(color, group.points.length);
+            })();
 
           return (
             <Marker

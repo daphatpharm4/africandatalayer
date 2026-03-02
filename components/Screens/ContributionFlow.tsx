@@ -4,11 +4,10 @@ import {
   Camera,
   CheckCircle,
   MapPin,
-  Pill,
-  Landmark,
-  Fuel,
   ShieldCheck
 } from 'lucide-react';
+import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
+import VerticalIcon from '../shared/VerticalIcon';
 import { enqueueSubmission, flushOfflineQueue, getQueueStats, type QueueSyncSummary } from '../../lib/client/offlineQueue';
 import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/deviceProfile';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
@@ -569,28 +568,22 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
 
   const renderVerticalSelector = () => {
     if (isEnrichMode) return null;
+    const verticalEntries = Object.values(VERTICALS);
     return (
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
         <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Vertical', 'Verticale')}</h4>
         <div className="grid grid-cols-3 gap-2">
-          <button
-            onClick={() => setVertical('pharmacy')}
-            className={`h-11 rounded-xl border text-xs font-bold uppercase tracking-widest ${vertical === 'pharmacy' ? 'bg-[#eaf3ee] border-[#2f855a] text-[#2f855a]' : 'border-gray-100 text-gray-500'}`}
-          >
-            {t('Pharmacy', 'Pharmacie')}
-          </button>
-          <button
-            onClick={() => setVertical('mobile_money')}
-            className={`h-11 rounded-xl border text-xs font-bold uppercase tracking-widest ${vertical === 'mobile_money' ? 'bg-[#e7eef4] border-[#0f2b46] text-[#0f2b46]' : 'border-gray-100 text-gray-500'}`}
-          >
-            {t('Kiosk', 'Kiosque')}
-          </button>
-          <button
-            onClick={() => setVertical('fuel_station')}
-            className={`h-11 rounded-xl border text-xs font-bold uppercase tracking-widest ${vertical === 'fuel_station' ? 'bg-[#f7e8e1] border-[#c86b4a] text-[#c86b4a]' : 'border-gray-100 text-gray-500'}`}
-          >
-            {t('Fuel', 'Carburant')}
-          </button>
+          {verticalEntries.map((v) => (
+            <button
+              key={v.id}
+              onClick={() => setVertical(v.id as Vertical)}
+              className={`h-11 rounded-xl border text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-1 ${vertical === v.id ? `border-current` : 'border-gray-100 text-gray-500'}`}
+              style={vertical === v.id ? { backgroundColor: v.bgColor, color: v.color, borderColor: v.color } : undefined}
+            >
+              <VerticalIcon name={v.icon} size={12} />
+              {getCategoryLabel(v.id, language)}
+            </button>
+          ))}
         </div>
       </div>
     );
@@ -921,7 +914,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     </div>
   );
 
-  const verticalIcon = vertical === 'pharmacy' ? <Pill size={18} /> : vertical === 'mobile_money' ? <Landmark size={18} /> : <Fuel size={18} />;
+  const verticalIcon = <VerticalIcon name={VERTICALS[vertical]?.icon ?? 'pill'} size={18} />;
 
   if (submitted) {
     return (

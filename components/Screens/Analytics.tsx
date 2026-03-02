@@ -21,6 +21,7 @@ import {
 import { getSession } from '../../lib/client/auth';
 import { apiJson } from '../../lib/client/api';
 import type { LeaderboardEntry, MapScope, PointEvent, ProjectedPoint, SubmissionCategory } from '../../shared/types';
+import { categoryPluralLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
 
 interface Props {
   onBack: () => void;
@@ -60,10 +61,8 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
   ]);
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
-  const categoryLabel = (category: SubmissionCategory): string => {
-    if (category === 'pharmacy') return t('Pharmacies', 'Pharmacies');
-    if (category === 'fuel_station') return t('Fuel Stations', 'Stations-service');
-    return t('Mobile Money Kiosks', 'Kiosques mobile money');
+  const categorylabel = (category: SubmissionCategory): string => {
+    return categoryPluralLabel(category, language);
   };
 
   useEffect(() => {
@@ -132,21 +131,18 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
         );
         setActiveContributors(activeUsers.size);
 
-        const categoryCounts: Record<SubmissionCategory, number> = {
-          pharmacy: 0,
-          fuel_station: 0,
-          mobile_money: 0
-        };
+        const categoryCounts: Record<string, number> = {};
+        for (const id of VERTICAL_IDS) categoryCounts[id] = 0;
         for (const event of safeEvents) {
           if (event.category in categoryCounts) categoryCounts[event.category] += 1;
         }
-        setCategoryData([
-          { name: categoryLabel('pharmacy'), value: categoryCounts.pharmacy, color: '#2f855a' },
-          { name: categoryLabel('fuel_station'), value: categoryCounts.fuel_station, color: '#0f2b46' },
-          { name: categoryLabel('mobile_money'), value: categoryCounts.mobile_money, color: '#c86b4a' }
-        ]);
+        setCategoryData(
+          VERTICAL_IDS
+            .filter((id) => (categoryCounts[id] ?? 0) > 0)
+            .map((id) => ({ name: categorylabel(id as SubmissionCategory), value: categoryCounts[id], color: VERTICALS[id].color }))
+        );
 
-        const categories: SubmissionCategory[] = ['pharmacy', 'fuel_station', 'mobile_money'];
+        const categories = VERTICAL_IDS;
         const bucketsPerCategory = categories.map(() => [0, 0, 0, 0]);
         const heatWindowMs = 24 * 60 * 60 * 1000;
         for (const event of safeEvents) {
@@ -173,16 +169,8 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
       } catch {
         setCompletionRate(0);
         setActiveContributors(0);
-        setCategoryData([
-          { name: categoryLabel('pharmacy'), value: 0, color: '#2f855a' },
-          { name: categoryLabel('fuel_station'), value: 0, color: '#0f2b46' },
-          { name: categoryLabel('mobile_money'), value: 0, color: '#c86b4a' }
-        ]);
-        setHeatmap([
-          ['Low', 'Low', 'Low', 'Low'],
-          ['Low', 'Low', 'Low', 'Low'],
-          ['Low', 'Low', 'Low', 'Low']
-        ]);
+        setCategoryData([]);
+        setHeatmap(VERTICAL_IDS.map(() => ['Low', 'Low', 'Low', 'Low'] as HeatLevel[]));
       } finally {
         setIsLoadingAdminData(false);
       }

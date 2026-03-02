@@ -9,16 +9,15 @@ import {
   isWithinBonamoussadi
 } from '../../shared/geofence';
 import {
-  Fuel,
-  Landmark,
   List,
   Map as MapIcon,
   MapPin,
-  Pill,
   Plus,
   ShieldCheck,
   User
 } from 'lucide-react';
+import VerticalIcon from '../shared/VerticalIcon';
+import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
 import BrandLogo from '../BrandLogo';
@@ -126,11 +125,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     const name =
       (typeof details.name === 'string' && details.name) ||
       (typeof details.siteName === 'string' && details.siteName) ||
-      (type === Category.PHARMACY
-        ? t('Pharmacy', 'Pharmacie')
-        : type === Category.FUEL
-          ? t('Fuel Station', 'Station-service')
-          : t('Mobile Money Kiosk', 'Kiosque mobile money'));
+      getCategoryLabel(point.category, language);
     const pricesByFuel =
       details.pricesByFuel && typeof details.pricesByFuel === 'object'
         ? (details.pricesByFuel as Record<string, number>)
@@ -282,9 +277,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
   }, [filteredPoints, mapScope]);
 
   const categoryLabel = (type: Category) => {
-    if (type === Category.PHARMACY) return t('Pharmacy', 'Pharmacie');
-    if (type === Category.FUEL) return t('Fuel Station', 'Station-service');
-    return t('Mobile Money Kiosk', 'Kiosque mobile money');
+    const verticalId = LEGACY_CATEGORY_MAP[type] ?? type;
+    return getCategoryLabel(verticalId, language);
   };
 
   return (
@@ -389,9 +383,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
                   onClick={() => onSelectPoint(point)}
                   className="w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4 active:scale-[0.98] transition-transform"
                 >
-                  <div className={`p-3 rounded-xl ${point.type === Category.FUEL ? 'bg-[#e7eef4] text-[#0f2b46]' : point.type === Category.PHARMACY ? 'bg-[#eaf3ee] text-[#2f855a]' : 'bg-gray-100 text-gray-700'}`}>
-                    {point.type === Category.FUEL ? <Fuel size={20} /> : point.type === Category.PHARMACY ? <Pill size={20} /> : <Landmark size={20} />}
-                  </div>
+                  {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
+                    <div className="p-3 rounded-xl" style={{ backgroundColor: v?.bgColor ?? '#f3f4f6', color: v?.color ?? '#374151' }}>
+                      <VerticalIcon name={v?.icon ?? 'pill'} size={20} />
+                    </div>
+                  ); })()}
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
                       <h4 className="font-semibold text-gray-900 text-sm">{point.name}</h4>

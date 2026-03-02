@@ -3,14 +3,13 @@ import { Category, DataPoint } from '../../types';
 import {
   ArrowLeft,
   Clock,
-  CreditCard,
   MapPin,
   Navigation2,
-  Pill,
   PlusCircle,
   ShieldCheck,
-  Zap
 } from 'lucide-react';
+import VerticalIcon from '../shared/VerticalIcon';
+import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 
 interface Props {
   point: DataPoint | null;
@@ -26,12 +25,9 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   if (!point) return null;
 
-  const categoryLabel =
-    point.type === Category.PHARMACY
-      ? t('Pharmacy', 'Pharmacie')
-      : point.type === Category.FUEL
-        ? t('Fuel Station', 'Station-service')
-        : t('Mobile Money Kiosk', 'Kiosque mobile money');
+  const verticalId = LEGACY_CATEGORY_MAP[point.type] ?? point.type;
+  const vertical = VERTICALS[verticalId];
+  const categoryLabelText = vertical ? getCategoryLabel(verticalId, language) : point.type;
 
   const translatedGap = (gap: string) => {
     const map: Record<string, { en: string; fr: string }> = {
@@ -52,7 +48,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
   };
 
   const knownFields: Array<{ label: string; value?: string | number | boolean }> = [
-    { label: t('Category', 'Categorie'), value: categoryLabel },
+    { label: t('Category', 'Categorie'), value: categoryLabelText },
     { label: t('Address', 'Adresse'), value: point.location },
     { label: t('Opening Hours', 'Heures d\'ouverture'), value: point.openingHours || point.hours },
     { label: t('Fuel Price', 'Prix carburant'), value: typeof point.price === 'number' ? `${point.price} XAF/L` : undefined },
@@ -74,7 +70,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
           <ArrowLeft size={20} />
         </button>
         <h3 className="text-sm font-bold truncate max-w-[200px]">{point.name}</h3>
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{categoryLabel}</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{categoryLabelText}</span>
       </div>
 
       <div className="p-4 space-y-4">
@@ -86,7 +82,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
           />
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="p-2 bg-[#0f2b46] rounded-full border-2 border-white shadow-xl">
-              {point.type === Category.PHARMACY ? <Pill size={20} className="text-white" /> : point.type === Category.FUEL ? <Zap size={20} className="text-white" /> : <CreditCard size={20} className="text-white" />}
+              <VerticalIcon name={vertical?.icon ?? 'pill'} size={20} className="text-white" />
             </div>
           </div>
           <button className="absolute bottom-3 right-3 p-2 bg-white rounded-xl shadow-md border border-gray-100 text-[#0f2b46]">

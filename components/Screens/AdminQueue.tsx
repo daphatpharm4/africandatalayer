@@ -10,6 +10,7 @@ import type {
   SubmissionLocation,
   SubmissionPhotoMetadata,
 } from '../../shared/types';
+import { categoryLabel as getCategoryLabel } from '../../shared/verticals';
 
 interface Props {
   onBack: () => void;
@@ -51,10 +52,8 @@ function formatDate(iso: string | null | undefined, unavailable: string): string
   return parsed.toLocaleString();
 }
 
-function categoryLabel(category: AdminSubmissionEvent['event']['category'], language: 'en' | 'fr'): string {
-  if (category === 'pharmacy') return language === 'fr' ? 'Pharmacie' : 'Pharmacy';
-  if (category === 'fuel_station') return language === 'fr' ? 'Station-service' : 'Fuel Station';
-  return language === 'fr' ? 'Kiosque mobile money' : 'Mobile Money Kiosk';
+function categoryLabelLocal(category: AdminSubmissionEvent['event']['category'], language: 'en' | 'fr'): string {
+  return getCategoryLabel(category, language);
 }
 
 function getSiteName(item: AdminSubmissionEvent, language: 'en' | 'fr'): string {
@@ -499,7 +498,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Point Metadata', 'Metadonnees du point')}</div>
-                <div>{t('Category', 'Categorie')}: {categoryLabel(selectedGroup.category, language)}</div>
+                <div>{t('Category', 'Categorie')}: {categoryLabelLocal(selectedGroup.category, language)}</div>
                 <div>Point ID: {selectedGroup.pointId}</div>
                 <div>{t('Events', 'Evenements')}: {selectedGroup.events.length}</div>
               </div>
@@ -631,7 +630,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         <div>
                           <h4 className="text-sm font-bold text-gray-900 leading-tight">{group.siteName}</h4>
                           <p className="text-[10px] uppercase tracking-widest text-gray-400">
-                            {categoryLabel(group.category, language)}
+                            {categoryLabelLocal(group.category, language)}
                             {group.events.length > 1 && ` · ${group.events.length} ${t('events', 'evenements')}`}
                           </p>
                         </div>

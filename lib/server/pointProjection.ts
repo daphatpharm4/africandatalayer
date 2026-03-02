@@ -7,20 +7,13 @@ import type {
   SubmissionDetails,
   SubmissionLocation,
 } from "../../shared/types.js";
+import { getVertical } from "../../shared/verticals.js";
 
-type GapRules = Record<SubmissionCategory, readonly string[]>;
-
-const ENRICHABLE_FIELDS: GapRules = {
-  pharmacy: ["openingHours", "isOpenNow", "isOnDuty"],
-  mobile_money: ["merchantIdByProvider", "paymentMethods", "openingHours", "providers"],
-  fuel_station: ["fuelTypes", "pricesByFuel", "quality", "paymentMethods", "openingHours", "hasFuelAvailable"],
-};
-
-const CREATE_REQUIRED_FIELDS: GapRules = {
-  pharmacy: ["name", "isOpenNow"],
-  mobile_money: ["providers"],
-  fuel_station: ["name", "hasFuelAvailable"],
-};
+function trimString(input: unknown): string | undefined {
+  if (typeof input !== "string") return undefined;
+  const trimmed = input.trim();
+  return trimmed || undefined;
+}
 
 function hasValue(input: unknown): boolean {
   if (typeof input === "string") return Boolean(input.trim());
@@ -31,106 +24,8 @@ function hasValue(input: unknown): boolean {
   return false;
 }
 
-function trimString(input: unknown): string | undefined {
-  if (typeof input !== "string") return undefined;
-  const trimmed = input.trim();
-  return trimmed || undefined;
-}
-
-function normalizeBoolean(input: unknown): boolean | undefined {
-  if (typeof input === "boolean") return input;
-  if (typeof input === "number") {
-    if (input === 1) return true;
-    if (input === 0) return false;
-    return undefined;
-  }
-  if (typeof input !== "string") return undefined;
-  const normalized = input.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (["true", "yes", "y", "1", "open", "available", "oui"].includes(normalized)) return true;
-  if (["false", "no", "n", "0", "closed", "unavailable", "non"].includes(normalized)) return false;
-  return undefined;
-}
-
-function normalizeProviders(input: unknown): string[] | undefined {
-  if (Array.isArray(input)) {
-    const list = input
-      .map((value) => trimString(value))
-      .filter((value): value is string => Boolean(value));
-    return list.length ? Array.from(new Set(list)) : undefined;
-  }
-  const single = trimString(input);
-  return single ? [single] : undefined;
-}
-
 function normalizeDetailsForCategory(category: SubmissionCategory, raw: SubmissionDetails): SubmissionDetails {
-  const details: SubmissionDetails = { ...raw };
-  const name = trimString(details.name) ?? trimString(details.siteName);
-  if (name) {
-    details.name = name;
-    details.siteName = name;
-  }
-
-  const openingHours = trimString((details as Record<string, unknown>).opening_hours) ?? trimString(details.openingHours);
-  if (openingHours) details.openingHours = openingHours;
-
-  if (category === "mobile_money") {
-    const providers = normalizeProviders(details.providers ?? details.provider);
-    if (providers) details.providers = providers;
-    const cashThreshold =
-      normalizeBoolean(details.hasMin50000XafAvailable) ??
-      normalizeBoolean(details.hasCashAvailable) ??
-      (typeof details.availability === "string" ? !details.availability.toLowerCase().includes("out") : undefined);
-    if (typeof cashThreshold === "boolean") {
-      details.hasMin50000XafAvailable = cashThreshold;
-    }
-    if ("hasCashAvailable" in details) {
-      delete details.hasCashAvailable;
-    }
-    if (details.merchantId && providers?.length && !details.merchantIdByProvider) {
-      details.merchantIdByProvider = { [providers[0]]: details.merchantId };
-    }
-  }
-
-  if (category === "fuel_station") {
-    const fuelType = trimString(details.fuelType);
-    if (fuelType && !details.fuelTypes?.length) details.fuelTypes = [fuelType];
-    const parsedPrice =
-      typeof details.fuelPrice === "number"
-        ? details.fuelPrice
-        : typeof details.price === "number"
-          ? details.price
-          : undefined;
-    if (typeof details.hasFuelAvailable !== "boolean" && typeof details.availability === "string") {
-      details.hasFuelAvailable = !details.availability.toLowerCase().includes("out");
-    }
-    if (parsedPrice !== undefined) {
-      const priceKey = fuelType ?? "super";
-      details.pricesByFuel = { ...(details.pricesByFuel ?? {}), [priceKey]: parsedPrice };
-      details.fuelPrice = parsedPrice;
-      details.price = parsedPrice;
-    }
-  }
-
-  if (category === "pharmacy" && typeof details.isOpenNow !== "boolean" && typeof details.availability === "string") {
-    const normalized = details.availability.toLowerCase();
-    details.isOpenNow = !normalized.includes("out") && !normalized.includes("closed");
-  }
-
-  if (category === "pharmacy") {
-    const raw = details as Record<string, unknown>;
-    const isOnDuty = normalizeBoolean(raw.isOnDuty ?? raw.isOnCall ?? raw.onDuty ?? raw.pharmacyDeGarde);
-    if (typeof isOnDuty === "boolean") details.isOnDuty = isOnDuty;
-
-    if (typeof details.isOnDuty !== "boolean" && typeof details.availability === "string") {
-      const normalized = details.availability.toLowerCase();
-      if (normalized.includes("on-call") || normalized.includes("on call") || normalized.includes("garde")) {
-        details.isOnDuty = true;
-      }
-    }
-  }
-
-  return details;
+  return getVertical(category).normalizeDetails(raw);
 }
 
 function mergeDetails(base: SubmissionDetails, incoming: SubmissionDetails): SubmissionDetails {
@@ -158,12 +53,12 @@ function mergeDetails(base: SubmissionDetails, incoming: SubmissionDetails): Sub
 
 export function listMissingFields(category: SubmissionCategory, details: SubmissionDetails): string[] {
   const normalized = normalizeDetailsForCategory(category, details);
-  return ENRICHABLE_FIELDS[category].filter((field) => !hasValue(normalized[field]));
+  return getVertical(category).enrichableFields.filter((field) => !hasValue(normalized[field]));
 }
 
 export function listCreateMissingFields(category: SubmissionCategory, details: SubmissionDetails): string[] {
   const normalized = normalizeDetailsForCategory(category, details);
-  return CREATE_REQUIRED_FIELDS[category].filter((field) => !hasValue(normalized[field]));
+  return getVertical(category).createRequiredFields.filter((field) => !hasValue(normalized[field]));
 }
 
 export function isEnrichFieldAllowed(category: SubmissionCategory, field: string): boolean {
@@ -177,7 +72,7 @@ export function isEnrichFieldAllowed(category: SubmissionCategory, field: string
         : field === "isOnCall" || field === "onDuty"
           ? "isOnDuty"
           : field;
-  return ENRICHABLE_FIELDS[category].includes(canonicalField);
+  return getVertical(category).enrichableFields.includes(canonicalField);
 }
 
 export function eventToProjectedPoint(event: PointEvent): ProjectedPoint {

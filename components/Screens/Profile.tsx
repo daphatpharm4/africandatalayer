@@ -15,6 +15,7 @@ import { apiJson } from '../../lib/client/api';
 import { getSession } from '../../lib/client/auth';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type { MapScope, PointEvent, UserProfile } from '../../shared/types';
+import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 
 interface Props {
   onBack: () => void;
@@ -62,12 +63,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
     const details = (submission.details ?? {}) as Record<string, unknown>;
     const siteName = typeof details.siteName === 'string' ? details.siteName : typeof details.name === 'string' ? details.name : null;
     const locationLabel = siteName || `GPS: ${submission.location.latitude.toFixed(4)}°, ${submission.location.longitude.toFixed(4)}°`;
-    const typeLabel =
-      submission.category === 'fuel_station'
-        ? t('Fuel Station', 'Station-service')
-        : submission.category === 'pharmacy'
-          ? t('Pharmacy', 'Pharmacie')
-          : t('Mobile Money Kiosk', 'Kiosque mobile money');
+    const typeLabel = getCategoryLabelFromRegistry(submission.category, language);
     const rawXp = details.xpAwarded;
     const xpAwarded = typeof rawXp === 'number' && Number.isFinite(rawXp) ? rawXp : 5;
 
@@ -81,9 +77,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   };
 
   const categoryLabel = (category: SyncErrorRecord['payloadSummary']['category']) => {
-    if (category === 'fuel_station') return t('Fuel Station', 'Station-service');
-    if (category === 'pharmacy') return t('Pharmacy', 'Pharmacie');
-    return t('Mobile Money Kiosk', 'Kiosque mobile money');
+    return getCategoryLabelFromRegistry(category, language);
   };
 
   useEffect(() => {
