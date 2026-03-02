@@ -568,7 +568,7 @@ export async function runWeeklySnapshot(
 
     // Average price for fuel verticals
     let avgPrice: number | null = null;
-    if (verticalId === "fuel_station" || verticalId === "fuel_fleet") {
+    if (verticalId === "fuel_station") {
       const prices = points
         .map((p) => p.details.fuelPrice)
         .filter((v): v is number => typeof v === "number" && v > 0);

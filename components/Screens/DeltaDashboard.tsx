@@ -155,7 +155,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   })();
 
   // Price trend (fuel only)
-  const showPriceTrend = selectedVertical === 'fuel_station' || selectedVertical === 'fuel_fleet';
+  const showPriceTrend = selectedVertical === 'fuel_station';
   const priceTrend = showPriceTrend
     ? filteredStats
         .filter((s) => s.avg_price !== null)

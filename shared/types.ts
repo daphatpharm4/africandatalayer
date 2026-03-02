@@ -4,15 +4,7 @@ export type SubmissionCategory =
   | "mobile_money"
   | "alcohol_outlet"
   | "retail_kiosk"
-  | "billboard"
-  | "fmcg"
-  | "transport_station_hub"
-  | "census_satellite_groundtruth"
-  | "fuel_fleet"
-  | "ngo_services"
-  | "public_goods"
-  | "competitor_intelligence"
-  | "water_point";
+  | "billboard";
 export type PointEventType = "CREATE_EVENT" | "ENRICH_EVENT";
 export type MapScope = "bonamoussadi" | "cameroon" | "global";
 
