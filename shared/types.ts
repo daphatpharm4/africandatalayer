@@ -191,3 +191,54 @@ export interface LeaderboardEntry {
   lastContributionAt: string | null;
   lastLocation: string;
 }
+
+// Delta / Snapshot types
+export type DeltaType = "new" | "removed" | "changed" | "unchanged";
+export type DeltaDirection = "increase" | "decrease" | "stable" | "not_applicable";
+
+export interface SnapshotDelta {
+  id: string;
+  snapshotDate: string;
+  baselineSnapshotDate: string;
+  verticalId: string;
+  pointId: string;
+  deltaType: DeltaType;
+  deltaField: string | null;
+  previousValue: string | null;
+  currentValue: string | null;
+  deltaMagnitude: number | null;
+  deltaDirection: DeltaDirection;
+  deltaSummary: string | null;
+}
+
+export interface AnomalyFlag {
+  metric: string;
+  zScore: number;
+  direction: DeltaDirection;
+}
+
+export interface SnapshotStats {
+  id: string;
+  snapshotDate: string;
+  verticalId: string;
+  totalPoints: number;
+  completedPoints: number;
+  completionRate: number;
+  newCount: number;
+  removedCount: number;
+  changedCount: number;
+  unchangedCount: number;
+  avgPrice: number | null;
+  weekOverWeekGrowth: number | null;
+  movingAvg4w: number | null;
+  zScoreTotalPoints: number | null;
+  zScoreNewCount: number | null;
+  zScoreRemovedCount: number | null;
+  anomalyFlags: AnomalyFlag[];
+}
+
+export interface TrendDataPoint {
+  date: string;
+  value: number;
+  movingAvg: number | null;
+}

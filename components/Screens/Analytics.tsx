@@ -26,6 +26,7 @@ import { categoryPluralLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verti
 interface Props {
   onBack: () => void;
   onAdmin?: () => void;
+  onDeltaDashboard?: () => void;
   isAdmin?: boolean;
   language: 'en' | 'fr';
 }
@@ -44,7 +45,7 @@ const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
   return 'bonamoussadi';
 };
 
-const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
+const Analytics: React.FC<Props> = ({ onBack, onAdmin, onDeltaDashboard, isAdmin, language }) => {
   const adminMode = Boolean(isAdmin);
   const [adminName, setAdminName] = useState<string | null>(null);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
@@ -259,6 +260,22 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, isAdmin, language }) => {
               <span className="text-sm font-semibold text-gray-900">{t('Top contributors near you', 'Top contributeurs pres de vous')}</span>
             </div>
           </div>
+        )}
+
+        {adminMode && onDeltaDashboard && (
+          <button
+            onClick={onDeltaDashboard}
+            className="w-full flex items-center justify-between bg-[#0f2b46] text-white p-4 rounded-2xl shadow-sm hover:bg-[#1a3d5c] transition-colors"
+          >
+            <div className="flex items-center space-x-3">
+              <BarChart3 size={18} />
+              <div className="text-left">
+                <span className="text-xs font-bold block">{t('Delta Intelligence', 'Intelligence Delta')}</span>
+                <span className="text-[10px] text-gray-300">{t('Snapshots, trends & anomalies', 'Snapshots, tendances & anomalies')}</span>
+              </div>
+            </div>
+            <ArrowLeft size={16} className="rotate-180" />
+          </button>
         )}
 
         {adminMode && (

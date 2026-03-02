@@ -2,5 +2,11 @@
   "framework": "vite",
   "buildCommand": "vite build",
   "devCommand": "vite",
-  "outputDirectory": "dist"
+  "outputDirectory": "dist",
+  "crons": [
+    {
+      "path": "/api/cron/snapshot",
+      "schedule": "0 3 * * 1"
+    }
+  ]
 }

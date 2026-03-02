@@ -9,7 +9,8 @@ export enum Screen {
   SETTINGS = 'SETTINGS',
   QUALITY = 'QUALITY',
   REWARDS = 'REWARDS',
-  ADMIN = 'ADMIN'
+  ADMIN = 'ADMIN',
+  DELTA_DASHBOARD = 'DELTA_DASHBOARD'
 }
 
 export enum Category {

@@ -18,6 +18,7 @@ const Settings = lazy(() => import('./components/Screens/Settings'));
 const QualityInfo = lazy(() => import('./components/Screens/QualityInfo'));
 const RewardsCatalog = lazy(() => import('./components/Screens/RewardsCatalog'));
 const AdminQueue = lazy(() => import('./components/Screens/AdminQueue'));
+const DeltaDashboard = lazy(() => import('./components/Screens/DeltaDashboard'));
 
 interface WindowWithIdleCallback extends Window {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -214,6 +215,7 @@ const App: React.FC = () => {
             onBack={goBack}
             isAdmin={isAdmin}
             onAdmin={isAdmin ? () => navigateTo(Screen.ADMIN) : undefined}
+            onDeltaDashboard={isAdmin ? () => navigateTo(Screen.DELTA_DASHBOARD) : undefined}
             language={language}
           />
         );
@@ -242,6 +244,8 @@ const App: React.FC = () => {
         return <RewardsCatalog language={language} onBack={goBack} />;
       case Screen.ADMIN:
         return <AdminQueue language={language} onBack={goBack} />;
+      case Screen.DELTA_DASHBOARD:
+        return <DeltaDashboard language={language} onBack={goBack} />;
       default:
         return <Splash onStart={(scr) => navigateTo(scr)} language={language} />;
     }
