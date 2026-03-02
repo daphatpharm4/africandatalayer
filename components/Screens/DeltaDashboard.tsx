@@ -72,8 +72,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       try {
         setLoading(true);
         const [statsData, anomalyData] = await Promise.all([
-          apiJson<StatsRow[]>('/api/analytics/snapshots?limit=52'),
-          apiJson<AnomalyRow[]>('/api/analytics/anomalies'),
+          apiJson<StatsRow[]>('/api/analytics?view=snapshots?limit=52'),
+          apiJson<AnomalyRow[]>('/api/analytics?view=anomalies'),
         ]);
         setStats(Array.isArray(statsData) ? statsData : []);
         setAnomalies(Array.isArray(anomalyData) ? anomalyData : []);
@@ -97,8 +97,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       }
       try {
         const [trend, deltasResp] = await Promise.all([
-          apiJson<{ data: TrendDataPoint[] }>(`/api/analytics/trends?vertical=${selectedVertical}&metric=total_points&weeks=12`),
-          apiJson<{ deltas: DeltaRow[] }>(`/api/analytics/deltas?vertical=${selectedVertical}&limit=20`),
+          apiJson<{ data: TrendDataPoint[] }>(`/api/analytics?view=trends&vertical=${selectedVertical}&metric=total_points&weeks=12`),
+          apiJson<{ deltas: DeltaRow[] }>(`/api/analytics?view=deltas&vertical=${selectedVertical}&limit=20`),
         ]);
         setTrendData(Array.isArray(trend?.data) ? trend.data : []);
         setRecentDeltas(Array.isArray(deltasResp?.deltas) ? deltasResp.deltas : []);

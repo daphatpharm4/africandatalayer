@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "crons": [
     {
-      "path": "/api/cron/snapshot",
+      "path": "/api/analytics?view=cron",
       "schedule": "0 3 * * 1"
     }
   ]
