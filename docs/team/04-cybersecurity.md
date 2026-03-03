@@ -435,7 +435,7 @@ psql "postgres://postgres.rhslszcwchyzkaooxzht:ApcWC6XbmfKBbp6S@aws-1-us-east-1.
 | Field | Value |
 |-------|-------|
 | **Severity** | CRITICAL |
-| **File** | `vite.config.ts:20-21`, `lib/gemini.ts:4` |
+| **File** | `vite.config.ts:20-21`, `lib/gemini.ts:4` (historical vulnerable state) |
 | **CVSS** | 8.6 |
 | **Priority** | FIX NOW |
 
@@ -467,6 +467,8 @@ export async function POST(request: Request): Promise<Response> {
   return jsonResponse(result);
 }
 ```
+
+**Implementation status (2026-03-03):** Remediated via removal of Vite `define` key injection, new authenticated `POST /api/ai/search`, and server-only Gemini client in `lib/server/geminiSearch.ts`.
 
 #### VULN-003: Plaintext Admin Password Support
 
@@ -1142,7 +1144,7 @@ function validatePasswordStrength(password: string): string | null {
 |---|------|--------------|---------|--------|
 | C-1 | Rotate ALL secrets exposed in `.env` | VULN-001 | `.env` | NOT DONE |
 | C-2 | Add `.env` to `.gitignore` and purge from git history | VULN-001 | `.gitignore` | NOT DONE |
-| C-3 | Move Gemini API calls to server-side proxy | VULN-002 | `vite.config.ts`, `lib/gemini.ts` | NOT DONE |
+| C-3 | Move Gemini API calls to server-side proxy | VULN-002 | `vite.config.ts`, `api/ai/search.ts`, `lib/server/geminiSearch.ts` | DONE (2026-03-03) |
 | C-4 | Remove plaintext admin password fallback | VULN-003 | `api/auth/auth.ts:42-46` | NOT DONE |
 | C-5 | Set `ADMIN_PASSWORD` to bcrypt hash in Vercel env vars | VULN-003 | Vercel dashboard | NOT DONE |
 | C-6 | Strip `passwordHash` from user profile API response | VULN-004 | `api/user/index.ts:22` | NOT DONE |

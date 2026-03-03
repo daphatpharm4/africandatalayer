@@ -92,7 +92,7 @@
 | IaC codified (Vercel + Supabase config as code) | Cloud Engineer | `vercel.json` enhanced per doc 03 spec, Supabase migrations scripted | None |
 | CI/CD pipeline operational | Cloud Engineer | PR -> preview deploy -> staging -> prod pipeline with automated tests | None |
 | Staging environment live | Cloud Engineer | Separate Supabase project, Vercel preview branch, seeded test data | None |
-| Security: Gemini API key moved server-side | Cloud Engineer + Cybersecurity | `VITE_GEMINI_API_KEY` removed from client bundle (doc 04, finding S-01) | None |
+| Security: Gemini API key moved server-side (DONE 2026-03-03) | Cloud Engineer + Cybersecurity | `VITE_GEMINI_API_KEY` removed from client bundle (doc 04, finding S-01) | None |
 | Security: Rate limiting on auth endpoints | Cloud Engineer + Cybersecurity | 10 req/min per IP on `/api/auth/*` (doc 04, finding D-01) | None |
 | KPI dashboard v1 (internal) | Data Analyst | Supabase SQL queries for T1 KPIs running on schedule, viewable in admin | None |
 | Contributor acquisition plan finalized | Marketing | Campus ambassador shortlist, WhatsApp group targets, onboarding script | None |
@@ -298,7 +298,7 @@ Phase 1 Exit Gate (M6, W11-12)
 
 | ID | Issue | Priority | Owner | Action Required | Due Date | Status |
 |----|-------|:--------:|-------|-----------------|:--------:|:------:|
-| I-01 | Gemini API key exposed in client bundle | P1 | Cloud Engineer (T3) | Move to server-side API route per doc 04 finding S-01 | Week 1 | OPEN |
+| I-01 | Gemini API key exposed in client bundle | P1 | Cloud Engineer (T3) | Moved to authenticated `POST /api/ai/search`; removed client-side key injection from `vite.config.ts` | Week 1 | DONE (2026-03-03) |
 | I-02 | No rate limiting on any API endpoint | P1 | Cloud Engineer (T3) | Implement Vercel KV-based rate limiter per doc 03 | Week 2 | OPEN |
 | I-03 | No staging environment exists | P2 | Cloud Engineer (T3) | Create separate Supabase project + Vercel preview branch | Week 2 | OPEN |
 | I-04 | Admin review queue lacks fraud indicators | P2 | Cloud Engineer (T3) | Add risk score, EXIF flags, and distance alerts to review UI | Week 4 | OPEN |

@@ -303,7 +303,7 @@ define: {
 },
 ```
 
-**Fix:** Remove these `define` entries. Create a server-side proxy at `api/gemini/index.ts` that uses `process.env.GEMINI_API_KEY` on the server and expose a safe endpoint to the client.
+**Fix:** Remove these `define` entries. Create a server-side proxy at `api/ai/search.ts` (`POST /api/ai/search`) that uses `process.env.GEMINI_API_KEY` on the server and expose only that safe endpoint to the client.
 
 ### 1.4 IaC Tool Selection
 

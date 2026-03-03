@@ -46,6 +46,7 @@ Set these environment variables:
 - `AUTH_URL` (e.g. `https://your-app.vercel.app`)
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `GEMINI_API_KEY` (server-only, used by `POST /api/ai/search`)
 - `ADL_POSTGRES_URL` (optional override if integration-managed `POSTGRES_URL` is locked)
 - `POSTGRES_URL` (or `POSTGRES_PRISMA_URL` / `POSTGRES_URL_NON_POOLING`)
 - Optional emergency fallback: `POSTGRES_SSL_NO_VERIFY=true` (only if TLS fails with `SELF_SIGNED_CERT_IN_CHAIN`)
@@ -56,6 +57,7 @@ Set these environment variables:
 - Optional: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
 - Optional (frontend): `VITE_ADMIN_EMAIL` (to show Impact tab for admin users)
 - Optional migration-only: `EDGE_CONFIG`, `EDGE_CONFIG_ID`, `VERCEL_API_TOKEN`
+- Do not define `VITE_GEMINI_API_KEY` in any frontend environment
 
 Endpoints:
 - `GET/POST /api/submissions` (default returns projected points; add `?view=events` for raw append-only events)

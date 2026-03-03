@@ -112,7 +112,7 @@ ADL's architecture must serve contributors on low-end Android devices over 2G/3G
 | **Geofencing** | `shared/geofence.ts` | Bounding boxes for Bonamoussadi and Cameroon; `isWithinBonamoussadi()`, `isWithinCameroon()` |
 | **Point projection** | `lib/server/pointProjection.ts` | Event sourcing projector: `point_events` -> `ProjectedPoint` with gap analysis |
 | **Photo upload** | `api/submissions/index.ts` | Base64 decode -> `@vercel/blob` PUT, public access, max 8 MB |
-| **AI integration** | `lib/gemini.ts` | Gemini 2.5 Flash for location search with Google Maps grounding, TTS, audio transcription |
+| **AI integration** | `api/ai/search.ts`, `lib/server/geminiSearch.ts`, `lib/client/ai.ts` | Authenticated server-side Gemini search proxy (`POST /api/ai/search`) with Google Maps grounding |
 
 ### 2.3 Target Architecture (Phase 2-3)
 
@@ -183,7 +183,7 @@ ADL's architecture must serve contributors on low-end Android devices over 2G/3G
 | Queue | Client-side IndexedDB only | + Supabase Database Webhooks | + Upstash Redis Queue / QStash | No server-side queue exists today -- needed for async fraud scoring |
 | Cache | HTTP `s-maxage=30` | + Vercel Edge Config for hot data | + Redis (Upstash) for session cache | Current 30s cache is appropriate for MVP data freshness |
 | Real-time | None | Supabase Realtime | Same | Leaderboard and admin review need push updates |
-| AI | Gemini API (client-side key!) | Move to server-side proxy | Same + batch geocoding pipeline | `lib/gemini.ts` exposes API key via `process.env.API_KEY` in Vite define -- security risk |
+| AI | Gemini API via authenticated server-side proxy (`POST /api/ai/search`) | Add quotas/rate limits + monitoring | Same + batch geocoding pipeline | `GEMINI_API_KEY` is server-only; no key injected into browser bundle |
 | Monitoring | Vercel Analytics + Speed Insights | + Sentry for error tracking | + Custom observability dashboard | `@vercel/analytics` and `@vercel/speed-insights` already in `package.json` |
 
 ---
@@ -588,7 +588,7 @@ ADMIN_PASSWORD=                 # Hardcoded admin password!
 
 1. **CRITICAL: `ADMIN_PASSWORD` in environment variables.** This is a plaintext admin password. Must be replaced with hashed credentials in the database (already partially done: `user_profiles.password_hash` column exists, `bcryptjs` is a dependency).
 
-2. **HIGH: Gemini API key exposed client-side.** `vite.config.ts` defines `process.env.API_KEY` which is bundled into the client JavaScript. Must be proxied through a server-side API route.
+2. **HIGH: Gemini API key exposed client-side.** `vite.config.ts` defines `process.env.API_KEY` which is bundled into the client JavaScript. Must be proxied through `POST /api/ai/search`.
 
 3. **MEDIUM: `VERCEL_API_TOKEN` in env.** This grants full Vercel account access. Should only be in CI/CD, never in runtime functions.
 
@@ -749,7 +749,7 @@ AWS af-south-1: Long-running workers, batch processing
 
 | # | Action | Effort | Impact | Files Affected |
 |---|--------|--------|--------|----------------|
-| 1.1 | **Move Gemini API key server-side** | 2h | Security fix | `vite.config.ts` (remove `define`), new `api/ai/search.ts` |
+| 1.1 | **Move Gemini API key server-side** | 2h | Security fix | `vite.config.ts` (remove `define`), new `api/ai/search.ts` (`POST /api/ai/search`) |
 | 1.2 | **Remove `ADMIN_PASSWORD` from env** | 1h | Security fix | Seed admin via `user_profiles.password_hash` only |
 | 1.3 | **Add server-side idempotency check** | 4h | Data integrity | `api/submissions/index.ts` (check `X-Idempotency-Key` vs recent events) |
 | 1.4 | **Create staging Supabase project** | 2h | Env separation | New project + Vercel env vars for Preview/Staging |
