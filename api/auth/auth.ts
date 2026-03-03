@@ -118,63 +118,79 @@ export default async function handler(request: Request): Promise<Response> {
         async signIn({ user, account }) {
           const email = normalizeEmail(user?.email);
           const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
+          const isAdminAccount = Boolean(email && adminEmail && email === adminEmail);
+          const provider = account?.provider ?? "unknown";
 
-          if (email && adminEmail && email === adminEmail) {
+          if (!email) return true;
+          if (!isAdminAccount && account?.provider !== "google") return true;
+
+          try {
+            if (isAdminAccount) {
+              const existing = await getUserProfile(email);
+              if (existing) {
+                let shouldUpdate = false;
+                if (!existing.isAdmin) {
+                  existing.isAdmin = true;
+                  shouldUpdate = true;
+                }
+                if (existing.mapScope !== "global") {
+                  existing.mapScope = "global";
+                  shouldUpdate = true;
+                }
+                if (shouldUpdate) {
+                  await upsertUserProfile(email, existing);
+                }
+              } else {
+                const profile: UserProfile = {
+                  id: email,
+                  name: user?.name ?? inferDefaultDisplayName(email),
+                  email,
+                  phone: null,
+                  image: user?.image ?? "",
+                  occupation: "",
+                  XP: 0,
+                  isAdmin: true,
+                  mapScope: "global",
+                };
+                await upsertUserProfile(email, profile);
+              }
+              return true;
+            }
+
             const existing = await getUserProfile(email);
             if (existing) {
-              let shouldUpdate = false;
-              if (!existing.isAdmin) {
-                existing.isAdmin = true;
-                shouldUpdate = true;
-              }
-              if (existing.mapScope !== "global") {
-                existing.mapScope = "global";
-                shouldUpdate = true;
-              }
-              if (shouldUpdate) {
+              if (!existing.mapScope) {
+                existing.mapScope = "bonamoussadi";
                 await upsertUserProfile(email, existing);
               }
-            } else {
-              const profile: UserProfile = {
-                id: email,
-                name: user?.name ?? inferDefaultDisplayName(email),
-                email,
-                phone: null,
-                image: user?.image ?? "",
-                occupation: "",
-                XP: 0,
-                isAdmin: true,
-                mapScope: "global",
-              };
-              await upsertUserProfile(email, profile);
+              return true;
             }
+
+            const profile: UserProfile = {
+              id: email,
+              name: user?.name ?? inferDefaultDisplayName(email),
+              email,
+              phone: null,
+              image: user?.image ?? "",
+              occupation: "",
+              XP: 0,
+              mapScope: "bonamoussadi",
+            };
+            await upsertUserProfile(email, profile);
+            return true;
+          } catch (error) {
+            // Do not block OAuth sign-in if profile sync fails.
+            if (isStorageUnavailableError(error)) {
+              console.error("[auth] profile sync skipped: storage unavailable", { email, provider });
+              return true;
+            }
+            console.error("[auth] profile sync failed during sign-in", {
+              email,
+              provider,
+              message: error instanceof Error ? error.message : String(error),
+            });
             return true;
           }
-
-          if (account?.provider !== "google") return true;
-          if (!email) return true;
-
-          const existing = await getUserProfile(email);
-          if (existing) {
-            if (!existing.mapScope) {
-              existing.mapScope = "bonamoussadi";
-              await upsertUserProfile(email, existing);
-            }
-            return true;
-          }
-
-          const profile: UserProfile = {
-            id: email,
-            name: user?.name ?? inferDefaultDisplayName(email),
-            email,
-            phone: null,
-            image: user?.image ?? "",
-            occupation: "",
-            XP: 0,
-            mapScope: "bonamoussadi",
-          };
-          await upsertUserProfile(email, profile);
-          return true;
         },
         async jwt({ token, user }) {
           const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
