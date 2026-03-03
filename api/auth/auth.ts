@@ -64,6 +64,22 @@ if (googleClientId && googleClientSecret) {
     Google({
       clientId: googleClientId,
       clientSecret: googleClientSecret,
+      token: {
+        async conform(response) {
+          // Auth.js v0.33 throws a generic CallbackRouteError for some OIDC body errors.
+          // Log the raw token endpoint payload from a clone so production logs expose root cause.
+          if (!response.ok) {
+            const body = await response.text().catch(() => "");
+            const trimmed = body.length > 1200 ? `${body.slice(0, 1200)}…` : body;
+            console.error("[auth] google token endpoint response error", {
+              status: response.status,
+              statusText: response.statusText,
+              body: trimmed,
+            });
+          }
+          return undefined;
+        },
+      },
     })
   );
 }
