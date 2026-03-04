@@ -141,7 +141,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
       try {
         setIsLoadingAssignments(true);
         setAssignmentError('');
-        const data = await apiJson<CollectionAssignment[]>('/api/assignments?view=mine');
+        const data = await apiJson<CollectionAssignment[]>('/api/user?view=assignments');
         if (cancelled) return;
         setAssignments(Array.isArray(data) ? data : []);
       } catch (error) {
@@ -203,7 +203,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
     setAssignmentError('');
     try {
       setIsUpdatingAssignmentId(assignmentId);
-      const updated = await apiJson<CollectionAssignment>('/api/assignments', {
+      const updated = await apiJson<CollectionAssignment>('/api/user?view=assignments', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: assignmentId, status }),

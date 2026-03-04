@@ -328,11 +328,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         setIsLoadingAssignments(true);
         setAssignmentError('');
         const params = new URLSearchParams();
-        params.set('view', 'planner_context');
+        params.set('view', 'assignment_planner_context');
         if (assignmentStatusFilter) params.set('status', assignmentStatusFilter);
         if (assignmentAgentFilter) params.set('agentUserId', assignmentAgentFilter);
         const data = await apiJson<{ context: AssignmentPlannerContext; assignments: CollectionAssignment[] }>(
-          `/api/assignments?${params.toString()}`,
+          `/api/user?${params.toString()}`,
         );
         if (cancelled) return;
         setAssignmentContext(data.context);
@@ -477,7 +477,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
     try {
       setIsCreatingAssignment(true);
-      const created = await apiJson<CollectionAssignment>('/api/assignments', {
+      const created = await apiJson<CollectionAssignment>('/api/user?view=assignments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
