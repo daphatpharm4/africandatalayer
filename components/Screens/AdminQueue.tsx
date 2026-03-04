@@ -4,13 +4,16 @@ import { apiFetch, apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type {
   AdminSubmissionEvent,
+  AssignmentPlannerContext,
   ClientDeviceInfo,
+  CollectionAssignment,
   SubmissionDetails,
   SubmissionFraudCheck,
   SubmissionLocation,
   SubmissionPhotoMetadata,
+  SubmissionCategory,
 } from '../../shared/types';
-import { categoryLabel as getCategoryLabel } from '../../shared/verticals';
+import { categoryLabel as getCategoryLabel, VERTICAL_IDS } from '../../shared/verticals';
 
 interface Props {
   onBack: () => void;
@@ -247,6 +250,16 @@ function groupEventsByPoint(items: AdminSubmissionEvent[], language: 'en' | 'fr'
   return result.sort((a, b) => new Date(b.latestEvent.event.createdAt).getTime() - new Date(a.latestEvent.event.createdAt).getTime());
 }
 
+function addDaysDateOnly(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+const DEFAULT_ASSIGNMENT_STATUS: CollectionAssignment['status'] = 'pending';
+const ASSIGNMENT_STATUSES: CollectionAssignment['status'][] = ['pending', 'in_progress', 'completed', 'expired'];
+const ASSIGNABLE_VERTICALS = VERTICAL_IDS as SubmissionCategory[];
+
 const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [isLoading, setIsLoading] = useState(true);
@@ -258,6 +271,20 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
+  const [assignmentContext, setAssignmentContext] = useState<AssignmentPlannerContext | null>(null);
+  const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
+  const [assignmentError, setAssignmentError] = useState('');
+  const [assignmentActionMessage, setAssignmentActionMessage] = useState('');
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<CollectionAssignment['status'] | ''>(DEFAULT_ASSIGNMENT_STATUS);
+  const [assignmentAgentFilter, setAssignmentAgentFilter] = useState('');
+  const [plannerAgent, setPlannerAgent] = useState('');
+  const [plannerZone, setPlannerZone] = useState('');
+  const [plannerDueDate, setPlannerDueDate] = useState(addDaysDateOnly(4));
+  const [plannerExpected, setPlannerExpected] = useState('30');
+  const [plannerNotes, setPlannerNotes] = useState('');
+  const [plannerVerticals, setPlannerVerticals] = useState<SubmissionCategory[]>(['pharmacy', 'mobile_money']);
+  const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,6 +319,45 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       cancelled = true;
     };
   }, [language]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAssignments = async () => {
+      try {
+        setIsLoadingAssignments(true);
+        setAssignmentError('');
+        const params = new URLSearchParams();
+        params.set('view', 'planner_context');
+        if (assignmentStatusFilter) params.set('status', assignmentStatusFilter);
+        if (assignmentAgentFilter) params.set('agentUserId', assignmentAgentFilter);
+        const data = await apiJson<{ context: AssignmentPlannerContext; assignments: CollectionAssignment[] }>(
+          `/api/assignments?${params.toString()}`,
+        );
+        if (cancelled) return;
+        setAssignmentContext(data.context);
+        setAssignments(Array.isArray(data.assignments) ? data.assignments : []);
+        setPlannerAgent((prev) => prev || data.context?.agents?.[0]?.id || '');
+        setPlannerZone((prev) => prev || data.context?.zones?.[0]?.id || '');
+      } catch (assignmentLoadError) {
+        if (cancelled) return;
+        const message =
+          assignmentLoadError instanceof Error
+            ? assignmentLoadError.message
+            : t('Unable to load assignments.', 'Impossible de charger les affectations.');
+        setAssignmentError(message);
+        setAssignments([]);
+        setAssignmentContext(null);
+      } finally {
+        if (!cancelled) setIsLoadingAssignments(false);
+      }
+    };
+
+    void loadAssignments();
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentStatusFilter, assignmentAgentFilter, language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -378,6 +444,65 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
+  const togglePlannerVertical = (vertical: SubmissionCategory) => {
+    setPlannerVerticals((prev) => {
+      if (prev.includes(vertical)) return prev.filter((item) => item !== vertical);
+      return [...prev, vertical];
+    });
+  };
+
+  const handleCreateAssignment = async () => {
+    if (isCreatingAssignment) return;
+    setAssignmentError('');
+    setAssignmentActionMessage('');
+    if (!plannerAgent) {
+      setAssignmentError(t('Select an agent.', 'Selectionnez un agent.'));
+      return;
+    }
+    if (!plannerZone) {
+      setAssignmentError(t('Select a zone.', 'Selectionnez une zone.'));
+      return;
+    }
+    if (!plannerDueDate) {
+      setAssignmentError(t('Select a due date.', 'Selectionnez une date limite.'));
+      return;
+    }
+    if (plannerVerticals.length === 0) {
+      setAssignmentError(t('Select at least one vertical.', 'Selectionnez au moins une verticale.'));
+      return;
+    }
+
+    const pointsExpected = Number(plannerExpected);
+    const normalizedExpected = Number.isFinite(pointsExpected) ? Math.max(0, Math.round(pointsExpected)) : 0;
+
+    try {
+      setIsCreatingAssignment(true);
+      const created = await apiJson<CollectionAssignment>('/api/assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentUserId: plannerAgent,
+          zoneId: plannerZone,
+          assignedVerticals: plannerVerticals,
+          dueDate: plannerDueDate,
+          pointsExpected: normalizedExpected,
+          notes: plannerNotes.trim() ? plannerNotes.trim() : null,
+        }),
+      });
+      setAssignments((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
+      setPlannerNotes('');
+      setAssignmentActionMessage(t('Assignment created.', 'Affectation creee.'));
+    } catch (createError) {
+      const message =
+        createError instanceof Error
+          ? createError.message
+          : t('Unable to create assignment.', 'Impossible de creer l\'affectation.');
+      setAssignmentError(message);
+    } finally {
+      setIsCreatingAssignment(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-[#1f2933] text-white px-4 h-14 flex items-center justify-between">
@@ -392,6 +517,166 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         <div className="bg-white border border-gray-100 rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest text-gray-500 flex items-center justify-between">
           <span>{t('Global Admin Scope', 'Portee admin globale')}</span>
           <span>{items.length} {t('items', 'elements')}</span>
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-[#0f2b46]">
+              {t('Assignment Planner', 'Planification des affectations')}
+            </h4>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              {assignments.length} {t('active rows', 'lignes')}
+            </span>
+          </div>
+
+          {assignmentActionMessage && (
+            <div className="rounded-xl border border-[#d2e6d8] bg-[#eaf3ee] p-3 text-[11px] text-[#2f855a]">
+              {assignmentActionMessage}
+            </div>
+          )}
+
+          {assignmentError && (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
+              {assignmentError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={assignmentStatusFilter}
+              onChange={(event) => setAssignmentStatusFilter((event.target.value as CollectionAssignment['status']) || '')}
+              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
+            >
+              <option value="">{t('All statuses', 'Tous les statuts')}</option>
+              {ASSIGNMENT_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+            <select
+              value={assignmentAgentFilter}
+              onChange={(event) => setAssignmentAgentFilter(event.target.value)}
+              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
+            >
+              <option value="">{t('All agents', 'Tous les agents')}</option>
+              {(assignmentContext?.agents ?? []).map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="rounded-xl border border-gray-100 p-3 space-y-3 bg-[#f9fafb]">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+              {t('Add Assignment', 'Ajouter une affectation')}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={plannerAgent}
+                onChange={(event) => setPlannerAgent(event.target.value)}
+                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
+              >
+                <option value="">{t('Select agent', 'Choisir agent')}</option>
+                {(assignmentContext?.agents ?? []).map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={plannerZone}
+                onChange={(event) => setPlannerZone(event.target.value)}
+                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
+              >
+                <option value="">{t('Select zone', 'Choisir zone')}</option>
+                {(assignmentContext?.zones ?? []).map((zone) => (
+                  <option key={zone.id} value={zone.id}>
+                    {zone.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={plannerDueDate}
+                onChange={(event) => setPlannerDueDate(event.target.value)}
+                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
+              />
+              <input
+                type="number"
+                min={0}
+                value={plannerExpected}
+                onChange={(event) => setPlannerExpected(event.target.value)}
+                placeholder={t('Expected points', 'Points attendus')}
+                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
+              />
+            </div>
+            <input
+              value={plannerNotes}
+              onChange={(event) => setPlannerNotes(event.target.value)}
+              placeholder={t('Optional notes', 'Notes optionnelles')}
+              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              {ASSIGNABLE_VERTICALS.map((vertical) => {
+                const active = plannerVerticals.includes(vertical);
+                return (
+                  <button
+                    key={vertical}
+                    type="button"
+                    onClick={() => togglePlannerVertical(vertical)}
+                    className={`h-9 rounded-xl border text-[10px] font-bold uppercase tracking-widest ${
+                      active ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-white text-gray-600 border-gray-100'
+                    }`}
+                  >
+                    {getCategoryLabel(vertical, language)}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={handleCreateAssignment}
+              disabled={isCreatingAssignment}
+              className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
+                isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white hover:bg-[#123a5f]'
+              }`}
+            >
+              {isCreatingAssignment ? t('Creating...', 'Creation...') : t('Create Assignment', 'Creer affectation')}
+            </button>
+          </div>
+
+          {isLoadingAssignments ? (
+            <div className="text-xs text-gray-500">{t('Loading assignments...', 'Chargement des affectations...')}</div>
+          ) : (
+            <div className="space-y-2">
+              {assignments.length === 0 && (
+                <div className="rounded-xl border border-gray-100 bg-[#f9fafb] p-3 text-xs text-gray-500">
+                  {t('No assignments found.', 'Aucune affectation trouvee.')}
+                </div>
+              )}
+              {assignments.map((assignment) => (
+                <div key={assignment.id} className="rounded-xl border border-gray-100 p-3 bg-white">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-bold text-gray-900">{assignment.zoneLabel}</div>
+                    <span className="text-[10px] uppercase tracking-widest text-gray-500">{assignment.status}</span>
+                  </div>
+                  <div className="text-[11px] text-gray-600">
+                    {assignment.agentUserId} · {assignment.pointsSubmitted}/{assignment.pointsExpected} ({assignment.completionRate}%)
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    {t('Due', 'Echeance')}: {assignment.dueDate}
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    {assignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {syncErrors.length > 0 && (
@@ -446,7 +731,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
           const latestFraudCheck = selectedGroup.latestEvent.fraudCheck ?? null;
           const latestDevice = getClientDevice(selectedGroup.latestEvent);
-          const contributors = [...new Map(selectedGroup.events.map((e) => [e.user.id, e.user])).values()];
+          const contributors = [...new Map<string, AdminSubmissionEvent['user']>(selectedGroup.events.map((e) => [e.user.id, e.user])).values()];
           return (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
             <div className="flex items-center justify-between">

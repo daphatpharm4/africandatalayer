@@ -11,7 +11,8 @@ import VerticalIcon from '../shared/VerticalIcon';
 import { enqueueSubmission, flushOfflineQueue, getQueueStats, type QueueSyncSummary } from '../../lib/client/offlineQueue';
 import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/deviceProfile';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
-import type { ClientExifData, SubmissionCategory, SubmissionInput } from '../../shared/types';
+import { apiJson } from '../../lib/client/api';
+import type { ClientExifData, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
 import { Category, ContributionMode, DataPoint } from '../../types';
 import exifr from 'exifr';
 
@@ -232,6 +233,10 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [syncMessage, setSyncMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [dedupCheck, setDedupCheck] = useState<DedupCheckResult | null>(null);
+  const [pendingPayload, setPendingPayload] = useState<SubmissionInput | null>(null);
+  const [selectedDedupPointId, setSelectedDedupPointId] = useState('');
+  const [isResolvingDedup, setIsResolvingDedup] = useState(false);
 
   const [siteName, setSiteName] = useState(seedPoint?.name ?? '');
   const [openingHours, setOpeningHours] = useState(seedPoint?.openingHours ?? '');
@@ -602,6 +607,65 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     return true;
   };
 
+  const submitPayload = async (payload: SubmissionInput): Promise<boolean> => {
+    const queuedItem = await enqueueSubmission(payload);
+    let summary: QueueSyncSummary | null = null;
+    if (navigator.onLine) {
+      summary = await syncQueuedItems();
+    } else {
+      const stats = await getQueueStats();
+      setSyncMessage(t(`Saved offline. ${stats.total} item(s) pending sync.`, `Enregistre hors ligne. ${stats.total} element(s) en attente de synchronisation.`));
+    }
+
+    if (summary && summary.permanentFailureIds.includes(queuedItem.id)) {
+      const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetee par la validation serveur.');
+      setErrorMessage(reason);
+      return false;
+    }
+
+    setSubmitted(true);
+    return true;
+  };
+
+  const maybePromptDedup = async (payload: SubmissionInput): Promise<boolean> => {
+    if (isEnrichMode || !navigator.onLine) return false;
+    if (!payload.location) return false;
+
+    try {
+      const details = (payload.details ?? {}) as Record<string, unknown>;
+      const dedupName =
+        (typeof details.siteName === 'string' && details.siteName.trim()) ||
+        (typeof details.name === 'string' && details.name.trim()) ||
+        (typeof details.roadName === 'string' && details.roadName.trim()) ||
+        '';
+      const params = new URLSearchParams({
+        view: 'dedup_candidates',
+        category: payload.category,
+        lat: String(payload.location.latitude),
+        lng: String(payload.location.longitude),
+      });
+      if (dedupName) params.set('name', dedupName);
+      const result = await apiJson<DedupCheckResult>(`/api/submissions?${params.toString()}`);
+      if (result.shouldPrompt && result.candidates.length > 0) {
+        setDedupCheck(result);
+        setPendingPayload(payload);
+        setSelectedDedupPointId(result.bestCandidatePointId ?? result.candidates[0]?.pointId ?? '');
+        setSyncMessage('');
+        setErrorMessage('');
+        return true;
+      }
+    } catch {
+      // If pre-check fails, fall back to normal submission flow.
+    }
+    return false;
+  };
+
+  const clearDedupPrompt = () => {
+    setDedupCheck(null);
+    setPendingPayload(null);
+    setSelectedDedupPointId('');
+  };
+
   const handleSubmit = async () => {
     if (!photoFile) {
       setPhotoError(t('Please capture a live photo before submitting.', 'Veuillez capturer une photo en direct avant de soumettre.'));
@@ -620,6 +684,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     setSyncMessage('');
     setIsSubmitting(true);
     try {
+      clearDedupPrompt();
       const [imageBase64, clientExif] = await Promise.all([
         fileToBase64(photoFile),
         extractClientExif(photoFile, location ?? manual ?? null),
@@ -633,28 +698,57 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         imageBase64,
         clientExif,
       };
-
-      const queuedItem = await enqueueSubmission(payload);
-      let summary: QueueSyncSummary | null = null;
-      if (navigator.onLine) {
-        summary = await syncQueuedItems();
-      } else {
-        const stats = await getQueueStats();
-        setSyncMessage(t(`Saved offline. ${stats.total} item(s) pending sync.`, `Enregistre hors ligne. ${stats.total} element(s) en attente de synchronisation.`));
-      }
-
-      if (summary && summary.permanentFailureIds.includes(queuedItem.id)) {
-        const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetee par la validation serveur.');
-        setErrorMessage(reason);
-        return;
-      }
-
-      setSubmitted(true);
+      const blockedByDedup = await maybePromptDedup(payload);
+      if (blockedByDedup) return;
+      await submitPayload(payload);
     } catch (error) {
       const syncError = toSubmissionSyncError(error);
       setErrorMessage(syncError.message || t('Submission failed.', 'Echec de la soumission.'));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDedupUseExisting = async () => {
+    if (!pendingPayload || !dedupCheck) return;
+    const targetPointId = selectedDedupPointId || dedupCheck.bestCandidatePointId || dedupCheck.candidates[0]?.pointId;
+    if (!targetPointId) {
+      setErrorMessage(t('No target point selected for enrich mode.', 'Aucun point cible selectionne pour le mode enrichissement.'));
+      return;
+    }
+
+    setIsResolvingDedup(true);
+    setErrorMessage('');
+    try {
+      const success = await submitPayload({
+        ...pendingPayload,
+        dedupDecision: 'use_existing',
+        dedupTargetPointId: targetPointId,
+      });
+      if (success) clearDedupPrompt();
+    } catch (error) {
+      const syncError = toSubmissionSyncError(error);
+      setErrorMessage(syncError.message || t('Submission failed.', 'Echec de la soumission.'));
+    } finally {
+      setIsResolvingDedup(false);
+    }
+  };
+
+  const handleDedupCreateNew = async () => {
+    if (!pendingPayload) return;
+    setIsResolvingDedup(true);
+    setErrorMessage('');
+    try {
+      const success = await submitPayload({
+        ...pendingPayload,
+        dedupDecision: 'allow_create',
+      });
+      if (success) clearDedupPrompt();
+    } catch (error) {
+      const syncError = toSubmissionSyncError(error);
+      setErrorMessage(syncError.message || t('Submission failed.', 'Echec de la soumission.'));
+    } finally {
+      setIsResolvingDedup(false);
     }
   };
 
@@ -1250,6 +1344,68 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
           </div>
         )}
 
+        {dedupCheck && (
+          <div className="rounded-2xl border border-[#f5d5c6] bg-[#fff8f4] p-4 space-y-3">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-[#b85f3f]">
+              {t('Potential Duplicate', 'Doublon potentiel')}
+            </div>
+            <div className="text-xs text-gray-700">
+              {t('A nearby point looks similar. Choose whether to enrich it or create a new one.', 'Un point proche semble similaire. Choisissez entre l\'enrichir ou creer un nouveau point.')}
+            </div>
+            <div className="space-y-2">
+              {dedupCheck.candidates.map((candidate) => {
+                const isSelected = selectedDedupPointId === candidate.pointId;
+                return (
+                  <button
+                    key={candidate.pointId}
+                    type="button"
+                    onClick={() => setSelectedDedupPointId(candidate.pointId)}
+                    className={`w-full rounded-xl border px-3 py-2 text-left ${
+                      isSelected ? 'border-[#c86b4a] bg-white' : 'border-[#f5d5c6] bg-[#fffdfb]'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-gray-900">
+                      {candidate.siteName || candidate.pointId}
+                    </div>
+                    <div className="text-[10px] text-gray-500">
+                      {candidate.distanceMeters}m · {t('similarity', 'similarite')}: {Math.round(candidate.similarityScore * 100)}%
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={handleDedupUseExisting}
+                disabled={isResolvingDedup}
+                className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
+                  isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white'
+                }`}
+              >
+                {t('Enrich Existing', 'Enrichir existant')}
+              </button>
+              <button
+                type="button"
+                onClick={handleDedupCreateNew}
+                disabled={isResolvingDedup}
+                className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
+                  isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-[#c86b4a] text-white'
+                }`}
+              >
+                {t('Create New', 'Creer nouveau')}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={clearDedupPrompt}
+              className="text-[10px] font-bold uppercase tracking-widest text-gray-500"
+            >
+              {t('Dismiss', 'Ignorer')}
+            </button>
+          </div>
+        )}
+
         {syncMessage && (
           <div className="rounded-xl border border-[#d5e1eb] bg-white p-3 text-xs text-[#0f2b46]">
             {syncMessage}
@@ -1260,7 +1416,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       <div className="p-6 pt-2">
         <button
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
           className="w-full h-14 bg-[#0f2b46] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-[#0b2236] active:scale-95 transition-all disabled:opacity-70"
         >
           {isSubmitting ? (

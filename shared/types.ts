@@ -8,6 +8,8 @@ export type SubmissionCategory =
   | "census_proxy";
 export type PointEventType = "CREATE_EVENT" | "ENRICH_EVENT";
 export type MapScope = "bonamoussadi" | "cameroon" | "global";
+export type CollectionAssignmentStatus = "pending" | "in_progress" | "completed" | "expired";
+export type DedupDecision = "allow_create" | "use_existing";
 
 export interface SubmissionLocation {
   latitude: number;
@@ -208,6 +210,8 @@ export interface SubmissionInput {
   imageBase64?: string;
   secondImageBase64?: string;
   clientExif?: ClientExifData | null;
+  dedupDecision?: DedupDecision;
+  dedupTargetPointId?: string;
 }
 
 export interface UserProfile {
@@ -287,4 +291,76 @@ export interface TrendDataPoint {
   date: string;
   value: number;
   movingAvg: number | null;
+}
+
+export interface ZoneBounds {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+export interface CollectionAssignment {
+  id: string;
+  agentUserId: string;
+  zoneId: string;
+  zoneLabel: string;
+  zoneBounds: ZoneBounds;
+  assignedVerticals: SubmissionCategory[];
+  assignedDate: string;
+  dueDate: string;
+  status: CollectionAssignmentStatus;
+  pointsExpected: number;
+  pointsSubmitted: number;
+  completionRate: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CollectionAssignmentCreateInput {
+  agentUserId: string;
+  zoneId: string;
+  assignedVerticals: SubmissionCategory[];
+  assignedDate?: string;
+  dueDate: string;
+  pointsExpected?: number;
+  notes?: string | null;
+}
+
+export interface CollectionAssignmentUpdateInput {
+  status?: CollectionAssignmentStatus;
+  pointsSubmitted?: number;
+  notes?: string | null;
+}
+
+export interface AssignmentPlannerContext {
+  zones: Array<{
+    id: string;
+    label: string;
+    bounds: ZoneBounds;
+  }>;
+  agents: Array<{
+    id: string;
+    name: string;
+    email: string | null;
+  }>;
+}
+
+export interface DedupCandidate {
+  pointId: string;
+  category: SubmissionCategory;
+  siteName: string | null;
+  latitude: number;
+  longitude: number;
+  distanceMeters: number;
+  similarityScore: number;
+  matchScore: number;
+}
+
+export interface DedupCheckResult {
+  shouldPrompt: boolean;
+  radiusMeters: number;
+  bestCandidatePointId: string | null;
+  candidates: DedupCandidate[];
 }

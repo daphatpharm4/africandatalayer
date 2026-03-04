@@ -16,7 +16,9 @@ import {
   projectPointsFromEvents,
 } from "../../lib/server/pointProjection.js";
 import { computeConfidenceScore } from "../../lib/server/confidenceScore.js";
+import { buildDedupCandidates } from "../../lib/server/dedup.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import { incrementAssignmentsForEvent } from "../../lib/server/collectionAssignments.js";
 import {
   filterEventsForViewer,
   redactEventUserIds,
@@ -45,6 +47,7 @@ import type {
   PointEvent,
   PointEventType,
   SubmissionCategory,
+  DedupDecision,
   SubmissionDetails,
   SubmissionFraudCheck,
   SubmissionInput,
@@ -123,6 +126,13 @@ function normalizeEventType(input: unknown): PointEventType {
     return input as PointEventType;
   }
   return "CREATE_EVENT";
+}
+
+function normalizeDedupDecision(input: unknown): DedupDecision | null {
+  if (typeof input !== "string") return null;
+  const normalized = input.trim().toLowerCase();
+  if (normalized === "allow_create" || normalized === "use_existing") return normalized;
+  return null;
 }
 
 function normalizeMapScope(input: string | null): MapScope {
@@ -458,6 +468,31 @@ export async function GET(request: Request): Promise<Response> {
 
     let projected = projectPointsFromEvents(scopedEvents);
 
+    if (view === "dedup_candidates") {
+      if (!authContext) return errorResponse("Unauthorized", 401);
+      const category = normalizeCategory(url.searchParams.get("category") ?? undefined);
+      if (!category) return errorResponse("Invalid category", 400);
+      const latitude = Number(url.searchParams.get("lat"));
+      const longitude = Number(url.searchParams.get("lng"));
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        return errorResponse("lat and lng are required", 400);
+      }
+      const name = trimString(url.searchParams.get("name"), 160);
+      const probeDetails: SubmissionDetails = {};
+      if (name) {
+        probeDetails.name = name;
+        probeDetails.siteName = name;
+        probeDetails.roadName = name;
+      }
+      const result = buildDedupCandidates(
+        category,
+        { latitude, longitude },
+        probeDetails,
+        projected,
+      );
+      return jsonResponse(result);
+    }
+
     if (lat && lng && radius) {
       const latitude = Number(lat);
       const longitude = Number(lng);
@@ -502,6 +537,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const eventType = normalizeEventType(body?.eventType);
+  const rawBody = body as unknown as Record<string, unknown>;
+  const dedupDecision = normalizeDedupDecision(rawBody?.dedupDecision);
+  const dedupTargetPointId =
+    typeof rawBody?.dedupTargetPointId === "string"
+      ? (rawBody.dedupTargetPointId as string).trim()
+      : "";
   const location = parseLocation(body?.location);
   const details = normalizeEnrichPayload(
     category,
@@ -584,15 +625,58 @@ export async function POST(request: Request): Promise<Response> {
     let pointId = typeof body.pointId === "string" && body.pointId.trim()
       ? body.pointId.trim()
       : generatePointId(category, finalLocation.latitude, finalLocation.longitude);
+    let effectiveEventType: PointEventType = eventType;
+    let allowGaplessEnrich = false;
+    const dedupResult = eventType === "CREATE_EVENT"
+      ? buildDedupCandidates(category, finalLocation, details, projectedExisting)
+      : null;
 
-    if (eventType === "CREATE_EVENT") {
+    if (eventType === "CREATE_EVENT" && dedupDecision === "use_existing") {
+      const chosenPointId = dedupTargetPointId || dedupResult?.bestCandidatePointId;
+      if (!chosenPointId) {
+        return errorResponse("dedupTargetPointId is required when dedupDecision=use_existing", 400);
+      }
+      const candidate = dedupResult?.candidates.find((item) => item.pointId === chosenPointId);
+      if (!candidate) {
+        return errorResponse("dedupTargetPointId is not a valid nearby candidate", 400);
+      }
+      const target = projectedExisting.find((point) => point.pointId === chosenPointId);
+      if (!target) return errorResponse("Target point not found", 404);
+      if (target.category !== category) return errorResponse("Category mismatch for target point", 400);
+      pointId = chosenPointId;
+      effectiveEventType = "ENRICH_EVENT";
+      allowGaplessEnrich = true;
+      details.dedupResolution = "use_existing";
+      details.dedupMatchScore = candidate.matchScore;
+      details.dedupDistanceMeters = candidate.distanceMeters;
+    }
+
+    if (eventType === "CREATE_EVENT" && dedupDecision !== "allow_create" && dedupDecision !== "use_existing") {
+      if (dedupResult?.shouldPrompt && dedupResult.candidates.length > 0) {
+        const topCandidate = dedupResult.candidates[0];
+        const topLabel = topCandidate?.siteName || topCandidate?.pointId || "nearby point";
+        return jsonResponse(
+          {
+            error: `Potential duplicate detected near ${topLabel}`,
+            code: "dedup_candidate",
+            dedup: dedupResult,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (effectiveEventType === "CREATE_EVENT") {
       const createError = validateCreatePayload(category, details);
       if (createError) return errorResponse(createError, 400);
     } else {
-      if (!body.pointId || typeof body.pointId !== "string" || !body.pointId.trim()) {
-        return errorResponse("pointId is required for ENRICH_EVENT", 400);
+      if (!allowGaplessEnrich) {
+        if (!body.pointId || typeof body.pointId !== "string" || !body.pointId.trim()) {
+          return errorResponse("pointId is required for ENRICH_EVENT", 400);
+        }
+        pointId = body.pointId.trim();
       }
-      pointId = body.pointId.trim();
+
       const target = projectedExisting.find((point) => point.pointId === pointId);
       if (!target) return errorResponse("Target point not found", 404);
       if (target.category !== category) return errorResponse("Category mismatch for target point", 400);
@@ -610,12 +694,17 @@ export async function POST(request: Request): Promise<Response> {
                 : field;
         return isEnrichFieldAllowed(category, canonical) && allowedGaps.has(canonical);
       });
-      if (!filteredEntries.length) {
+      if (!filteredEntries.length && !allowGaplessEnrich) {
         return errorResponse("ENRICH_EVENT must include at least one currently missing field", 400);
       }
       const filteredDetails: SubmissionDetails = {};
       for (const [key, value] of filteredEntries) {
         filteredDetails[key] = value;
+      }
+      if (allowGaplessEnrich) {
+        filteredDetails.dedupResolution = "use_existing";
+        filteredDetails.dedupTargetPointId = pointId;
+        filteredDetails.dedupReviewedAt = new Date().toISOString();
       }
       Object.assign(details, filteredDetails);
       for (const key of Object.keys(details)) {
@@ -710,7 +799,7 @@ export async function POST(request: Request): Promise<Response> {
     const newEvent: PointEvent = {
       id: eventId,
       pointId,
-      eventType,
+      eventType: effectiveEventType,
       userId: auth.id,
       category,
       location: finalLocation,
@@ -729,6 +818,11 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     await insertPointEvent(newEvent);
+    try {
+      await incrementAssignmentsForEvent(newEvent);
+    } catch (assignmentError) {
+      console.warn("Unable to update assignment progress from submission", assignmentError);
+    }
 
     const exifDeviceMake = primaryPhotoMetadata?.deviceMake ?? null;
     const exifDeviceModel = primaryPhotoMetadata?.deviceModel ?? null;

@@ -14,7 +14,7 @@ import {
 import { apiJson } from '../../lib/client/api';
 import { getSession } from '../../lib/client/auth';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
-import type { MapScope, PointEvent, UserProfile } from '../../shared/types';
+import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 
 interface Props {
@@ -35,6 +35,10 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   const [isLoadingSyncErrors, setIsLoadingSyncErrors] = useState(true);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
   const [syncErrorActionError, setSyncErrorActionError] = useState('');
+  const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
+  const [assignmentError, setAssignmentError] = useState('');
+  const [isUpdatingAssignmentId, setIsUpdatingAssignmentId] = useState<string | null>(null);
   const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
     if (isAdminMode) return 'global';
     if (value === 'cameroon' || value === 'global') return value;
@@ -133,6 +137,35 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
   useEffect(() => {
     let cancelled = false;
 
+    const loadAssignments = async () => {
+      try {
+        setIsLoadingAssignments(true);
+        setAssignmentError('');
+        const data = await apiJson<CollectionAssignment[]>('/api/assignments?view=mine');
+        if (cancelled) return;
+        setAssignments(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error
+            ? error.message
+            : t('Unable to load assignments.', 'Impossible de charger les affectations.');
+        setAssignmentError(message);
+        setAssignments([]);
+      } finally {
+        if (!cancelled) setIsLoadingAssignments(false);
+      }
+    };
+
+    void loadAssignments();
+    return () => {
+      cancelled = true;
+    };
+  }, [language]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     const loadSyncErrors = async () => {
       try {
         setIsLoadingSyncErrors(true);
@@ -162,6 +195,28 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
       setSyncErrorActionError(t('Unable to clear sync errors.', 'Impossible d\'effacer les erreurs de synchronisation.'));
     } finally {
       setIsClearingSyncErrors(false);
+    }
+  };
+
+  const handleAssignmentStatus = async (assignmentId: string, status: CollectionAssignment['status']) => {
+    if (isUpdatingAssignmentId) return;
+    setAssignmentError('');
+    try {
+      setIsUpdatingAssignmentId(assignmentId);
+      const updated = await apiJson<CollectionAssignment>('/api/assignments', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: assignmentId, status }),
+      });
+      setAssignments((prev) => prev.map((assignment) => (assignment.id === assignmentId ? updated : assignment)));
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t('Unable to update assignment.', 'Impossible de mettre a jour l\'affectation.');
+      setAssignmentError(message);
+    } finally {
+      setIsUpdatingAssignmentId(null);
     }
   };
 
@@ -255,6 +310,87 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
             </p>
           </div>
         )}
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                {t('Collection Workflow', 'Workflow de collecte')}
+              </span>
+              <span className="text-sm font-bold text-gray-900">
+                {t('My Weekly Assignments', 'Mes affectations hebdomadaires')}
+              </span>
+            </div>
+            <span className="inline-flex items-center rounded-full bg-[#e7eef4] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+              {assignments.length}
+            </span>
+          </div>
+
+          {assignmentError && (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
+              {assignmentError}
+            </div>
+          )}
+
+          {isLoadingAssignments ? (
+            <div className="text-xs text-gray-500">{t('Loading assignments...', 'Chargement des affectations...')}</div>
+          ) : assignments.length === 0 ? (
+            <div className="text-xs text-gray-500">
+              {t('No active assignments yet.', 'Aucune affectation active pour le moment.')}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {assignments.map((assignment) => {
+                const canStart = assignment.status === 'pending';
+                const canComplete = assignment.status === 'in_progress';
+                const isUpdating = isUpdatingAssignmentId === assignment.id;
+                const statusLabel =
+                  assignment.status === 'pending'
+                    ? t('Pending', 'En attente')
+                    : assignment.status === 'in_progress'
+                      ? t('In progress', 'En cours')
+                      : assignment.status === 'completed'
+                        ? t('Completed', 'Termine')
+                        : t('Expired', 'Expire');
+                return (
+                  <div key={assignment.id} className="rounded-xl border border-gray-100 p-3 bg-[#f9fafb] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-bold text-gray-900">{assignment.zoneLabel}</div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{statusLabel}</span>
+                    </div>
+                    <div className="text-[11px] text-gray-600">
+                      {t('Due', 'Echeance')}: {assignment.dueDate}
+                    </div>
+                    <div className="text-[11px] text-gray-600">
+                      {assignment.pointsSubmitted}/{assignment.pointsExpected} {t('points', 'points')} · {assignment.completionRate}%
+                    </div>
+                    <div className="text-[10px] text-gray-500">
+                      {assignment.assignedVerticals
+                        .map((vertical) => getCategoryLabelFromRegistry(vertical, language))
+                        .join(', ')}
+                    </div>
+                    {(canStart || canComplete) && (
+                      <button
+                        type="button"
+                        disabled={isUpdating}
+                        onClick={() => handleAssignmentStatus(assignment.id, canStart ? 'in_progress' : 'completed')}
+                        className={`h-9 rounded-xl px-3 text-[10px] font-bold uppercase tracking-widest ${
+                          isUpdating ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white'
+                        }`}
+                      >
+                        {isUpdating
+                          ? t('Updating...', 'Mise a jour...')
+                          : canStart
+                            ? t('Start Assignment', 'Demarrer affectation')
+                            : t('Mark Completed', 'Marquer termine')}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <button
