@@ -61,12 +61,12 @@ export function getCronDispatchSchedule(now: Date): CronDispatchSchedule {
   const minute = now.getUTCMinutes();
   const dayOfWeek = now.getUTCDay();
   const dayOfMonth = now.getUTCDate();
-  const isTopOfHour = minute === 0;
+  const isDailyCronWindow = hour === 6 && minute === 0;
 
   return {
-    weeklySnapshot: isTopOfHour && dayOfWeek === 1 && hour === 3,
-    monthlyRollup: isTopOfHour && dayOfMonth === 1 && hour === 4,
-    dailyRoadSnapshot: isTopOfHour && hour === 6,
+    weeklySnapshot: isDailyCronWindow && dayOfWeek === 1,
+    monthlyRollup: isDailyCronWindow && dayOfMonth === 1,
+    dailyRoadSnapshot: isDailyCronWindow,
   };
 }
 
@@ -101,9 +101,9 @@ async function handleCronDispatch(url: URL): Promise<Response> {
   const dateOverride = url.searchParams.get("date") ?? undefined;
   const schedule = getCronDispatchSchedule(now);
   const jobs: CronDispatchSummary["jobs"] = {
-    weeklySnapshot: { due: schedule.weeklySnapshot, status: "skipped", message: "Not scheduled this hour" },
-    monthlyRollup: { due: schedule.monthlyRollup, status: "skipped", message: "Not scheduled this hour" },
-    dailyRoadSnapshot: { due: schedule.dailyRoadSnapshot, status: "skipped", message: "Not scheduled this hour" },
+    weeklySnapshot: { due: schedule.weeklySnapshot, status: "skipped", message: "Not scheduled for this run" },
+    monthlyRollup: { due: schedule.monthlyRollup, status: "skipped", message: "Not scheduled for this run" },
+    dailyRoadSnapshot: { due: schedule.dailyRoadSnapshot, status: "skipped", message: "Not scheduled for this run" },
   };
 
   let hasFailures = false;
@@ -188,7 +188,7 @@ export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "snapshots";
 
-  // Hourly cron dispatcher - authenticated via CRON_SECRET.
+  // Daily cron dispatcher (Hobby-compatible) - authenticated via CRON_SECRET.
   if (view === "cron_dispatch") {
     const unauthorizedResponse = requireCronAuthorization(request);
     if (unauthorizedResponse) return unauthorizedResponse;

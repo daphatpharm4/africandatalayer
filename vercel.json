@@ -6,7 +6,7 @@
   "crons": [
     {
       "path": "/api/analytics?view=cron_dispatch",
-      "schedule": "0 * * * *"
+      "schedule": "0 6 * * *"
     }
   ],
   "headers": [
