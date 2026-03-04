@@ -14,6 +14,168 @@ const VALID_METRICS = new Set([
   "week_over_week_growth",
 ]);
 
+export interface CronDispatchSchedule {
+  weeklySnapshot: boolean;
+  monthlyRollup: boolean;
+  dailyRoadSnapshot: boolean;
+}
+
+type CronJobSummaryStatus = "skipped" | "ok" | "error";
+
+interface CronJobSummary {
+  due: boolean;
+  status: CronJobSummaryStatus;
+  message?: string;
+  result?: unknown;
+}
+
+interface CronDispatchSummary {
+  evaluatedAtUtc: string;
+  schedule: CronDispatchSchedule;
+  executedAnyJob: boolean;
+  hasFailures: boolean;
+  jobs: {
+    weeklySnapshot: CronJobSummary;
+    monthlyRollup: CronJobSummary;
+    dailyRoadSnapshot: CronJobSummary;
+  };
+}
+
+function isCronRequestAuthorized(request: Request): boolean {
+  const authHeader = request.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET;
+  return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
+}
+
+function requireCronAuthorization(request: Request): Response | null {
+  if (isCronRequestAuthorized(request)) return null;
+  return errorResponse("Unauthorized", 401);
+}
+
+function asErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+export function getCronDispatchSchedule(now: Date): CronDispatchSchedule {
+  const hour = now.getUTCHours();
+  const minute = now.getUTCMinutes();
+  const dayOfWeek = now.getUTCDay();
+  const dayOfMonth = now.getUTCDate();
+  const isTopOfHour = minute === 0;
+
+  return {
+    weeklySnapshot: isTopOfHour && dayOfWeek === 1 && hour === 3,
+    monthlyRollup: isTopOfHour && dayOfMonth === 1 && hour === 4,
+    dailyRoadSnapshot: isTopOfHour && hour === 6,
+  };
+}
+
+function resolveCronDispatchInstant(input: string | null): Date | null {
+  if (!input) return new Date();
+  const parsed = new Date(input);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+async function runWeeklySnapshotCron(dateOverride?: string): Promise<unknown> {
+  const { runWeeklySnapshot } = await import("../../lib/server/snapshotEngine.js");
+  return runWeeklySnapshot(dateOverride);
+}
+
+async function runMonthlyRollupCron(dateOverride?: string): Promise<unknown> {
+  const { runMonthlyRollup } = await import("../../lib/server/snapshotEngine.js");
+  return runMonthlyRollup(dateOverride);
+}
+
+async function runDailyRoadSnapshotCron(dateOverride?: string): Promise<unknown> {
+  const { runDailyRoadSnapshot } = await import("../../lib/server/snapshotEngine.js");
+  return runDailyRoadSnapshot(dateOverride);
+}
+
+async function handleCronDispatch(url: URL): Promise<Response> {
+  const now = resolveCronDispatchInstant(url.searchParams.get("at"));
+  if (!now) {
+    return errorResponse("Invalid at timestamp. Use ISO-8601 UTC format.", 400);
+  }
+
+  const dateOverride = url.searchParams.get("date") ?? undefined;
+  const schedule = getCronDispatchSchedule(now);
+  const jobs: CronDispatchSummary["jobs"] = {
+    weeklySnapshot: { due: schedule.weeklySnapshot, status: "skipped", message: "Not scheduled this hour" },
+    monthlyRollup: { due: schedule.monthlyRollup, status: "skipped", message: "Not scheduled this hour" },
+    dailyRoadSnapshot: { due: schedule.dailyRoadSnapshot, status: "skipped", message: "Not scheduled this hour" },
+  };
+
+  let hasFailures = false;
+
+  if (schedule.weeklySnapshot) {
+    try {
+      jobs.weeklySnapshot = {
+        due: true,
+        status: "ok",
+        message: "Weekly snapshot executed",
+        result: await runWeeklySnapshotCron(dateOverride),
+      };
+    } catch (error) {
+      hasFailures = true;
+      jobs.weeklySnapshot = {
+        due: true,
+        status: "error",
+        message: asErrorMessage(error),
+      };
+      console.error("Cron dispatch weekly snapshot failed:", error);
+    }
+  }
+
+  if (schedule.monthlyRollup) {
+    try {
+      jobs.monthlyRollup = {
+        due: true,
+        status: "ok",
+        message: "Monthly rollup executed",
+        result: await runMonthlyRollupCron(dateOverride),
+      };
+    } catch (error) {
+      hasFailures = true;
+      jobs.monthlyRollup = {
+        due: true,
+        status: "error",
+        message: asErrorMessage(error),
+      };
+      console.error("Cron dispatch monthly rollup failed:", error);
+    }
+  }
+
+  if (schedule.dailyRoadSnapshot) {
+    try {
+      jobs.dailyRoadSnapshot = {
+        due: true,
+        status: "ok",
+        message: "Daily road snapshot executed",
+        result: await runDailyRoadSnapshotCron(dateOverride),
+      };
+    } catch (error) {
+      hasFailures = true;
+      jobs.dailyRoadSnapshot = {
+        due: true,
+        status: "error",
+        message: asErrorMessage(error),
+      };
+      console.error("Cron dispatch daily road snapshot failed:", error);
+    }
+  }
+
+  const summary: CronDispatchSummary = {
+    evaluatedAtUtc: now.toISOString(),
+    schedule,
+    executedAnyJob: schedule.weeklySnapshot || schedule.monthlyRollup || schedule.dailyRoadSnapshot,
+    hasFailures,
+    jobs,
+  };
+
+  return jsonResponse(summary, { status: hasFailures ? 500 : 200 });
+}
+
 function isMissingDbObjectError(error: unknown): boolean {
   const pg = error as { code?: unknown; message?: unknown } | null;
   const code = typeof pg?.code === "string" ? pg.code : "";
@@ -26,17 +188,20 @@ export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "snapshots";
 
+  // Hourly cron dispatcher - authenticated via CRON_SECRET.
+  if (view === "cron_dispatch") {
+    const unauthorizedResponse = requireCronAuthorization(request);
+    if (unauthorizedResponse) return unauthorizedResponse;
+    return handleCronDispatch(url);
+  }
+
   // Weekly snapshot cron trigger - authenticated via CRON_SECRET.
   if (view === "cron") {
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const unauthorizedResponse = requireCronAuthorization(request);
+    if (unauthorizedResponse) return unauthorizedResponse;
     try {
-      const { runWeeklySnapshot } = await import("../../lib/server/snapshotEngine.js");
       const dateOverride = url.searchParams.get("date") ?? undefined;
-      const result = await runWeeklySnapshot(dateOverride);
+      const result = await runWeeklySnapshotCron(dateOverride);
       return jsonResponse(result);
     } catch (error) {
       console.error("Snapshot cron failed:", error);
@@ -49,15 +214,11 @@ export async function GET(request: Request): Promise<Response> {
 
   // Monthly rollup cron trigger - authenticated via CRON_SECRET.
   if (view === "cron_monthly") {
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const unauthorizedResponse = requireCronAuthorization(request);
+    if (unauthorizedResponse) return unauthorizedResponse;
     try {
-      const { runMonthlyRollup } = await import("../../lib/server/snapshotEngine.js");
       const dateOverride = url.searchParams.get("date") ?? undefined;
-      const result = await runMonthlyRollup(dateOverride);
+      const result = await runMonthlyRollupCron(dateOverride);
       return jsonResponse(result);
     } catch (error) {
       console.error("Monthly rollup cron failed:", error);
@@ -70,15 +231,11 @@ export async function GET(request: Request): Promise<Response> {
 
   // Daily transport-road summary cron trigger - authenticated via CRON_SECRET.
   if (view === "cron_daily_road") {
-    const authHeader = request.headers.get("authorization");
-    const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-      return errorResponse("Unauthorized", 401);
-    }
+    const unauthorizedResponse = requireCronAuthorization(request);
+    if (unauthorizedResponse) return unauthorizedResponse;
     try {
-      const { runDailyRoadSnapshot } = await import("../../lib/server/snapshotEngine.js");
       const dateOverride = url.searchParams.get("date") ?? undefined;
-      const result = await runDailyRoadSnapshot(dateOverride);
+      const result = await runDailyRoadSnapshotCron(dateOverride);
       return jsonResponse(result);
     } catch (error) {
       console.error("Daily road snapshot cron failed:", error);
@@ -110,7 +267,7 @@ export async function GET(request: Request): Promise<Response> {
       return handleKpiWeekly(url);
     default:
       return errorResponse(
-        `Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, kpi_summary, kpi_weekly, cron, cron_monthly, cron_daily_road`,
+        `Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, kpi_summary, kpi_weekly, cron_dispatch, cron, cron_monthly, cron_daily_road`,
         400,
       );
   }

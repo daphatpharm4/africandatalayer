@@ -33,7 +33,7 @@ ADL today runs as a single Vercel deployment -- every API route, the React SPA, 
 |  Vercel Deployment (monolith)                                    |
 |                                                                  |
 |  [AUTH MODULE]          [SUBMISSION MODULE]     [USER MODULE]    |
-|  api/auth/auth.ts       api/submissions/        api/user/        |
+|  lib/server/auth/handler.ts       api/submissions/        api/user/        |
 |  api/auth/register.ts     index.ts (GET/POST)     index.ts       |
 |  api/auth/[...auth].ts    [id].ts (GET/PUT/DEL)                  |
 |  api/auth/callback/                                              |
@@ -249,7 +249,7 @@ POST /api/auth/callback/credentials
 |-----------|-------|
 | Auth | None |
 | Rate limit | 10 req/min per IP |
-| File | `api/auth/auth.ts` (Auth.js handler) |
+| File | `lib/server/auth/handler.ts` (Auth.js handler) |
 
 Handled by Auth.js. Sets `authjs.session-token` (or `__Secure-authjs.session-token` on HTTPS) as an HTTP-only cookie with JWT.
 

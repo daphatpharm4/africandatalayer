@@ -1,20 +1,12 @@
 {
   "framework": "vite",
-  "buildCommand": "vite build",
+  "buildCommand": "npm run build",
   "devCommand": "vite",
   "outputDirectory": "dist",
   "crons": [
     {
-      "path": "/api/analytics?view=cron",
-      "schedule": "0 3 * * 1"
-    },
-    {
-      "path": "/api/analytics?view=cron_monthly",
-      "schedule": "0 4 1 * *"
-    },
-    {
-      "path": "/api/analytics?view=cron_daily_road",
-      "schedule": "0 6 * * *"
+      "path": "/api/analytics?view=cron_dispatch",
+      "schedule": "0 * * * *"
     }
   ],
   "headers": [

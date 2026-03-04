@@ -48,7 +48,7 @@
           v
 +-------------------------------------------------------------------+
 |  TRUST BOUNDARY 3: Vercel Serverless Functions (semi-trusted)     |
-|  - api/auth/auth.ts -- Auth.js handler                            |
+|  - lib/server/auth/handler.ts -- Auth.js handler                            |
 |  - api/auth/register.ts -- User registration                     |
 |  - api/submissions/index.ts -- GET/POST submissions              |
 |  - api/submissions/[id].ts -- GET/PUT/DELETE by ID               |
@@ -80,11 +80,11 @@
 
 **Risk:** HIGH
 
-The registration endpoint (`api/auth/register.ts`) and credential login (`api/auth/auth.ts`) have zero rate limiting. An attacker can enumerate valid accounts by observing 409 (user exists) vs 201 (created) responses on the registration endpoint, then launch credential stuffing against the login endpoint.
+The registration endpoint (`api/auth/register.ts`) and credential login (`lib/server/auth/handler.ts`) have zero rate limiting. An attacker can enumerate valid accounts by observing 409 (user exists) vs 201 (created) responses on the registration endpoint, then launch credential stuffing against the login endpoint.
 
 **Current state:**
 - Registration: No CAPTCHA, no rate limit, leaks user existence via 409 status (`api/auth/register.ts:39`)
-- Login: Auth.js credential flow with no lockout, no rate limit (`api/auth/auth.ts:23-58`)
+- Login: Auth.js credential flow with no lockout, no rate limit (`lib/server/auth/handler.ts:23-58`)
 - Password policy: Only minimum 8 characters (`api/auth/register.ts:31`), no complexity requirements
 
 **Attack scenario:**
@@ -97,10 +97,10 @@ The registration endpoint (`api/auth/register.ts`) and credential login (`api/au
 
 **Risk:** CRITICAL
 
-Admin authentication uses a single shared `ADMIN_EMAIL` + `ADMIN_PASSWORD` environment variable pair (`api/auth/auth.ts:36-48`). The code explicitly supports plaintext passwords as a fallback:
+Admin authentication uses a single shared `ADMIN_EMAIL` + `ADMIN_PASSWORD` environment variable pair (`lib/server/auth/handler.ts:36-48`). The code explicitly supports plaintext passwords as a fallback:
 
 ```typescript
-// api/auth/auth.ts:42-44
+// lib/server/auth/handler.ts:42-44
 if (adminPassword.startsWith("$2")) {
   adminMatch = await bcrypt.compare(password, adminPassword);
 } else {
@@ -115,7 +115,7 @@ The `.env` file committed to the repository contains `ADMIN_PASSWORD=test1234` i
 
 **Risk:** MEDIUM
 
-Session management uses Auth.js JWT strategy (`api/auth/auth.ts:103`) with appropriate cookie settings:
+Session management uses Auth.js JWT strategy (`lib/server/auth/handler.ts:103`) with appropriate cookie settings:
 - `httpOnly: true` (prevents XSS-based cookie theft)
 - `sameSite: "lax"` (partial CSRF protection)
 - `secure: true` in production (enforced by `isSecureRequest()` in `lib/auth.ts:8-12`)
@@ -340,10 +340,10 @@ The `fetchIpLocation` function (`api/submissions/index.ts:223-239`) calls `ipapi
 
 **Risk:** HIGH
 
-Admin status is determined solely by matching the user's email against `ADMIN_EMAIL` (`api/auth/auth.ts:36-48`, `api/auth/auth.ts:122`, `api/auth/auth.ts:180-186`). The admin flag is embedded in the JWT token:
+Admin status is determined solely by matching the user's email against `ADMIN_EMAIL` (`lib/server/auth/handler.ts:36-48`, `lib/server/auth/handler.ts:122`, `lib/server/auth/handler.ts:180-186`). The admin flag is embedded in the JWT token:
 
 ```typescript
-// api/auth/auth.ts:182-184
+// lib/server/auth/handler.ts:182-184
 if (adminEmail && email && adminEmail === email) {
   (token as { isAdmin?: boolean }).isAdmin = true;
 }
@@ -475,7 +475,7 @@ export async function POST(request: Request): Promise<Response> {
 | Field | Value |
 |-------|-------|
 | **Severity** | CRITICAL |
-| **File** | `api/auth/auth.ts:42-46` |
+| **File** | `lib/server/auth/handler.ts:42-46` |
 | **CVSS** | 8.1 |
 | **Priority** | FIX NOW |
 
@@ -497,7 +497,7 @@ node -e "const bcrypt = require('bcryptjs'); console.log(bcrypt.hashSync('NEW_ST
 
 Remove the plaintext fallback:
 ```typescript
-// api/auth/auth.ts -- Remove the else branch entirely:
+// lib/server/auth/handler.ts -- Remove the else branch entirely:
 if (adminPassword.startsWith("$2")) {
   adminMatch = await bcrypt.compare(password, adminPassword);
 } else {
@@ -606,7 +606,7 @@ curl -X PUT https://adl.vercel.app/api/submissions/SOME_POINT_ID \
 | Field | Value |
 |-------|-------|
 | **Severity** | HIGH |
-| **File** | `api/auth/auth.ts`, `api/auth/register.ts` |
+| **File** | `lib/server/auth/handler.ts`, `api/auth/register.ts` |
 | **CVSS** | 7.3 |
 | **Priority** | Fix within 14 days |
 
@@ -783,7 +783,7 @@ const leaderboard = topRows.map((row, index) => {
 | Field | Value |
 |-------|-------|
 | **Severity** | MEDIUM |
-| **File** | `api/auth/auth.ts:53` |
+| **File** | `lib/server/auth/handler.ts:53` |
 | **CVSS** | 4.3 |
 | **Priority** | Fix within 30 days |
 
@@ -797,7 +797,7 @@ Meanwhile, the admin path correctly uses `await bcrypt.compare` (asynchronous). 
 
 **Remediation:**
 ```typescript
-// api/auth/auth.ts:53 -- Change to async:
+// lib/server/auth/handler.ts:53 -- Change to async:
 const valid = await bcrypt.compare(password, profile.passwordHash);
 ```
 
@@ -856,7 +856,7 @@ function validatePasswordStrength(password: string): string | null {
 | Field | Value |
 |-------|-------|
 | **Severity** | LOW |
-| **File** | `api/auth/auth.ts:104` |
+| **File** | `lib/server/auth/handler.ts:104` |
 | **CVSS** | 3.7 |
 | **Priority** | Fix within 90 days |
 
@@ -1145,7 +1145,7 @@ function validatePasswordStrength(password: string): string | null {
 | C-1 | Rotate ALL secrets exposed in `.env` | VULN-001 | `.env` | NOT DONE |
 | C-2 | Add `.env` to `.gitignore` and purge from git history | VULN-001 | `.gitignore` | NOT DONE |
 | C-3 | Move Gemini API calls to server-side proxy | VULN-002 | `vite.config.ts`, `api/ai/search.ts`, `lib/server/geminiSearch.ts` | DONE (2026-03-03) |
-| C-4 | Remove plaintext admin password fallback | VULN-003 | `api/auth/auth.ts:42-46` | NOT DONE |
+| C-4 | Remove plaintext admin password fallback | VULN-003 | `lib/server/auth/handler.ts:42-46` | NOT DONE |
 | C-5 | Set `ADMIN_PASSWORD` to bcrypt hash in Vercel env vars | VULN-003 | Vercel dashboard | NOT DONE |
 | C-6 | Strip `passwordHash` from user profile API response | VULN-004 | `api/user/index.ts:22` | NOT DONE |
 | C-7 | Verify all Vercel env vars are set correctly after secret rotation | VULN-001 | Vercel dashboard | NOT DONE |
@@ -1154,14 +1154,14 @@ function validatePasswordStrength(password: string): string | null {
 
 | # | Item | Vulnerability | File(s) | Status |
 |---|------|--------------|---------|--------|
-| H-1 | Implement rate limiting on auth endpoints | VULN-007 | `api/auth/auth.ts`, `api/auth/register.ts` | NOT DONE |
+| H-1 | Implement rate limiting on auth endpoints | VULN-007 | `lib/server/auth/handler.ts`, `api/auth/register.ts` | NOT DONE |
 | H-2 | Implement server-side idempotency check for submissions | VULN-005 | `api/submissions/index.ts` | NOT DONE |
 | H-3 | Remove or validate `photoUrl` in PUT endpoint | VULN-006 | `api/submissions/[id].ts:100` | NOT DONE |
 | H-4 | Add security headers (HSTS, CSP, X-Frame-Options, etc.) | VULN-010 | `vercel.json` | NOT DONE |
 | H-5 | Add admin action audit logging | R-1 | `api/submissions/[id].ts`, `api/user/index.ts` | NOT DONE |
 | H-6 | Implement rate limiting on submission endpoint | D-1 | `api/submissions/index.ts` | NOT DONE |
-| H-7 | Change `bcrypt.compareSync` to `await bcrypt.compare` | VULN-012 | `api/auth/auth.ts:53` | NOT DONE |
-| H-8 | Reduce JWT session duration to 7 days | S-3 | `api/auth/auth.ts:103` | NOT DONE |
+| H-7 | Change `bcrypt.compareSync` to `await bcrypt.compare` | VULN-012 | `lib/server/auth/handler.ts:53` | NOT DONE |
+| H-8 | Reduce JWT session duration to 7 days | S-3 | `lib/server/auth/handler.ts:103` | NOT DONE |
 | H-9 | Add ownership/admin check to PUT endpoint | E-4 | `api/submissions/[id].ts:68` | NOT DONE |
 | H-10 | Redact `userId` from public leaderboard response | VULN-011 | `api/leaderboard/index.ts:92` | NOT DONE |
 
@@ -1178,8 +1178,8 @@ function validatePasswordStrength(password: string): string | null {
 | M-7 | Implement failed login monitoring and alerting | 3.5 monitoring | New: `lib/server/securityEvents.ts` | NOT DONE |
 | M-8 | Add magic byte validation for uploaded images | 3.3 input validation | `api/submissions/index.ts:164-176` | NOT DONE |
 | M-9 | Increase bcrypt cost factor to 12 | 3.1 authentication | `api/auth/register.ts:50` | NOT DONE |
-| M-10 | Configure explicit JWT expiration (7 days standard, 24h admin) | S-3 | `api/auth/auth.ts:103` | NOT DONE |
-| M-11 | Set `AUTH_URL` explicitly, remove `trustHost: true` | VULN-016 | `api/auth/auth.ts:104` | NOT DONE |
+| M-10 | Configure explicit JWT expiration (7 days standard, 24h admin) | S-3 | `lib/server/auth/handler.ts:103` | NOT DONE |
+| M-11 | Set `AUTH_URL` explicitly, remove `trustHost: true` | VULN-016 | `lib/server/auth/handler.ts:104` | NOT DONE |
 
 ### 5.4 Nice to Have (Low / Phase 2)
 

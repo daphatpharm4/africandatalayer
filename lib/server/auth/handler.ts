@@ -3,11 +3,11 @@ import Credentials from "@auth/core/providers/credentials";
 import Google from "@auth/core/providers/google";
 import type { AppProviders } from "@auth/core/providers";
 import bcrypt from "bcryptjs";
-import type { UserProfile } from "../../shared/types.js";
-import { errorResponse } from "../../lib/server/http.js";
-import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
-import { getAuthSecret, getSessionCookieName, isSecureRequest } from "../../lib/auth.js";
-import { inferDefaultDisplayName, normalizeEmail, normalizeIdentifier } from "../../lib/shared/identifier.js";
+import type { UserProfile } from "../../../shared/types.js";
+import { errorResponse } from "../http.js";
+import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../storage/index.js";
+import { getAuthSecret, getSessionCookieName, isSecureRequest } from "../../auth.js";
+import { inferDefaultDisplayName, normalizeEmail, normalizeIdentifier } from "../../shared/identifier.js";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";

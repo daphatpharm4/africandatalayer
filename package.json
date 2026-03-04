@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run check:function-budget && vite build",
     "preview": "vite preview",
+    "check:function-budget": "node scripts/check-vercel-function-budget.mjs",
     "typecheck": "tsc --noEmit",
     "migrate": "node scripts/migrate.mjs",
     "migrate:dry": "node scripts/migrate.mjs --dry-run",

@@ -1,4 +1,4 @@
-import handler from "./auth.js";
+import handler from "../../lib/server/auth/handler.js";
 
 export async function GET(request: Request): Promise<Response> {
   return handler(request);
