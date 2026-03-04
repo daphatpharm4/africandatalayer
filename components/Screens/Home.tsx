@@ -9,6 +9,7 @@ import {
   isWithinBonamoussadi
 } from '../../shared/geofence';
 import {
+  ChevronDown,
   List,
   Map as MapIcon,
   MapPin,
@@ -50,11 +51,33 @@ const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
   return 'bonamoussadi';
 };
 
+const categoryFromSubmission = (category: ProjectedPoint['category']): Category => {
+  if (category === 'pharmacy') return Category.PHARMACY;
+  if (category === 'fuel_station') return Category.FUEL;
+  if (category === 'mobile_money') return Category.MOBILE_MONEY;
+  if (category === 'alcohol_outlet') return Category.ALCOHOL_OUTLET;
+  if (category === 'billboard') return Category.BILLBOARD;
+  if (category === 'transport_road') return Category.TRANSPORT_ROAD;
+  if (category === 'census_proxy') return Category.CENSUS_PROXY;
+  return Category.PHARMACY;
+};
+
+const selectableCategories: Category[] = [
+  Category.PHARMACY,
+  Category.FUEL,
+  Category.MOBILE_MONEY,
+  Category.ALCOHOL_OUTLET,
+  Category.BILLBOARD,
+  Category.TRANSPORT_ROAD,
+  Category.CENSUS_PROXY,
+];
+
 
 const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth, onContribute, onProfile, language }) => {
   const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
   const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
+  const [isVerticalPickerOpen, setIsVerticalPickerOpen] = useState(false);
   const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? 'global' : 'bonamoussadi'));
@@ -116,12 +139,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
 
   const mapProjectedToPoint = (point: ProjectedPoint): DataPoint => {
     const details = (point.details ?? {}) as Record<string, unknown>;
-    const type =
-      point.category === 'pharmacy'
-        ? Category.PHARMACY
-        : point.category === 'fuel_station'
-          ? Category.FUEL
-          : Category.MOBILE_MONEY;
+    const type = categoryFromSubmission(point.category);
     const name =
       (typeof details.name === 'string' && details.name) ||
       (typeof details.siteName === 'string' && details.siteName) ||
@@ -318,25 +336,43 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
           </div>
         )}
 
-        <div className="flex p-1 bg-gray-100 rounded-xl mb-2">
+        <div className="relative mb-2">
           <button
-            onClick={() => setActiveCategory(Category.PHARMACY)}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all ${activeCategory === Category.PHARMACY ? 'bg-white shadow-sm text-[#0f2b46]' : 'text-gray-500'}`}
+            onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
+            className="w-full h-11 px-3 bg-gray-100 rounded-xl text-xs font-semibold text-[#0f2b46] flex items-center justify-between"
           >
-            {t('Pharmacies', 'Pharmacies')}
+            <span>
+              {t('Vertical', 'Verticale')}: {categoryLabel(activeCategory)}
+            </span>
+            <ChevronDown size={14} className={`transition-transform ${isVerticalPickerOpen ? 'rotate-180' : ''}`} />
           </button>
-          <button
-            onClick={() => setActiveCategory(Category.FUEL)}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all ${activeCategory === Category.FUEL ? 'bg-white shadow-sm text-[#0f2b46]' : 'text-gray-500'}`}
-          >
-            {t('Fuel', 'Carburant')}
-          </button>
-          <button
-            onClick={() => setActiveCategory(Category.MOBILE_MONEY)}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-xl transition-all ${activeCategory === Category.MOBILE_MONEY ? 'bg-white shadow-sm text-[#0f2b46]' : 'text-gray-500'}`}
-          >
-            {t('Kiosk', 'Kiosque')}
-          </button>
+          {isVerticalPickerOpen && (
+            <div className="absolute left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-lg p-2 z-30">
+              <div className="grid grid-cols-2 gap-2">
+                {selectableCategories.map((category) => {
+                  const verticalId = LEGACY_CATEGORY_MAP[category] ?? category;
+                  const vertical = VERTICALS[verticalId];
+                  const isActive = activeCategory === category;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => {
+                        setActiveCategory(category);
+                        setIsVerticalPickerOpen(false);
+                      }}
+                      className={`h-10 rounded-xl border text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-1 ${
+                        isActive ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-gray-50 text-gray-600 border-gray-100'
+                      }`}
+                    >
+                      <VerticalIcon name={vertical?.icon ?? 'pill'} size={12} />
+                      {categoryLabel(category)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
