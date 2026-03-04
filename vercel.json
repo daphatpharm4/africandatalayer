@@ -41,7 +41,7 @@
     "api/**/*.ts": {
       "maxDuration": 30
     },
-    "api/analytics/index.ts": {
+    "api/analytics/*.ts": {
       "maxDuration": 60
     }
   }
