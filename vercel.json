@@ -40,9 +40,6 @@
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 30
-    },
-    "api/analytics/*.ts": {
-      "maxDuration": 60
     }
   }
 }
