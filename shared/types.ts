@@ -3,8 +3,9 @@ export type SubmissionCategory =
   | "fuel_station"
   | "mobile_money"
   | "alcohol_outlet"
-  | "retail_kiosk"
-  | "billboard";
+  | "billboard"
+  | "transport_road"
+  | "census_proxy";
 export type PointEventType = "CREATE_EVENT" | "ENRICH_EVENT";
 export type MapScope = "bonamoussadi" | "cameroon" | "global";
 
@@ -53,11 +54,18 @@ export interface SubmissionDetails {
   name?: string;
   siteName?: string;
   openingHours?: string;
+  outletType?: string;
   isOpenNow?: boolean;
   isOnDuty?: boolean;
+  isLicensed?: boolean;
+  hasPrescriptionService?: boolean;
+  medicineCategories?: string[];
   providers?: string[];
   hasCashAvailable?: boolean;
   hasMin50000XafAvailable?: boolean;
+  isActive?: boolean;
+  hasFloat?: boolean;
+  agentType?: string;
   hasFuelAvailable?: boolean;
   pricesByFuel?: Record<string, number>;
   paymentMethods?: string[];
@@ -69,6 +77,46 @@ export interface SubmissionDetails {
   quality?: string;
   availability?: string;
   queueLength?: string;
+  hasConvenienceStore?: boolean;
+  hasCarWash?: boolean;
+  hasATM?: boolean;
+  servesFood?: boolean;
+  hasSeating?: boolean;
+  operatingPeriod?: string;
+  priceRange?: string;
+  brandsAvailable?: string[];
+  isFormal?: boolean;
+  billboardType?: string;
+  size?: string;
+  isOccupied?: boolean;
+  advertiserBrand?: string;
+  advertiserCategory?: string;
+  condition?: string;
+  isLit?: boolean;
+  facing?: string;
+  roadName?: string;
+  segmentType?: string;
+  surfaceType?: string;
+  isBlocked?: boolean;
+  blockageType?: string;
+  blockageSeverity?: string;
+  passableBy?: string[];
+  hasStreetLight?: boolean;
+  hasSidewalk?: boolean;
+  trafficLevel?: string;
+  estimatedWidth?: string;
+  floodRisk?: string;
+  buildingType?: string;
+  storeyCount?: number;
+  occupancyStatus?: string;
+  estimatedUnits?: number;
+  hasElectricity?: boolean;
+  hasWater?: boolean;
+  constructionMaterial?: string;
+  roofMaterial?: string;
+  hasCommercialGround?: boolean;
+  commercialTypes?: string[];
+  nearbyInfrastructure?: string[];
   provider?: string;
   merchantId?: string;
   merchantIdByProvider?: Record<string, string>;
@@ -87,6 +135,7 @@ export interface SubmissionDetails {
   source?: string;
   externalId?: string;
   isImported?: boolean;
+  reviewerApproved?: boolean;
   [key: string]: unknown;
 }
 
@@ -187,6 +236,7 @@ export interface LeaderboardEntry {
 // Delta / Snapshot types
 export type DeltaType = "new" | "removed" | "changed" | "unchanged";
 export type DeltaDirection = "increase" | "decrease" | "stable" | "not_applicable";
+export type DeltaSignificance = "high" | "medium" | "low";
 
 export interface SnapshotDelta {
   id: string;
@@ -201,6 +251,9 @@ export interface SnapshotDelta {
   deltaMagnitude: number | null;
   deltaDirection: DeltaDirection;
   deltaSummary: string | null;
+  significance: DeltaSignificance;
+  isPublishable: boolean;
+  isFromPartialSnapshot: boolean;
 }
 
 export interface AnomalyFlag {
@@ -227,6 +280,7 @@ export interface SnapshotStats {
   zScoreNewCount: number | null;
   zScoreRemovedCount: number | null;
   anomalyFlags: AnomalyFlag[];
+  isBaseline: boolean;
 }
 
 export interface TrendDataPoint {

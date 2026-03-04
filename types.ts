@@ -16,7 +16,11 @@ export enum Screen {
 export enum Category {
   PHARMACY = 'PHARMACY',
   FUEL = 'FUEL',
-  MOBILE_MONEY = 'MOBILE_MONEY'
+  MOBILE_MONEY = 'MOBILE_MONEY',
+  ALCOHOL_OUTLET = 'ALCOHOL_OUTLET',
+  BILLBOARD = 'BILLBOARD',
+  TRANSPORT_ROAD = 'TRANSPORT_ROAD',
+  CENSUS_PROXY = 'CENSUS_PROXY'
 }
 
 export type ContributionMode = 'CREATE' | 'ENRICH';

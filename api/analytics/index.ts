@@ -18,7 +18,7 @@ export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "snapshots";
 
-  // Cron trigger — authenticated via CRON_SECRET, not user session
+  // Weekly snapshot cron trigger - authenticated via CRON_SECRET.
   if (view === "cron") {
     const authHeader = request.headers.get("authorization");
     const cronSecret = process.env.CRON_SECRET;
@@ -39,6 +39,27 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
+  // Monthly rollup cron trigger - authenticated via CRON_SECRET.
+  if (view === "cron_monthly") {
+    const authHeader = request.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return errorResponse("Unauthorized", 401);
+    }
+    try {
+      const { runMonthlyRollup } = await import("../../lib/server/snapshotEngine.js");
+      const dateOverride = url.searchParams.get("date") ?? undefined;
+      const result = await runMonthlyRollup(dateOverride);
+      return jsonResponse(result);
+    } catch (error) {
+      console.error("Monthly rollup cron failed:", error);
+      return errorResponse(
+        error instanceof Error ? error.message : "Monthly rollup failed",
+        500,
+      );
+    }
+  }
+
   // All other views require authenticated user
   const user = await requireUser(request);
   if (!user) return errorResponse("Unauthorized", 401);
@@ -48,12 +69,14 @@ export async function GET(request: Request): Promise<Response> {
       return handleSnapshots(url);
     case "deltas":
       return handleDeltas(url);
+    case "monthly":
+      return handleMonthly(url);
     case "trends":
       return handleTrends(url);
     case "anomalies":
       return handleAnomalies();
     default:
-      return errorResponse(`Invalid view: ${view}. Valid: snapshots, deltas, trends, anomalies, cron`, 400);
+      return errorResponse(`Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, cron, cron_monthly`, 400);
   }
 }
 
@@ -85,6 +108,8 @@ async function handleDeltas(url: URL): Promise<Response> {
   const date = url.searchParams.get("date");
   const vertical = url.searchParams.get("vertical");
   const type = url.searchParams.get("type");
+  const significance = url.searchParams.get("significance");
+  const publishable = url.searchParams.get("publishable");
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 500);
 
   const conditions: string[] = [];
@@ -102,6 +127,15 @@ async function handleDeltas(url: URL): Promise<Response> {
   if (type) {
     conditions.push(`delta_type = $${idx++}`);
     values.push(type);
+  }
+  if (significance) {
+    conditions.push(`significance = $${idx++}`);
+    values.push(significance);
+  }
+  if (publishable === "true") {
+    conditions.push(`is_publishable = true`);
+  } else if (publishable === "false") {
+    conditions.push(`is_publishable = false`);
   }
 
   const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -121,6 +155,34 @@ async function handleDeltas(url: URL): Promise<Response> {
     deltas: dataResult.rows,
     total: (countResult.rows[0] as { total: number }).total,
   });
+}
+
+async function handleMonthly(url: URL): Promise<Response> {
+  const vertical = url.searchParams.get("vertical");
+  const month = url.searchParams.get("month");
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "24", 10), 120);
+
+  const conditions: string[] = [];
+  const values: unknown[] = [];
+  let idx = 1;
+
+  if (vertical) {
+    conditions.push(`vertical_id = $${idx++}`);
+    values.push(vertical);
+  }
+  if (month) {
+    conditions.push(`month = $${idx++}`);
+    values.push(month);
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  values.push(limit);
+
+  const result = await query(
+    `SELECT * FROM monthly_stats ${where} ORDER BY month DESC, vertical_id LIMIT $${idx}`,
+    values,
+  );
+  return jsonResponse(result.rows);
 }
 
 async function handleTrends(url: URL): Promise<Response> {

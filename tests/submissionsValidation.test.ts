@@ -33,18 +33,20 @@ test('mobile money create validation only requires providers', () => {
 });
 
 test('vertical registry contains all expected verticals', () => {
-  assert.ok(VERTICAL_IDS.length >= 14, `Expected at least 14 verticals, got ${VERTICAL_IDS.length}`);
+  assert.equal(VERTICAL_IDS.length, 7, `Expected 7 active verticals, got ${VERTICAL_IDS.length}`);
   assert.ok(isValidCategory('pharmacy'));
   assert.ok(isValidCategory('alcohol_outlet'));
-  assert.ok(isValidCategory('water_point'));
+  assert.ok(isValidCategory('transport_road'));
+  assert.ok(isValidCategory('census_proxy'));
+  assert.ok(!isValidCategory('retail_kiosk'));
   assert.ok(!isValidCategory('invalid_category'));
 });
 
 test('getVertical returns config for new verticals', () => {
-  const v = getVertical('alcohol_outlet');
-  assert.equal(v.id, 'alcohol_outlet');
-  assert.equal(v.labelEn, 'Alcohol Outlet');
-  assert.ok(v.createRequiredFields.includes('name'));
+  const road = getVertical('transport_road');
+  assert.equal(road.id, 'transport_road');
+  assert.equal(road.labelEn, 'Road Segment');
+  assert.ok(road.createRequiredFields.includes('roadName'));
 });
 
 test('categoryLabel returns localized labels', () => {
@@ -58,4 +60,21 @@ test('new vertical create validation requires name', () => {
   assert.ok(missing.includes('name'));
   const complete = listCreateMissingFields('alcohol_outlet' as any, { name: 'Bar Central' });
   assert.equal(complete.length, 0);
+});
+
+test('transport road and census proxy enforce required create fields', () => {
+  const roadMissing = listCreateMissingFields('transport_road' as any, { roadName: 'Rue 5' });
+  assert.ok(roadMissing.includes('condition'));
+
+  const roadComplete = listCreateMissingFields('transport_road' as any, { roadName: 'Rue 5', condition: 'good' });
+  assert.equal(roadComplete.length, 0);
+
+  const censusMissing = listCreateMissingFields('census_proxy' as any, { buildingType: 'residential' });
+  assert.ok(censusMissing.includes('occupancyStatus'));
+
+  const censusComplete = listCreateMissingFields('census_proxy' as any, {
+    buildingType: 'residential',
+    occupancyStatus: 'occupied',
+  });
+  assert.equal(censusComplete.length, 0);
 });

@@ -28,6 +28,13 @@ type Vertical = SubmissionCategory;
 const providerOptions = ['MTN', 'Orange', 'Airtel'];
 const paymentMethodOptions = ['Cash', 'Mobile Money', 'Card'];
 const fuelTypeOptions = ['Super', 'Diesel', 'Gas'];
+const outletTypeOptions = ['bar', 'restaurant', 'off_licence', 'street_vendor', 'nightclub'];
+const billboardTypeOptions = ['standard', 'digital', 'street_furniture', 'wall_paint', 'poster', 'informal'];
+const roadConditionOptions = ['good', 'fair', 'poor', 'impassable'];
+const roadSurfaceOptions = ['asphalt', 'laterite', 'gravel', 'earth', 'concrete'];
+const roadBlockageOptions = ['flooding', 'construction', 'accident', 'debris', 'market_encroachment'];
+const buildingTypeOptions = ['residential', 'commercial', 'mixed', 'industrial', 'institutional', 'religious'];
+const occupancyStatusOptions = ['occupied', 'partially_occupied', 'vacant', 'under_construction'];
 const openingHourPresets = ['08:00 - 20:00', '09:00 - 19:00', '24/7'];
 // Vercel serverless payload limit is 4.5MB; base64 adds ~33% overhead.
 // Keep raw threshold at 3MB so base64 + JSON stays under 4.5MB.
@@ -202,7 +209,12 @@ async function extractClientExif(
 const pointTypeToVertical = (type: Category): Vertical => {
   if (type === Category.PHARMACY) return 'pharmacy';
   if (type === Category.FUEL) return 'fuel_station';
-  return 'mobile_money';
+  if (type === Category.MOBILE_MONEY) return 'mobile_money';
+  if (type === Category.ALCOHOL_OUTLET) return 'alcohol_outlet';
+  if (type === Category.BILLBOARD) return 'billboard';
+  if (type === Category.TRANSPORT_ROAD) return 'transport_road';
+  if (type === Category.CENSUS_PROXY) return 'census_proxy';
+  return 'pharmacy';
 };
 
 const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode, seedPoint }) => {
@@ -234,6 +246,20 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [priceFuelType, setPriceFuelType] = useState(seedPoint?.fuelType ?? fuelTypeOptions[0]);
   const [priceValue, setPriceValue] = useState(seedPoint?.price ? String(seedPoint.price) : '');
   const [quality, setQuality] = useState(seedPoint?.quality ?? 'Standard');
+  const [outletType, setOutletType] = useState('bar');
+  const [isFormal, setIsFormal] = useState(true);
+  const [billboardType, setBillboardType] = useState('standard');
+  const [isOccupied, setIsOccupied] = useState(true);
+  const [advertiserBrand, setAdvertiserBrand] = useState('');
+  const [roadName, setRoadName] = useState('');
+  const [roadCondition, setRoadCondition] = useState('good');
+  const [roadSurface, setRoadSurface] = useState('asphalt');
+  const [roadBlocked, setRoadBlocked] = useState(false);
+  const [blockageType, setBlockageType] = useState(roadBlockageOptions[0]);
+  const [buildingType, setBuildingType] = useState('residential');
+  const [occupancyStatus, setOccupancyStatus] = useState('occupied');
+  const [storeyCount, setStoreyCount] = useState('');
+  const [estimatedUnits, setEstimatedUnits] = useState('');
   const [isLowEndDevice] = useState<boolean>(() => detectLowEndDevice());
 
   const gaps = useMemo(() => seedPoint?.gaps ?? [], [seedPoint]);
@@ -431,6 +457,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       return {
         name: siteName.trim(),
         isOpenNow,
+        isOnDuty,
         openingHours: openingHours.trim() || undefined,
         clientDevice
       };
@@ -444,15 +471,56 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         clientDevice
       };
     }
-    const parsedPrice = Number(priceValue);
+    if (vertical === 'fuel_station') {
+      const parsedPrice = Number(priceValue);
+      return {
+        name: siteName.trim(),
+        hasFuelAvailable,
+        fuelTypes: fuelTypes.length ? fuelTypes : undefined,
+        pricesByFuel: Number.isFinite(parsedPrice) ? { [priceFuelType]: parsedPrice } : undefined,
+        quality,
+        openingHours: openingHours.trim() || undefined,
+        paymentMethods: paymentMethods.length ? paymentMethods : undefined,
+        clientDevice
+      };
+    }
+    if (vertical === 'alcohol_outlet') {
+      return {
+        name: siteName.trim(),
+        outletType,
+        isFormal,
+        openingHours: openingHours.trim() || undefined,
+        paymentMethods: paymentMethods.length ? paymentMethods : undefined,
+        clientDevice
+      };
+    }
+    if (vertical === 'billboard') {
+      return {
+        name: siteName.trim(),
+        billboardType,
+        isOccupied,
+        advertiserBrand: advertiserBrand.trim() || undefined,
+        clientDevice
+      };
+    }
+    if (vertical === 'transport_road') {
+      return {
+        roadName: roadName.trim(),
+        name: roadName.trim() || undefined,
+        condition: roadCondition,
+        surfaceType: roadSurface,
+        isBlocked: roadBlocked,
+        blockageType: roadBlocked ? blockageType : undefined,
+        clientDevice
+      };
+    }
+    const parsedStoreyCount = Number(storeyCount);
+    const parsedEstimatedUnits = Number(estimatedUnits);
     return {
-      name: siteName.trim(),
-      hasFuelAvailable,
-      fuelTypes: fuelTypes.length ? fuelTypes : undefined,
-      pricesByFuel: Number.isFinite(parsedPrice) ? { [priceFuelType]: parsedPrice } : undefined,
-      quality,
-      openingHours: openingHours.trim() || undefined,
-      paymentMethods: paymentMethods.length ? paymentMethods : undefined,
+      buildingType,
+      occupancyStatus,
+      storeyCount: Number.isFinite(parsedStoreyCount) ? parsedStoreyCount : undefined,
+      estimatedUnits: Number.isFinite(parsedEstimatedUnits) ? parsedEstimatedUnits : undefined,
       clientDevice
     };
   };
@@ -500,6 +568,30 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       }
       if (vertical === 'fuel_station' && !siteName.trim()) {
         setErrorMessage(t('Fuel station name is required.', 'Le nom de la station-service est requis.'));
+        return false;
+      }
+      if (vertical === 'alcohol_outlet' && !siteName.trim()) {
+        setErrorMessage(t('Alcohol outlet name is required.', 'Le nom du point de vente d\'alcool est requis.'));
+        return false;
+      }
+      if (vertical === 'billboard' && !siteName.trim()) {
+        setErrorMessage(t('Billboard name/description is required.', 'Le nom ou la description du panneau est requis.'));
+        return false;
+      }
+      if (vertical === 'transport_road' && !roadName.trim()) {
+        setErrorMessage(t('Road segment name is required.', 'Le nom du segment routier est requis.'));
+        return false;
+      }
+      if (vertical === 'transport_road' && !roadCondition) {
+        setErrorMessage(t('Road condition is required.', 'L\'etat de la route est requis.'));
+        return false;
+      }
+      if (vertical === 'census_proxy' && !buildingType) {
+        setErrorMessage(t('Building type is required.', 'Le type de batiment est requis.'));
+        return false;
+      }
+      if (vertical === 'census_proxy' && !occupancyStatus) {
+        setErrorMessage(t('Occupancy status is required.', 'Le statut d\'occupation est requis.'));
         return false;
       }
     } else if (Object.keys(details).filter((field) => field !== 'clientDevice').length === 0) {
@@ -568,11 +660,11 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
 
   const renderVerticalSelector = () => {
     if (isEnrichMode) return null;
-    const verticalEntries = Object.values(VERTICALS);
+    const verticalEntries = Object.values(VERTICALS) as Array<(typeof VERTICALS)[keyof typeof VERTICALS]>;
     return (
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
         <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Vertical', 'Verticale')}</h4>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {verticalEntries.map((v) => (
             <button
               key={v.id}
@@ -714,23 +806,187 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         </div>
       );
     }
+    if (vertical === 'fuel_station') {
+      return (
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Fuel Station', 'Creer une station-service')}</h4>
+          <input
+            value={siteName}
+            onChange={(event) => setSiteName(event.target.value)}
+            placeholder={t('Fuel station name', 'Nom de la station-service')}
+            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
+            <button
+              onClick={() => setHasFuelAvailable((prev) => !prev)}
+              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasFuelAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+            >
+              {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (vertical === 'alcohol_outlet') {
+      return (
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Alcohol Outlet', 'Creer un point de vente d\'alcool')}</h4>
+          <input
+            value={siteName}
+            onChange={(event) => setSiteName(event.target.value)}
+            placeholder={t('Outlet name', 'Nom du point de vente')}
+            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+          <select
+            value={outletType}
+            onChange={(event) => setOutletType(event.target.value)}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          >
+            {outletTypeOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-600">{t('Formal / licensed', 'Formel / licence')}</span>
+            <button
+              onClick={() => setIsFormal((prev) => !prev)}
+              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isFormal ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+            >
+              {isFormal ? t('Yes', 'Oui') : t('No', 'Non')}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (vertical === 'billboard') {
+      return (
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Billboard', 'Creer un panneau')}</h4>
+          <input
+            value={siteName}
+            onChange={(event) => setSiteName(event.target.value)}
+            placeholder={t('Billboard description', 'Description du panneau')}
+            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+          <select
+            value={billboardType}
+            onChange={(event) => setBillboardType(event.target.value)}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          >
+            {billboardTypeOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <input
+            value={advertiserBrand}
+            onChange={(event) => setAdvertiserBrand(event.target.value)}
+            placeholder={t('Advertiser brand (optional)', 'Marque annonceur (optionnel)')}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-600">{t('Occupied', 'Occupe')}</span>
+            <button
+              onClick={() => setIsOccupied((prev) => !prev)}
+              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isOccupied ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+            >
+              {isOccupied ? t('Yes', 'Oui') : t('No', 'Non')}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (vertical === 'transport_road') {
+      return (
+        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Road Segment', 'Creer un segment routier')}</h4>
+          <input
+            value={roadName}
+            onChange={(event) => setRoadName(event.target.value)}
+            placeholder={t('Road name', 'Nom de route')}
+            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+          <select
+            value={roadCondition}
+            onChange={(event) => setRoadCondition(event.target.value)}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          >
+            {roadConditionOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <select
+            value={roadSurface}
+            onChange={(event) => setRoadSurface(event.target.value)}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          >
+            {roadSurfaceOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-gray-600">{t('Blocked', 'Bloque')}</span>
+            <button
+              onClick={() => setRoadBlocked((prev) => !prev)}
+              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${roadBlocked ? 'bg-[#c86b4a] text-white' : 'bg-gray-100 text-gray-500'}`}
+            >
+              {roadBlocked ? t('Yes', 'Oui') : t('No', 'Non')}
+            </button>
+          </div>
+          {roadBlocked && (
+            <select
+              value={blockageType}
+              onChange={(event) => setBlockageType(event.target.value)}
+              className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+            >
+              {roadBlockageOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      );
+    }
+
     return (
       <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-        <h4 className="text-sm font-bold text-gray-900">{t('Create Fuel Station', 'Creer une station-service')}</h4>
-        <input
-          value={siteName}
-          onChange={(event) => setSiteName(event.target.value)}
-          placeholder={t('Fuel station name', 'Nom de la station-service')}
-          className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-        />
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
-          <button
-            onClick={() => setHasFuelAvailable((prev) => !prev)}
-            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasFuelAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
-          >
-            {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
-          </button>
+        <h4 className="text-sm font-bold text-gray-900">{t('Create Building', 'Creer un batiment')}</h4>
+        <select
+          value={buildingType}
+          onChange={(event) => setBuildingType(event.target.value)}
+          className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+        >
+          {buildingTypeOptions.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+        <select
+          value={occupancyStatus}
+          onChange={(event) => setOccupancyStatus(event.target.value)}
+          className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+        >
+          {occupancyStatusOptions.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+        <div className="grid grid-cols-2 gap-3">
+          <input
+            type="number"
+            value={storeyCount}
+            onChange={(event) => setStoreyCount(event.target.value)}
+            placeholder={t('Storeys', 'Etages')}
+            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+          <input
+            type="number"
+            value={estimatedUnits}
+            onChange={(event) => setEstimatedUnits(event.target.value)}
+            placeholder={t('Estimated units', 'Unites estimees')}
+            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
         </div>
       </div>
     );
@@ -973,11 +1229,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
           <div className="flex items-center space-x-2 text-[#0f2b46]">
             {verticalIcon}
             <span className="text-sm font-bold">
-              {vertical === 'pharmacy'
-                ? t('Pharmacy', 'Pharmacie')
-                : vertical === 'mobile_money'
-                  ? t('Mobile Money Kiosk', 'Kiosque mobile money')
-                  : t('Fuel Station', 'Station-service')}
+              {getCategoryLabel(vertical, language)}
             </span>
           </div>
           {isEnrichMode && seedPoint && (

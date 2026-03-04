@@ -15,6 +15,7 @@ import {
   normalizeEnrichPayload,
   projectPointsFromEvents,
 } from "../../lib/server/pointProjection.js";
+import { computeConfidenceScore } from "../../lib/server/confidenceScore.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import {
   filterEventsForViewer,
@@ -50,6 +51,7 @@ import type {
   SubmissionLocation,
 } from "../../shared/types.js";
 import { isValidCategory, normalizeCategoryAlias } from "../../shared/verticals.js";
+import { generatePointId } from "../../lib/shared/pointId.js";
 const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const SUBMISSION_PHOTO_MATCH_KM = DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM;
@@ -579,7 +581,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const existingEvents = await buildCombinedEvents();
     const projectedExisting = projectPointsFromEvents(existingEvents);
-    let pointId = typeof body.pointId === "string" && body.pointId.trim() ? body.pointId.trim() : crypto.randomUUID();
+    let pointId = typeof body.pointId === "string" && body.pointId.trim()
+      ? body.pointId.trim()
+      : generatePointId(category, finalLocation.latitude, finalLocation.longitude);
 
     if (eventType === "CREATE_EVENT") {
       const createError = validateCreatePayload(category, details);
@@ -716,6 +720,13 @@ export async function POST(request: Request): Promise<Response> {
       source: typeof details.source === "string" ? details.source : undefined,
       externalId: typeof details.externalId === "string" ? details.externalId : undefined,
     };
+
+    const projectedWithNewEvent = projectPointsFromEvents([...existingEvents, newEvent]);
+    const projectedPoint = projectedWithNewEvent.find((point) => point.pointId === pointId);
+    if (projectedPoint) {
+      const confidenceScore = computeConfidenceScore(projectedPoint, new Date(now));
+      newEvent.details = { ...newEvent.details, confidenceScore, lastSeenAt: now };
+    }
 
     await insertPointEvent(newEvent);
 
