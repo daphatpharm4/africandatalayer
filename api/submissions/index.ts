@@ -20,6 +20,15 @@ import { buildDedupCandidates } from "../../lib/server/dedup.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { incrementAssignmentsForEvent } from "../../lib/server/collectionAssignments.js";
 import {
+  blockStatusFromCode,
+  computeEventContentHash,
+  computeImageSha256,
+  evaluateSubmissionRisk,
+  hashIpIdentifier,
+  logBlockedSubmission,
+  persistSubmissionRiskArtifacts,
+} from "../../lib/server/submissionRisk.js";
+import {
   filterEventsForViewer,
   redactEventUserIds,
   resolveAdminViewAccess,
@@ -230,34 +239,102 @@ function isPrivateIp(ip: string): boolean {
 interface IpApiResponse {
   latitude?: unknown;
   longitude?: unknown;
+  asn?: unknown;
+  org?: unknown;
 }
 
-async function fetchIpLocation(ip: string): Promise<SubmissionLocation | null> {
+interface IpLookupResult {
+  ip: string;
+  location: SubmissionLocation | null;
+  asn: string | null;
+  org: string | null;
+  isDatacenter: boolean;
+  isVpn: boolean;
+  isTor: boolean;
+}
+
+function toLowerText(input: unknown): string {
+  if (typeof input !== "string") return "";
+  return input.trim().toLowerCase();
+}
+
+function classifyIpOrg(orgRaw: string): { isDatacenter: boolean; isVpn: boolean; isTor: boolean } {
+  const org = orgRaw.toLowerCase();
+  const isDatacenter =
+    org.includes("hosting") ||
+    org.includes("cloud") ||
+    org.includes("digitalocean") ||
+    org.includes("aws") ||
+    org.includes("amazon") ||
+    org.includes("google cloud") ||
+    org.includes("azure") ||
+    org.includes("linode") ||
+    org.includes("ovh");
+  const isVpn =
+    org.includes("vpn") ||
+    org.includes("private internet") ||
+    org.includes("nord") ||
+    org.includes("expressvpn") ||
+    org.includes("surfshark") ||
+    org.includes("proxy");
+  const isTor = org.includes("tor");
+  return { isDatacenter, isVpn, isTor };
+}
+
+async function fetchIpInfo(ip: string): Promise<IpLookupResult> {
   const target = `https://ipapi.co/${ip}/json/`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     const res = await fetch(target, { signal: controller.signal });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      return {
+        ip,
+        location: null,
+        asn: null,
+        org: null,
+        isDatacenter: false,
+        isVpn: false,
+        isTor: false,
+      };
+    }
     const data = (await res.json()) as IpApiResponse;
     const latitude = Number(data?.latitude);
     const longitude = Number(data?.longitude);
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-    return { latitude, longitude };
+    const org = toLowerText(data?.org) || null;
+    const asn = typeof data?.asn === "string" && data.asn.trim() ? data.asn.trim().toLowerCase() : null;
+    const classification = classifyIpOrg(org ?? "");
+    return {
+      ip,
+      location: Number.isFinite(latitude) && Number.isFinite(longitude) ? { latitude, longitude } : null,
+      asn,
+      org,
+      isDatacenter: classification.isDatacenter,
+      isVpn: classification.isVpn,
+      isTor: classification.isTor,
+    };
   } catch {
-    return null;
+    return {
+      ip,
+      location: null,
+      asn: null,
+      org: null,
+      isDatacenter: false,
+      isVpn: false,
+      isTor: false,
+    };
   } finally {
     clearTimeout(timeout);
   }
 }
 
-async function getIpLocation(request: Request): Promise<SubmissionLocation | null> {
+async function getIpInfo(request: Request): Promise<IpLookupResult | null> {
   const forwarded = request.headers.get("x-forwarded-for");
   const realIp = request.headers.get("x-real-ip");
   const vercelIp = request.headers.get("x-vercel-forwarded-for");
   const ip = normalizeIp(vercelIp ?? forwarded ?? realIp);
   if (!ip || isPrivateIp(ip)) return null;
-  return await fetchIpLocation(ip);
+  return await fetchIpInfo(ip);
 }
 
 function validateCreatePayload(category: SubmissionCategory, details: SubmissionDetails): string | null {
@@ -287,6 +364,26 @@ function getSecondaryPhotoUrl(event: PointEvent): string | null {
   if (typeof secondPhotoUrl !== "string") return null;
   const normalized = secondPhotoUrl.trim();
   return normalized || null;
+}
+
+function getReviewStatus(event: PointEvent): string {
+  const details = event.details as Record<string, unknown> | undefined;
+  const status = typeof details?.reviewStatus === "string" ? details.reviewStatus.trim().toLowerCase() : "";
+  return status || "auto_approved";
+}
+
+function getReviewFlags(event: PointEvent): string[] {
+  const details = event.details as Record<string, unknown> | undefined;
+  const raw = details?.reviewFlags;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((value) => (typeof value === "string" ? value.trim() : ""))
+    .filter((value) => value.length > 0);
+}
+
+function isPendingReview(event: PointEvent): boolean {
+  if (getReviewStatus(event) === "pending_review") return true;
+  return getReviewFlags(event).length > 0;
 }
 
 function shouldRunFallbackFraudCheck(event: PointEvent, fraudCheck: SubmissionFraudCheck | null): boolean {
@@ -466,6 +563,15 @@ export async function GET(request: Request): Promise<Response> {
       return jsonResponse(adminEvents, { status: 200 });
     }
 
+    if (view === "review_queue") {
+      const adminAccess = resolveAdminViewAccess(authContext);
+      if (adminAccess === "unauthorized") return errorResponse("Unauthorized", 401);
+      if (adminAccess === "forbidden") return errorResponse("Forbidden", 403);
+      const pending = scopedEvents.filter((event) => isPendingReview(event));
+      const adminEvents = await buildAdminSubmissionEvents(pending);
+      return jsonResponse(adminEvents, { status: 200 });
+    }
+
     let projected = projectPointsFromEvents(scopedEvents);
 
     if (view === "dedup_candidates") {
@@ -565,7 +671,9 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse(`Photo exceeds maximum size of ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB`, 400);
   }
 
-  const ipLocation = await getIpLocation(request);
+  const ipInfo = await getIpInfo(request);
+  const ipLocation = ipInfo?.location ?? null;
+  const ipHash = ipInfo?.ip ? hashIpIdentifier(ipInfo.ip) : null;
   const clientExif = (body as unknown as Record<string, unknown>)?.clientExif as ClientExifData | null | undefined;
   let photoLocation: SubmissionLocation | null = null;
   let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null = null;
@@ -717,6 +825,93 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
+    let riskEvaluation;
+    try {
+      riskEvaluation = await evaluateSubmissionRisk({
+        userId: auth.id,
+        isAdmin: isAdminUser,
+        pointId,
+        eventType: effectiveEventType,
+        category,
+        details,
+        finalLocation,
+        submissionLocation: location,
+        ipLocation,
+        photoMetadata: {
+          gps: primaryPhotoMetadata?.gps ?? null,
+          capturedAt: primaryPhotoMetadata?.capturedAt ?? null,
+          deviceMake: primaryPhotoMetadata?.deviceMake ?? null,
+          deviceModel: primaryPhotoMetadata?.deviceModel ?? null,
+        },
+        clientDevice,
+        imageBuffer: parsedPhoto.imageBuffer,
+        ipHash,
+        ipReputation: ipInfo
+          ? {
+              asn: ipInfo.asn,
+              org: ipInfo.org,
+              isDatacenter: ipInfo.isDatacenter,
+              isVpn: ipInfo.isVpn,
+              isTor: ipInfo.isTor,
+            }
+          : null,
+        hasSecondaryPhoto: Boolean(body?.secondImageBase64),
+      });
+    } catch (riskError) {
+      console.warn("Submission risk engine fallback activated", riskError);
+      riskEvaluation = {
+        shouldBlock: false,
+        blockCode: null,
+        blockReason: null,
+        imageHash: computeImageSha256(parsedPhoto.imageBuffer),
+        contentHash: computeEventContentHash({
+          pointId,
+          category,
+          eventType: effectiveEventType,
+          location: finalLocation,
+          details,
+        }),
+        reviewStatus: "pending_review",
+        reviewFlags: ["risk_engine_unavailable"],
+        riskScore: 55,
+        exifTrustScore: 0,
+        velocity: {
+          user15m: 0,
+          device15m: null,
+          ip15m: null,
+          deviceDistinctUsers15m: null,
+          ipDistinctUsers15m: null,
+        },
+        impossibleTravelSpeedKmh: null,
+        riskComponents: {
+          locationRisk: 0,
+          photoRisk: 0,
+          temporalRisk: 0,
+          userRisk: 0,
+          behavioralRisk: 0,
+        },
+      };
+    }
+
+    if (riskEvaluation.shouldBlock) {
+      const blockCode = riskEvaluation.blockCode ?? "blocked";
+      try {
+        await logBlockedSubmission({
+          userId: auth.id,
+          blockCode,
+          riskScore: riskEvaluation.riskScore,
+          riskComponents: riskEvaluation.riskComponents,
+          notes: riskEvaluation.blockReason,
+        });
+      } catch (auditError) {
+        console.warn("Unable to write blocked submission audit log", auditError);
+      }
+      return errorResponse(
+        riskEvaluation.blockReason ?? "Submission blocked by fraud controls",
+        blockStatusFromCode(blockCode),
+      );
+    }
+
     const eventId = crypto.randomUUID();
     let photoUrl: string | undefined;
     try {
@@ -794,6 +989,27 @@ export async function POST(request: Request): Promise<Response> {
       submissionMatchThresholdKm: SUBMISSION_PHOTO_MATCH_KM,
       ipMatchThresholdKm: IP_PHOTO_MATCH_KM,
     });
+    details.imageSha256 = riskEvaluation.imageHash;
+    details.contentHash = riskEvaluation.contentHash;
+    details.reviewStatus = riskEvaluation.reviewStatus;
+    details.reviewFlags = riskEvaluation.reviewFlags;
+    details.riskScore = riskEvaluation.riskScore;
+    details.riskComponents = riskEvaluation.riskComponents as unknown as Record<string, unknown>;
+    details.exifTrustScore = riskEvaluation.exifTrustScore;
+    details.velocitySignals = riskEvaluation.velocity as unknown as Record<string, unknown>;
+    details.ipHash = ipHash ?? undefined;
+    if (ipInfo) {
+      details.ipReputation = {
+        asn: ipInfo.asn,
+        org: ipInfo.org,
+        isDatacenter: ipInfo.isDatacenter,
+        isVpn: ipInfo.isVpn,
+        isTor: ipInfo.isTor,
+      };
+    }
+
+    const xpAwarded = riskEvaluation.reviewStatus === "auto_approved" ? BASE_EVENT_XP : 0;
+    details.xpAwarded = xpAwarded;
 
     const now = new Date().toISOString();
     const newEvent: PointEvent = {
@@ -823,6 +1039,22 @@ export async function POST(request: Request): Promise<Response> {
     } catch (assignmentError) {
       console.warn("Unable to update assignment progress from submission", assignmentError);
     }
+    try {
+      await persistSubmissionRiskArtifacts({
+        eventId,
+        pointId,
+        userId: auth.id,
+        imageHash: riskEvaluation.imageHash,
+        contentHash: riskEvaluation.contentHash,
+        reviewStatus: riskEvaluation.reviewStatus,
+        reviewFlags: riskEvaluation.reviewFlags,
+        riskScore: riskEvaluation.riskScore,
+        riskComponents: riskEvaluation.riskComponents,
+        clientDevice,
+      });
+    } catch (riskPersistError) {
+      console.warn("Unable to persist submission risk artifacts", riskPersistError);
+    }
 
     const exifDeviceMake = primaryPhotoMetadata?.deviceMake ?? null;
     const exifDeviceModel = primaryPhotoMetadata?.deviceModel ?? null;
@@ -830,6 +1062,9 @@ export async function POST(request: Request): Promise<Response> {
       eventId,
       userId: auth.id,
       category,
+      reviewStatus: riskEvaluation.reviewStatus,
+      reviewFlags: riskEvaluation.reviewFlags,
+      riskScore: riskEvaluation.riskScore,
       deviceId: clientDevice?.deviceId ?? null,
       clientPlatform: clientDevice?.platform ?? null,
       clientUserAgent: clientDevice?.userAgent ?? requestUserAgent ?? null,
@@ -844,8 +1079,8 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const profile = await getUserProfile(auth.id);
-    if (profile) {
-      profile.XP = (profile.XP ?? 0) + BASE_EVENT_XP;
+    if (profile && xpAwarded > 0) {
+      profile.XP = (profile.XP ?? 0) + xpAwarded;
       await upsertUserProfile(auth.id, profile);
     }
 

@@ -14,6 +14,14 @@ const VALID_METRICS = new Set([
   "week_over_week_growth",
 ]);
 
+function isMissingDbObjectError(error: unknown): boolean {
+  const pg = error as { code?: unknown; message?: unknown } | null;
+  const code = typeof pg?.code === "string" ? pg.code : "";
+  if (code === "42P01" || code === "42703") return true;
+  const message = typeof pg?.message === "string" ? pg.message.toLowerCase() : "";
+  return message.includes("does not exist") || message.includes("undefined table") || message.includes("undefined column");
+}
+
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "snapshots";
@@ -60,6 +68,27 @@ export async function GET(request: Request): Promise<Response> {
     }
   }
 
+  // Daily transport-road summary cron trigger - authenticated via CRON_SECRET.
+  if (view === "cron_daily_road") {
+    const authHeader = request.headers.get("authorization");
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      return errorResponse("Unauthorized", 401);
+    }
+    try {
+      const { runDailyRoadSnapshot } = await import("../../lib/server/snapshotEngine.js");
+      const dateOverride = url.searchParams.get("date") ?? undefined;
+      const result = await runDailyRoadSnapshot(dateOverride);
+      return jsonResponse(result);
+    } catch (error) {
+      console.error("Daily road snapshot cron failed:", error);
+      return errorResponse(
+        error instanceof Error ? error.message : "Daily road snapshot failed",
+        500,
+      );
+    }
+  }
+
   // All other views require authenticated user
   const user = await requireUser(request);
   if (!user) return errorResponse("Unauthorized", 401);
@@ -75,8 +104,15 @@ export async function GET(request: Request): Promise<Response> {
       return handleTrends(url);
     case "anomalies":
       return handleAnomalies();
+    case "kpi_summary":
+      return handleKpiSummary();
+    case "kpi_weekly":
+      return handleKpiWeekly(url);
     default:
-      return errorResponse(`Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, cron, cron_monthly`, 400);
+      return errorResponse(
+        `Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, kpi_summary, kpi_weekly, cron, cron_monthly, cron_daily_road`,
+        400,
+      );
   }
 }
 
@@ -228,4 +264,179 @@ async function handleAnomalies(): Promise<Response> {
   );
 
   return jsonResponse(result.rows);
+}
+
+async function handleKpiSummary(): Promise<Response> {
+  const [
+    wacResult,
+    verificationResult,
+    freshnessResult,
+    fraudResult,
+    reviewResult,
+    enrichmentResult,
+  ] = await Promise.all([
+    query<{ wac: number }>(
+      `SELECT COUNT(DISTINCT user_id)::int AS wac
+       FROM point_events
+       WHERE created_at >= NOW() - INTERVAL '7 days'`,
+    ),
+    query<{ total_points: number; verified_points: number; verification_rate_pct: number }>(
+      `WITH point_users AS (
+         SELECT point_id, COUNT(DISTINCT user_id) AS distinct_users
+         FROM point_events
+         GROUP BY point_id
+       )
+       SELECT
+         COUNT(*)::int AS total_points,
+         COUNT(*) FILTER (WHERE distinct_users >= 2)::int AS verified_points,
+         ROUND(
+           100.0 * COUNT(*) FILTER (WHERE distinct_users >= 2) / GREATEST(COUNT(*), 1),
+           1
+         ) AS verification_rate_pct
+       FROM point_users`,
+    ),
+    query<{ median_age_days: number; avg_age_days: number }>(
+      `WITH latest_per_point AS (
+         SELECT point_id, MAX(created_at) AS last_event_at
+         FROM point_events
+         GROUP BY point_id
+       ),
+       ages AS (
+         SELECT EXTRACT(EPOCH FROM (NOW() - last_event_at)) / 86400.0 AS age_days
+         FROM latest_per_point
+       )
+       SELECT
+         ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY age_days)::numeric, 1) AS median_age_days,
+         ROUND(AVG(age_days)::numeric, 1) AS avg_age_days
+       FROM ages`,
+    ),
+    query<{ events_with_fraud_check: number; mismatch_events: number; fraud_rate_pct: number }>(
+      `SELECT
+         COUNT(*) FILTER (
+           WHERE details #>> '{fraudCheck,primaryPhoto,submissionGpsMatch}' IS NOT NULL
+         )::int AS events_with_fraud_check,
+         COUNT(*) FILTER (
+           WHERE details #>> '{fraudCheck,primaryPhoto,submissionGpsMatch}' = 'false'
+         )::int AS mismatch_events,
+         ROUND(
+           100.0 * COUNT(*) FILTER (
+             WHERE details #>> '{fraudCheck,primaryPhoto,submissionGpsMatch}' = 'false'
+           ) / GREATEST(
+             COUNT(*) FILTER (
+               WHERE details #>> '{fraudCheck,primaryPhoto,submissionGpsMatch}' IS NOT NULL
+             ),
+             1
+           ),
+           1
+         ) AS fraud_rate_pct
+       FROM point_events
+       WHERE created_at >= NOW() - INTERVAL '30 days'`,
+    ),
+    query<{ pending_review: number; high_risk_events: number }>(
+      `SELECT
+         COUNT(*) FILTER (WHERE COALESCE(details->>'reviewStatus', 'auto_approved') = 'pending_review')::int AS pending_review,
+         COUNT(*) FILTER (
+           WHERE (details->>'riskScore') ~ '^-?\\d+(\\.\\d+)?$'
+             AND (details->>'riskScore')::numeric >= 60
+         )::int AS high_risk_events
+       FROM point_events`,
+    ),
+    query<{ enrichment_rate_pct: number }>(
+      `WITH point_summary AS (
+         SELECT
+           point_id,
+           BOOL_OR(event_type = 'CREATE_EVENT') AS has_create,
+           BOOL_OR(event_type = 'ENRICH_EVENT') AS has_enrich
+         FROM point_events
+         GROUP BY point_id
+       )
+       SELECT ROUND(
+         100.0 * COUNT(*) FILTER (WHERE has_enrich) / GREATEST(COUNT(*), 1),
+         1
+       ) AS enrichment_rate_pct
+       FROM point_summary
+       WHERE has_create`,
+    ),
+  ]);
+
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    weeklyActiveContributors: Number(wacResult.rows[0]?.wac ?? 0),
+    verification: {
+      totalPoints: Number(verificationResult.rows[0]?.total_points ?? 0),
+      verifiedPoints: Number(verificationResult.rows[0]?.verified_points ?? 0),
+      verificationRatePct: Number(verificationResult.rows[0]?.verification_rate_pct ?? 0),
+    },
+    freshness: {
+      medianAgeDays: Number(freshnessResult.rows[0]?.median_age_days ?? 0),
+      avgAgeDays: Number(freshnessResult.rows[0]?.avg_age_days ?? 0),
+    },
+    fraud: {
+      eventsWithFraudCheck: Number(fraudResult.rows[0]?.events_with_fraud_check ?? 0),
+      mismatchEvents: Number(fraudResult.rows[0]?.mismatch_events ?? 0),
+      fraudRatePct: Number(fraudResult.rows[0]?.fraud_rate_pct ?? 0),
+    },
+    reviewQueue: {
+      pendingReview: Number(reviewResult.rows[0]?.pending_review ?? 0),
+      highRiskEvents: Number(reviewResult.rows[0]?.high_risk_events ?? 0),
+    },
+    enrichmentRatePct: Number(enrichmentResult.rows[0]?.enrichment_rate_pct ?? 0),
+  };
+
+  return jsonResponse(payload, { status: 200 });
+}
+
+async function handleKpiWeekly(url: URL): Promise<Response> {
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "24", 10), 104);
+
+  try {
+    const result = await query(
+      `SELECT week_start, category, total_events, total_creates, total_enrichments, unique_users,
+              unique_points, new_users, verified_points, fraud_flags, avg_completeness_pct, median_freshness_days
+       FROM analytics_weekly
+       ORDER BY week_start DESC, category
+       LIMIT $1`,
+      [limit],
+    );
+    return jsonResponse(result.rows, { status: 200 });
+  } catch (error) {
+    if (!isMissingDbObjectError(error)) throw error;
+  }
+
+  const fallback = await query(
+    `WITH per_week AS (
+       SELECT
+         DATE_TRUNC('week', created_at)::date AS week_start,
+         category,
+         COUNT(*)::int AS total_events,
+         COUNT(*) FILTER (WHERE event_type = 'CREATE_EVENT')::int AS total_creates,
+         COUNT(*) FILTER (WHERE event_type = 'ENRICH_EVENT')::int AS total_enrichments,
+         COUNT(DISTINCT user_id)::int AS unique_users,
+         COUNT(DISTINCT point_id)::int AS unique_points,
+         COUNT(*) FILTER (
+           WHERE details #>> '{fraudCheck,primaryPhoto,submissionGpsMatch}' = 'false'
+         )::int AS fraud_flags
+       FROM point_events
+       GROUP BY DATE_TRUNC('week', created_at)::date, category
+     )
+     SELECT
+       week_start,
+       category,
+       total_events,
+       total_creates,
+       total_enrichments,
+       unique_users,
+       unique_points,
+       0::int AS new_users,
+       0::int AS verified_points,
+       fraud_flags,
+       NULL::numeric AS avg_completeness_pct,
+       NULL::numeric AS median_freshness_days
+     FROM per_week
+     ORDER BY week_start DESC, category
+     LIMIT $1`,
+    [limit],
+  );
+
+  return jsonResponse(fallback.rows, { status: 200 });
 }

@@ -936,3 +936,53 @@ export async function runMonthlyRollup(referenceDateOverride?: string): Promise<
     rowsUpserted: result.rowCount ?? 0,
   };
 }
+
+export interface DailyRoadSnapshotResult {
+  date: string;
+  totalRoadEvents: number;
+  blockedEvents: number;
+  uniqueRoadSegments: number;
+  severeBlockages: number;
+}
+
+export async function runDailyRoadSnapshot(dateOverride?: string): Promise<DailyRoadSnapshotResult> {
+  const targetDate = dateOverride ?? new Date().toISOString().slice(0, 10);
+  const parsed = new Date(`${targetDate}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("Invalid date for daily road snapshot");
+  }
+  const nextDate = new Date(parsed);
+  nextDate.setUTCDate(parsed.getUTCDate() + 1);
+  const endDate = nextDate.toISOString().slice(0, 10);
+
+  const result = await query<{
+    total_events: number;
+    blocked_events: number;
+    unique_segments: number;
+    severe_blockages: number;
+  }>(
+    `SELECT
+       COUNT(*)::int AS total_events,
+       COUNT(*) FILTER (
+         WHERE details->>'isBlocked' = 'true'
+       )::int AS blocked_events,
+       COUNT(DISTINCT point_id)::int AS unique_segments,
+       COUNT(*) FILTER (
+         WHERE details->>'isBlocked' = 'true'
+           AND LOWER(COALESCE(details->>'blockageSeverity', '')) IN ('high', 'severe', 'critical')
+       )::int AS severe_blockages
+     FROM point_events
+     WHERE category = 'transport_road'
+       AND created_at >= $1::date
+       AND created_at < $2::date`,
+    [targetDate, endDate],
+  );
+
+  return {
+    date: targetDate,
+    totalRoadEvents: Number(result.rows[0]?.total_events ?? 0),
+    blockedEvents: Number(result.rows[0]?.blocked_events ?? 0),
+    uniqueRoadSegments: Number(result.rows[0]?.unique_segments ?? 0),
+    severeBlockages: Number(result.rows[0]?.severe_blockages ?? 0),
+  };
+}

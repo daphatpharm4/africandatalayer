@@ -7,6 +7,42 @@
     {
       "path": "/api/analytics?view=cron",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/analytics?view=cron_monthly",
+      "schedule": "0 4 1 * *"
+    },
+    {
+      "path": "/api/analytics?view=cron_daily_road",
+      "schedule": "0 6 * * *"
     }
-  ]
+  ],
+  "headers": [
+    {
+      "source": "/api/submissions",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
+      "source": "/api/analytics",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, s-maxage=300, stale-while-revalidate=600" }
+      ]
+    },
+    {
+      "source": "/api/health",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
+    }
+  ],
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 30
+    },
+    "api/analytics/index.ts": {
+      "maxDuration": 60
+    }
+  }
 }
