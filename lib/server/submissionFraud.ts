@@ -23,7 +23,7 @@ const EXIF_STATUSES: ReadonlySet<SubmissionExifStatus> = new Set([
   "unsupported_format",
   "fallback_recovered",
 ]);
-const EXIF_SOURCES: ReadonlySet<SubmissionExifSource> = new Set(["upload_buffer", "remote_url", "none"]);
+const EXIF_SOURCES: ReadonlySet<SubmissionExifSource> = new Set(["upload_buffer", "remote_url", "client_fallback", "none"]);
 
 type ExtractPhotoMetadataSource = Exclude<SubmissionExifSource, "none">;
 
@@ -580,9 +580,8 @@ export function applyClientExifFallback(
   clientExif: ClientExifData | null | undefined,
 ): ExtractedPhotoMetadata {
   if (!clientExif) return metadata;
-  if (hasExifSignal(metadata)) return metadata;
 
-  const gps: SubmissionLocation | null =
+  const fallbackGps: SubmissionLocation | null =
     typeof clientExif.latitude === "number" &&
     typeof clientExif.longitude === "number" &&
     Number.isFinite(clientExif.latitude) &&
@@ -590,11 +589,24 @@ export function applyClientExifFallback(
       ? { latitude: clientExif.latitude, longitude: clientExif.longitude }
       : null;
 
-  const capturedAt = typeof clientExif.capturedAt === "string" && clientExif.capturedAt.trim() ? clientExif.capturedAt.trim() : null;
-  const deviceMake = typeof clientExif.deviceMake === "string" && clientExif.deviceMake.trim() ? clientExif.deviceMake.trim() : null;
-  const deviceModel = typeof clientExif.deviceModel === "string" && clientExif.deviceModel.trim() ? clientExif.deviceModel.trim() : null;
+  const fallbackCapturedAt =
+    typeof clientExif.capturedAt === "string" && clientExif.capturedAt.trim() ? clientExif.capturedAt.trim() : null;
+  const fallbackDeviceMake =
+    typeof clientExif.deviceMake === "string" && clientExif.deviceMake.trim() ? clientExif.deviceMake.trim() : null;
+  const fallbackDeviceModel =
+    typeof clientExif.deviceModel === "string" && clientExif.deviceModel.trim() ? clientExif.deviceModel.trim() : null;
 
-  if (!gps && !capturedAt && !deviceMake && !deviceModel) return metadata;
+  const supplementedFields: string[] = [];
+  const gps = metadata.gps ?? fallbackGps;
+  if (!metadata.gps && fallbackGps) supplementedFields.push("gps");
+  const capturedAt = metadata.capturedAt ?? fallbackCapturedAt;
+  if (!metadata.capturedAt && fallbackCapturedAt) supplementedFields.push("capturedAt");
+  const deviceMake = metadata.deviceMake ?? fallbackDeviceMake;
+  if (!metadata.deviceMake && fallbackDeviceMake) supplementedFields.push("deviceMake");
+  const deviceModel = metadata.deviceModel ?? fallbackDeviceModel;
+  if (!metadata.deviceModel && fallbackDeviceModel) supplementedFields.push("deviceModel");
+
+  if (supplementedFields.length === 0) return metadata;
 
   return {
     gps,
@@ -602,8 +614,8 @@ export function applyClientExifFallback(
     deviceMake,
     deviceModel,
     exifStatus: "fallback_recovered",
-    exifReason: `EXIF recovered from client-side extraction (server got ${metadata.exifStatus}: ${metadata.exifReason ?? "no details"})`,
-    exifSource: "upload_buffer",
+    exifReason: `EXIF supplemented from client-side metadata for fields: ${supplementedFields.join(", ")} (server source=${metadata.exifSource}; status=${metadata.exifStatus}; reason=${metadata.exifReason ?? "no details"})`,
+    exifSource: "client_fallback",
   };
 }
 

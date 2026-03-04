@@ -17,7 +17,7 @@ export interface SubmissionLocation {
 }
 
 export type SubmissionExifStatus = "ok" | "missing" | "parse_error" | "unsupported_format" | "fallback_recovered";
-export type SubmissionExifSource = "upload_buffer" | "remote_url" | "none";
+export type SubmissionExifSource = "upload_buffer" | "remote_url" | "client_fallback" | "none";
 
 export interface SubmissionPhotoMetadata {
   gps: SubmissionLocation | null;

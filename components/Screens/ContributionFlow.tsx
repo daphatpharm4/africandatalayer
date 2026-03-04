@@ -13,6 +13,7 @@ import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/device
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
 import { apiJson } from '../../lib/client/api';
 import type { ClientExifData, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
+import { ENRICH_FIELD_CATALOG, getEnrichFieldLabel, type EnrichFieldConfig, type EnrichFieldOption } from '../../shared/enrichFieldCatalog';
 import { Category, ContributionMode, DataPoint } from '../../types';
 import exifr from 'exifr';
 
@@ -44,6 +45,33 @@ const MAX_UPLOAD_DIMENSION = 1600;
 const IMAGE_QUALITY_LOW_END = 0.72;
 const IMAGE_QUALITY_DEFAULT = 0.82;
 const JPEG_MIME_TYPES = new Set(['image/jpeg', 'image/jpg']);
+
+function normalizeText(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const value = input.trim();
+  return value || null;
+}
+
+function normalizeStringList(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const cleaned = input
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter((value) => value.length > 0);
+  return Array.from(new Set(cleaned));
+}
+
+function normalizeNumber(input: unknown): number | null {
+  if (typeof input === 'number' && Number.isFinite(input)) return input;
+  if (typeof input === 'string') {
+    const parsed = Number(input.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function optionLabel(option: EnrichFieldOption, language: 'en' | 'fr'): string {
+  return language === 'fr' ? option.labelFr : option.labelEn;
+}
 
 function dataUrlToBytes(dataUrl: string): Uint8Array | null {
   const commaIndex = dataUrl.indexOf(',');
@@ -190,9 +218,9 @@ async function extractClientExif(
   }
 
   // Step 2: Fill gaps with browser APIs (critical for iOS which strips EXIF from <input capture>)
-  if (lat == null && lng == null && deviceLocation) {
-    lat = deviceLocation.latitude;
-    lng = deviceLocation.longitude;
+  if (deviceLocation) {
+    if (lat == null) lat = deviceLocation.latitude;
+    if (lng == null) lng = deviceLocation.longitude;
   }
   if (!capturedAt) {
     capturedAt = new Date().toISOString();
@@ -265,26 +293,31 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [occupancyStatus, setOccupancyStatus] = useState('occupied');
   const [storeyCount, setStoreyCount] = useState('');
   const [estimatedUnits, setEstimatedUnits] = useState('');
+  const [enrichValues, setEnrichValues] = useState<Record<string, unknown>>({});
+  const [enrichTouched, setEnrichTouched] = useState<Record<string, boolean>>({});
+  const [enrichMultiRaw, setEnrichMultiRaw] = useState<Record<string, string>>({});
   const [isLowEndDevice] = useState<boolean>(() => detectLowEndDevice());
 
   const gaps = useMemo(() => seedPoint?.gaps ?? [], [seedPoint]);
   const isEnrichMode = mode === 'ENRICH' && Boolean(seedPoint);
-  const gapLabel = (gap: string) => {
-    const labels: Record<string, { en: string; fr: string }> = {
-      openingHours: { en: 'Opening Hours', fr: 'Heures d\'ouverture' },
-      isOpenNow: { en: 'Open Now Status', fr: 'Statut ouvert maintenant' },
-      isOnDuty: { en: 'On-call Pharmacy', fr: 'Pharmacie de garde' },
-      merchantIdByProvider: { en: 'Merchant IDs', fr: 'ID marchands' },
-      paymentMethods: { en: 'Payment Methods', fr: 'Moyens de paiement' },
-      providers: { en: 'Providers', fr: 'Operateurs' },
-      fuelTypes: { en: 'Fuel Types', fr: 'Types de carburant' },
-      pricesByFuel: { en: 'Fuel Prices', fr: 'Prix carburant' },
-      quality: { en: 'Quality', fr: 'Qualite' },
-      hasFuelAvailable: { en: 'Fuel Availability', fr: 'Disponibilite carburant' }
-    };
-    const label = labels[gap];
-    if (!label) return gap;
-    return language === 'fr' ? label.fr : label.en;
+
+  const markEnrichTouched = (field: string) => {
+    setEnrichTouched((prev) => ({ ...prev, [field]: true }));
+  };
+
+  const setEnrichFieldValue = (field: string, value: unknown) => {
+    setEnrichValues((prev) => ({ ...prev, [field]: value }));
+    markEnrichTouched(field);
+  };
+
+  const getEnrichFieldValue = (field: string): unknown => {
+    return enrichValues[field];
+  };
+
+  const toggleEnrichMultiValue = (field: string, value: string) => {
+    const existing = normalizeStringList(getEnrichFieldValue(field));
+    const next = existing.includes(value) ? existing.filter((item) => item !== value) : [...existing, value];
+    setEnrichFieldValue(field, next);
   };
 
   useEffect(() => {
@@ -292,6 +325,16 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       setVertical(pointTypeToVertical(seedPoint.type));
     }
   }, [seedPoint]);
+
+  useEffect(() => {
+    setEnrichValues({});
+    setEnrichTouched({});
+    setEnrichMultiRaw({});
+    setMerchantId(seedPoint?.merchantId ?? '');
+    setMerchantProvider(seedPoint?.providers?.[0] ?? providerOptions[0]);
+    setPriceFuelType(seedPoint?.fuelType ?? fuelTypeOptions[0]);
+    setPriceValue(seedPoint?.price ? String(seedPoint.price) : '');
+  }, [isEnrichMode, seedPoint?.id]);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -533,16 +576,61 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const buildEnrichDetails = (): Record<string, unknown> => {
     const details: Record<string, unknown> = { clientDevice: getClientDeviceInfo() };
     for (const gap of gaps) {
-      if (gap === 'openingHours' && openingHours.trim()) details.openingHours = openingHours.trim();
-      if (gap === 'isOpenNow') details.isOpenNow = isOpenNow;
-      if (gap === 'isOnDuty') details.isOnDuty = isOnDuty;
-      if (gap === 'providers' && providers.length) details.providers = providers;
-      if (gap === 'merchantIdByProvider' && merchantId.trim()) details.merchantIdByProvider = { [merchantProvider]: merchantId.trim() };
-      if (gap === 'paymentMethods' && paymentMethods.length) details.paymentMethods = paymentMethods;
-      if (gap === 'fuelTypes' && fuelTypes.length) details.fuelTypes = fuelTypes;
-      if (gap === 'pricesByFuel' && Number.isFinite(Number(priceValue))) details.pricesByFuel = { [priceFuelType]: Number(priceValue) };
-      if (gap === 'quality' && quality) details.quality = quality;
-      if (gap === 'hasFuelAvailable') details.hasFuelAvailable = hasFuelAvailable;
+      const fieldConfig = ENRICH_FIELD_CATALOG[gap];
+      if (!fieldConfig) {
+        const fallback = normalizeText(getEnrichFieldValue(gap));
+        if (fallback) details[gap] = fallback;
+        continue;
+      }
+
+      if (fieldConfig.kind === 'map_value') {
+        if (!enrichTouched[gap]) continue;
+        if (gap === 'merchantIdByProvider') {
+          const normalizedMerchantId = merchantId.trim();
+          if (normalizedMerchantId) details.merchantIdByProvider = { [merchantProvider]: normalizedMerchantId };
+          continue;
+        }
+        if (gap === 'pricesByFuel') {
+          const parsedPrice = normalizeNumber(priceValue);
+          if (parsedPrice !== null) details.pricesByFuel = { [priceFuelType]: parsedPrice };
+          continue;
+        }
+        const rawMap = getEnrichFieldValue(gap);
+        if (rawMap && typeof rawMap === 'object' && !Array.isArray(rawMap)) {
+          const normalizedMap = Object.fromEntries(
+            Object.entries(rawMap as Record<string, unknown>)
+              .map(([key, value]) => [key.trim(), normalizeText(value)])
+              .filter(([key, value]) => key.length > 0 && Boolean(value)),
+          );
+          if (Object.keys(normalizedMap).length > 0) details[gap] = normalizedMap;
+        }
+        continue;
+      }
+
+      const rawValue = getEnrichFieldValue(gap);
+      if (fieldConfig.kind === 'boolean') {
+        if (enrichTouched[gap] && typeof rawValue === 'boolean') details[gap] = rawValue;
+        continue;
+      }
+      if (fieldConfig.kind === 'text') {
+        const normalized = normalizeText(rawValue);
+        if (normalized) details[gap] = normalized;
+        continue;
+      }
+      if (fieldConfig.kind === 'number') {
+        const normalized = normalizeNumber(rawValue);
+        if (normalized !== null) details[gap] = normalized;
+        continue;
+      }
+      if (fieldConfig.kind === 'single_select') {
+        const normalized = normalizeText(rawValue);
+        if (normalized) details[gap] = normalized;
+        continue;
+      }
+      if (fieldConfig.kind === 'multi_select') {
+        const normalized = normalizeStringList(rawValue);
+        if (normalized.length > 0) details[gap] = normalized;
+      }
     }
     return details;
   };
@@ -1086,181 +1174,255 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     );
   };
 
+  const renderEnrichFieldInput = (gap: string) => {
+    const fieldConfig: EnrichFieldConfig | undefined = ENRICH_FIELD_CATALOG[gap];
+    if (!fieldConfig) {
+      const raw = typeof getEnrichFieldValue(gap) === 'string' ? String(getEnrichFieldValue(gap)) : '';
+      return (
+        <div className="space-y-2" key={gap}>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{gap}</label>
+          <input
+            value={raw}
+            onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+        </div>
+      );
+    }
+
+    const label = getEnrichFieldLabel(gap, language);
+    const options = fieldConfig.options ?? [];
+
+    if (fieldConfig.kind === 'boolean') {
+      const selected = typeof getEnrichFieldValue(gap) === 'boolean' ? (getEnrichFieldValue(gap) as boolean) : null;
+      return (
+        <div className="space-y-2" key={gap}>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setEnrichFieldValue(gap, true)}
+              className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${selected === true ? 'bg-[#4c7c59] text-white' : 'bg-gray-50 text-gray-500'}`}
+            >
+              {t('Yes', 'Oui')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEnrichFieldValue(gap, false)}
+              className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${selected === false ? 'bg-[#c86b4a] text-white' : 'bg-gray-50 text-gray-500'}`}
+            >
+              {t('No', 'Non')}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    if (fieldConfig.kind === 'map_value') {
+      if (gap === 'merchantIdByProvider') {
+        return (
+          <div className="space-y-2" key={gap}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={merchantProvider}
+                onChange={(event) => {
+                  markEnrichTouched(gap);
+                  setMerchantProvider(event.target.value);
+                }}
+                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+              >
+                {providerOptions.map((provider) => (
+                  <option key={provider} value={provider}>{provider}</option>
+                ))}
+              </select>
+              <input
+                value={merchantId}
+                onChange={(event) => {
+                  markEnrichTouched(gap);
+                  setMerchantId(event.target.value);
+                }}
+                placeholder={t('Merchant ID', 'ID marchand')}
+                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+              />
+            </div>
+          </div>
+        );
+      }
+      if (gap === 'pricesByFuel') {
+        return (
+          <div className="space-y-2" key={gap}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={priceFuelType}
+                onChange={(event) => {
+                  markEnrichTouched(gap);
+                  setPriceFuelType(event.target.value);
+                }}
+                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+              >
+                {fuelTypeOptions.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={priceValue}
+                onChange={(event) => {
+                  markEnrichTouched(gap);
+                  setPriceValue(event.target.value);
+                }}
+                placeholder={t('Price (XAF)', 'Prix (XAF)')}
+                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+              />
+            </div>
+          </div>
+        );
+      }
+    }
+
+    if (fieldConfig.kind === 'text') {
+      const value = typeof getEnrichFieldValue(gap) === 'string' ? String(getEnrichFieldValue(gap)) : '';
+      const placeholder = language === 'fr' ? (fieldConfig.placeholderFr ?? fieldConfig.labelFr) : (fieldConfig.placeholderEn ?? fieldConfig.labelEn);
+      return (
+        <div className="space-y-2" key={gap}>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          {gap === 'openingHours' && (
+            <div className="flex flex-wrap gap-2">
+              {openingHourPresets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => setEnrichFieldValue(gap, preset)}
+                  className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${value === preset ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          )}
+          <input
+            value={value}
+            onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
+            placeholder={placeholder}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+        </div>
+      );
+    }
+
+    if (fieldConfig.kind === 'number') {
+      const value = typeof getEnrichFieldValue(gap) === 'number' || typeof getEnrichFieldValue(gap) === 'string'
+        ? String(getEnrichFieldValue(gap))
+        : '';
+      return (
+        <div className="space-y-2" key={gap}>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <input
+            type="number"
+            value={value}
+            onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          />
+        </div>
+      );
+    }
+
+    if (fieldConfig.kind === 'single_select') {
+      const value = typeof getEnrichFieldValue(gap) === 'string' ? String(getEnrichFieldValue(gap)) : '';
+      if (options.length === 0) {
+        return (
+          <div className="space-y-2" key={gap}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <input
+              value={value}
+              onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
+              className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+            />
+          </div>
+        );
+      }
+      return (
+        <div className="space-y-2" key={gap}>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <select
+            value={value}
+            onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
+            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+          >
+            <option value="">{t('Select...', 'Selectionner...')}</option>
+            {options.map((option) => (
+              <option key={option.value} value={option.value}>{optionLabel(option, language)}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    if (fieldConfig.kind === 'multi_select') {
+      const selectedValues = normalizeStringList(getEnrichFieldValue(gap));
+      if (options.length === 0) {
+        const raw = enrichMultiRaw[gap] ?? selectedValues.join(', ');
+        const placeholder = language === 'fr'
+          ? (fieldConfig.placeholderFr ?? t('Valeurs separees par virgules', 'Valeurs separees par virgules'))
+          : (fieldConfig.placeholderEn ?? t('Comma-separated values', 'Valeurs separees par virgules'));
+        return (
+          <div className="space-y-2" key={gap}>
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <input
+              value={raw}
+              onChange={(event) => {
+                const nextRaw = event.target.value;
+                setEnrichMultiRaw((prev) => ({ ...prev, [gap]: nextRaw }));
+                const nextValues = nextRaw.split(',').map((value) => value.trim()).filter((value) => value.length > 0);
+                setEnrichFieldValue(gap, nextValues);
+              }}
+              placeholder={placeholder}
+              className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+            />
+          </div>
+        );
+      }
+      return (
+        <div className="space-y-2" key={gap}>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <div className="flex flex-wrap gap-2">
+            {options.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => toggleEnrichMultiValue(gap, option.value)}
+                className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${selectedValues.includes(option.value) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
+              >
+                {optionLabel(option, language)}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   const renderEnrichFields = () => (
     <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
       <h4 className="text-sm font-bold text-gray-900">{t('Enrich Missing Fields', 'Enrichir les champs manquants')}</h4>
       <div className="flex flex-wrap gap-2">
         {gaps.map((gap) => (
           <span key={gap} className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-[#fff8f4] text-[#b85f3f] border border-[#f5d5c6]">
-            {gapLabel(gap)}
+            {getEnrichFieldLabel(gap, language)}
           </span>
         ))}
       </div>
-
-      {gaps.includes('openingHours') && (
-        <div className="space-y-2">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Opening hours', 'Heures d\'ouverture')}</label>
-          <div className="flex flex-wrap gap-2">
-            {openingHourPresets.map((preset) => (
-              <button
-                key={preset}
-                onClick={() => setOpeningHours(preset)}
-                className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${openingHours === preset ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
-          <input
-            value={openingHours}
-            onChange={(event) => setOpeningHours(event.target.value)}
-            placeholder={t('Custom opening hours', 'Heures d\'ouverture personnalisees')}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-        </div>
-      )}
-
-      {gaps.includes('isOpenNow') && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">{t('Open now', 'Ouvert maintenant')}</span>
-          <button
-            onClick={() => setIsOpenNow((prev) => !prev)}
-            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isOpenNow ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
-          >
-            {isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')}
-          </button>
-        </div>
-      )}
-
-      {gaps.includes('isOnDuty') && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">{t('On-call pharmacy', 'Pharmacie de garde')}</span>
-          <button
-            onClick={() => setIsOnDuty((prev) => !prev)}
-            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isOnDuty ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
-          >
-            {isOnDuty ? t('Yes', 'Oui') : t('No', 'Non')}
-          </button>
-        </div>
-      )}
-
-      {gaps.includes('providers') && (
-        <div className="space-y-2">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Providers', 'Operateurs')}</label>
-          <div className="flex flex-wrap gap-2">
-            {providerOptions.map((provider) => (
-              <button
-                key={provider}
-                onClick={() => setProviders((prev) => toggleListValue(prev, provider))}
-                className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${providers.includes(provider) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
-              >
-                {provider}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {gaps.includes('merchantIdByProvider') && (
-        <div className="grid grid-cols-2 gap-3">
-          <select
-            value={merchantProvider}
-            onChange={(event) => setMerchantProvider(event.target.value)}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {providerOptions.map((provider) => (
-              <option key={provider} value={provider}>{provider}</option>
-            ))}
-          </select>
-          <input
-            value={merchantId}
-            onChange={(event) => setMerchantId(event.target.value)}
-            placeholder={t('Merchant ID', 'ID marchand')}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-        </div>
-      )}
-
-      {gaps.includes('paymentMethods') && (
-        <div className="space-y-2">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Payment methods', 'Moyens de paiement')}</label>
-          <div className="flex flex-wrap gap-2">
-            {paymentMethodOptions.map((method) => (
-              <button
-                key={method}
-                onClick={() => setPaymentMethods((prev) => toggleListValue(prev, method))}
-                className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${paymentMethods.includes(method) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
-              >
-                {method}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {gaps.includes('fuelTypes') && (
-        <div className="space-y-2">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Fuel types', 'Types de carburant')}</label>
-          <div className="flex flex-wrap gap-2">
-            {fuelTypeOptions.map((type) => (
-              <button
-                key={type}
-                onClick={() => setFuelTypes((prev) => toggleListValue(prev, type))}
-                className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${fuelTypes.includes(type) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {gaps.includes('pricesByFuel') && (
-        <div className="grid grid-cols-2 gap-3">
-          <select
-            value={priceFuelType}
-            onChange={(event) => setPriceFuelType(event.target.value)}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {fuelTypeOptions.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-          <input
-            type="number"
-            value={priceValue}
-            onChange={(event) => setPriceValue(event.target.value)}
-            placeholder={t('Price (XAF)', 'Prix (XAF)')}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-        </div>
-      )}
-
-      {gaps.includes('quality') && (
-        <div className="flex gap-2">
-          {['Premium', 'Standard', 'Low'].map((option) => (
-            <button
-              key={option}
-              onClick={() => setQuality(option)}
-              className={`flex-1 h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${quality === option ? 'bg-[#4c7c59] text-white' : 'bg-gray-50 text-gray-500'}`}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {gaps.includes('hasFuelAvailable') && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
-          <button
-            onClick={() => setHasFuelAvailable((prev) => !prev)}
-            className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasFuelAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
-          >
-            {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
-          </button>
-        </div>
-      )}
+      <div className="space-y-4">
+        {gaps.map((gap) => (
+          <React.Fragment key={`enrich-${gap}`}>
+            {renderEnrichFieldInput(gap)}
+          </React.Fragment>
+        ))}
+      </div>
     </div>
   );
 

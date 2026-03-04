@@ -18,6 +18,8 @@ import {
 import { computeConfidenceScore } from "../../lib/server/confidenceScore.js";
 import { buildDedupCandidates } from "../../lib/server/dedup.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import { query } from "../../lib/server/db.js";
+import { diffCategorySets, parseConstraintCategories } from "../../lib/server/schemaGuard.js";
 import { incrementAssignmentsForEvent } from "../../lib/server/collectionAssignments.js";
 import {
   blockStatusFromCode,
@@ -62,7 +64,7 @@ import type {
   SubmissionInput,
   SubmissionLocation,
 } from "../../shared/types.js";
-import { isValidCategory, normalizeCategoryAlias } from "../../shared/verticals.js";
+import { VERTICAL_IDS, isValidCategory, normalizeCategoryAlias } from "../../shared/verticals.js";
 import { generatePointId } from "../../lib/shared/pointId.js";
 const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
@@ -75,6 +77,7 @@ const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image
 const BASE_EVENT_XP = 5;
 const allowedMapScopes: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
 const PUBLIC_READ_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=300";
+const EXPECTED_SUBMISSION_CATEGORIES = [...VERTICAL_IDS].sort((a, b) => a.localeCompare(b));
 
 function parseLocation(input: unknown): SubmissionLocation | null {
   if (!input || typeof input !== "object") return null;
@@ -519,6 +522,58 @@ async function buildCombinedEvents(): Promise<PointEvent[]> {
   return merged;
 }
 
+type SchemaGuardView = {
+  ok: boolean | null;
+  expected: string[];
+  actual: string[];
+  missing: string[];
+  extra: string[];
+  reason?: string;
+};
+
+async function buildSchemaGuardView(): Promise<SchemaGuardView> {
+  const fallback: SchemaGuardView = {
+    ok: null,
+    expected: EXPECTED_SUBMISSION_CATEGORIES,
+    actual: [],
+    missing: EXPECTED_SUBMISSION_CATEGORIES,
+    extra: [],
+  };
+
+  try {
+    const result = await query<{ constraint_definition: string | null }>(
+      `
+        SELECT pg_get_constraintdef(c.oid) AS constraint_definition
+        FROM pg_constraint c
+        JOIN pg_class rel ON rel.oid = c.conrelid
+        JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+        WHERE ns.nspname = 'public'
+          AND rel.relname = 'point_events'
+          AND c.conname = 'point_events_category_check'
+        LIMIT 1
+      `,
+    );
+    const definition = result.rows[0]?.constraint_definition ?? null;
+    if (!definition) {
+      return { ...fallback, reason: "constraint_not_found" };
+    }
+    const actual = parseConstraintCategories(definition);
+    const diff = diffCategorySets(EXPECTED_SUBMISSION_CATEGORIES, actual);
+    return {
+      ok: diff.ok,
+      expected: diff.expected,
+      actual: diff.actual,
+      missing: diff.missing,
+      extra: diff.extra,
+    };
+  } catch (error) {
+    if (isStorageUnavailableError(error)) {
+      return { ...fallback, reason: "storage_unavailable" };
+    }
+    return { ...fallback, reason: "query_failed" };
+  }
+}
+
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   const authContext = toSubmissionAuthContext(auth);
@@ -535,6 +590,13 @@ export async function GET(request: Request): Promise<Response> {
   const canUsePublicCache = !authContext && !canUseExpandedScope;
 
   try {
+    if (view === "schema_guard") {
+      const adminAccess = resolveAdminViewAccess(authContext);
+      if (adminAccess === "unauthorized") return errorResponse("Unauthorized", 401);
+      if (adminAccess === "forbidden") return errorResponse("Forbidden", 403);
+      return jsonResponse(await buildSchemaGuardView(), { status: 200 });
+    }
+
     const allEvents = await buildCombinedEvents();
     const scopedEvents = allEvents.filter((event) => {
       if (effectiveScope === "global") return true;

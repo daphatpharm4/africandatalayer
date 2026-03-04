@@ -223,6 +223,7 @@ SELECT
   COUNT(DISTINCT pe.point_id) AS unique_points,
   COUNT(*) FILTER (WHERE pe.photo_url IS NOT NULL) AS with_photo,
   COUNT(*) FILTER (
+    WHERE
     pe.details #>> '{fraudCheck,primaryPhoto,submissionGpsMatch}' = 'false'
   ) AS fraud_flags
 FROM point_events pe

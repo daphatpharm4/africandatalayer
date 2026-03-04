@@ -97,7 +97,7 @@ function parseExifStatus(input) {
 function parseExifSource(input) {
   if (typeof input !== "string") return null;
   const normalized = input.trim().toLowerCase();
-  if (normalized === "upload_buffer" || normalized === "remote_url" || normalized === "none") return normalized;
+  if (normalized === "upload_buffer" || normalized === "remote_url" || normalized === "client_fallback" || normalized === "none") return normalized;
   return null;
 }
 

@@ -24,7 +24,7 @@ type MatchState = 'match' | 'mismatch' | 'unavailable';
 
 function exifStatusLabel(status: SubmissionPhotoMetadata['exifStatus'] | null | undefined, language: 'en' | 'fr'): string {
   if (status === 'ok') return language === 'fr' ? 'EXIF present' : 'EXIF present';
-  if (status === 'fallback_recovered') return language === 'fr' ? 'Recupere via URL' : 'Recovered via URL';
+  if (status === 'fallback_recovered') return language === 'fr' ? 'Recupere via fallback' : 'Recovered via fallback';
   if (status === 'missing') return language === 'fr' ? 'EXIF absent' : 'EXIF missing';
   if (status === 'unsupported_format') return language === 'fr' ? 'Format non supporte' : 'Unsupported format';
   if (status === 'parse_error') return language === 'fr' ? 'Erreur de lecture EXIF' : 'EXIF parse error';
@@ -34,6 +34,7 @@ function exifStatusLabel(status: SubmissionPhotoMetadata['exifStatus'] | null | 
 function exifSourceLabel(source: SubmissionPhotoMetadata['exifSource'] | null | undefined, language: 'en' | 'fr'): string {
   if (source === 'upload_buffer') return language === 'fr' ? 'Upload initial' : 'Initial upload';
   if (source === 'remote_url') return language === 'fr' ? 'Photo distante' : 'Remote photo';
+  if (source === 'client_fallback') return language === 'fr' ? 'Fallback client' : 'Client fallback';
   if (source === 'none') return language === 'fr' ? 'Aucune source' : 'No source';
   return language === 'fr' ? 'Indisponible' : 'Unavailable';
 }
@@ -197,6 +198,15 @@ interface GroupedPoint {
   allPhotos: { url: string; eventType: string; createdAt: string; metadata: SubmissionPhotoMetadata | null }[];
 }
 
+interface SchemaGuardStatus {
+  ok: boolean | null;
+  expected: string[];
+  actual: string[];
+  missing: string[];
+  extra: string[];
+  reason?: string;
+}
+
 function groupEventsByPoint(items: AdminSubmissionEvent[], language: 'en' | 'fr'): GroupedPoint[] {
   const groups = new Map<string, AdminSubmissionEvent[]>();
   for (const item of items) {
@@ -268,6 +278,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [deleteError, setDeleteError] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [items, setItems] = useState<AdminSubmissionEvent[]>([]);
+  const [schemaGuard, setSchemaGuard] = useState<SchemaGuardStatus | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
@@ -319,6 +330,22 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       cancelled = true;
     };
   }, [language]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSchemaGuard = async () => {
+      try {
+        const data = await apiJson<SchemaGuardStatus>('/api/submissions?view=schema_guard');
+        if (!cancelled) setSchemaGuard(data);
+      } catch {
+        if (!cancelled) setSchemaGuard(null);
+      }
+    };
+    void loadSchemaGuard();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -518,6 +545,24 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           <span>{t('Global Admin Scope', 'Portee admin globale')}</span>
           <span>{items.length} {t('items', 'elements')}</span>
         </div>
+
+        {schemaGuard?.ok === false && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
+              {t('Schema Guard Warning', 'Alerte garde schema')}
+            </div>
+            {schemaGuard.missing.length > 0 && (
+              <div className="text-xs text-amber-800">
+                {t('Missing categories:', 'Categories manquantes:')} {schemaGuard.missing.map((value) => getCategoryLabel(value, language)).join(', ')}
+              </div>
+            )}
+            {schemaGuard.extra.length > 0 && (
+              <div className="text-xs text-amber-800">
+                {t('Unexpected categories:', 'Categories inattendues:')} {schemaGuard.extra.join(', ')}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4 shadow-sm">
           <div className="flex items-center justify-between">

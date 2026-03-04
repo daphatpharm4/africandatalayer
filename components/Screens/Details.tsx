@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
+import { getEnrichFieldLabel } from '../../shared/enrichFieldCatalog';
 
 interface Props {
   point: DataPoint | null;
@@ -29,23 +30,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
   const vertical = VERTICALS[verticalId];
   const categoryLabelText = vertical ? getCategoryLabel(verticalId, language) : point.type;
 
-  const translatedGap = (gap: string) => {
-    const map: Record<string, { en: string; fr: string }> = {
-      openingHours: { en: 'Opening Hours', fr: 'Heures d\'ouverture' },
-      isOpenNow: { en: 'Open Now Status', fr: 'Statut ouvert maintenant' },
-      isOnDuty: { en: 'On-call Pharmacy', fr: 'Pharmacie de garde' },
-      merchantIdByProvider: { en: 'Merchant IDs by Provider', fr: 'ID marchands par operateur' },
-      paymentMethods: { en: 'Payment Methods', fr: 'Moyens de paiement' },
-      providers: { en: 'Providers', fr: 'Operateurs' },
-      fuelTypes: { en: 'Fuel Types', fr: 'Types de carburant' },
-      pricesByFuel: { en: 'Prices by Fuel', fr: 'Prix par carburant' },
-      quality: { en: 'Quality', fr: 'Qualite' },
-      hasFuelAvailable: { en: 'Fuel Availability', fr: 'Disponibilite carburant' }
-    };
-    const value = map[gap];
-    if (!value) return gap;
-    return language === 'fr' ? value.fr : value.en;
-  };
+  const translatedGap = (gap: string) => getEnrichFieldLabel(gap, language);
 
   const knownFields: Array<{ label: string; value?: string | number | boolean }> = [
     { label: t('Category', 'Categorie'), value: categoryLabelText },
