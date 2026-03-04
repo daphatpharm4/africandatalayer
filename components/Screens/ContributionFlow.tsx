@@ -337,6 +337,11 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   }, [isEnrichMode, seedPoint?.id]);
 
   useEffect(() => {
+    if (!isEnrichMode) return;
+    clearDedupPrompt();
+  }, [isEnrichMode, seedPoint?.id]);
+
+  useEffect(() => {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
@@ -1403,7 +1408,20 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
       );
     }
 
-    return null;
+    const fallbackRaw =
+      typeof getEnrichFieldValue(gap) === 'string' || typeof getEnrichFieldValue(gap) === 'number'
+        ? String(getEnrichFieldValue(gap))
+        : '';
+    return (
+      <div className="space-y-2" key={gap}>
+        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+        <input
+          value={fallbackRaw}
+          onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
+          className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+        />
+      </div>
+    );
   };
 
   const renderEnrichFields = () => (
@@ -1575,7 +1593,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         )}
       </div>
 
-      <div className="p-6 pt-2">
+      <div className="sticky bottom-0 z-20 p-6 pt-2 bg-[#f9fafb] border-t border-gray-100">
         <button
           onClick={handleSubmit}
           disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
