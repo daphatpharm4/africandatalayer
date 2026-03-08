@@ -12,7 +12,6 @@ import {
   Wallet
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
-import { getSession } from '../../lib/client/auth';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
@@ -27,11 +26,13 @@ interface Props {
 
 const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQueue, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const historyPreviewLimit = 5;
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [userLocation, setUserLocation] = useState(t('Location not set', 'Position non definie'));
   const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
+  const [showAllHistory, setShowAllHistory] = useState(false);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
   const [isLoadingSyncErrors, setIsLoadingSyncErrors] = useState(true);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
@@ -92,20 +93,21 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
         setLoadError('');
         const data = await apiJson<UserProfile>('/api/user');
         setProfile(data);
+        setShowAllHistory(false);
 
         try {
-          const [session, submissions] = await Promise.all([
-            getSession(),
-            apiJson<PointEvent[]>('/api/submissions?view=events')
-          ]);
-          const userId = session?.user?.id?.toLowerCase().trim();
+          const userId = typeof data?.id === 'string' ? data.id.toLowerCase().trim() : '';
+          const scope = normalizeMapScope(data?.mapScope, Boolean(data?.isAdmin));
+          const params = new URLSearchParams({ view: 'events' });
+          if (scope !== 'bonamoussadi') params.set('scope', scope);
+          const submissions = await apiJson<PointEvent[]>(`/api/submissions?${params.toString()}`);
           if (!userId) {
             setHistory([]);
             setUserLocation(t('Location not set', 'Position non definie'));
             return;
           }
 
-          const ownSubmissions = submissions
+          const ownSubmissions = (Array.isArray(submissions) ? submissions : [])
             .filter((submission) => (typeof submission.userId === 'string' ? submission.userId.toLowerCase().trim() : '') === userId)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
@@ -134,6 +136,9 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
     };
     loadProfile();
   }, [language]);
+
+  const visibleHistory = showAllHistory ? history : history.slice(0, historyPreviewLimit);
+  const canToggleHistory = history.length > historyPreviewLimit;
 
   useEffect(() => {
     let cancelled = false;
@@ -448,7 +453,15 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
             <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Contribution History', 'Historique des contributions')}</h4>
-            <button className="text-[10px] font-bold text-[#0f2b46] uppercase">{t('View All', 'Voir tout')}</button>
+            {canToggleHistory && (
+              <button
+                type="button"
+                onClick={() => setShowAllHistory((prev) => !prev)}
+                className="text-[10px] font-bold text-[#0f2b46] uppercase"
+              >
+                {showAllHistory ? t('Show Less', 'Voir moins') : t('View All', 'Voir tout')}
+              </button>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -457,7 +470,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
                 {t('No contributions yet. Add your first report to build your history.', 'Aucune contribution pour le moment. Ajoutez votre premier signalement pour construire votre historique.')}
               </div>
             )}
-            {history.map((act) => (
+            {visibleHistory.map((act) => (
               <div key={act.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400">
