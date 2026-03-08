@@ -369,7 +369,7 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div
-        className={`app-shell flex flex-col w-full ${wideShell ? 'max-w-7xl' : 'max-w-md'} mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-gray-100 min-h-screen`}
+        className={`app-shell flex flex-col w-full ${wideShell ? 'max-w-7xl' : 'max-w-md'} mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-gray-100`}
       >
         {showSyncBar && (
           <SyncStatusBar
