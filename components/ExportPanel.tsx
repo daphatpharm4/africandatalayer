@@ -7,6 +7,8 @@ interface Props {
   language: 'en' | 'fr';
   apiPreview: string;
   selectedFormat: ExportFormat;
+  canExport?: boolean;
+  exportDisabledReason?: string | null;
   onSelectFormat: (format: ExportFormat) => void;
   onExport: (format: ExportFormat) => void;
   onCopyApi: () => void;
@@ -16,6 +18,8 @@ const ExportPanel: React.FC<Props> = ({
   language,
   apiPreview,
   selectedFormat,
+  canExport = true,
+  exportDisabledReason = null,
   onSelectFormat,
   onExport,
   onCopyApi,
@@ -41,7 +45,10 @@ const ExportPanel: React.FC<Props> = ({
         <button
           type="button"
           onClick={() => onExport('pdf')}
-          className="h-10 w-10 rounded-2xl bg-[#0f2b46] text-white flex items-center justify-center"
+          disabled={!canExport}
+          className={`h-10 w-10 rounded-2xl flex items-center justify-center ${
+            canExport ? 'bg-[#0f2b46] text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          }`}
           aria-label={t('Print report', 'Imprimer le rapport')}
         >
           <Printer size={16} />
@@ -54,8 +61,11 @@ const ExportPanel: React.FC<Props> = ({
             key={option.id}
             type="button"
             onClick={() => onSelectFormat(option.id)}
+            disabled={!canExport}
             className={`h-12 rounded-2xl border text-xs font-bold uppercase tracking-widest flex items-center justify-center gap-2 ${
-              selectedFormat === option.id
+              !canExport
+                ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
+                : selectedFormat === option.id
                 ? 'border-[#0f2b46] bg-[#0f2b46] text-white'
                 : 'border-gray-100 bg-[#f9fafb] text-gray-700'
             }`}
@@ -81,10 +91,19 @@ const ExportPanel: React.FC<Props> = ({
         </button>
       </div>
 
+      {!canExport && exportDisabledReason && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[11px] text-amber-800">
+          {exportDisabledReason}
+        </div>
+      )}
+
       <button
         type="button"
         onClick={() => onExport(selectedFormat)}
-        className="w-full h-12 rounded-2xl bg-[#c86b4a] text-white text-xs font-bold uppercase tracking-widest"
+        disabled={!canExport}
+        className={`w-full h-12 rounded-2xl text-xs font-bold uppercase tracking-widest ${
+          canExport ? 'bg-[#c86b4a] text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+        }`}
       >
         <span className="inline-flex items-center gap-2">
           <Download size={14} />

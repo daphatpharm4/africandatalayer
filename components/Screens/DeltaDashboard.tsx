@@ -13,8 +13,8 @@ import {
 } from 'recharts';
 import { apiJson, buildUrl } from '../../lib/client/api';
 import ExportPanel from '../ExportPanel';
-import { VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
-import type { SnapshotStats, SnapshotDelta, TrendDataPoint, AnomalyFlag } from '../../shared/types';
+import { categoryLabel, VERTICAL_IDS } from '../../shared/verticals';
+import type { TrendDataPoint, AnomalyFlag } from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -119,8 +119,14 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const filteredStats = selectedVertical === 'all'
     ? stats
     : stats.filter((s) => s.vertical_id === selectedVertical);
+  const activeVerticalSet = useMemo(() => new Set(stats.map((s) => s.vertical_id)), [stats]);
+  const filteredAnomalies = selectedVertical === 'all'
+    ? anomalies
+    : anomalies.filter((entry) => entry.vertical_id === selectedVertical);
+  const hasSelectedVerticalData = selectedVertical === 'all' || activeVerticalSet.has(selectedVertical);
 
   const latestStats = filteredStats.length > 0 ? filteredStats[0] : null;
+  const selectedVerticalLabel = selectedVertical === 'all' ? t('All Verticals', 'Toutes les verticales') : categoryLabel(selectedVertical, language);
 
   const latestDate = stats.length > 0 ? stats[0].snapshot_date : null;
 
@@ -169,9 +175,6 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         .slice(-12)
     : [];
 
-  // Active verticals (those with stats)
-  const activeVerticals = [...new Set(stats.map((s) => s.vertical_id))];
-
   const latestUpdatedLabel = useMemo(() => {
     if (!latestDate) return t('No snapshots yet', 'Aucun snapshot');
     return new Date(latestDate).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', {
@@ -212,6 +215,12 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       significance: row.significance ?? '',
     }));
   }, [latestDate, recentDeltas, selectedVertical, stats]);
+  const canExport = exportRows.length > 0;
+  const exportDisabledReason = !canExport
+    ? selectedVertical === 'all'
+      ? t('No snapshot data is available to export yet.', 'Aucune donnee snapshot n est encore disponible pour l export.')
+      : t('This vertical is supported, but it has no snapshot history to export yet.', 'Cette verticale est prise en charge, mais elle n a pas encore d historique snapshot a exporter.')
+    : null;
 
   const downloadBlob = (filename: string, blob: Blob) => {
     const url = URL.createObjectURL(blob);
@@ -248,6 +257,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   };
 
   const handleExport = (format: 'csv' | 'geojson' | 'pdf') => {
+    if (!canExport) return;
     if (format === 'csv') {
       exportCsv();
       return;
@@ -313,7 +323,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               <h2 className="mt-2 text-2xl font-extrabold">
                 {selectedVertical === 'all'
                   ? t('What changed across the monitored network', 'Ce qui a change sur le reseau suivi')
-                  : `${t('Change story for', 'Recit de changement pour')} ${selectedVertical}`}
+                  : `${t('Change story for', 'Recit de changement pour')} ${selectedVerticalLabel}`}
               </h2>
               <p className="mt-2 text-sm text-white/80">
                 {t('Exports inherit the exact current filter state.', 'Les exports reprennent exactement l etat courant des filtres.')}
@@ -327,17 +337,17 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         </div>
 
         {/* Anomaly Banner */}
-        {anomalies.length > 0 && (
+        {filteredAnomalies.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start space-x-3">
             <AlertTriangle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-bold text-red-700">
-                {anomalies.length} {t('Anomalies Detected', 'Anomalies detectees')}
+                {filteredAnomalies.length} {t('Anomalies Detected', 'Anomalies detectees')}
               </p>
               <div className="mt-1 space-y-1">
-                {anomalies.slice(0, 3).map((a, i) => (
+                {filteredAnomalies.slice(0, 3).map((a, i) => (
                   <p key={i} className="text-[10px] text-red-600">
-                    {a.vertical_id}: {a.anomaly_flags.map((f) => `${f.metric} z=${f.zScore}`).join(', ')}
+                    {categoryLabel(a.vertical_id, language)}: {a.anomaly_flags.map((f) => `${f.metric} z=${f.zScore}`).join(', ')}
                   </p>
                 ))}
               </div>
@@ -372,7 +382,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           </div>
           <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm text-center">
             <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">{t('Alerts', 'Alertes')}</span>
-            <span className={`text-sm font-bold ${anomalies.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>{anomalies.length}</span>
+            <span className={`text-sm font-bold ${filteredAnomalies.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>{filteredAnomalies.length}</span>
           </div>
         </div>
 
@@ -386,7 +396,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           >
             {t('All', 'Tout')}
           </button>
-          {activeVerticals.map((vid) => (
+          {VERTICAL_IDS.map((vid) => (
             <button
               key={vid}
               onClick={() => setSelectedVertical(vid)}
@@ -394,7 +404,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                 selectedVertical === vid ? 'bg-[#0f2b46] text-white' : 'bg-white text-gray-600 border border-gray-200'
               }`}
             >
-              {VERTICALS[vid]?.labelEn ?? vid}
+              {categoryLabel(vid, language)}
             </button>
           ))}
         </div>
@@ -403,6 +413,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           language={language}
           apiPreview={apiPreview}
           selectedFormat={selectedFormat}
+          canExport={canExport}
+          exportDisabledReason={exportDisabledReason}
           onSelectFormat={setSelectedFormat}
           onExport={handleExport}
           onCopyApi={handleCopyApi}
@@ -421,6 +433,21 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             </p>
             <p className="text-[10px] text-gray-400">
               {t('Snapshots are taken weekly. Check back after the first run.', 'Les snapshots sont pris chaque semaine.')}
+            </p>
+          </div>
+        ) : !hasSelectedVerticalData ? (
+          <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm text-center space-y-3">
+            <p className="text-xs font-bold text-gray-700">
+              {selectedVerticalLabel}
+            </p>
+            <p className="text-sm font-semibold text-gray-900">
+              {t('No snapshot history for this vertical yet', 'Pas encore d historique snapshot pour cette verticale')}
+            </p>
+            <p className="text-[11px] text-gray-500 max-w-md mx-auto">
+              {t(
+                'This vertical is available in ADL, but no weekly snapshot rows have been generated for it yet. Once coverage starts, charts and exports will appear here.',
+                'Cette verticale est disponible dans ADL, mais aucune ligne de snapshot hebdomadaire n a encore ete generee pour elle. Des que la couverture demarre, les graphiques et exports apparaitront ici.'
+              )}
             </p>
           </div>
         ) : (
