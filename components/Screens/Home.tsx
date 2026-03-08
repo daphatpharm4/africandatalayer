@@ -429,7 +429,10 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb]">
+    <div
+      className="flex h-full min-h-0 flex-col overflow-y-auto bg-[#f9fafb] no-scrollbar"
+      style={{ WebkitOverflowScrolling: 'touch' }}
+    >
       <header className="px-4 pt-4 pb-3 bg-white border-b border-gray-100 shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
@@ -566,7 +569,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         )}
       </header>
 
-      <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+      <div className="relative flex flex-1 flex-col overflow-hidden min-h-[26rem]">
         {viewMode === 'map' && (
           <Suspense
             fallback={
