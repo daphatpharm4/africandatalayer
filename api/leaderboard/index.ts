@@ -1,7 +1,8 @@
-import { getLegacySubmissions, getPointEvents, getUserProfilesBatch, isStorageUnavailableError } from "../../lib/server/storage/index.js";
-import { mergePointEventsWithLegacy } from "../../lib/server/pointProjection.js";
+import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
+import { getUserProfilesBatch, isStorageUnavailableError } from "../../lib/server/storage/index.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import type { LeaderboardEntry, PointEvent, SubmissionCategory } from "../../shared/types.js";
+import { getEffectiveEventXp } from "../../shared/xp.js";
 
 type AggregateRow = {
   userId: string;
@@ -13,14 +14,11 @@ type AggregateRow = {
   verticalBreakdown: Partial<Record<SubmissionCategory, number>>;
 };
 
-const FALLBACK_XP = 5;
 const FALLBACK_QUALITY_SCORE = 50;
 const LEADERBOARD_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=300";
 
 function getXpAwarded(submission: PointEvent): number {
-  const details = submission.details as Record<string, unknown> | undefined;
-  const rawXp = details?.xpAwarded;
-  return typeof rawXp === "number" && Number.isFinite(rawXp) ? rawXp : FALLBACK_XP;
+  return getEffectiveEventXp(submission);
 }
 
 function getLastLocationLabel(submission: PointEvent): string {
@@ -50,9 +48,7 @@ function getDisplayName(userId: string, profileName?: string, profileEmail?: str
 
 export async function GET(): Promise<Response> {
   try {
-    const pointEvents = await getPointEvents();
-    const legacySubmissions = await getLegacySubmissions();
-    const submissions = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
+    const submissions = await buildContributionEvents();
     const rowsByUser = new Map<string, AggregateRow>();
 
     for (const submission of submissions) {

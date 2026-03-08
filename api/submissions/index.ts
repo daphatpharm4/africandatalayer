@@ -1,17 +1,13 @@
 import { put } from "@vercel/blob";
 import { requireUser } from "../../lib/auth.js";
 import {
-  getLegacySubmissions,
-  getPointEvents,
   getUserProfile,
   insertPointEvent,
   isStorageUnavailableError,
-  upsertUserProfile,
 } from "../../lib/server/storage/index.js";
 import {
   isEnrichFieldAllowed,
   listCreateMissingFields,
-  mergePointEventsWithLegacy,
   normalizeEnrichPayload,
   projectPointsFromEvents,
 } from "../../lib/server/pointProjection.js";
@@ -37,6 +33,8 @@ import {
   toSubmissionAuthContext,
   normalizeActorId,
 } from "../../lib/server/submissionAccess.js";
+import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
+import { reconcileUserProfileXp } from "../../lib/server/xp.js";
 import {
   DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM,
   applyClientExifFallback,
@@ -49,7 +47,6 @@ import {
   parseSubmissionFraudCheck,
 } from "../../lib/server/submissionFraud.js";
 import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../../shared/geofence.js";
-import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type {
   AdminSubmissionEvent,
   ClientDeviceInfo,
@@ -65,16 +62,15 @@ import type {
   SubmissionLocation,
 } from "../../shared/types.js";
 import { VERTICAL_IDS, isValidCategory, normalizeCategoryAlias } from "../../shared/verticals.js";
+import { BASE_EVENT_XP } from "../../shared/xp.js";
 import { generatePointId } from "../../lib/shared/pointId.js";
 const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
 const SUBMISSION_PHOTO_MATCH_KM = DEFAULT_SUBMISSION_GPS_MATCH_THRESHOLD_KM;
 const MAX_FORENSICS_FALLBACK_LOOKUPS = Number(process.env.ADMIN_FORENSICS_FALLBACK_LIMIT ?? "25") || 25;
-const INLINE_PHOTO_PREFIX = "data:image/";
 const MAX_IMAGE_BYTES = Number(process.env.MAX_SUBMISSION_IMAGE_BYTES ?? "8388608") || 8388608;
 const INLINE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
 const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/heic", "image/heif"]);
-const BASE_EVENT_XP = 5;
 const allowedMapScopes: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
 const PUBLIC_READ_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=300";
 const EXPECTED_SUBMISSION_CATEGORIES = [...VERTICAL_IDS].sort((a, b) => a.localeCompare(b));
@@ -157,17 +153,6 @@ function normalizeMapScope(input: string | null): MapScope {
 function stripBase64Prefix(imageBase64: string): string {
   const commaIndex = imageBase64.indexOf(",");
   return commaIndex === -1 ? imageBase64 : imageBase64.slice(commaIndex + 1);
-}
-
-function isInlinePhotoData(value: unknown): value is string {
-  return typeof value === "string" && value.startsWith(INLINE_PHOTO_PREFIX);
-}
-
-function stripInlinePhotoData(event: PointEvent): PointEvent {
-  if (!isInlinePhotoData(event.photoUrl)) return event;
-  const { photoUrl: _photoUrl, ...rest } = event;
-  const details = { ...(event.details ?? {}), hasPhoto: true };
-  return { ...rest, details };
 }
 
 function mimeToExtension(mime: string): string {
@@ -501,27 +486,6 @@ async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSu
   return output;
 }
 
-async function buildCombinedEvents(): Promise<PointEvent[]> {
-  const pointEvents = (await getPointEvents()).map(stripInlinePhotoData);
-  const legacySubmissions = await getLegacySubmissions();
-  const merged = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
-  const seenExternalIds = new Set(
-    merged
-      .map((event) => (typeof event.externalId === "string" ? event.externalId.trim() : ""))
-      .filter((value) => value.length > 0),
-  );
-  const seenPointIds = new Set(merged.map((event) => event.pointId));
-  for (const seedEvent of BONAMOUSSADI_CURATED_SEED_EVENTS) {
-    const externalId = typeof seedEvent.externalId === "string" ? seedEvent.externalId.trim() : "";
-    if (externalId && seenExternalIds.has(externalId)) continue;
-    if (seenPointIds.has(seedEvent.pointId)) continue;
-    merged.push(seedEvent);
-    if (externalId) seenExternalIds.add(externalId);
-    seenPointIds.add(seedEvent.pointId);
-  }
-  return merged;
-}
-
 type SchemaGuardView = {
   ok: boolean | null;
   expected: string[];
@@ -597,7 +561,7 @@ export async function GET(request: Request): Promise<Response> {
       return jsonResponse(await buildSchemaGuardView(), { status: 200 });
     }
 
-    const allEvents = await buildCombinedEvents();
+    const allEvents = await buildReadableEvents();
     const scopedEvents = allEvents.filter((event) => {
       if (effectiveScope === "global") return true;
       if (effectiveScope === "cameroon") return isWithinCameroon(event.location);
@@ -790,7 +754,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   try {
-    const existingEvents = await buildCombinedEvents();
+    const existingEvents = await buildReadableEvents();
     const projectedExisting = projectPointsFromEvents(existingEvents);
     let pointId = typeof body.pointId === "string" && body.pointId.trim()
       ? body.pointId.trim()
@@ -1141,9 +1105,8 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const profile = await getUserProfile(auth.id);
-    if (profile && xpAwarded > 0) {
-      profile.XP = (profile.XP ?? 0) + xpAwarded;
-      await upsertUserProfile(auth.id, profile);
+    if (profile) {
+      await reconcileUserProfileXp(auth.id, { profile });
     }
 
     return jsonResponse(newEvent, { status: 201 });

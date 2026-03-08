@@ -444,11 +444,12 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
                     </p>
                     <p className="text-[10px] text-gray-400 truncate max-w-[220px]">{entry.lastLocation}</p>
                     <p className="text-[10px] text-gray-500 mt-1">
-                      {entry.contributions} x {entry.averageQualityScore}% = {entry.rankingScore.toLocaleString()} {t('pts', 'pts')}
+                      {t('Ranking score', 'Score de classement')}: {entry.contributions} x {entry.averageQualityScore}% = {entry.rankingScore.toLocaleString()}
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="block text-xs font-bold text-[#4c7c59]">{entry.rankingScore.toLocaleString()}</span>
+                    <span className="block text-xs font-bold text-[#0f2b46]">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
+                    <span className="block text-xs font-bold text-[#4c7c59]">{entry.xp.toLocaleString()} XP</span>
                     <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400">
                       {entry.averageQualityScore}% {t('quality', 'qualite')}
                     </span>

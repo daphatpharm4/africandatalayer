@@ -1,42 +1,17 @@
 import { requireUser } from "../../lib/auth.js";
 import {
   deletePointEvent,
-  getLegacySubmissions,
-  getPointEvents,
-  getUserProfile,
   insertPointEvent,
   isStorageUnavailableError,
-  upsertUserProfile,
 } from "../../lib/server/storage/index.js";
 import { query } from "../../lib/server/db.js";
-import { mergePointEventsWithLegacy, normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
+import { normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { canViewEventDetail, toSubmissionAuthContext } from "../../lib/server/submissionAccess.js";
-import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedEvents.js";
 import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
-
-const BASE_EVENT_XP = 5;
-
-async function getCombinedEvents(): Promise<PointEvent[]> {
-  const pointEvents = await getPointEvents();
-  const legacySubmissions = await getLegacySubmissions();
-  const merged = mergePointEventsWithLegacy(pointEvents, legacySubmissions);
-  const seenExternalIds = new Set(
-    merged
-      .map((event) => (typeof event.externalId === "string" ? event.externalId.trim() : ""))
-      .filter((value) => value.length > 0),
-  );
-  const seenPointIds = new Set(merged.map((event) => event.pointId));
-  for (const seedEvent of BONAMOUSSADI_CURATED_SEED_EVENTS) {
-    const externalId = typeof seedEvent.externalId === "string" ? seedEvent.externalId.trim() : "";
-    if (externalId && seenExternalIds.has(externalId)) continue;
-    if (seenPointIds.has(seedEvent.pointId)) continue;
-    merged.push(seedEvent);
-    if (externalId) seenExternalIds.add(externalId);
-    seenPointIds.add(seedEvent.pointId);
-  }
-  return merged;
-}
+import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
+import { reconcileUserProfileXp } from "../../lib/server/xp.js";
+import { BASE_EVENT_XP } from "../../shared/xp.js";
 
 type ReviewDecision = "approved" | "rejected" | "flagged";
 
@@ -83,9 +58,7 @@ async function applyReviewDecision(params: {
   }
 
   const details = row.details && typeof row.details === "object" ? ({ ...row.details } as Record<string, unknown>) : {};
-  const currentXpAwarded = typeof details.xpAwarded === "number" && Number.isFinite(details.xpAwarded) ? details.xpAwarded : 0;
-  const shouldGrantXp = params.decision === "approved" && currentXpAwarded <= 0;
-  const nextXpAwarded = shouldGrantXp ? BASE_EVENT_XP : currentXpAwarded;
+  const nextXpAwarded = params.decision === "approved" ? BASE_EVENT_XP : 0;
   const reviewStatus = params.decision === "approved" ? "auto_approved" : "pending_review";
 
   details.reviewStatus = reviewStatus;
@@ -93,12 +66,14 @@ async function applyReviewDecision(params: {
   details.reviewedBy = params.reviewerId;
   details.reviewedAt = new Date().toISOString();
   if (params.notes) details.reviewNotes = params.notes;
-  if (nextXpAwarded > 0) details.xpAwarded = nextXpAwarded;
+  details.xpAwarded = nextXpAwarded;
 
+  const existingFlags = Array.isArray(details.reviewFlags) ? details.reviewFlags.filter((f) => typeof f === "string") : [];
   if (params.decision === "rejected") {
-    const existingFlags = Array.isArray(details.reviewFlags) ? details.reviewFlags.filter((f) => typeof f === "string") : [];
     if (!existingFlags.includes("rejected_by_admin")) existingFlags.push("rejected_by_admin");
     details.reviewFlags = existingFlags;
+  } else {
+    details.reviewFlags = existingFlags.filter((flag) => flag !== "rejected_by_admin");
   }
 
   await query(
@@ -123,13 +98,7 @@ async function applyReviewDecision(params: {
     if (!isMissingDbObjectError(error)) throw error;
   }
 
-  if (shouldGrantXp) {
-    const profile = await getUserProfile(row.user_id);
-    if (profile) {
-      profile.XP = (profile.XP ?? 0) + BASE_EVENT_XP;
-      await upsertUserProfile(row.user_id, profile);
-    }
-  }
+  await reconcileUserProfileXp(row.user_id);
 
   return {
     eventId: params.eventId,
@@ -153,7 +122,7 @@ export async function GET(request: Request): Promise<Response> {
 
   let events: PointEvent[];
   try {
-    events = await getCombinedEvents();
+    events = await buildReadableEvents();
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
@@ -197,7 +166,7 @@ export async function PUT(request: Request): Promise<Response> {
   if (!details) return errorResponse("Missing details payload", 400);
 
   try {
-    const combinedEvents = await getCombinedEvents();
+    const combinedEvents = await buildReadableEvents();
     const points = projectPointsFromEvents(combinedEvents);
     const targetPoint = points.find((point) => point.pointId === id || point.id === id);
     if (!targetPoint) return errorResponse("Submission not found", 404);
@@ -286,10 +255,16 @@ export async function DELETE(request: Request): Promise<Response> {
   if (view !== "event") return errorResponse("Use view=event for event deletion", 400);
 
   try {
+    const combined = await buildReadableEvents();
+    const targetEvent = combined.find((event) => event.id === id) ?? null;
     const deleted = await deletePointEvent(id);
-    if (deleted) return jsonResponse({ ok: true, id }, { status: 200 });
+    if (deleted) {
+      if (targetEvent) {
+        await reconcileUserProfileXp(targetEvent.userId);
+      }
+      return jsonResponse({ ok: true, id }, { status: 200 });
+    }
 
-    const combined = await getCombinedEvents();
     const existsReadOnly = combined.some((event) => event.id === id);
     if (existsReadOnly) {
       return errorResponse("Submission source is read-only and cannot be deleted", 409);

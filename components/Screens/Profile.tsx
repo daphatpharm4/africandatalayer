@@ -16,6 +16,7 @@ import { apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
+import { getEffectiveEventXp } from '../../shared/xp';
 import BadgeGrid, { computeBadges } from '../BadgeSystem';
 
 interface Props {
@@ -34,7 +35,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   const [loadError, setLoadError] = useState('');
   const [userLocation, setUserLocation] = useState(t('Location not set', 'Position non definie'));
   const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
-  const [computedXP, setComputedXP] = useState<number | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [ownEvents, setOwnEvents] = useState<PointEvent[]>([]);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
@@ -74,8 +74,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
     const siteName = typeof details.siteName === 'string' ? details.siteName : typeof details.name === 'string' ? details.name : null;
     const locationLabel = siteName || `GPS: ${submission.location.latitude.toFixed(4)}°, ${submission.location.longitude.toFixed(4)}°`;
     const typeLabel = getCategoryLabelFromRegistry(submission.category, language);
-    const rawXp = details.xpAwarded;
-    const xpAwarded = typeof rawXp === 'number' && Number.isFinite(rawXp) ? rawXp : 0;
+    const xpAwarded = getEffectiveEventXp(submission);
 
     return {
       id: submission.id,
@@ -118,13 +117,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
           setOwnEvents(ownSubmissions);
           const historyItems = ownSubmissions.map(submissionToHistory);
           setHistory(historyItems);
-
-          const totalXP = ownSubmissions.reduce((sum, submission) => {
-            const details = (submission.details ?? {}) as Record<string, unknown>;
-            const awarded = typeof details.xpAwarded === 'number' && Number.isFinite(details.xpAwarded) ? details.xpAwarded : 0;
-            return sum + awarded;
-          }, 0);
-          setComputedXP(totalXP);
 
           const latest = ownSubmissions[0];
           if (latest) {
@@ -320,7 +312,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
                 <div className="h-8 w-24 rounded-lg bg-white/20 animate-pulse"></div>
               ) : (
                 <>
-                  <h3 className="text-3xl font-extrabold tracking-tight">{Math.max(profile?.XP ?? 0, computedXP ?? 0).toLocaleString()}</h3>
+                  <h3 className="text-3xl font-extrabold tracking-tight">{(profile?.XP ?? 0).toLocaleString()}</h3>
                   <span className="text-lg font-bold opacity-60">XP</span>
                 </>
               )}

@@ -1,5 +1,7 @@
 import { requireUser } from "../../lib/auth.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
+import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
+import { computeCanonicalUserXp } from "../../lib/server/xp.js";
 import {
   createAssignment,
   getAssignmentById,
@@ -97,9 +99,21 @@ export async function GET(request: Request): Promise<Response> {
     const profile = await getUserProfile(auth.id);
     if (!profile) return errorResponse("Profile not found", 404);
 
+    let shouldPersist = false;
     if (authIsAdmin && (!profile.isAdmin || profile.mapScope !== "global")) {
       profile.isAdmin = true;
       profile.mapScope = "global";
+      shouldPersist = true;
+    }
+
+    const events = await buildContributionEvents();
+    const canonicalXp = computeCanonicalUserXp(events, auth.id);
+    if ((profile.XP ?? 0) !== canonicalXp) {
+      profile.XP = canonicalXp;
+      shouldPersist = true;
+    }
+
+    if (shouldPersist) {
       await upsertUserProfile(auth.id, profile);
     }
 
