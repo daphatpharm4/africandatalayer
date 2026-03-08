@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [isOffline, setIsOffline] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<'agent' | 'admin' | 'client'>('agent');
   const [language, setLanguage] = useState<'en' | 'fr'>(() => {
     const saved = localStorage.getItem('adl_language');
     return saved === 'en' ? 'en' : 'fr';
@@ -144,6 +145,7 @@ const App: React.FC = () => {
     const hasUser = !!session?.user;
     setIsAuthenticated(hasUser);
     setIsAdmin(Boolean(session?.user?.isAdmin));
+    setUserRole((session?.user?.role as 'agent' | 'admin' | 'client') ?? 'agent');
     return hasUser;
   };
 

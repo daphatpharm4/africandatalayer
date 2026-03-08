@@ -213,6 +213,7 @@ export default async function handler(request: Request): Promise<Response> {
           const email = normalizeEmail(user?.email ?? token?.email);
           if (adminEmail && email && adminEmail === email) {
             (token as { isAdmin?: boolean }).isAdmin = true;
+            (token as { role?: string }).role = "admin";
           } else {
             (token as { isAdmin?: boolean }).isAdmin = false;
           }
@@ -222,6 +223,18 @@ export default async function handler(request: Request): Promise<Response> {
             const id = (user as { id?: string }).id ?? user.email;
             if (id) (token as { uid?: string }).uid = id;
           }
+          // Load role from DB if not already set (non-admin users)
+          if (!(token as { role?: string }).role) {
+            const uid = (token as { uid?: string }).uid;
+            if (uid) {
+              try {
+                const profile = await getUserProfile(uid);
+                (token as { role?: string }).role = profile?.role ?? "agent";
+              } catch {
+                (token as { role?: string }).role = "agent";
+              }
+            }
+          }
           return token;
         },
         async session({ session, token }) {
@@ -230,6 +243,9 @@ export default async function handler(request: Request): Promise<Response> {
           }
           if (session.user && (token as { isAdmin?: boolean })?.isAdmin !== undefined) {
             (session.user as { isAdmin?: boolean }).isAdmin = Boolean((token as { isAdmin?: boolean }).isAdmin);
+          }
+          if (session.user && (token as { role?: string })?.role) {
+            (session.user as { role?: string }).role = (token as { role?: string }).role;
           }
           return session;
         },

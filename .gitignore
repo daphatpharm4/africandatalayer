@@ -1,4 +1,17 @@
 node_modules
+dist
 .vercel
 .env*.local
 .env
+
+# OS files
+.DS_Store
+**/.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Claude Code
+.claude/

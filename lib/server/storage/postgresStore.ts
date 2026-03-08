@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { query } from "../db.js";
-import type { LegacySubmission, MapScope, PointEvent, PointEventType, SubmissionCategory, UserProfile } from "../../../shared/types.js";
+import type { LegacySubmission, MapScope, PointEvent, PointEventType, SubmissionCategory, UserProfile, UserRole } from "../../../shared/types.js";
 import { isValidCategory } from "../../../shared/verticals.js";
 import { normalizeEmail, normalizePhone } from "../../shared/identifier.js";
 import type { StorageStore } from "./types.js";
 
 const VALID_MAP_SCOPES: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
+const VALID_ROLES: ReadonlySet<UserRole> = new Set(["agent", "admin", "client"]);
 let phoneColumnState: "unknown" | "present" | "missing" = "unknown";
 
 function normalizeUserId(input: string): string {
@@ -16,6 +17,13 @@ function normalizeMapScope(input: unknown): MapScope {
   if (typeof input !== "string") return "bonamoussadi";
   const normalized = input.trim().toLowerCase() as MapScope;
   if (!VALID_MAP_SCOPES.has(normalized)) return "bonamoussadi";
+  return normalized;
+}
+
+function normalizeRole(input: unknown): UserRole {
+  if (typeof input !== "string") return "agent";
+  const normalized = input.trim().toLowerCase() as UserRole;
+  if (!VALID_ROLES.has(normalized)) return "agent";
   return normalized;
 }
 
@@ -82,6 +90,7 @@ function rowToUserProfile(row: Record<string, unknown>): UserProfile {
     XP: parseXp(row.xp),
     passwordHash: typeof row.password_hash === "string" ? row.password_hash : undefined,
     isAdmin: Boolean(row.is_admin),
+    role: normalizeRole(row.role),
     mapScope: normalizeMapScope(row.map_scope),
   };
 }
@@ -96,7 +105,7 @@ function isMissingPhoneColumnError(error: unknown): boolean {
 async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
   const result = await query<Record<string, unknown>>(
     `
-      select id, email, name, image, occupation, xp, password_hash, is_admin, map_scope
+      select id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope
       from user_profiles
       where id = $1
       limit 1
@@ -139,7 +148,7 @@ async function getUserProfile(userId: string): Promise<UserProfile | null> {
   try {
     const result = await query<Record<string, unknown>>(
       `
-        select id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope
+        select id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope
         from user_profiles
         where id = $1
         limit 1
@@ -167,6 +176,7 @@ async function upsertUserProfileLegacy(params: {
   xp: number;
   passwordHash: string | null;
   isAdmin: boolean;
+  role: UserRole;
   mapScope: MapScope;
 }): Promise<void> {
   const legacyEmail = params.email ?? normalizeEmail(params.id);
@@ -176,8 +186,8 @@ async function upsertUserProfileLegacy(params: {
 
   await query(
     `
-      insert into user_profiles (id, email, name, image, occupation, xp, password_hash, is_admin, map_scope, updated_at)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+      insert into user_profiles (id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, updated_at)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
       on conflict (id) do update
       set
         email = excluded.email,
@@ -187,6 +197,7 @@ async function upsertUserProfileLegacy(params: {
         xp = excluded.xp,
         password_hash = coalesce(excluded.password_hash, user_profiles.password_hash),
         is_admin = excluded.is_admin,
+        role = excluded.role,
         map_scope = excluded.map_scope,
         updated_at = now()
     `,
@@ -199,6 +210,7 @@ async function upsertUserProfileLegacy(params: {
       params.xp,
       params.passwordHash,
       params.isAdmin,
+      params.role,
       params.mapScope,
     ],
   );
@@ -216,13 +228,14 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   const xp = parseXp(profile.XP);
   const passwordHash = typeof profile.passwordHash === "string" && profile.passwordHash.trim() ? profile.passwordHash : null;
   const isAdmin = profile.isAdmin === true;
+  const role = normalizeRole(profile.role);
   const mapScope = normalizeMapScope(profile.mapScope);
 
   const runWithPhone = async () => {
     await query(
       `
-        insert into user_profiles (id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope, updated_at)
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+        insert into user_profiles (id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, updated_at)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
         on conflict (id) do update
         set
           email = excluded.email,
@@ -233,15 +246,16 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
           xp = excluded.xp,
           password_hash = coalesce(excluded.password_hash, user_profiles.password_hash),
           is_admin = excluded.is_admin,
+          role = excluded.role,
           map_scope = excluded.map_scope,
           updated_at = now()
       `,
-      [id, email, phone, name, image, occupation, xp, passwordHash, isAdmin, mapScope],
+      [id, email, phone, name, image, occupation, xp, passwordHash, isAdmin, role, mapScope],
     );
   };
 
   if (phoneColumnState === "missing") {
-    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, mapScope });
+    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, role, mapScope });
     return;
   }
 
@@ -251,7 +265,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   } catch (error) {
     if (!isMissingPhoneColumnError(error)) throw error;
     phoneColumnState = "missing";
-    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, mapScope });
+    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, role, mapScope });
   }
 }
 
@@ -261,8 +275,8 @@ async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProf
 
   const fetchRows = async (includePhone: boolean): Promise<UserProfile[]> => {
     const cols = includePhone
-      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, map_scope"
-      : "id, email, name, image, occupation, xp, password_hash, is_admin, map_scope";
+      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope"
+      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope";
     const result = await query<Record<string, unknown>>(
       `select ${cols} from user_profiles where id = ANY($1::text[])`,
       [normalizedIds],

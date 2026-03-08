@@ -2,6 +2,8 @@ import { apiFetch, apiJson, buildUrl } from "./api";
 import { normalizeIdentifier } from "../shared/identifier";
 import { looksLikeHtml, sanitizeErrorMessage } from "./errorUtils";
 
+export type UserRole = "agent" | "admin" | "client";
+
 export interface AuthSession {
   user?: {
     id?: string;
@@ -9,6 +11,7 @@ export interface AuthSession {
     email?: string | null;
     image?: string | null;
     isAdmin?: boolean;
+    role?: UserRole;
   };
   expires?: string;
 }

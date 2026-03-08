@@ -8,6 +8,7 @@ export type SubmissionCategory =
   | "census_proxy";
 export type PointEventType = "CREATE_EVENT" | "ENRICH_EVENT";
 export type MapScope = "bonamoussadi" | "cameroon" | "global";
+export type UserRole = "agent" | "admin" | "client";
 export type CollectionAssignmentStatus = "pending" | "in_progress" | "completed" | "expired";
 export type DedupDecision = "allow_create" | "use_existing";
 
@@ -224,6 +225,7 @@ export interface UserProfile {
   XP: number;
   passwordHash?: string;
   isAdmin?: boolean;
+  role?: UserRole;
   mapScope?: MapScope;
 }
 
