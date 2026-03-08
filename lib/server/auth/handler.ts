@@ -66,8 +66,10 @@ if (googleClientId && googleClientSecret) {
       clientSecret: googleClientSecret,
       token: {
         async conform(response) {
-          // Auth.js v0.33 throws a generic CallbackRouteError for some OIDC body errors.
-          // Log the raw token endpoint payload from a clone so production logs expose root cause.
+          // Auth.js v0.33 throws "TODO: Handle OIDC response body error" when
+          // the token response content-type isn't exactly "application/json".
+          // Google sometimes returns "application/json; charset=utf-8" which
+          // triggers this bug. Fix by re-wrapping with a clean content-type.
           if (!response.ok) {
             const body = await response.text().catch(() => "");
             const trimmed = body.length > 1200 ? `${body.slice(0, 1200)}…` : body;
@@ -75,6 +77,16 @@ if (googleClientId && googleClientSecret) {
               status: response.status,
               statusText: response.statusText,
               body: trimmed,
+            });
+            return undefined;
+          }
+          const contentType = response.headers.get("content-type") ?? "";
+          if (contentType.includes("application/json")) {
+            // Re-create response with clean content-type so Auth.js parses it
+            const body = await response.text();
+            return new Response(body, {
+              status: response.status,
+              headers: { "Content-Type": "application/json" },
             });
           }
           return undefined;
