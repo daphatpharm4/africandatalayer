@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, AlertTriangle, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, AlertTriangle, Download, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -11,7 +11,8 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { apiJson } from '../../lib/client/api';
+import { apiJson, buildUrl } from '../../lib/client/api';
+import ExportPanel from '../ExportPanel';
 import { VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
 import type { SnapshotStats, SnapshotDelta, TrendDataPoint, AnomalyFlag } from '../../shared/types';
 
@@ -63,6 +64,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const [selectedVertical, setSelectedVertical] = useState<string>('all');
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'geojson' | 'pdf'>('csv');
   const [stats, setStats] = useState<StatsRow[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyRow[]>([]);
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
@@ -170,6 +172,101 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   // Active verticals (those with stats)
   const activeVerticals = [...new Set(stats.map((s) => s.vertical_id))];
 
+  const latestUpdatedLabel = useMemo(() => {
+    if (!latestDate) return t('No snapshots yet', 'Aucun snapshot');
+    return new Date(latestDate).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }, [language, latestDate]);
+
+  const apiPreview = useMemo(() => {
+    const params = new URLSearchParams({ view: 'deltas', publishable: 'true', limit: '20' });
+    if (selectedVertical !== 'all') params.set('vertical', selectedVertical);
+    return buildUrl(`/api/analytics?${params.toString()}`);
+  }, [selectedVertical]);
+
+  const exportRows = useMemo(() => {
+    if (selectedVertical === 'all') {
+      return stats
+        .filter((row) => row.snapshot_date === latestDate)
+        .map((row) => ({
+          snapshot_date: row.snapshot_date,
+          vertical_id: row.vertical_id,
+          total_points: row.total_points,
+          completion_rate: row.completion_rate,
+          new_count: row.new_count,
+          removed_count: row.removed_count,
+          changed_count: row.changed_count,
+          anomalies: row.anomaly_flags.length,
+        }));
+    }
+    return recentDeltas.map((row) => ({
+      snapshot_date: row.snapshot_date,
+      vertical_id: row.vertical_id,
+      point_id: row.point_id,
+      delta_type: row.delta_type,
+      delta_field: row.delta_field ?? '',
+      delta_summary: row.delta_summary ?? '',
+      significance: row.significance ?? '',
+    }));
+  }, [latestDate, recentDeltas, selectedVertical, stats]);
+
+  const downloadBlob = (filename: string, blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCsv = () => {
+    if (exportRows.length === 0) return;
+    const headers = Object.keys(exportRows[0]);
+    const rows = exportRows.map((row) => headers.map((header) => JSON.stringify(row[header as keyof typeof row] ?? '')).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    downloadBlob(`adl-${selectedVertical}-delta.csv`, new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  };
+
+  const exportGeoJson = () => {
+    const featureCollection = {
+      type: 'FeatureCollection',
+      features: exportRows.map((row) => ({
+        type: 'Feature',
+        geometry: null,
+        properties: row,
+      })),
+    };
+    downloadBlob(
+      `adl-${selectedVertical}-delta.geojson`,
+      new Blob([JSON.stringify(featureCollection, null, 2)], { type: 'application/geo+json' }),
+    );
+  };
+
+  const handleExport = (format: 'csv' | 'geojson' | 'pdf') => {
+    if (format === 'csv') {
+      exportCsv();
+      return;
+    }
+    if (format === 'geojson') {
+      exportGeoJson();
+      return;
+    }
+    window.print();
+  };
+
+  const handleCopyApi = async () => {
+    try {
+      await navigator.clipboard.writeText(apiPreview);
+    } catch {
+      // Ignore clipboard failures; the preview is still visible.
+    }
+  };
+
   const deltaTypeColor = (type: string) => {
     switch (type) {
       case 'new': return 'text-green-600 bg-green-50';
@@ -196,10 +293,39 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           <ArrowLeft size={20} />
         </button>
         <h3 className="text-sm font-bold mx-auto">{t('Delta Intelligence', 'Intelligence Delta')}</h3>
-        <div className="w-8" />
+        <button
+          type="button"
+          onClick={() => handleExport(selectedFormat)}
+          className="absolute right-2 p-2 text-[#0f2b46]"
+          aria-label={t('Export current view', 'Exporter la vue')}
+        >
+          <Download size={18} />
+        </button>
       </div>
 
       <div className="p-4 space-y-4">
+        <div className="rounded-[32px] bg-gradient-to-br from-[#0f2b46] via-[#1d4565] to-[#345d7d] text-white p-6 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/70">
+                {t('Client Dashboard', 'Tableau client')}
+              </div>
+              <h2 className="mt-2 text-2xl font-extrabold">
+                {selectedVertical === 'all'
+                  ? t('What changed across the monitored network', 'Ce qui a change sur le reseau suivi')
+                  : `${t('Change story for', 'Recit de changement pour')} ${selectedVertical}`}
+              </h2>
+              <p className="mt-2 text-sm text-white/80">
+                {t('Exports inherit the exact current filter state.', 'Les exports reprennent exactement l etat courant des filtres.')}
+              </p>
+            </div>
+            <div className="rounded-3xl bg-white/10 px-4 py-3 backdrop-blur">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-white/70">{t('Last Updated', 'Derniere mise a jour')}</div>
+              <div className="mt-1 text-lg font-bold">{latestUpdatedLabel}</div>
+            </div>
+          </div>
+        </div>
+
         {/* Anomaly Banner */}
         {anomalies.length > 0 && (
           <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start space-x-3">
@@ -272,6 +398,15 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             </button>
           ))}
         </div>
+
+        <ExportPanel
+          language={language}
+          apiPreview={apiPreview}
+          selectedFormat={selectedFormat}
+          onSelectFormat={setSelectedFormat}
+          onExport={handleExport}
+          onCopyApi={handleCopyApi}
+        />
 
         {loading ? (
           <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm text-center">

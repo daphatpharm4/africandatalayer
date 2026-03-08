@@ -237,6 +237,9 @@ export interface LeaderboardEntry {
   contributions: number;
   lastContributionAt: string | null;
   lastLocation: string;
+  averageQualityScore: number;
+  rankingScore: number;
+  verticalBreakdown: Partial<Record<SubmissionCategory, number>>;
 }
 
 // Delta / Snapshot types

@@ -5,7 +5,8 @@ import {
   Medal,
   Share2,
   ShieldCheck,
-  ThermometerSun
+  ThermometerSun,
+  Users
 } from 'lucide-react';
 import {
   BarChart,
@@ -26,6 +27,7 @@ import { categoryPluralLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verti
 interface Props {
   onBack: () => void;
   onAdmin?: () => void;
+  onAgentPerformance?: () => void;
   onDeltaDashboard?: () => void;
   isAdmin?: boolean;
   language: 'en' | 'fr';
@@ -45,7 +47,7 @@ const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
   return 'bonamoussadi';
 };
 
-const Analytics: React.FC<Props> = ({ onBack, onAdmin, onDeltaDashboard, isAdmin, language }) => {
+const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDeltaDashboard, isAdmin, language }) => {
   const adminMode = Boolean(isAdmin);
   const [adminName, setAdminName] = useState<string | null>(null);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
@@ -215,6 +217,18 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onDeltaDashboard, isAdmin
     return buckets;
   }, [leaderboard]);
 
+  const topVerticalChampion = useMemo(() => {
+    if (leaderboard.length === 0) return null;
+    const totals = new Map<string, number>();
+    for (const entry of leaderboard) {
+      Object.entries(entry.verticalBreakdown ?? {}).forEach(([vertical, count]) => {
+        totals.set(vertical, (totals.get(vertical) ?? 0) + (typeof count === 'number' ? count : 0));
+      });
+    }
+    const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+    return sorted[0] ?? null;
+  }, [leaderboard]);
+
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
@@ -263,19 +277,36 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onDeltaDashboard, isAdmin
         )}
 
         {adminMode && onDeltaDashboard && (
-          <button
-            onClick={onDeltaDashboard}
-            className="w-full flex items-center justify-between bg-[#0f2b46] text-white p-4 rounded-2xl shadow-sm hover:bg-[#1a3d5c] transition-colors"
-          >
-            <div className="flex items-center space-x-3">
-              <BarChart3 size={18} />
-              <div className="text-left">
-                <span className="text-xs font-bold block">{t('Delta Intelligence', 'Intelligence Delta')}</span>
-                <span className="text-[10px] text-gray-300">{t('Snapshots, trends & anomalies', 'Snapshots, tendances & anomalies')}</span>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <button
+              onClick={onDeltaDashboard}
+              className="w-full flex items-center justify-between bg-[#0f2b46] text-white p-4 rounded-2xl shadow-sm hover:bg-[#1a3d5c] transition-colors"
+            >
+              <div className="flex items-center space-x-3">
+                <BarChart3 size={18} />
+                <div className="text-left">
+                  <span className="text-xs font-bold block">{t('Delta Intelligence', 'Intelligence Delta')}</span>
+                  <span className="text-[10px] text-gray-300">{t('Snapshots, trends & anomalies', 'Snapshots, tendances & anomalies')}</span>
+                </div>
               </div>
-            </div>
-            <ArrowLeft size={16} className="rotate-180" />
-          </button>
+              <ArrowLeft size={16} className="rotate-180" />
+            </button>
+            {onAgentPerformance && (
+              <button
+                onClick={onAgentPerformance}
+                className="w-full flex items-center justify-between bg-white border border-gray-100 text-[#0f2b46] p-4 rounded-2xl shadow-sm hover:border-[#0f2b46] transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <Users size={18} />
+                  <div className="text-left">
+                    <span className="text-xs font-bold block">{t('Agent Performance', 'Performance agents')}</span>
+                    <span className="text-[10px] text-gray-500">{t('Quality, fraud & assignment pace', 'Qualite, fraude et rythme des affectations')}</span>
+                  </div>
+                </div>
+                <ArrowLeft size={16} className="rotate-180" />
+              </button>
+            )}
+          </div>
         )}
 
         {adminMode && (
@@ -379,6 +410,19 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onDeltaDashboard, isAdmin
             </div>
             <span className="text-[10px] font-bold text-gray-400 uppercase">{adminMode ? t('Monthly', 'Mensuel') : t('Local', 'Local')}</span>
           </div>
+          <div className="rounded-2xl bg-[#f9fafb] p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              {t('Ranking Model', 'Modele de classement')}
+            </div>
+            <div className="mt-2 text-sm font-semibold text-gray-900">
+              {t('Ranking score = submissions x average quality', 'Score = soumissions x qualite moyenne')}
+            </div>
+            {topVerticalChampion && (
+              <div className="mt-2 text-xs text-gray-500">
+                {t('Busiest vertical:', 'Verticale la plus active:')} {categorylabel(topVerticalChampion[0] as SubmissionCategory)} ({topVerticalChampion[1]})
+              </div>
+            )}
+          </div>
           <div className="space-y-3">
             {isLoadingLeaderboard && (
               <div className="bg-[#f9fafb] border border-gray-100 rounded-2xl p-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
@@ -398,9 +442,17 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onDeltaDashboard, isAdmin
                     <p className="text-[10px] text-gray-400 uppercase tracking-widest">
                       {entry.contributions} {t('submissions', 'soumissions')} • {formatLastSeen(entry.lastContributionAt)}
                     </p>
-                    <p className="text-[10px] text-gray-400 truncate max-w-[180px]">{entry.lastLocation}</p>
+                    <p className="text-[10px] text-gray-400 truncate max-w-[220px]">{entry.lastLocation}</p>
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      {entry.contributions} x {entry.averageQualityScore}% = {entry.rankingScore.toLocaleString()} {t('pts', 'pts')}
+                    </p>
                   </div>
-                  <span className="text-xs font-bold text-[#4c7c59]">{entry.xp.toLocaleString()} XP</span>
+                  <div className="text-right">
+                    <span className="block text-xs font-bold text-[#4c7c59]">{entry.rankingScore.toLocaleString()}</span>
+                    <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      {entry.averageQualityScore}% {t('quality', 'qualite')}
+                    </span>
+                  </div>
                 </div>
               ))}
           </div>

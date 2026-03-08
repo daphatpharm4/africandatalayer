@@ -4,6 +4,7 @@ const DB_NAME = 'adl_offline_queue';
 const STORE_NAME = 'submission_queue';
 const SYNC_ERROR_STORE_NAME = 'submission_sync_errors';
 const DB_VERSION = 2;
+const SESSION_SYNC_COUNT_KEY = 'adl_queue_session_synced';
 
 export type QueueStatus = 'pending' | 'syncing' | 'failed' | 'synced';
 
@@ -44,6 +45,20 @@ export interface QueueSyncSummary {
   remaining: number;
 }
 
+export interface QueueSnapshot {
+  pending: number;
+  failed: number;
+  total: number;
+  synced: number;
+  queuedFailed: number;
+  rejected: number;
+  storageBytes: number;
+}
+
+type QueueSnapshotListener = (snapshot: QueueSnapshot) => void;
+
+const queueSnapshotListeners = new Set<QueueSnapshotListener>();
+
 function toQueueErrorInfo(error: unknown): { message: string; retryable: boolean } {
   const fallback = 'Unable to sync queued submission';
   if (error instanceof Error) {
@@ -77,6 +92,47 @@ function transactionDone(tx: IDBTransaction): Promise<void> {
   });
 }
 
+function readSyncedCount(): number {
+  try {
+    const raw = window.localStorage.getItem(SESSION_SYNC_COUNT_KEY);
+    const parsed = Number(raw ?? '0');
+    return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeSyncedCount(value: number): void {
+  try {
+    window.localStorage.setItem(SESSION_SYNC_COUNT_KEY, String(Math.max(0, Math.floor(value))));
+  } catch {
+    // Ignore storage failures; queue persistence still works via IndexedDB.
+  }
+}
+
+function incrementSyncedCount(value: number): void {
+  if (!Number.isFinite(value) || value <= 0) return;
+  writeSyncedCount(readSyncedCount() + Math.floor(value));
+}
+
+async function emitQueueSnapshot(): Promise<void> {
+  if (queueSnapshotListeners.size === 0) return;
+  try {
+    const snapshot = await getQueueSnapshot();
+    queueSnapshotListeners.forEach((listener) => listener(snapshot));
+  } catch {
+    // Snapshot reads should never break queue operations.
+  }
+}
+
+export function subscribeQueueSnapshot(listener: QueueSnapshotListener): () => void {
+  queueSnapshotListeners.add(listener);
+  void getQueueSnapshot().then(listener).catch(() => undefined);
+  return () => {
+    queueSnapshotListeners.delete(listener);
+  };
+}
+
 async function openDb(): Promise<IDBDatabase> {
   const db = ensureIndexedDb();
   return await new Promise<IDBDatabase>((resolve, reject) => {
@@ -95,12 +151,29 @@ async function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function putItem(item: QueueItem): Promise<void> {
+async function putItem(item: QueueItem, options: { notify?: boolean } = {}): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   tx.objectStore(STORE_NAME).put(item);
   await transactionDone(tx);
   db.close();
+  if (options.notify !== false) await emitQueueSnapshot();
+}
+
+async function deleteSyncErrorRecordsByQueueItemId(queueItemId: string, options: { notify?: boolean } = {}): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction(SYNC_ERROR_STORE_NAME, 'readwrite');
+  const store = tx.objectStore(SYNC_ERROR_STORE_NAME);
+  const request = store.getAll();
+  const result = await requestToPromise(request);
+  for (const record of result as SyncErrorRecord[]) {
+    if (record.queueItemId === queueItemId) {
+      store.delete(record.id);
+    }
+  }
+  await transactionDone(tx);
+  db.close();
+  if (options.notify !== false) await emitQueueSnapshot();
 }
 
 export async function enqueueSubmission(payload: SubmissionInput): Promise<QueueItem> {
@@ -113,7 +186,7 @@ export async function enqueueSubmission(payload: SubmissionInput): Promise<Queue
     attempts: 0,
     retryCount: 0,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
   };
   await putItem(item);
   return item;
@@ -129,49 +202,59 @@ export async function listQueueItems(): Promise<QueueItem[]> {
   return (result as QueueItem[]).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
 
-async function updateItem(id: string, updater: (item: QueueItem) => QueueItem): Promise<QueueItem | null> {
+export async function getQueueItem(id: string): Promise<QueueItem | null> {
   const db = await openDb();
-  return await new Promise<QueueItem | null>((resolve, reject) => {
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const request = tx.objectStore(STORE_NAME).get(id);
+  const result = await requestToPromise(request);
+  await transactionDone(tx);
+  db.close();
+  return (result as QueueItem | undefined) ?? null;
+}
+
+async function updateItem(
+  id: string,
+  updater: (item: QueueItem) => QueueItem,
+  options: { notify?: boolean } = {},
+): Promise<QueueItem | null> {
+  const db = await openDb();
+  const updated = await new Promise<QueueItem | null>((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
-    let updated: QueueItem | null = null;
+    let nextItem: QueueItem | null = null;
     const getRequest = store.get(id);
     getRequest.onsuccess = () => {
       const existing = getRequest.result as QueueItem | undefined;
       if (!existing) return;
-      updated = updater(existing);
-      store.put(updated);
+      nextItem = updater(existing);
+      store.put(nextItem);
     };
     getRequest.onerror = () => reject(getRequest.error);
-    tx.oncomplete = () => {
-      db.close();
-      resolve(updated);
-    };
-    tx.onerror = () => {
-      db.close();
-      reject(tx.error);
-    };
-    tx.onabort = () => {
-      db.close();
-      reject(tx.error ?? new Error('IndexedDB transaction aborted'));
-    };
+    tx.oncomplete = () => resolve(nextItem);
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
   });
+  db.close();
+  if (options.notify !== false) await emitQueueSnapshot();
+  return updated;
 }
 
-async function removeItem(id: string): Promise<void> {
+async function removeItem(id: string, options: { notify?: boolean } = {}): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(STORE_NAME, 'readwrite');
   tx.objectStore(STORE_NAME).delete(id);
   await transactionDone(tx);
   db.close();
+  if (options.notify !== false) await emitQueueSnapshot();
 }
 
-async function putSyncErrorRecord(record: SyncErrorRecord): Promise<void> {
+async function putSyncErrorRecord(record: SyncErrorRecord, options: { notify?: boolean } = {}): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(SYNC_ERROR_STORE_NAME, 'readwrite');
   tx.objectStore(SYNC_ERROR_STORE_NAME).put(record);
   await transactionDone(tx);
   db.close();
+  if (options.notify !== false) await emitQueueSnapshot();
 }
 
 export async function listSyncErrorRecords(): Promise<SyncErrorRecord[]> {
@@ -190,14 +273,79 @@ export async function clearSyncErrorRecords(): Promise<void> {
   tx.objectStore(SYNC_ERROR_STORE_NAME).clear();
   await transactionDone(tx);
   db.close();
+  await emitQueueSnapshot();
+}
+
+export async function deleteQueueItem(id: string): Promise<void> {
+  await removeItem(id, { notify: false });
+  await deleteSyncErrorRecordsByQueueItemId(id, { notify: false });
+  await emitQueueSnapshot();
+}
+
+export async function updateQueueItemPayload(id: string, payload: SubmissionInput): Promise<QueueItem | null> {
+  const updated = await updateItem(
+    id,
+    (current) => ({
+      ...current,
+      payload,
+      status: 'pending',
+      retryCount: 0,
+      nextRetryAt: undefined,
+      lastError: undefined,
+      updatedAt: new Date().toISOString(),
+    }),
+    { notify: false },
+  );
+  await deleteSyncErrorRecordsByQueueItemId(id, { notify: false });
+  await emitQueueSnapshot();
+  return updated;
+}
+
+export async function retryQueueItem(
+  id: string,
+  sendFn?: (payload: SubmissionInput, options?: { idempotencyKey?: string }) => Promise<void>,
+): Promise<QueueSyncSummary | null> {
+  const item = await updateItem(
+    id,
+    (current) => ({
+      ...current,
+      status: 'pending',
+      retryCount: 0,
+      nextRetryAt: undefined,
+      lastError: undefined,
+      updatedAt: new Date().toISOString(),
+    }),
+    { notify: false },
+  );
+  await deleteSyncErrorRecordsByQueueItemId(id, { notify: false });
+  await emitQueueSnapshot();
+  if (!item || !sendFn || !navigator.onLine) return null;
+  return flushOfflineQueue(sendFn);
+}
+
+export async function getQueueSnapshot(): Promise<QueueSnapshot> {
+  const [items, syncErrors] = await Promise.all([listQueueItems(), listSyncErrorRecords()]);
+  const pending = items.filter((item) => item.status === 'pending' || item.status === 'syncing').length;
+  const queuedFailed = items.filter((item) => item.status === 'failed').length;
+  const rejected = syncErrors.length;
+  const storageBytes = new TextEncoder().encode(JSON.stringify(items)).length;
+  return {
+    pending,
+    failed: queuedFailed + rejected,
+    total: items.length,
+    synced: readSyncedCount(),
+    queuedFailed,
+    rejected,
+    storageBytes,
+  };
 }
 
 export async function getQueueStats(): Promise<{ pending: number; failed: number; total: number }> {
-  const items = await listQueueItems();
+  const snapshot = await getQueueSnapshot();
   return {
-    pending: items.filter((item) => item.status === 'pending' || item.status === 'syncing').length,
-    failed: items.filter((item) => item.status === 'failed').length,
-    total: items.length
+    pending: snapshot.pending,
+    failed: snapshot.failed,
+    total: snapshot.total,
   };
 }
 
@@ -215,23 +363,27 @@ export async function flushOfflineQueue(
   const permanentFailureMessages = new Set<string>();
 
   for (const item of items) {
-    // Skip items not yet ready for retry (exponential backoff).
     if (item.nextRetryAt && new Date(item.nextRetryAt).getTime() > now) {
       failed += 1;
       failedIds.push(item.id);
       continue;
     }
 
-    await updateItem(item.id, (current) => ({
-      ...current,
-      status: 'syncing',
-      attempts: current.attempts + 1,
-      updatedAt: new Date().toISOString()
-    }));
+    await updateItem(
+      item.id,
+      (current) => ({
+        ...current,
+        status: 'syncing',
+        attempts: current.attempts + 1,
+        updatedAt: new Date().toISOString(),
+      }),
+      { notify: false },
+    );
 
     try {
       await sendFn(item.payload, { idempotencyKey: item.idempotencyKey });
-      await removeItem(item.id);
+      await removeItem(item.id, { notify: false });
+      await deleteSyncErrorRecordsByQueueItemId(item.id, { notify: false });
       synced += 1;
       syncedIds.push(item.id);
     } catch (error) {
@@ -243,37 +395,49 @@ export async function flushOfflineQueue(
         const baseDelay = Math.min(30000, 1000 * Math.pow(2, retryCount));
         const jitter = Math.random() * 1000;
         const nextRetryAt = new Date(now + baseDelay + jitter).toISOString();
-        await updateItem(item.id, (current) => ({
-          ...current,
-          status: 'failed',
-          retryCount,
-          nextRetryAt,
-          updatedAt: new Date().toISOString(),
-          lastError: details.message,
-        }));
+        await updateItem(
+          item.id,
+          (current) => ({
+            ...current,
+            status: 'failed',
+            retryCount,
+            nextRetryAt,
+            updatedAt: new Date().toISOString(),
+            lastError: details.message,
+          }),
+          { notify: false },
+        );
         continue;
       }
 
       permanentFailures += 1;
       permanentFailureIds.push(item.id);
       permanentFailureMessages.add(details.message);
-      await putSyncErrorRecord({
-        id: crypto.randomUUID(),
-        queueItemId: item.id,
-        message: details.message,
-        createdAt: new Date().toISOString(),
-        payloadSummary: {
-          eventType: item.payload.eventType,
-          category: item.payload.category,
-          pointId: item.payload.pointId,
-          location: item.payload.location,
+      await putSyncErrorRecord(
+        {
+          id: crypto.randomUUID(),
+          queueItemId: item.id,
+          message: details.message,
+          createdAt: new Date().toISOString(),
+          payloadSummary: {
+            eventType: item.payload.eventType,
+            category: item.payload.category,
+            pointId: item.payload.pointId,
+            location: item.payload.location,
+          },
         },
-      });
-      await removeItem(item.id);
+        { notify: false },
+      );
+      await removeItem(item.id, { notify: false });
     }
   }
 
+  if (synced > 0) {
+    incrementSyncedCount(synced);
+  }
+
   const remaining = (await listQueueItems()).length;
+  await emitQueueSnapshot();
   return {
     synced,
     failed,

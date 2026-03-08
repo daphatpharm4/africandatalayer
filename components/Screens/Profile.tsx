@@ -21,10 +21,11 @@ interface Props {
   onBack: () => void;
   onSettings: () => void;
   onRedeem: () => void;
+  onSubmissionQueue: () => void;
   language: 'en' | 'fr';
 }
 
-const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) => {
+const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQueue, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -266,6 +267,19 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, language }) =>
             </span>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={onSubmissionQueue}
+          className="w-full rounded-2xl border border-[#d5e1eb] bg-white p-4 text-left shadow-sm"
+        >
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+            {t('Submission Queue', 'File de soumission')}
+          </div>
+          <div className="mt-1 text-sm font-semibold text-gray-900">
+            {t('Manage pending sync, failed items, and queued drafts.', 'Gerer la sync en attente, les echecs et les brouillons en file.')}
+          </div>
+        </button>
 
         <div className="bg-[#0f2b46] rounded-2xl p-6 text-white shadow-xl flex items-center justify-between relative overflow-hidden">
           <div className="relative z-10 space-y-1">

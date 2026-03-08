@@ -21,6 +21,8 @@ interface Props {
 }
 
 type MatchState = 'match' | 'mismatch' | 'unavailable';
+type RiskFilter = 'all' | 'flagged' | 'pending' | 'low_risk';
+type ReviewDecision = 'approved' | 'rejected' | 'flagged';
 
 function exifStatusLabel(status: SubmissionPhotoMetadata['exifStatus'] | null | undefined, language: 'en' | 'fr'): string {
   if (status === 'ok') return language === 'fr' ? 'EXIF present' : 'EXIF present';
@@ -120,6 +122,25 @@ function matchStateClass(state: MatchState): string {
   if (state === 'match') return 'text-[#4c7c59] bg-[#eaf3ee] border-[#d2e6d8]';
   if (state === 'mismatch') return 'text-[#c86b4a] bg-[#fdf0ea] border-[#f4d5c6]';
   return 'text-gray-500 bg-gray-100 border-gray-200';
+}
+
+function getRiskScore(item: AdminSubmissionEvent): number {
+  const details = item.event.details as SubmissionDetails;
+  const riskScore = details.riskScore;
+  return typeof riskScore === 'number' && Number.isFinite(riskScore) ? riskScore : 0;
+}
+
+function getReviewStatus(item: AdminSubmissionEvent): string {
+  const details = item.event.details as SubmissionDetails;
+  return typeof details.reviewStatus === 'string' ? details.reviewStatus : 'auto_approved';
+}
+
+function getRiskBucket(item: AdminSubmissionEvent): Exclude<RiskFilter, 'all'> {
+  const riskScore = getRiskScore(item);
+  const reviewStatus = getReviewStatus(item);
+  if (riskScore >= 60) return 'flagged';
+  if (reviewStatus === 'pending_review') return 'pending';
+  return 'low_risk';
 }
 
 const DetailMetadataBlock: React.FC<{
@@ -296,6 +317,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [plannerNotes, setPlannerNotes] = useState('');
   const [plannerVerticals, setPlannerVerticals] = useState<SubmissionCategory[]>(['pharmacy', 'mobile_money']);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>('all');
+  const [isApplyingDecision, setIsApplyingDecision] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -410,8 +433,33 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, [selectedPointId]);
 
   const groupedPoints = useMemo(() => groupEventsByPoint(items, language), [items, language]);
-  const selectedGroup = useMemo(() => groupedPoints.find((g) => g.pointId === selectedPointId) ?? null, [groupedPoints, selectedPointId]);
+  const filteredGroups = useMemo(() => {
+    const filtered = groupedPoints.filter((group) => {
+      if (riskFilter === 'all') return true;
+      return getRiskBucket(group.latestEvent) === riskFilter;
+    });
+
+    return filtered.sort((a, b) => {
+      const riskDelta = getRiskScore(b.latestEvent) - getRiskScore(a.latestEvent);
+      if (riskDelta !== 0) return riskDelta;
+      const reviewPriority = (value: string) => (value === 'pending_review' ? 1 : 0);
+      const reviewDelta = reviewPriority(getReviewStatus(b.latestEvent)) - reviewPriority(getReviewStatus(a.latestEvent));
+      if (reviewDelta !== 0) return reviewDelta;
+      return new Date(b.latestEvent.event.createdAt).getTime() - new Date(a.latestEvent.event.createdAt).getTime();
+    });
+  }, [groupedPoints, riskFilter]);
+  const selectedGroup = useMemo(() => filteredGroups.find((g) => g.pointId === selectedPointId) ?? null, [filteredGroups, selectedPointId]);
   const unavailableLabel = t('Unavailable', 'Indisponible');
+
+  useEffect(() => {
+    if (filteredGroups.length === 0) {
+      if (selectedPointId !== null) setSelectedPointId(null);
+      return;
+    }
+    if (!selectedPointId || !filteredGroups.some((group) => group.pointId === selectedPointId)) {
+      setSelectedPointId(filteredGroups[0]?.pointId ?? null);
+    }
+  }, [filteredGroups, selectedPointId]);
 
   const handleDeleteSelected = async () => {
     if (!selectedGroup) return;
@@ -460,6 +508,89 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
+  const applyReviewToLocalState = (eventId: string, decision: ReviewDecision) => {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.event.id !== eventId) return item;
+        const nextReviewStatus = decision === 'approved' ? 'auto_approved' : 'pending_review';
+        return {
+          ...item,
+          event: {
+            ...item.event,
+            details: {
+              ...(item.event.details as SubmissionDetails),
+              reviewDecision: decision,
+              reviewStatus: nextReviewStatus,
+              reviewedAt: new Date().toISOString(),
+            },
+          },
+        };
+      }),
+    );
+  };
+
+  const handleReviewDecision = async (group: GroupedPoint, decision: ReviewDecision) => {
+    if (isApplyingDecision) return;
+    setActionMessage('');
+    setDeleteError('');
+    try {
+      setIsApplyingDecision(true);
+      await apiJson(`/api/submissions/${encodeURIComponent(group.latestEvent.event.id)}?view=review`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision }),
+      });
+      applyReviewToLocalState(group.latestEvent.event.id, decision);
+      setActionMessage(
+        decision === 'approved'
+          ? t('Latest event approved.', 'Dernier evenement approuve.')
+          : decision === 'rejected'
+            ? t('Latest event rejected.', 'Dernier evenement rejete.')
+            : t('Latest event put on hold.', 'Dernier evenement mis en attente.'),
+      );
+    } catch (reviewError) {
+      const message =
+        reviewError instanceof Error
+          ? reviewError.message
+          : t('Unable to apply review decision.', 'Impossible d appliquer la decision.');
+      setDeleteError(message);
+    } finally {
+      setIsApplyingDecision(false);
+    }
+  };
+
+  const handleBulkApproveLowRisk = async () => {
+    if (isApplyingDecision) return;
+    const lowRiskGroups = filteredGroups.filter(
+      (group) => getRiskBucket(group.latestEvent) === 'low_risk' && getReviewStatus(group.latestEvent) === 'pending_review',
+    );
+    if (lowRiskGroups.length === 0) {
+      setActionMessage(t('No low-risk pending groups to approve.', 'Aucun groupe faible risque a approuver.'));
+      return;
+    }
+
+    setActionMessage('');
+    setDeleteError('');
+    try {
+      setIsApplyingDecision(true);
+      for (const group of lowRiskGroups) {
+        await apiJson(`/api/submissions/${encodeURIComponent(group.latestEvent.event.id)}?view=review`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision: 'approved' }),
+        });
+        applyReviewToLocalState(group.latestEvent.event.id, 'approved');
+      }
+      setActionMessage(
+        t(`${lowRiskGroups.length} low-risk group(s) approved.`, `${lowRiskGroups.length} groupe(s) faible risque approuves.`),
+      );
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : t('Bulk approve failed.', 'Approbation en lot impossible.'));
+    } finally {
+      setIsApplyingDecision(false);
+    }
+  };
+
   const handleClearSyncErrors = async () => {
     if (isClearingSyncErrors) return;
     try {
@@ -470,6 +601,51 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       setIsClearingSyncErrors(false);
     }
   };
+
+  useEffect(() => {
+    if (filteredGroups.length === 0) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target?.tagName === 'INPUT'
+        || target?.tagName === 'TEXTAREA'
+        || target?.tagName === 'SELECT'
+        || target?.isContentEditable === true;
+      if (isTypingTarget) return;
+
+      const currentIndex = filteredGroups.findIndex((group) => group.pointId === selectedPointId);
+      const selected = currentIndex >= 0 ? filteredGroups[currentIndex] : null;
+      const key = event.key.toLowerCase();
+
+      if (key === 'j') {
+        event.preventDefault();
+        const next = filteredGroups[Math.min(filteredGroups.length - 1, Math.max(0, currentIndex + 1))];
+        if (next) setSelectedPointId(next.pointId);
+      }
+      if (key === 'k') {
+        event.preventDefault();
+        const prev = filteredGroups[Math.max(0, currentIndex - 1)];
+        if (prev) setSelectedPointId(prev.pointId);
+      }
+      if (!selected || isApplyingDecision) return;
+      if (key === 'a') {
+        event.preventDefault();
+        void handleReviewDecision(selected, 'approved');
+      }
+      if (key === 'r') {
+        event.preventDefault();
+        void handleReviewDecision(selected, 'rejected');
+      }
+      if (key === 'h') {
+        event.preventDefault();
+        void handleReviewDecision(selected, 'flagged');
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [filteredGroups, isApplyingDecision, selectedPointId]);
 
   const togglePlannerVertical = (vertical: SubmissionCategory) => {
     setPlannerVerticals((prev) => {
@@ -544,6 +720,47 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         <div className="bg-white border border-gray-100 rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest text-gray-500 flex items-center justify-between">
           <span>{t('Global Admin Scope', 'Portee admin globale')}</span>
           <span>{items.length} {t('items', 'elements')}</span>
+        </div>
+
+        <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">{t('Risk Queue', 'File de risque')}</div>
+              <div className="mt-1 text-sm font-bold text-gray-900">{filteredGroups.length} {t('visible groups', 'groupes visibles')}</div>
+            </div>
+            <button
+              type="button"
+              onClick={handleBulkApproveLowRisk}
+              disabled={isApplyingDecision}
+              className={`h-10 rounded-2xl px-4 text-[10px] font-bold uppercase tracking-widest ${
+                isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white'
+              }`}
+            >
+              {t('Approve Low-Risk', 'Approuver faible risque')}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            {([
+              ['all', t('All', 'Tous')],
+              ['flagged', t('Flagged', 'Signales')],
+              ['pending', t('Pending', 'En attente')],
+              ['low_risk', t('Low Risk', 'Faible risque')],
+            ] as Array<[RiskFilter, string]>).map(([filter, label]) => (
+              <button
+                key={filter}
+                type="button"
+                onClick={() => setRiskFilter(filter)}
+                className={`h-10 rounded-xl border text-[10px] font-bold uppercase tracking-widest ${
+                  riskFilter === filter ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-[#f9fafb] text-gray-600 border-gray-100'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            {t('Keyboard', 'Clavier')}: J/K {t('navigate', 'naviguer')} • A {t('approve', 'approuver')} • R {t('reject', 'rejeter')} • H {t('hold', 'mettre en attente')}
+          </div>
         </div>
 
         {schemaGuard?.ok === false && (
@@ -794,25 +1011,57 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
                 {selectedGroup.events.length} {t('event(s)', 'evenement(s)')}
               </p>
-              <button
-                type="button"
-                onClick={handleDeleteSelected}
-                disabled={isDeleting || hasReadOnly}
-                className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center space-x-2 ${
-                  isDeleting || hasReadOnly
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
-                }`}
-              >
-                <Trash2 size={14} />
-                <span>
-                  {isDeleting
-                    ? t('Deleting...', 'Suppression...')
-                    : hasReadOnly
-                      ? t('Cannot delete', 'Suppression impossible')
-                      : t('Delete point', 'Supprimer point')}
-                </span>
-              </button>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
+                  disabled={isApplyingDecision}
+                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
+                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#eaf3ee] text-[#2f855a]'
+                  }`}
+                >
+                  {t('Approve', 'Approuver')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleReviewDecision(selectedGroup, 'flagged')}
+                  disabled={isApplyingDecision}
+                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
+                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#fff8f4] text-[#c86b4a]'
+                  }`}
+                >
+                  {t('Hold', 'Mettre en attente')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
+                  disabled={isApplyingDecision}
+                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
+                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600'
+                  }`}
+                >
+                  {t('Reject', 'Rejeter')}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  disabled={isDeleting || hasReadOnly}
+                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center space-x-2 ${
+                    isDeleting || hasReadOnly
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
+                  }`}
+                >
+                  <Trash2 size={14} />
+                  <span>
+                    {isDeleting
+                      ? t('Deleting...', 'Suppression...')
+                      : hasReadOnly
+                        ? t('Cannot delete', 'Suppression impossible')
+                        : t('Delete point', 'Supprimer point')}
+                  </span>
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 text-[11px]">
@@ -831,6 +1080,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 <div>{t('Category', 'Categorie')}: {categoryLabelLocal(selectedGroup.category, language)}</div>
                 <div>Point ID: {selectedGroup.pointId}</div>
                 <div>{t('Events', 'Evenements')}: {selectedGroup.events.length}</div>
+                <div>{t('Risk Score', 'Score de risque')}: {getRiskScore(selectedGroup.latestEvent)}</div>
+                <div>{t('Review Status', 'Statut revue')}: {getReviewStatus(selectedGroup.latestEvent)}</div>
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
@@ -920,19 +1171,21 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           );
         })()}
 
-        {!isLoading && !error && groupedPoints.length === 0 && (
+        {!isLoading && !error && filteredGroups.length === 0 && (
           <div className="bg-white border border-gray-100 rounded-2xl p-6 text-xs text-gray-500 text-center">
             {t('No submissions found.', 'Aucune soumission trouvee.')}
           </div>
         )}
 
-        {!isLoading && !error && groupedPoints.length > 0 && (
+        {!isLoading && !error && filteredGroups.length > 0 && (
           <div className="space-y-3">
-            {groupedPoints.map((group) => {
+            {filteredGroups.map((group) => {
               const isSelected = selectedPointId === group.pointId;
               const state = getMatchState(group.latestEvent.fraudCheck);
               const preview = group.allPhotos[0]?.url ?? null;
               const contributors = [...new Set(group.events.map((e) => e.user.name))];
+              const riskScore = getRiskScore(group.latestEvent);
+              const reviewStatus = getReviewStatus(group.latestEvent);
               return (
                 <button
                   key={group.pointId}
@@ -975,6 +1228,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       <div className="text-[11px] text-gray-500 flex items-center gap-1">
                         <MapPin size={12} />
                         <span>{formatDate(group.latestEvent.event.createdAt, unavailableLabel)}</span>
+                      </div>
+                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                        {t('Risk', 'Risque')}: {riskScore} • {reviewStatus}
                       </div>
                     </div>
                   </div>

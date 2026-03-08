@@ -1,6 +1,6 @@
-import React, { Suspense, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Category, DataPoint } from '../../types';
-import type { MapScope, ProjectedPoint } from '../../shared/types';
+import type { CollectionAssignment, MapScope, PointEvent, ProjectedPoint, UserRole } from '../../shared/types';
 import {
   BONAMOUSSADI_CENTER,
   CAMEROON_CENTER,
@@ -21,14 +21,18 @@ import VerticalIcon from '../shared/VerticalIcon';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
+import { getSession } from '../../lib/client/auth';
 import BrandLogo from '../BrandLogo';
+import DailyProgressWidget from '../DailyProgressWidget';
+import StreakTracker from '../StreakTracker';
 
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
   isAuthenticated: boolean;
   isAdmin?: boolean;
+  userRole?: UserRole;
   onAuth: () => void;
-  onContribute?: () => void;
+  onContribute?: (options?: { batch?: boolean; assignment?: CollectionAssignment | null }) => void;
   onProfile: () => void;
   language: 'en' | 'fr';
 }
@@ -73,14 +77,18 @@ const selectableCategories: Category[] = [
 ];
 
 
-const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth, onContribute, onProfile, language }) => {
+const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRole = 'agent', onAuth, onContribute, onProfile, language }) => {
   const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
   const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [isVerticalPickerOpen, setIsVerticalPickerOpen] = useState(false);
   const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
+  const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
+  const [agentEvents, setAgentEvents] = useState<PointEvent[]>([]);
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? 'global' : 'bonamoussadi'));
+  const contributePressTimer = useRef<number | null>(null);
+  const longPressTriggered = useRef(false);
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
@@ -274,6 +282,49 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     void loadPoints();
   }, [language, mapScope]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadAgentData = async () => {
+      if (!isAuthenticated || userRole === 'client') {
+        setAssignments([]);
+        setAgentEvents([]);
+        return;
+      }
+
+      try {
+        const [session, assignmentData, eventData] = await Promise.all([
+          getSession(),
+          apiJson<CollectionAssignment[]>('/api/user?view=assignments'),
+          apiJson<PointEvent[]>('/api/submissions?view=events'),
+        ]);
+        const userId = session?.user?.id?.toLowerCase().trim() ?? '';
+        if (cancelled) return;
+        setAssignments(Array.isArray(assignmentData) ? assignmentData : []);
+        const ownEvents = Array.isArray(eventData)
+          ? eventData.filter((event) => (typeof event.userId === 'string' ? event.userId.toLowerCase().trim() : '') === userId)
+          : [];
+        setAgentEvents(ownEvents);
+      } catch {
+        if (cancelled) return;
+        setAssignments([]);
+        setAgentEvents([]);
+      }
+    };
+
+    void loadAgentData();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, language, userRole]);
+
+  useEffect(() => {
+    return () => {
+      if (contributePressTimer.current) {
+        window.clearTimeout(contributePressTimer.current);
+      }
+    };
+  }, []);
+
   const filteredPoints = useMemo(() => points.filter((point) => point.type === activeCategory), [activeCategory, points]);
 
   const mapPointGroups = useMemo<MapPointGroup[]>(() => {
@@ -299,6 +350,84 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
     return getCategoryLabel(verticalId, language);
   };
 
+  const showAgentWidgets = isAuthenticated && userRole !== 'client';
+  const activeAssignment = useMemo(() => {
+    const active = assignments
+      .filter((assignment) => assignment.status === 'in_progress' || assignment.status === 'pending')
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    return active[0] ?? null;
+  }, [assignments]);
+
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const submissionsToday = agentEvents.filter((event) => event.createdAt.slice(0, 10) === todayKey).length;
+  const enrichmentsToday = agentEvents.filter((event) => event.eventType === 'ENRICH_EVENT' && event.createdAt.slice(0, 10) === todayKey).length;
+  const averageQuality = (() => {
+    const todayEvents = agentEvents.filter((event) => event.createdAt.slice(0, 10) === todayKey);
+    if (todayEvents.length === 0) return 0;
+    const total = todayEvents.reduce((sum, event) => {
+      const details = (event.details ?? {}) as Record<string, unknown>;
+      const score = typeof details.confidenceScore === 'number' ? details.confidenceScore : 75;
+      return sum + score;
+    }, 0);
+    return Math.round(total / todayEvents.length);
+  })();
+  const streakDays = (() => {
+    if (agentEvents.length === 0) return 0;
+    const dates = Array.from(new Set(agentEvents.map((event) => event.createdAt.slice(0, 10)))).sort().reverse();
+    let streak = 0;
+    let cursor = new Date();
+    while (true) {
+      const key = cursor.toISOString().slice(0, 10);
+      if (!dates.includes(key)) break;
+      streak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+    return streak;
+  })();
+  const streakActiveDays = (() => {
+    const dateSet = new Set(agentEvents.map((event) => event.createdAt.slice(0, 10)));
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date();
+      date.setDate(date.getDate() - (6 - index));
+      return dateSet.has(date.toISOString().slice(0, 10));
+    });
+  })();
+  const dailyTarget = activeAssignment?.pointsExpected && activeAssignment.pointsExpected > 0 ? activeAssignment.pointsExpected : 10;
+
+  const launchSingleCapture = () => {
+    if (isAuthenticated && onContribute) {
+      onContribute({ assignment: activeAssignment });
+      return;
+    }
+    onAuth();
+  };
+
+  const handleContributePressStart = () => {
+    if (!isAuthenticated || !onContribute) return;
+    longPressTriggered.current = false;
+    if (contributePressTimer.current) {
+      window.clearTimeout(contributePressTimer.current);
+    }
+    contributePressTimer.current = window.setTimeout(() => {
+      longPressTriggered.current = true;
+      onContribute({ batch: true, assignment: activeAssignment });
+    }, 550);
+  };
+
+  const handleContributePressEnd = () => {
+    if (contributePressTimer.current) {
+      window.clearTimeout(contributePressTimer.current);
+      contributePressTimer.current = null;
+    }
+    if (longPressTriggered.current) {
+      window.setTimeout(() => {
+        longPressTriggered.current = false;
+      }, 0);
+      return;
+    }
+    launchSingleCapture();
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f9fafb]">
       <header className="px-4 pt-4 pb-3 bg-white border-b border-gray-100 shrink-0">
@@ -310,6 +439,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
               {isAdmin && (
                 <span className="px-2 py-0.5 rounded-full bg-[#e7eef4] text-[#0f2b46] text-[9px] font-bold uppercase tracking-widest">
                   {t('Admin', 'Admin')}
+                </span>
+              )}
+              {userRole === 'client' && (
+                <span className="px-2 py-0.5 rounded-full bg-[#fff8f4] text-[#c86b4a] text-[9px] font-bold uppercase tracking-widest">
+                  {t('Client', 'Client')}
                 </span>
               )}
             </div>
@@ -374,6 +508,62 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
             </div>
           )}
         </div>
+
+        {showAgentWidgets && activeAssignment && (
+          <div className="mb-3 rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">
+                  {t('Active Assignment', 'Affectation active')}
+                </div>
+                <h4 className="mt-1 text-base font-bold text-gray-900">{activeAssignment.zoneLabel}</h4>
+                <p className="mt-1 text-xs text-gray-500">
+                  {activeAssignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}
+                </p>
+              </div>
+              <div className="rounded-full bg-[#f2f6fa] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                {activeAssignment.status}
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                <span>{t('Progress', 'Progression')}</span>
+                <span>{activeAssignment.pointsSubmitted}/{activeAssignment.pointsExpected}</span>
+              </div>
+              <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-[#0f2b46] to-[#4c7c59]" style={{ width: `${Math.min(100, activeAssignment.completionRate)}%` }} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs text-gray-500">
+                {t('Due', 'Echeance')}: {activeAssignment.dueDate}
+              </div>
+              {onContribute && (
+                <button
+                  type="button"
+                  onClick={() => onContribute({ assignment: activeAssignment })}
+                  className="h-10 rounded-2xl bg-[#0f2b46] px-4 text-[10px] font-bold uppercase tracking-widest text-white"
+                >
+                  {t('Start Capture', 'Commencer la capture')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showAgentWidgets && (
+          <div className="mb-3 grid grid-cols-1 gap-3">
+            <DailyProgressWidget
+              language={language}
+              submissionsToday={submissionsToday}
+              enrichmentsToday={enrichmentsToday}
+              averageQuality={averageQuality}
+              streakDays={streakDays}
+              dailyTarget={dailyTarget}
+            />
+            <StreakTracker language={language} streakDays={streakDays} activeDays={streakActiveDays} />
+          </div>
+        )}
       </header>
 
       <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
@@ -457,7 +647,29 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
 
         {onContribute && (
           <button
-            onClick={isAuthenticated ? onContribute : onAuth}
+            type="button"
+            onClick={(event) => event.preventDefault()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                launchSingleCapture();
+              }
+            }}
+            onPointerDown={handleContributePressStart}
+            onPointerUp={handleContributePressEnd}
+            onPointerLeave={() => {
+              if (contributePressTimer.current) {
+                window.clearTimeout(contributePressTimer.current);
+                contributePressTimer.current = null;
+              }
+            }}
+            onPointerCancel={() => {
+              if (contributePressTimer.current) {
+                window.clearTimeout(contributePressTimer.current);
+                contributePressTimer.current = null;
+              }
+            }}
+            onContextMenu={(event) => event.preventDefault()}
             className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
             aria-label={
               isAuthenticated

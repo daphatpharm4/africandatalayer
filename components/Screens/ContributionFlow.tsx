@@ -2,20 +2,28 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Camera,
-  CheckCircle,
   MapPin,
   ShieldCheck
 } from 'lucide-react';
 import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
 import VerticalIcon from '../shared/VerticalIcon';
-import { enqueueSubmission, flushOfflineQueue, getQueueStats, type QueueSyncSummary } from '../../lib/client/offlineQueue';
+import {
+  enqueueSubmission,
+  flushOfflineQueue,
+  getQueueStats,
+  retryQueueItem,
+  updateQueueItemPayload,
+  type QueueItem,
+  type QueueSyncSummary,
+} from '../../lib/client/offlineQueue';
 import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/deviceProfile';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
 import { apiJson } from '../../lib/client/api';
-import type { ClientExifData, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
+import type { ClientExifData, CollectionAssignment, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
 import { ENRICH_FIELD_CATALOG, getEnrichFieldLabel, type EnrichFieldConfig, type EnrichFieldOption } from '../../shared/enrichFieldCatalog';
 import { Category, ContributionMode, DataPoint } from '../../types';
 import exifr from 'exifr';
+import XPPopup from '../XPPopup';
 
 interface Props {
   onBack: () => void;
@@ -23,6 +31,12 @@ interface Props {
   language: 'en' | 'fr';
   mode: ContributionMode;
   seedPoint: DataPoint | null;
+  queuedDraft?: QueueItem | null;
+  assignment?: CollectionAssignment | null;
+  isBatchMode?: boolean;
+  onQueueOpen?: () => void;
+  onDraftConsumed?: () => void;
+  onBatchExit?: () => void;
 }
 
 type Vertical = SubmissionCategory;
@@ -246,11 +260,25 @@ const pointTypeToVertical = (type: Category): Vertical => {
   return 'pharmacy';
 };
 
-const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode, seedPoint }) => {
+const ContributionFlow: React.FC<Props> = ({
+  onBack,
+  onComplete,
+  language,
+  mode,
+  seedPoint,
+  queuedDraft = null,
+  assignment = null,
+  isBatchMode = false,
+  onQueueOpen,
+  onDraftConsumed,
+  onBatchExit,
+}) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [vertical, setVertical] = useState<Vertical>(() => (seedPoint ? pointTypeToVertical(seedPoint.type) : 'pharmacy'));
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [draftImageBase64, setDraftImageBase64] = useState<string | null>(null);
+  const [draftClientExif, setDraftClientExif] = useState<ClientExifData | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [showManualLocation, setShowManualLocation] = useState(false);
   const [manualLatitude, setManualLatitude] = useState('');
@@ -265,6 +293,8 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [pendingPayload, setPendingPayload] = useState<SubmissionInput | null>(null);
   const [selectedDedupPointId, setSelectedDedupPointId] = useState('');
   const [isResolvingDedup, setIsResolvingDedup] = useState(false);
+  const [batchCapturedCount, setBatchCapturedCount] = useState(0);
+  const [xpBreakdown, setXpBreakdown] = useState({ baseXp: 5, qualityBonus: 0, streakBonus: 0, totalXp: 5 });
 
   const [siteName, setSiteName] = useState(seedPoint?.name ?? '');
   const [openingHours, setOpeningHours] = useState(seedPoint?.openingHours ?? '');
@@ -298,8 +328,12 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   const [enrichMultiRaw, setEnrichMultiRaw] = useState<Record<string, string>>({});
   const [isLowEndDevice] = useState<boolean>(() => detectLowEndDevice());
 
-  const gaps = useMemo(() => seedPoint?.gaps ?? [], [seedPoint]);
-  const isEnrichMode = mode === 'ENRICH' && Boolean(seedPoint);
+  const draftGapKeys = useMemo(() => {
+    const details = (queuedDraft?.payload.details ?? {}) as Record<string, unknown>;
+    return Object.keys(details).filter((field) => field !== 'clientDevice');
+  }, [queuedDraft?.id, queuedDraft?.payload.details]);
+  const gaps = useMemo(() => (seedPoint?.gaps && seedPoint.gaps.length > 0 ? seedPoint.gaps : draftGapKeys), [draftGapKeys, seedPoint]);
+  const isEnrichMode = mode === 'ENRICH' && (Boolean(seedPoint) || Boolean(queuedDraft?.payload.pointId));
 
   const markEnrichTouched = (field: string) => {
     setEnrichTouched((prev) => ({ ...prev, [field]: true }));
@@ -327,6 +361,13 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   }, [seedPoint]);
 
   useEffect(() => {
+    if (queuedDraft) return;
+    if (assignment?.assignedVerticals?.[0] && !isEnrichMode) {
+      setVertical(assignment.assignedVerticals[0]);
+    }
+  }, [assignment?.assignedVerticals, isEnrichMode, queuedDraft]);
+
+  useEffect(() => {
     setEnrichValues({});
     setEnrichTouched({});
     setEnrichMultiRaw({});
@@ -352,9 +393,83 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
 
   useEffect(() => {
     return () => {
-      if (photoPreview) URL.revokeObjectURL(photoPreview);
+      if (photoPreview?.startsWith('blob:')) URL.revokeObjectURL(photoPreview);
     };
   }, [photoPreview]);
+
+  useEffect(() => {
+    if (!queuedDraft) {
+      setDraftImageBase64(null);
+      setDraftClientExif(null);
+      return;
+    }
+
+    const details = (queuedDraft.payload.details ?? {}) as Record<string, unknown>;
+    const merchantMap = details.merchantIdByProvider && typeof details.merchantIdByProvider === 'object'
+      ? details.merchantIdByProvider as Record<string, string>
+      : {};
+    const firstMerchantProvider = Object.keys(merchantMap)[0];
+    const priceMap = details.pricesByFuel && typeof details.pricesByFuel === 'object'
+      ? details.pricesByFuel as Record<string, number>
+      : {};
+    const firstPriceFuel = Object.keys(priceMap)[0];
+
+    setVertical(queuedDraft.payload.category as Vertical);
+    setPhotoPreview(typeof queuedDraft.payload.imageBase64 === 'string' ? queuedDraft.payload.imageBase64 : null);
+    setPhotoFile(null);
+    setDraftImageBase64(typeof queuedDraft.payload.imageBase64 === 'string' ? queuedDraft.payload.imageBase64 : null);
+    setDraftClientExif(queuedDraft.payload.clientExif ?? null);
+    setLocation(queuedDraft.payload.location ?? null);
+    setSiteName(
+      (typeof details.siteName === 'string' && details.siteName)
+      || (typeof details.name === 'string' && details.name)
+      || '',
+    );
+    setOpeningHours(typeof details.openingHours === 'string' ? details.openingHours : '');
+    setIsOpenNow(typeof details.isOpenNow === 'boolean' ? details.isOpenNow : true);
+    setIsOnDuty(typeof details.isOnDuty === 'boolean' ? details.isOnDuty : false);
+    setProviders(Array.isArray(details.providers) ? details.providers.filter((value): value is string => typeof value === 'string') : []);
+    setMerchantProvider(firstMerchantProvider ?? providerOptions[0]);
+    setMerchantId(firstMerchantProvider ? merchantMap[firstMerchantProvider] ?? '' : (typeof details.merchantId === 'string' ? details.merchantId : ''));
+    setPaymentMethods(Array.isArray(details.paymentMethods) ? details.paymentMethods.filter((value): value is string => typeof value === 'string') : []);
+    setHasFuelAvailable(typeof details.hasFuelAvailable === 'boolean' ? details.hasFuelAvailable : true);
+    setFuelTypes(Array.isArray(details.fuelTypes) ? details.fuelTypes.filter((value): value is string => typeof value === 'string') : []);
+    setPriceFuelType(firstPriceFuel ?? fuelTypeOptions[0]);
+    setPriceValue(firstPriceFuel && Number.isFinite(priceMap[firstPriceFuel]) ? String(priceMap[firstPriceFuel]) : '');
+    setQuality(typeof details.quality === 'string' ? details.quality : 'Standard');
+    setOutletType(typeof details.outletType === 'string' ? details.outletType : 'bar');
+    setIsFormal(typeof details.isFormal === 'boolean' ? details.isFormal : true);
+    setBillboardType(typeof details.billboardType === 'string' ? details.billboardType : 'standard');
+    setIsOccupied(typeof details.isOccupied === 'boolean' ? details.isOccupied : true);
+    setAdvertiserBrand(typeof details.advertiserBrand === 'string' ? details.advertiserBrand : '');
+    setRoadName(
+      (typeof details.roadName === 'string' && details.roadName)
+      || (typeof details.name === 'string' && details.name)
+      || '',
+    );
+    setRoadCondition(typeof details.condition === 'string' ? details.condition : 'good');
+    setRoadSurface(typeof details.surfaceType === 'string' ? details.surfaceType : 'asphalt');
+    setRoadBlocked(typeof details.isBlocked === 'boolean' ? details.isBlocked : false);
+    setBlockageType(typeof details.blockageType === 'string' ? details.blockageType : roadBlockageOptions[0]);
+    setBuildingType(typeof details.buildingType === 'string' ? details.buildingType : 'residential');
+    setOccupancyStatus(typeof details.occupancyStatus === 'string' ? details.occupancyStatus : 'occupied');
+    setStoreyCount(typeof details.storeyCount === 'number' ? String(details.storeyCount) : '');
+    setEstimatedUnits(typeof details.estimatedUnits === 'number' ? String(details.estimatedUnits) : '');
+
+    if (mode === 'ENRICH') {
+      const nextEnrichValues = Object.fromEntries(
+        Object.entries(details).filter(([field]) => field !== 'clientDevice'),
+      );
+      setEnrichValues(nextEnrichValues);
+      setEnrichTouched(Object.fromEntries(Object.keys(nextEnrichValues).map((field) => [field, true])));
+    }
+  }, [mode, queuedDraft]);
+
+  useEffect(() => {
+    if (!isBatchMode) {
+      setBatchCapturedCount(0);
+    }
+  }, [isBatchMode]);
 
   useEffect(() => {
     const onOnline = async () => {
@@ -435,10 +550,12 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     const file = event.target.files?.[0];
     if (!file) return;
     setPhotoFile(file);
+    setDraftImageBase64(null);
+    setDraftClientExif(null);
     setPhotoError('');
     const nextPreview = URL.createObjectURL(file);
     setPhotoPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
       return nextPreview;
     });
   };
@@ -645,7 +762,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     setLocationError('');
     setErrorMessage('');
 
-    if (!photoFile) {
+    if (!photoFile && !draftImageBase64) {
       setPhotoError(t('Please capture a live photo before submitting.', 'Veuillez capturer une photo en direct avant de soumettre.'));
       return false;
     }
@@ -700,22 +817,46 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     return true;
   };
 
+  const calculateXp = (payload: SubmissionInput) => {
+    const baseXp = 5;
+    const qualityBonus = payload.location ? 2 : 0;
+    const detailsCount = Object.keys((payload.details ?? {}) as Record<string, unknown>).filter((field) => field !== 'clientDevice').length;
+    const streakBonus = isBatchMode || detailsCount >= 3 ? 1 : 0;
+    return {
+      baseXp,
+      qualityBonus,
+      streakBonus,
+      totalXp: baseXp + qualityBonus + streakBonus,
+    };
+  };
+
   const submitPayload = async (payload: SubmissionInput): Promise<boolean> => {
-    const queuedItem = await enqueueSubmission(payload);
+    const queuedItem = queuedDraft
+      ? await updateQueueItemPayload(queuedDraft.id, payload)
+      : await enqueueSubmission(payload);
     let summary: QueueSyncSummary | null = null;
     if (navigator.onLine) {
-      summary = await syncQueuedItems();
+      if (queuedDraft && queuedItem) {
+        summary = await retryQueueItem(queuedItem.id, sendSubmissionPayload);
+      } else {
+        summary = await syncQueuedItems();
+      }
     } else {
       const stats = await getQueueStats();
       setSyncMessage(t(`Saved offline. ${stats.total} item(s) pending sync.`, `Enregistre hors ligne. ${stats.total} element(s) en attente de synchronisation.`));
     }
 
-    if (summary && summary.permanentFailureIds.includes(queuedItem.id)) {
+    if (summary && queuedItem && summary.permanentFailureIds.includes(queuedItem.id)) {
       const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetee par la validation serveur.');
       setErrorMessage(reason);
       return false;
     }
 
+    setXpBreakdown(calculateXp(payload));
+    if (isBatchMode) {
+      setBatchCapturedCount((prev) => prev + 1);
+    }
+    onDraftConsumed?.();
     setSubmitted(true);
     return true;
   };
@@ -760,7 +901,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
   };
 
   const handleSubmit = async () => {
-    if (!photoFile) {
+    if (!photoFile && !draftImageBase64) {
       setPhotoError(t('Please capture a live photo before submitting.', 'Veuillez capturer une photo en direct avant de soumettre.'));
       return;
     }
@@ -778,17 +919,15 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     setIsSubmitting(true);
     try {
       clearDedupPrompt();
-      const [imageBase64, clientExif] = await Promise.all([
-        fileToBase64(photoFile),
-        extractClientExif(photoFile, location ?? manual ?? null),
-      ]);
+      const imageBase64 = photoFile ? await fileToBase64(photoFile) : draftImageBase64;
+      const clientExif = photoFile ? await extractClientExif(photoFile, location ?? manual ?? null) : draftClientExif;
       const payload: SubmissionInput = {
         eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
         category: vertical,
-        pointId: isEnrichMode && seedPoint ? seedPoint.id : undefined,
+        pointId: isEnrichMode ? (seedPoint?.id ?? queuedDraft?.payload.pointId) : undefined,
         location: location ?? manual ?? undefined,
         details,
-        imageBase64,
+        imageBase64: imageBase64 ?? undefined,
         clientExif,
       };
       const blockedByDedup = await maybePromptDedup(payload);
@@ -1444,39 +1583,68 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     </div>
   );
 
+  const resetForAnotherCapture = () => {
+    if (photoPreview?.startsWith('blob:')) {
+      URL.revokeObjectURL(photoPreview);
+    }
+    setSubmitted(false);
+    setPhotoPreview(null);
+    setPhotoFile(null);
+    setDraftImageBase64(null);
+    setDraftClientExif(null);
+    setLocation(null);
+    setManualLatitude('');
+    setManualLongitude('');
+    setPhotoError('');
+    setLocationError('');
+    setErrorMessage('');
+    setSyncMessage('');
+    setPendingPayload(null);
+    setSelectedDedupPointId('');
+    setDedupCheck(null);
+    setSiteName('');
+    setOpeningHours('');
+    setProviders([]);
+    setMerchantId('');
+    setPaymentMethods([]);
+    setFuelTypes([]);
+    setPriceValue('');
+    setAdvertiserBrand('');
+    setRoadName('');
+    setStoreyCount('');
+    setEstimatedUnits('');
+    setEnrichValues({});
+    setEnrichTouched({});
+    setEnrichMultiRaw({});
+  };
+
+  const handleBackPress = () => {
+    if (isBatchMode) {
+      onBatchExit?.();
+    }
+    onBack();
+  };
+
   const verticalIcon = <VerticalIcon name={VERTICALS[vertical]?.icon ?? 'pill'} size={18} />;
 
   if (submitted) {
     return (
-      <div className="flex flex-col h-full bg-[#f9fafb]">
-        <div className="pt-6 px-8">
-          <button onClick={onBack} className="p-1 -ml-1 text-gray-500">
-            <ArrowLeft size={24} />
-          </button>
-        </div>
-        <div className="flex-1 px-6 flex flex-col items-center justify-center text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#eaf3ee] text-[#4c7c59] flex items-center justify-center">
-            <CheckCircle size={30} />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900">{t('Saved Offline', 'Enregistre hors ligne')}</h2>
-          <p className="text-sm text-gray-500">
-            {t('Your submission is saved locally first and will sync automatically when online.', 'Votre soumission est d\'abord enregistree localement et sera synchronisee automatiquement en ligne.')}
-          </p>
-          {syncMessage && (
-            <div className="w-full rounded-xl border border-[#d5e1eb] bg-white p-3 text-xs text-[#0f2b46]">
-              {syncMessage}
-            </div>
-          )}
-        </div>
-        <div className="p-6">
-          <button
-            onClick={onComplete}
-            className="w-full h-14 bg-[#c86b4a] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg hover:bg-[#b85f3f] active:scale-95 transition-all"
-          >
-            {t('Return to Map', 'Retour a la carte')}
-          </button>
-        </div>
-      </div>
+      <XPPopup
+        language={language}
+        totalXp={xpBreakdown.totalXp}
+        baseXp={xpBreakdown.baseXp}
+        qualityBonus={xpBreakdown.qualityBonus}
+        streakBonus={xpBreakdown.streakBonus}
+        syncMessage={syncMessage}
+        isBatchMode={isBatchMode}
+        onPrimary={resetForAnotherCapture}
+        onSecondary={() => {
+          if (isBatchMode) {
+            onBatchExit?.();
+          }
+          onComplete();
+        }}
+      />
     );
   }
 
@@ -1484,7 +1652,7 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
     <div className="flex flex-col h-full bg-[#f9fafb]">
       <div className="pt-6 px-6">
         <div className="flex items-center justify-between mb-3">
-          <button onClick={onBack} className="p-1 -ml-1 text-gray-500">
+          <button onClick={handleBackPress} className="p-1 -ml-1 text-gray-500">
             <ArrowLeft size={24} />
           </button>
           <span className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em]">
@@ -1512,6 +1680,45 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
             </span>
           )}
         </div>
+
+        {assignment && (
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">{t('Assignment Context', 'Contexte affectation')}</div>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-bold text-gray-900">{assignment.zoneLabel}</div>
+                <div className="text-xs text-gray-500">
+                  {assignment.assignedVerticals.map((item) => getCategoryLabel(item, language)).join(', ')}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                  {assignment.pointsSubmitted}/{assignment.pointsExpected}
+                </div>
+                <div className="text-[10px] text-gray-400">{t('Due', 'Echeance')} {assignment.dueDate}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isBatchMode && (
+          <div className="bg-[#0f2b46] text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">{t('Batch Capture', 'Capture en lot')}</div>
+              <div className="mt-1 text-sm font-bold">{t('Captured', 'Captures')}: {batchCapturedCount}</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onBatchExit?.();
+                onComplete();
+              }}
+              className="rounded-full bg-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest"
+            >
+              {t('End Batch', 'Fin du lot')}
+            </button>
+          </div>
+        )}
 
         {renderVerticalSelector()}
         {renderPhotoBlock()}
@@ -1587,8 +1794,17 @@ const ContributionFlow: React.FC<Props> = ({ onBack, onComplete, language, mode,
         )}
 
         {syncMessage && (
-          <div className="rounded-xl border border-[#d5e1eb] bg-white p-3 text-xs text-[#0f2b46]">
-            {syncMessage}
+          <div className="rounded-xl border border-[#d5e1eb] bg-white p-3 text-xs text-[#0f2b46] space-y-2">
+            <div>{syncMessage}</div>
+            {onQueueOpen && (
+              <button
+                type="button"
+                onClick={onQueueOpen}
+                className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]"
+              >
+                {t('Open queue', 'Ouvrir la file')}
+              </button>
+            )}
           </div>
         )}
       </div>
