@@ -1,24 +1,24 @@
 import React from 'react';
 import { Screen } from '../types';
-import { Map, PlusCircle, BarChart2, Medal, User } from 'lucide-react';
+import { Map, PlusCircle, BarChart2, Medal, User, TrendingUp, Download, LayoutDashboard } from 'lucide-react';
+
+type UserRole = 'agent' | 'admin' | 'client';
 
 interface Props {
   currentScreen: Screen;
   onNavigate: (screen: Screen) => void;
   isAuthenticated: boolean;
   isAdmin?: boolean;
+  userRole?: UserRole;
   language?: 'en' | 'fr';
 }
 
-const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticated, isAdmin, language = 'en' }) => {
+const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticated, isAdmin, userRole = 'agent', language = 'en' }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
-  const navItems = [
+
+  const agentNav = [
     { id: Screen.HOME, label: t('Explore', 'Explorer'), icon: Map },
-    {
-      id: Screen.CONTRIBUTE,
-      label: t('Contribute', 'Contribuer'),
-      icon: PlusCircle
-    },
+    { id: Screen.CONTRIBUTE, label: t('Contribute', 'Contribuer'), icon: PlusCircle },
     {
       id: Screen.ANALYTICS,
       label: isAdmin ? t('Impact', 'Impact') : t('Leaderboard', 'Classement'),
@@ -26,6 +26,15 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
     },
     { id: isAuthenticated ? Screen.PROFILE : Screen.AUTH, label: isAuthenticated ? t('Profile', 'Profil') : t('Sign In', 'Connexion'), icon: User }
   ];
+
+  const clientNav = [
+    { id: Screen.DELTA_DASHBOARD, label: t('Dashboard', 'Tableau'), icon: LayoutDashboard },
+    { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
+    { id: Screen.ANALYTICS, label: t('Insights', 'Analyses'), icon: TrendingUp },
+    { id: isAuthenticated ? Screen.PROFILE : Screen.AUTH, label: isAuthenticated ? t('Account', 'Compte') : t('Sign In', 'Connexion'), icon: User }
+  ];
+
+  const navItems = userRole === 'client' ? clientNav : agentNav;
 
   return (
     <nav className="h-16 bg-white border-t border-gray-200 flex items-center justify-around px-2 z-40">

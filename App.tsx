@@ -71,8 +71,14 @@ const App: React.FC = () => {
     setCurrentScreen(Screen.HOME);
   };
 
+  const isClient = userRole === 'client';
+
   const switchTab = (screen: Screen) => {
     setHistory([]);
+    // Clients cannot access the capture flow
+    if (screen === Screen.CONTRIBUTE && isClient) {
+      return;
+    }
     if (screen === Screen.CONTRIBUTE && !isAuthenticated) {
       setAuthReturnScreen(currentScreen);
       setCurrentScreen(Screen.AUTH);
@@ -155,7 +161,9 @@ const App: React.FC = () => {
       const hasSeenSplash = localStorage.getItem("adl_splash_seen") === "true";
       if (currentScreen === Screen.SPLASH && (hasUser || hasSeenSplash)) {
         setHistory([]);
-        setCurrentScreen(Screen.HOME);
+        const session = await getSession();
+        const role = (session?.user?.role as 'agent' | 'admin' | 'client') ?? 'agent';
+        setCurrentScreen(role === 'client' ? Screen.DELTA_DASHBOARD : Screen.HOME);
       }
     };
     bootstrap();
@@ -165,9 +173,9 @@ const App: React.FC = () => {
     const hasSeenSplash = localStorage.getItem("adl_splash_seen") === "true";
     if (currentScreen === Screen.SPLASH && hasSeenSplash) {
       setHistory([]);
-      setCurrentScreen(Screen.HOME);
+      setCurrentScreen(isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
     }
-  }, [currentScreen]);
+  }, [currentScreen, isClient]);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -180,7 +188,7 @@ const App: React.FC = () => {
             isAuthenticated={isAuthenticated}
             isAdmin={isAdmin}
             onAuth={() => navigateTo(Screen.AUTH)}
-            onContribute={() => openContribution('CREATE')}
+            onContribute={isClient ? undefined : () => openContribution('CREATE')}
             onProfile={() => switchTab(Screen.PROFILE)}
             language={language}
           />
@@ -198,7 +206,12 @@ const App: React.FC = () => {
           />
         );
       case Screen.AUTH:
-        return <Auth language={language} onBack={goBack} onComplete={async () => { await refreshSession(); switchTab(Screen.HOME); }} />;
+        return <Auth language={language} onBack={goBack} onComplete={async () => {
+          await refreshSession();
+          const session = await getSession();
+          const role = (session?.user?.role as 'agent' | 'admin' | 'client') ?? 'agent';
+          switchTab(role === 'client' ? Screen.DELTA_DASHBOARD : Screen.HOME);
+        }} />;
       case Screen.CONTRIBUTE:
         return (
           <ContributionFlow
@@ -217,7 +230,7 @@ const App: React.FC = () => {
             onBack={goBack}
             isAdmin={isAdmin}
             onAdmin={isAdmin ? () => navigateTo(Screen.ADMIN) : undefined}
-            onDeltaDashboard={isAdmin ? () => navigateTo(Screen.DELTA_DASHBOARD) : undefined}
+            onDeltaDashboard={(isAdmin || isClient) ? () => navigateTo(Screen.DELTA_DASHBOARD) : undefined}
             language={language}
           />
         );
@@ -282,6 +295,7 @@ const App: React.FC = () => {
           onNavigate={(scr) => switchTab(scr)}
           isAuthenticated={isAuthenticated}
           isAdmin={isAdmin}
+          userRole={userRole}
           language={language}
         />
       )}

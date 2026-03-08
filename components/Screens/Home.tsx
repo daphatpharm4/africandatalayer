@@ -28,7 +28,7 @@ interface Props {
   isAuthenticated: boolean;
   isAdmin?: boolean;
   onAuth: () => void;
-  onContribute: () => void;
+  onContribute?: () => void;
   onProfile: () => void;
   language: 'en' | 'fr';
 }
@@ -455,17 +455,19 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, onAuth
           <span className="text-xs font-bold uppercase tracking-wider">{viewMode === 'map' ? t('List View', 'Vue liste') : t('Map View', 'Vue carte')}</span>
         </button>
 
-        <button
-          onClick={isAuthenticated ? onContribute : onAuth}
-          className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
-          aria-label={
-            isAuthenticated
-              ? t('Contribute', 'Contribuer')
-              : t('Sign in to contribute', 'Connectez-vous pour contribuer')
-          }
-        >
-          <Plus size={22} />
-        </button>
+        {onContribute && (
+          <button
+            onClick={isAuthenticated ? onContribute : onAuth}
+            className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
+            aria-label={
+              isAuthenticated
+                ? t('Contribute', 'Contribuer')
+                : t('Sign in to contribute', 'Connectez-vous pour contribuer')
+            }
+          >
+            <Plus size={22} />
+          </button>
+        )}
 
         {!isAuthenticated && (
           <div className="absolute top-20 left-4 right-4 bg-white/95 backdrop-blur p-3 rounded-xl shadow-xl border border-[#f2f4f7] z-20 flex items-center justify-between">
