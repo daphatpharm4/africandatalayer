@@ -37,7 +37,7 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
   const navItems = userRole === 'client' ? clientNav : agentNav;
 
   return (
-    <nav className="h-16 bg-white border-t border-gray-200 flex items-center justify-around px-2 z-40">
+    <nav className="min-h-16 bg-white border-t border-gray-200 flex items-center justify-around px-2 pt-1 pb-[calc(0.25rem+var(--safe-bottom))] z-40">
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = currentScreen === item.id;

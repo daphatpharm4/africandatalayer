@@ -16,6 +16,11 @@
             --safe-bottom: env(safe-area-inset-bottom);
             --app-height: 100vh;
         }
+        @supports (height: 100svh) {
+            :root {
+                --app-height: 100svh;
+            }
+        }
         @supports (height: 100dvh) {
             :root {
                 --app-height: 100dvh;
