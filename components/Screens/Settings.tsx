@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
   User,
@@ -6,6 +6,7 @@ import {
   WifiOff,
   BarChart,
   Bell,
+  Contrast,
   Globe,
   LogOut,
   ChevronRight,
@@ -22,6 +23,17 @@ interface Props {
 
 const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChange }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const [highContrast, setHighContrast] = useState(() => localStorage.getItem('adl_high_contrast') === '1');
+
+  useEffect(() => {
+    if (highContrast) {
+      document.documentElement.classList.add('high-contrast');
+      localStorage.setItem('adl_high_contrast', '1');
+    } else {
+      document.documentElement.classList.remove('high-contrast');
+      localStorage.removeItem('adl_high_contrast');
+    }
+  }, [highContrast]);
 
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
@@ -112,6 +124,19 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
                   FR
                 </button>
               </div>
+            </div>
+            <div className="w-full flex items-center justify-between p-4">
+              <div className="flex items-center space-x-4">
+                <div className="p-2 bg-[#e7eef4] text-[#0f2b46] rounded-xl"><Contrast size={20} /></div>
+                <span className="text-sm font-bold text-gray-900">{t('High Contrast', 'Contraste eleve')}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHighContrast((prev) => !prev)}
+                className={`relative w-11 h-6 rounded-full transition-colors ${highContrast ? 'bg-[#0f2b46]' : 'bg-gray-200'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${highContrast ? 'translate-x-5' : ''}`} />
+              </button>
             </div>
           </div>
         </div>

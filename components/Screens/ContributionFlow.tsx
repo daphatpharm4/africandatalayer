@@ -1660,10 +1660,33 @@ const ContributionFlow: React.FC<Props> = ({
           </span>
           <span className="w-6"></span>
         </div>
-        <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-[#4c7c59] mb-4">
+        <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-[#4c7c59] mb-3">
           <ShieldCheck size={12} />
           <span>{t('Live photo + GPS mandatory', 'Photo live + GPS obligatoires')}</span>
         </div>
+        {(() => {
+          const steps = [
+            { label: t('Type', 'Type'), done: Boolean(vertical) },
+            { label: t('Photo', 'Photo'), done: Boolean(photoPreview) },
+            { label: t('GPS', 'GPS'), done: Boolean(location) },
+            { label: t('Details', 'Details'), done: Boolean(siteName) },
+          ];
+          return (
+            <div className="flex items-center gap-1.5 mb-4">
+              {steps.map((step, i) => (
+                <React.Fragment key={step.label}>
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-2 h-2 rounded-full transition-colors ${step.done ? 'bg-[#4c7c59]' : 'bg-gray-200'}`} />
+                    <span className={`text-[9px] font-bold uppercase tracking-widest ${step.done ? 'text-[#4c7c59]' : 'text-gray-300'}`}>
+                      {step.label}
+                    </span>
+                  </div>
+                  {i < steps.length - 1 && <div className={`flex-1 h-px ${steps[i].done ? 'bg-[#4c7c59]' : 'bg-gray-200'}`} />}
+                </React.Fragment>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-5">

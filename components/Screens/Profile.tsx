@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeft,
@@ -8,6 +8,7 @@ import {
   Gift,
   MapPin,
   Settings as SettingsIcon,
+  TrendingUp,
   Trash2,
   Wallet
 } from 'lucide-react';
@@ -15,6 +16,7 @@ import { apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
+import BadgeGrid, { computeBadges } from '../BadgeSystem';
 
 interface Props {
   onBack: () => void;
@@ -34,6 +36,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   const [history, setHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
   const [computedXP, setComputedXP] = useState<number | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [ownEvents, setOwnEvents] = useState<PointEvent[]>([]);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
   const [isLoadingSyncErrors, setIsLoadingSyncErrors] = useState(true);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
@@ -112,6 +115,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
             .filter((submission) => (typeof submission.userId === 'string' ? submission.userId.toLowerCase().trim() : '') === userId)
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+          setOwnEvents(ownSubmissions);
           const historyItems = ownSubmissions.map(submissionToHistory);
           setHistory(historyItems);
 
@@ -145,6 +149,19 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
     };
     loadProfile();
   }, [language]);
+
+  const badges = useMemo(() => computeBadges(ownEvents, language), [ownEvents, language]);
+  const earnedBadgeCount = badges.filter((b) => b.earned).length;
+  const nextBadge = badges.find((b) => !b.earned);
+
+  const pointsThisWeek = useMemo(() => {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
+    const mondayKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+    return ownEvents.filter((e) => e.createdAt.slice(0, 10) >= mondayKey).length;
+  }, [ownEvents]);
 
   const visibleHistory = showAllHistory ? history : history.slice(0, historyPreviewLimit);
   const canToggleHistory = history.length > historyPreviewLimit;
@@ -449,14 +466,18 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
           </div>
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
             <div className="flex items-center space-x-2 text-[#0f2b46]">
-              <Calendar size={16} />
-              <span className="text-[10px] font-bold uppercase tracking-widest">{t('Badges', 'Badges')}</span>
+              <TrendingUp size={16} />
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t('This Week', 'Cette semaine')}</span>
             </div>
             <div className="flex flex-col">
-              <span className="text-2xl font-bold text-gray-900">7</span>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{t('Next: Urban Validator', 'Suivant : Validateur urbain')}</p>
+              <span className="text-2xl font-bold text-gray-900">{pointsThisWeek}</span>
+              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{t('submissions', 'soumissions')}</p>
             </div>
           </div>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
+          <BadgeGrid badges={badges} language={language} />
         </div>
 
         <div className="space-y-4">

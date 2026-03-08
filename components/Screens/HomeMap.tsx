@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
+import React, { useEffect, useState } from 'react';
+import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Category, DataPoint } from '../../types';
 import type { MapScope } from '../../shared/types';
@@ -65,6 +65,44 @@ const getMarkerIconForType = (type: Category): L.DivIcon => {
   return icon;
 };
 
+const agentLocationIcon = L.divIcon({
+  className: '',
+  html: `<div style="width:16px;height:16px;border-radius:9999px;background:#3b82f6;border:3px solid #ffffff;box-shadow:0 0 0 2px rgba(59,130,246,0.3),0 2px 8px rgba(0,0,0,0.2);"></div>`,
+  iconSize: [16, 16],
+  iconAnchor: [8, 8]
+});
+
+const AgentLocationMarker: React.FC = () => {
+  const [position, setPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  if (!position) return null;
+
+  return (
+    <>
+      <Circle
+        center={[position.lat, position.lng]}
+        radius={Math.min(position.accuracy, 200)}
+        pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.1, weight: 1 }}
+      />
+      <Marker position={[position.lat, position.lng]} icon={agentLocationIcon} zIndexOffset={1000}>
+        <Popup>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">Your location</span>
+        </Popup>
+      </Marker>
+    </>
+  );
+};
+
 const MapSizeSync: React.FC<{ active: boolean }> = ({ active }) => {
   const map = useMap();
 
@@ -119,6 +157,7 @@ const HomeMap: React.FC<Props> = ({
         className="absolute inset-0 h-full w-full"
       >
         <MapSizeSync active />
+        <AgentLocationMarker />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
