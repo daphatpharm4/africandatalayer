@@ -8,6 +8,7 @@ import { errorResponse } from "../http.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../storage/index.js";
 import { getAuthSecret, getSessionCookieName, isSecureRequest } from "../../auth.js";
 import { inferDefaultDisplayName, normalizeEmail, normalizeIdentifier } from "../../shared/identifier.js";
+import { withAbsoluteUrl } from "./requestUrl.js";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
@@ -101,30 +102,12 @@ if (!authSecret) {
   throw new Error("AUTH_SECRET (or NEXTAUTH_SECRET) is required for Auth.js");
 }
 
-async function withAbsoluteUrl(request: Request): Promise<Request> {
-  try {
-    // eslint-disable-next-line no-new
-    new URL(request.url);
-    return request;
-  } catch {
-    const base = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000";
-    const url = new URL(request.url || "/", base);
-    const method = request.method ?? "GET";
-    const init: RequestInit = {
-      method,
-      headers: request.headers,
-      redirect: request.redirect,
-    };
-    if (method !== "GET" && method !== "HEAD") {
-      init.body = await request.arrayBuffer();
-    }
-    return new Request(url, init);
-  }
-}
-
 export default async function handler(request: Request): Promise<Response> {
   try {
-    const normalizedRequest = await withAbsoluteUrl(request);
+    const normalizedRequest = await withAbsoluteUrl(
+      request,
+      process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000"
+    );
     return await Auth(normalizedRequest, {
       providers,
       secret: authSecret,
