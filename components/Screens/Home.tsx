@@ -292,10 +292,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       }
 
       try {
+        const eventsParams = new URLSearchParams({ view: 'events' });
+        if (isAdmin) eventsParams.set('scope', 'global');
         const [session, assignmentData, eventData] = await Promise.all([
           getSession(),
           apiJson<CollectionAssignment[]>('/api/user?view=assignments'),
-          apiJson<PointEvent[]>('/api/submissions?view=events'),
+          apiJson<PointEvent[]>(`/api/submissions?${eventsParams.toString()}`),
         ]);
         const userId = session?.user?.id?.toLowerCase().trim() ?? '';
         if (cancelled) return;
@@ -315,7 +317,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, language, userRole]);
+  }, [isAuthenticated, isAdmin, language, userRole]);
 
   useEffect(() => {
     return () => {
@@ -358,11 +360,25 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     return active[0] ?? null;
   }, [assignments]);
 
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const submissionsToday = agentEvents.filter((event) => event.createdAt.slice(0, 10) === todayKey).length;
-  const enrichmentsToday = agentEvents.filter((event) => event.eventType === 'ENRICH_EVENT' && event.createdAt.slice(0, 10) === todayKey).length;
+  const todayKey = (() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  })();
+  const localDateKey = (iso: string) => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const submissionsToday = agentEvents.filter((event) => localDateKey(event.createdAt) === todayKey).length;
+  const enrichmentsToday = agentEvents.filter((event) => event.eventType === 'ENRICH_EVENT' && localDateKey(event.createdAt) === todayKey).length;
   const averageQuality = (() => {
-    const todayEvents = agentEvents.filter((event) => event.createdAt.slice(0, 10) === todayKey);
+    const todayEvents = agentEvents.filter((event) => localDateKey(event.createdAt) === todayKey);
     if (todayEvents.length === 0) return 0;
     const total = todayEvents.reduce((sum, event) => {
       const details = (event.details ?? {}) as Record<string, unknown>;
@@ -373,11 +389,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   })();
   const streakDays = (() => {
     if (agentEvents.length === 0) return 0;
-    const dates = Array.from(new Set(agentEvents.map((event) => event.createdAt.slice(0, 10)))).sort().reverse();
+    const dates = Array.from(new Set(agentEvents.map((event) => localDateKey(event.createdAt)))).sort().reverse();
     let streak = 0;
     let cursor = new Date();
     while (true) {
-      const key = cursor.toISOString().slice(0, 10);
+      const key = localDateKey(cursor.toISOString());
       if (!dates.includes(key)) break;
       streak += 1;
       cursor.setDate(cursor.getDate() - 1);
@@ -385,11 +401,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     return streak;
   })();
   const streakActiveDays = (() => {
-    const dateSet = new Set(agentEvents.map((event) => event.createdAt.slice(0, 10)));
+    const dateSet = new Set(agentEvents.map((event) => localDateKey(event.createdAt)));
     return Array.from({ length: 7 }, (_, index) => {
       const date = new Date();
       date.setDate(date.getDate() - (6 - index));
-      return dateSet.has(date.toISOString().slice(0, 10));
+      return dateSet.has(localDateKey(date.toISOString()));
     });
   })();
   const dailyTarget = activeAssignment?.pointsExpected && activeAssignment.pointsExpected > 0 ? activeAssignment.pointsExpected : 10;
