@@ -35,7 +35,8 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/api/auth/callback/:path*", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/auth/signin/:path*", "destination": "/api/auth/[...auth]" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
