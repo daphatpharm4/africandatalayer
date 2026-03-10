@@ -5,6 +5,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/react';
 import App from './App';
 import { initClientSentry } from './lib/client/sentry';
+import './index.css';
 import 'leaflet/dist/leaflet.css';
 
 const rootElement = document.getElementById('root');

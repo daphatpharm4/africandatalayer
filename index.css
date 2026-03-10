@@ -1,0 +1,144 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --safe-top: env(safe-area-inset-top);
+    --safe-bottom: env(safe-area-inset-bottom);
+    --app-height: 100vh;
+  }
+
+  @supports (height: 100svh) {
+    :root {
+      --app-height: 100svh;
+    }
+  }
+
+  @supports (height: 100dvh) {
+    :root {
+      --app-height: 100dvh;
+    }
+  }
+
+  html,
+  body,
+  #root {
+    height: var(--app-height);
+    overflow: hidden;
+  }
+
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    background-color: #f9fafb;
+    color: #111827;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+.app-shell {
+  height: var(--app-height);
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  box-sizing: border-box;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.animate-in {
+  animation-duration: 0.3s;
+  animation-fill-mode: both;
+}
+
+.high-contrast .text-gray-300 {
+  color: #374151 !important;
+}
+
+.high-contrast .text-gray-400 {
+  color: #1f2937 !important;
+}
+
+.high-contrast .text-gray-500 {
+  color: #111827 !important;
+}
+
+.high-contrast .text-gray-600 {
+  color: #030712 !important;
+}
+
+.high-contrast .font-medium {
+  font-weight: 600 !important;
+}
+
+.high-contrast .font-semibold {
+  font-weight: 700 !important;
+}
+
+.high-contrast .font-bold {
+  font-weight: 800 !important;
+}
+
+.high-contrast .border-gray-100 {
+  border-color: #d1d5db !important;
+}
+
+@keyframes xp-count-up {
+  from {
+    transform: translateY(20px) scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes xp-slide-in {
+  from {
+    transform: translateX(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes xp-pulse {
+  0%,
+  100% {
+    transform: scaleX(1);
+  }
+  50% {
+    transform: scaleX(1.02);
+  }
+}
+
+@keyframes level-scale-in {
+  from {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(-10vh) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(110vh) rotate(720deg);
+    opacity: 0;
+  }
+}
