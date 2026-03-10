@@ -75,7 +75,7 @@
 |---|---|
 | **Description** | Contributor creates a POI (CREATE_EVENT, +5 XP), then enriches the same POI repeatedly (ENRICH_EVENT, +5 XP each) by filling in each gap field individually across separate submissions. |
 | **Attacker Motivation** | Multiply XP from a single physical location. A pharmacy has 3 enrichable fields (openingHours, isOpenNow, isOnDuty per `ENRICHABLE_FIELDS`); a fuel station has 6 fields. One visit could yield 7 submissions = 35 XP. |
-| **Attack Method** | Submit CREATE_EVENT with minimal required fields. Then submit separate ENRICH_EVENTs for each gap. The system validates that each enrichment fills "at least one currently missing field" (`api/submissions/index.ts:558`) but does not penalize drip-feeding. |
+| **Attack Method** | Submit CREATE_EVENT with minimal required fields. Then submit separate ENRICH_EVENTs for each enrichable field, even if the point is already complete. The system validates that each enrichment includes at least one enrichable field, but it still does not penalize drip-feeding. |
 | **Detection Difficulty** | Low. Pattern is visible: same userId, same pointId, multiple ENRICH_EVENTs in a short period. |
 | **Business Impact** | Medium. Inflates contribution counts and XP. May or may not produce bad data (the enrichment data itself could be legitimate). |
 

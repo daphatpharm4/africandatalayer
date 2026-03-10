@@ -16,6 +16,10 @@ export function resolveAuthRequestBaseUrl(
     defaultProtocol?: "http" | "https";
   } = {}
 ): string {
+  if (options.fallbackUrl?.trim()) {
+    return options.fallbackUrl.trim();
+  }
+
   const host = firstHeaderValue(headers.get("x-forwarded-host")) ?? firstHeaderValue(headers.get("host"));
   if (host) {
     const protocol = normalizeProtocol(

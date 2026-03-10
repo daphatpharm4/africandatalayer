@@ -17,6 +17,7 @@ import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } fro
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 import { getEffectiveEventXp } from '../../shared/xp';
+import { countActivitiesInCurrentWeek, formatContributionHistoryDate } from '../../lib/shared/contributionMetrics';
 import BadgeGrid, { computeBadges } from '../BadgeSystem';
 
 interface Props {
@@ -53,22 +54,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
   const isMapUnlocked = activeMapScope !== 'bonamoussadi';
 
-  const formatHistoryDate = (iso: string) => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return t('Unknown', 'Inconnu');
-
-    const now = new Date();
-    const sameDay = now.toDateString() === date.toDateString();
-    const yesterday = new Date(now);
-    yesterday.setDate(now.getDate() - 1);
-    const isYesterday = yesterday.toDateString() === date.toDateString();
-    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    if (sameDay) return language === 'fr' ? `Aujourd'hui • ${time}` : `Today • ${time}`;
-    if (isYesterday) return language === 'fr' ? `Hier • ${time}` : `Yesterday • ${time}`;
-    return `${date.toLocaleDateString([], { month: 'short', day: '2-digit' })} • ${time}`;
-  };
-
   const submissionToHistory = (submission: PointEvent) => {
     const details = (submission.details ?? {}) as Record<string, unknown>;
     const siteName = typeof details.siteName === 'string' ? details.siteName : typeof details.name === 'string' ? details.name : null;
@@ -78,7 +63,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
 
     return {
       id: submission.id,
-      date: formatHistoryDate(submission.createdAt),
+      date: formatContributionHistoryDate(submission.createdAt, language),
       location: locationLabel,
       type: typeLabel,
       xp: xpAwarded
@@ -147,12 +132,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   const nextBadge = badges.find((b) => !b.earned);
 
   const pointsThisWeek = useMemo(() => {
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mondayOffset);
-    const mondayKey = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
-    return ownEvents.filter((e) => e.createdAt.slice(0, 10) >= mondayKey).length;
+    return countActivitiesInCurrentWeek(ownEvents);
   }, [ownEvents]);
 
   const visibleHistory = showAllHistory ? history : history.slice(0, historyPreviewLimit);
@@ -443,6 +423,34 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
           </button>
         </div>
 
+        {(() => {
+          const WEEKLY_TARGET = 50;
+          const progress = Math.min(100, Math.round((pointsThisWeek / WEEKLY_TARGET) * 100));
+          return (
+            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                  {t('Weekly Target', 'Objectif hebdomadaire')}
+                </span>
+                <span className="text-xs font-bold text-gray-900">
+                  {pointsThisWeek}/{WEEKLY_TARGET}
+                </span>
+              </div>
+              <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#0f2b46] to-[#4c7c59] transition-all duration-700"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-gray-500">
+                {pointsThisWeek >= WEEKLY_TARGET
+                  ? t('Target reached! +20 XP bonus earned.', 'Objectif atteint ! +20 XP bonus gagnes.')
+                  : t('Complete 50 this week for a 20 XP bonus!', 'Completez 50 cette semaine pour un bonus de 20 XP !')}
+              </p>
+            </div>
+          );
+        })()}
+
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-3">
             <div className="flex items-center space-x-2 text-[#4c7c59]">
@@ -555,7 +563,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
                     <span className="text-xs font-semibold">{record.message}</span>
                   </div>
                   <div className="text-[10px] text-gray-500 uppercase font-bold tracking-widest">
-                    {formatHistoryDate(record.createdAt)} • {categoryLabel(record.payloadSummary.category)}
+                    {formatContributionHistoryDate(record.createdAt, language)} • {categoryLabel(record.payloadSummary.category)}
                   </div>
                   <div className="text-[11px] text-gray-500">
                     {record.payloadSummary.location

@@ -11,6 +11,8 @@ export type MapScope = "bonamoussadi" | "cameroon" | "global";
 export type UserRole = "agent" | "admin" | "client";
 export type CollectionAssignmentStatus = "pending" | "in_progress" | "completed" | "expired";
 export type DedupDecision = "allow_create" | "use_existing";
+export type ConsentStatus = "obtained" | "refused_pii_only" | "not_required" | "withdrawn";
+export type TrustTier = "new" | "standard" | "trusted" | "restricted";
 
 export interface SubmissionLocation {
   latitude: number;
@@ -51,6 +53,20 @@ export interface ClientDeviceInfo {
   deviceMemoryGb?: number | null;
   hardwareConcurrency?: number | null;
   isLowEnd?: boolean;
+}
+
+export interface GpsIntegrityReport {
+  mockLocationDetected: boolean;
+  mockLocationMethod: string | null;
+  hasAccelerometerData: boolean;
+  hasGyroscopeData: boolean;
+  accelerometerSampleCount: number;
+  motionDetectedDuringCapture: boolean;
+  gpsAccuracyMeters: number | null;
+  networkType: string | null;
+  gpsTimestamp: number | null;
+  deviceTimestamp: number;
+  timeDeltaMs: number | null;
 }
 
 export interface SubmissionDetails {
@@ -135,6 +151,10 @@ export interface SubmissionDetails {
   secondPhotoUrl?: string;
   fraudCheck?: SubmissionFraudCheck;
   clientDevice?: ClientDeviceInfo;
+  consentStatus?: ConsentStatus;
+  consentRecordedAt?: string;
+  gpsIntegrity?: GpsIntegrityReport;
+  photoEvidenceSha256?: string;
   source?: string;
   externalId?: string;
   isImported?: boolean;
@@ -154,6 +174,11 @@ export interface PointEvent {
   createdAt: string;
   source?: string;
   externalId?: string;
+  consentStatus?: ConsentStatus;
+  consentRecordedAt?: string;
+  erasedAt?: string | null;
+  erasedBy?: string | null;
+  erasureReason?: string | null;
 }
 
 export interface ProjectedPoint {
@@ -213,6 +238,10 @@ export interface SubmissionInput {
   clientExif?: ClientExifData | null;
   dedupDecision?: DedupDecision;
   dedupTargetPointId?: string;
+  consentStatus?: ConsentStatus;
+  consentRecordedAt?: string;
+  gpsIntegrity?: GpsIntegrityReport;
+  photoEvidenceSha256?: string;
 }
 
 export interface UserProfile {
@@ -227,6 +256,25 @@ export interface UserProfile {
   isAdmin?: boolean;
   role?: UserRole;
   mapScope?: MapScope;
+  trustScore?: number;
+  trustTier?: TrustTier;
+  suspendedUntil?: string | null;
+  wipeRequested?: boolean;
+  failedLoginCount?: number;
+  lockedUntil?: string | null;
+}
+
+export interface PrivacyRequest {
+  id: string;
+  requestType: "access" | "rectification" | "erasure";
+  status: "open" | "in_progress" | "completed" | "rejected";
+  subjectReference: string;
+  createdBy: string;
+  assignedTo?: string | null;
+  notes?: string | null;
+  resolutionNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface LeaderboardEntry {

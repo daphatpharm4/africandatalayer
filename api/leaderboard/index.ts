@@ -46,6 +46,16 @@ function getDisplayName(userId: string, profileName?: string, profileEmail?: str
   return source || "Contributor";
 }
 
+function redactUserId(userId: string): string {
+  if (!userId) return "contributor";
+  if (userId.includes("@")) {
+    const [name] = userId.split("@");
+    const prefix = name.slice(0, 2);
+    return `${prefix}***`;
+  }
+  return `${userId.slice(0, 3)}***`;
+}
+
 export async function GET(): Promise<Response> {
   try {
     const submissions = await buildContributionEvents();
@@ -111,7 +121,7 @@ export async function GET(): Promise<Response> {
       const rankingScore = Math.round(row.contributions * averageQualityScore);
       return {
         rank: index + 1,
-        userId: row.userId,
+        userId: redactUserId(row.userId),
         name: getDisplayName(row.userId, profile?.name, profile?.email, profile?.phone),
         xp: row.xp,
         contributions: row.contributions,

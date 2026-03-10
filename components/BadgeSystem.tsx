@@ -12,6 +12,7 @@ import {
   Building2
 } from 'lucide-react';
 import type { PointEvent } from '../shared/types';
+import { computeContributionSummary } from '../lib/shared/contributionMetrics';
 
 export interface Badge {
   id: string;
@@ -43,7 +44,7 @@ export function computeBadges(events: PointEvent[], language: 'en' | 'fr'): Badg
   });
   let consecutiveHighQuality = 0;
   let maxConsecutiveHighQuality = 0;
-  for (const event of events.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())) {
+  for (const event of [...events].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())) {
     const details = (event.details ?? {}) as Record<string, unknown>;
     if (typeof details.confidenceScore === 'number' && details.confidenceScore > 90) {
       consecutiveHighQuality += 1;
@@ -53,16 +54,7 @@ export function computeBadges(events: PointEvent[], language: 'en' | 'fr'): Badg
     }
   }
 
-  const dateDays = new Set(events.map((e) => e.createdAt.slice(0, 10)));
-  const sortedDates = Array.from(dateDays).sort().reverse();
-  let streakDays = 0;
-  const cursor = new Date();
-  while (true) {
-    const key = cursor.toISOString().slice(0, 10);
-    if (!sortedDates.includes(key)) break;
-    streakDays += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
+  const streakDays = computeContributionSummary(events).streakDays;
 
   const eveningEvents = events.filter((e) => {
     const hour = new Date(e.createdAt).getHours();

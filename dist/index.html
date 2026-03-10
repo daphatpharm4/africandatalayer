@@ -64,6 +64,30 @@
         .high-contrast .font-semibold { font-weight: 700 !important; }
         .high-contrast .font-bold { font-weight: 800 !important; }
         .high-contrast .border-gray-100 { border-color: #d1d5db !important; }
+
+        /* XP Popup animations */
+        @keyframes xp-count-up {
+            from { transform: translateY(20px) scale(0.8); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes xp-slide-in {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes xp-pulse {
+            0%, 100% { transform: scaleX(1); }
+            50% { transform: scaleX(1.02); }
+        }
+
+        /* Level-up celebration animations */
+        @keyframes level-scale-in {
+            from { transform: scale(0.3); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        @keyframes confetti-fall {
+            0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
     </style>
 
 <link rel="stylesheet" href="/index.css">
@@ -80,7 +104,7 @@
   }
 }
 </script>
-  <script type="module" crossorigin src="/assets/index-CZcRUqgP.js"></script>
+  <script type="module" crossorigin src="/assets/index-Ch4PHfnq.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-CIGW-MKW.css">
 </head>
 <body class="antialiased overflow-hidden">

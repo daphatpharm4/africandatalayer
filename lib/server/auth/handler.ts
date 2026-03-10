@@ -6,12 +6,67 @@ import bcrypt from "bcryptjs";
 import type { UserProfile } from "../../../shared/types.js";
 import { errorResponse } from "../http.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../storage/index.js";
-import { getAuthSecret, getSessionCookieName, isSecureRequest } from "../../auth.js";
+import { getAuthBaseUrl, getAuthSecret, getSessionCookieName, isSecureRequest, SESSION_CONFIG } from "../../auth.js";
 import { inferDefaultDisplayName, normalizeEmail, normalizeIdentifier } from "../../shared/identifier.js";
 import { withAbsoluteUrl } from "./requestUrl.js";
+import { consumeRateLimit } from "../rateLimit.js";
+import { logSecurityEvent } from "../securityAudit.js";
+import { captureServerException } from "../sentry.js";
+import { logWarn } from "../logger.js";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
+const LOCKOUT_MAX_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MINUTES = 30;
+
+function extractRequestIp(request: Request | undefined): string | null {
+  if (!request) return null;
+  const header =
+    request.headers.get("x-vercel-forwarded-for") ??
+    request.headers.get("x-forwarded-for") ??
+    request.headers.get("x-real-ip");
+  const value = header?.split(",")[0]?.trim();
+  return value || null;
+}
+
+function isBcryptHash(value: string): boolean {
+  return /^\$2[aby]\$/.test(value);
+}
+
+async function persistLoginFailure(profile: UserProfile | null, request: Request | undefined, userId: string): Promise<void> {
+  if (!profile) {
+    await logSecurityEvent({
+      eventType: "login_failure",
+      userId,
+      request,
+      details: { reason: "invalid_credentials", hasProfile: false },
+    });
+    return;
+  }
+
+  const nextCount = (profile.failedLoginCount ?? 0) + 1;
+  profile.failedLoginCount = nextCount;
+  if (nextCount >= LOCKOUT_MAX_ATTEMPTS) {
+    profile.lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();
+  }
+  await upsertUserProfile(profile.id, profile);
+  await logSecurityEvent({
+    eventType: nextCount >= LOCKOUT_MAX_ATTEMPTS ? "account_locked" : "login_failure",
+    userId: profile.id,
+    request,
+    details: {
+      failedLoginCount: nextCount,
+      lockedUntil: profile.lockedUntil ?? null,
+    },
+  });
+}
+
+async function clearLoginFailure(profile: UserProfile): Promise<void> {
+  if (!profile.failedLoginCount && !profile.lockedUntil) return;
+  profile.failedLoginCount = 0;
+  profile.lockedUntil = null;
+  await upsertUserProfile(profile.id, profile);
+}
 
 const providers: AppProviders = [
   Credentials({
@@ -21,7 +76,7 @@ const providers: AppProviders = [
       email: { label: "Email", type: "text" },
       password: { label: "Password", type: "password" },
     },
-    async authorize(credentials) {
+    async authorize(credentials, request) {
       const rawIdentifier =
         typeof credentials?.identifier === "string"
           ? credentials.identifier
@@ -33,26 +88,75 @@ const providers: AppProviders = [
 
       if (!normalizedIdentifier || !password) return null;
       const identifier = normalizedIdentifier.value;
+      const ip = extractRequestIp(request);
+      if (ip) {
+        const authRate = await consumeRateLimit({
+          route: "POST /api/auth/callback/credentials",
+          key: `${ip}:${identifier}`,
+          windowSeconds: 15 * 60,
+          max: 10,
+          request,
+          userId: identifier,
+        });
+        if (!authRate.allowed) {
+          return null;
+        }
+      }
 
       const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
       const adminPassword = process.env.ADMIN_PASSWORD ?? "";
       if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail) {
-        let adminMatch = false;
-        if (adminPassword.startsWith("$2")) {
-          adminMatch = await bcrypt.compare(password, adminPassword);
-        } else {
-          // Fallback for plain-text password (legacy). Update ADMIN_PASSWORD to a bcrypt hash.
-          console.warn("[auth] ADMIN_PASSWORD is not a bcrypt hash. Please update it to a bcrypt hash.");
-          adminMatch = password === adminPassword;
+        if (!isBcryptHash(adminPassword)) {
+          logWarn("auth.admin_password_invalid_format", { userId: identifier });
+          return null;
         }
-        if (adminMatch) return { id: identifier, name: "Admin", email: identifier };
+        const adminMatch = await bcrypt.compare(password, adminPassword);
+        if (adminMatch) {
+          await logSecurityEvent({
+            eventType: "login_success",
+            userId: identifier,
+            request,
+            details: { method: "credentials_admin" },
+          });
+          return { id: identifier, name: "Admin", email: identifier };
+        }
+        await logSecurityEvent({
+          eventType: "login_failure",
+          userId: identifier,
+          request,
+          details: { reason: "invalid_admin_credentials" },
+        });
+        return null;
       }
 
       const profile = await getUserProfile(identifier);
-      if (!profile?.passwordHash) return null;
+      if (profile?.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
+        await logSecurityEvent({
+          eventType: "login_failure",
+          userId: profile.id,
+          request,
+          details: { reason: "account_locked", lockedUntil: profile.lockedUntil },
+        });
+        return null;
+      }
+      if (!profile?.passwordHash) {
+        await persistLoginFailure(profile ?? null, request, identifier);
+        return null;
+      }
 
-      const valid = bcrypt.compareSync(password, profile.passwordHash);
-      if (!valid) return null;
+      const valid = await bcrypt.compare(password, profile.passwordHash);
+      if (!valid) {
+        await persistLoginFailure(profile, request, identifier);
+        return null;
+      }
+
+      await clearLoginFailure(profile);
+      await logSecurityEvent({
+        eventType: "login_success",
+        userId: profile.id,
+        request,
+        details: { method: "credentials" },
+      });
 
       const fallbackName = inferDefaultDisplayName(profile.email ?? profile.phone ?? profile.id);
       return { id: profile.id, name: profile.name || fallbackName, email: profile.email ?? undefined };
@@ -101,18 +205,19 @@ const authSecret = getAuthSecret();
 if (!authSecret) {
   throw new Error("AUTH_SECRET (or NEXTAUTH_SECRET) is required for Auth.js");
 }
+const authBaseUrl = getAuthBaseUrl();
+if (!authBaseUrl) {
+  throw new Error("AUTH_URL (or NEXTAUTH_URL) is required for Auth.js");
+}
 
 export default async function handler(request: Request): Promise<Response> {
   try {
-    const normalizedRequest = await withAbsoluteUrl(
-      request,
-      process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000"
-    );
+    const normalizedRequest = await withAbsoluteUrl(request, authBaseUrl);
     return await Auth(normalizedRequest, {
       providers,
       secret: authSecret,
-      session: { strategy: "jwt" },
-      trustHost: true,
+      session: { strategy: "jwt", maxAge: SESSION_CONFIG.maxAge, updateAge: SESSION_CONFIG.updateAge },
+      trustHost: false,
       basePath: "/api/auth",
       cookies: {
         sessionToken: {
@@ -165,6 +270,12 @@ export default async function handler(request: Request): Promise<Response> {
                 };
                 await upsertUserProfile(email, profile);
               }
+              await logSecurityEvent({
+                eventType: "login_success",
+                userId: email,
+                request: normalizedRequest,
+                details: { method: provider },
+              });
               return true;
             }
 
@@ -174,6 +285,12 @@ export default async function handler(request: Request): Promise<Response> {
                 existing.mapScope = "bonamoussadi";
                 await upsertUserProfile(email, existing);
               }
+              await logSecurityEvent({
+                eventType: "login_success",
+                userId: email,
+                request: normalizedRequest,
+                details: { method: provider },
+              });
               return true;
             }
 
@@ -188,6 +305,12 @@ export default async function handler(request: Request): Promise<Response> {
               mapScope: "bonamoussadi",
             };
             await upsertUserProfile(email, profile);
+            await logSecurityEvent({
+              eventType: "login_success",
+              userId: email,
+              request: normalizedRequest,
+              details: { method: provider },
+            });
             return true;
           } catch (error) {
             // Do not block OAuth sign-in if profile sync fails.
@@ -250,6 +373,7 @@ export default async function handler(request: Request): Promise<Response> {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
+    captureServerException(error, { route: "auth_handler" });
     throw error;
   }
 }

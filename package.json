@@ -7,6 +7,10 @@
     "dev": "vite",
     "build": "npm run check:function-budget && vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "node --test tests/*.test.ts",
+    "test:ci": "npm run lint && npm run typecheck && npm run test && npm run build",
     "check:function-budget": "node scripts/check-vercel-function-budget.mjs",
     "typecheck": "tsc --noEmit",
     "migrate": "node scripts/migrate.mjs",
@@ -19,6 +23,8 @@
   "dependencies": {
     "@auth/core": "^0.33.0",
     "@google/genai": "1.3.0",
+    "@sentry/browser": "^10.42.0",
+    "@sentry/node": "^10.42.0",
     "@vercel/analytics": "^1.6.1",
     "@vercel/blob": "^2.0.1",
     "@vercel/edge-config": "^1.4.0",
@@ -26,19 +32,27 @@
     "bcryptjs": "^2.4.3",
     "exifr": "^7.1.3",
     "leaflet": "^1.9.4",
+    "leaflet.heat": "^0.2.0",
     "lucide-react": "0.475.0",
     "pg": "^8.18.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-leaflet": "^5.0.0",
-    "recharts": "2.15.0"
+    "recharts": "2.15.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.19.7",
     "@types/pg": "^8.16.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "eslint": "^10.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.4.0",
+    "prettier": "^3.8.1",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.57.0",
     "vite": "^6.2.0"
   }
 }

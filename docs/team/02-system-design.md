@@ -1388,7 +1388,7 @@ STATE MACHINE PER QUEUE ITEM
 | Two users CREATE the same POI | Medium | **Accept both** as separate points. Admin merges via point_id reassignment. |
 | Two users ENRICH the same field on the same point | Low | **Last-write-wins** at the field level. The `mergeDetails()` function in `pointProjection.ts` (line 136) already implements this. |
 | Offline queue replays create duplicate events | High (current gap) | **Idempotency key** (Section 5.4). Server returns cached response for duplicate key. |
-| User submits enrichment for a gap that was already filled by someone else | Medium | Current: returns 400 "ENRICH_EVENT must include at least one currently missing field". **Improvement:** Accept the enrichment but store as a competing value. Admin or confidence scoring resolves. |
+| User submits enrichment for a field that is already filled | Medium | Current: accepts the enrichable field update and applies **last-write-wins** during projection. Competing values are preserved in the event log; admin review or confidence scoring can still resolve disputes later. |
 
 **Conflict resolution for offline queue:**
 

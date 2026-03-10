@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
+import { Circle, MapContainer, Marker, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { Layers, Navigation } from 'lucide-react';
 import { Category, DataPoint } from '../../types';
-import type { MapScope } from '../../shared/types';
+import type { MapScope, ZoneBounds } from '../../shared/types';
 import { LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 
 type MapPointGroup = {
@@ -10,6 +11,43 @@ type MapPointGroup = {
   latitude: number;
   longitude: number;
   points: DataPoint[];
+};
+
+interface AssignmentZone {
+  id: string;
+  zoneLabel: string;
+  zoneBounds: ZoneBounds;
+}
+
+const HeatmapLayer: React.FC<{ points: [number, number, number][] }> = ({ points }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!points.length) return;
+
+    let heatLayer: L.Layer | null = null;
+    const loadHeat = async () => {
+      try {
+        await import('leaflet.heat');
+        heatLayer = (L as any).heatLayer(points, {
+          radius: 20,
+          blur: 15,
+          maxZoom: 17,
+          max: 1.0,
+        });
+        (heatLayer as L.Layer).addTo(map);
+      } catch {
+        // leaflet.heat not available, skip
+      }
+    };
+
+    void loadHeat();
+    return () => {
+      if (heatLayer) map.removeLayer(heatLayer);
+    };
+  }, [map, points]);
+
+  return null;
 };
 
 interface Props {
@@ -27,6 +65,8 @@ interface Props {
   language: 'en' | 'fr';
   t: (en: string, fr: string) => string;
   isLowEndDevice: boolean;
+  nearbyEnrichCount?: number;
+  assignmentZones?: AssignmentZone[];
 }
 
 const createMarkerIcon = (color: string) =>
@@ -138,8 +178,16 @@ const HomeMap: React.FC<Props> = ({
   formatPharmacyOpenStatus,
   language,
   t,
-  isLowEndDevice
+  isLowEndDevice,
+  nearbyEnrichCount = 0,
+  assignmentZones = [],
 }) => {
+  const [showHeatmap, setShowHeatmap] = useState(false);
+
+  const heatPoints: [number, number, number][] = showHeatmap
+    ? mapPointGroups.map((g) => [g.latitude, g.longitude, 1])
+    : [];
+
   return (
     <div className="flex-1 bg-[#e7eef4] relative overflow-hidden z-0 min-h-0">
       <MapContainer
@@ -158,6 +206,21 @@ const HomeMap: React.FC<Props> = ({
       >
         <MapSizeSync active />
         <AgentLocationMarker />
+        {assignmentZones.map((zone) => (
+          <Rectangle
+            key={zone.id}
+            bounds={[
+              [zone.zoneBounds.south, zone.zoneBounds.west],
+              [zone.zoneBounds.north, zone.zoneBounds.east],
+            ]}
+            pathOptions={{ color: '#c86b4a', fillColor: '#c86b4a', fillOpacity: 0.1, weight: 2 }}
+          >
+            <Popup>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{zone.zoneLabel}</span>
+            </Popup>
+          </Rectangle>
+        ))}
+        {showHeatmap && heatPoints.length > 0 && <HeatmapLayer points={heatPoints} />}
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -241,6 +304,29 @@ const HomeMap: React.FC<Props> = ({
           <div className="w-2 h-2 rounded-full bg-[#4c7c59] animate-pulse"></div>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={() => setShowHeatmap((prev) => !prev)}
+        className={`absolute top-20 right-4 z-20 w-10 h-10 rounded-xl border shadow-sm flex items-center justify-center transition-colors ${
+          showHeatmap ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-white/95 text-gray-600 border-gray-100'
+        }`}
+        title={t('Toggle heatmap', 'Basculer carte thermique')}
+      >
+        <Layers size={18} />
+      </button>
+      {nearbyEnrichCount > 0 && (
+        <div className="absolute bottom-4 inset-x-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Navigation size={14} className="text-[#c86b4a]" />
+            <span className="text-xs font-bold text-gray-900">
+              {nearbyEnrichCount} {t('points nearby to enrich', 'points a enrichir a proximite')}
+            </span>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-[#c86b4a]">
+            {'<200m'}
+          </span>
+        </div>
+      )}
     </div>
   );
 };

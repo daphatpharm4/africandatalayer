@@ -2,23 +2,23 @@ import bcrypt from "bcryptjs";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
+import { registerBodySchema } from "../../lib/server/validation.js";
 import type { UserProfile } from "../../shared/types.js";
 
-interface RegisterBody {
-  identifier?: string;
-  email?: string;
-  password?: string;
-  name?: string;
-}
-
 export async function POST(request: Request): Promise<Response> {
-  let body: RegisterBody;
+  let parsedBody: unknown;
   try {
-    body = (await request.json()) as RegisterBody;
+    parsedBody = await request.json();
   } catch {
     return errorResponse("Invalid JSON body", 400);
   }
 
+  const validation = registerBodySchema.safeParse(parsedBody);
+  if (!validation.success) {
+    return errorResponse(validation.error.issues[0]?.message ?? "Invalid registration payload", 400);
+  }
+
+  const body = validation.data;
   const rawIdentifier = body?.identifier ?? body?.email;
   const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
   const password = body?.password;
@@ -28,15 +28,11 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse("Phone/email and password are required", 400);
   }
 
-  if (password.length < 8) {
-    return errorResponse("Password must be at least 8 characters", 400);
-  }
-
   try {
     const identifier = normalizedIdentifier.value;
     const existing = await getUserProfile(identifier);
     if (existing) {
-      return errorResponse("User already exists", 409);
+      return jsonResponse({ ok: true }, { status: 201 });
     }
 
     const profile: UserProfile = {
@@ -47,8 +43,14 @@ export async function POST(request: Request): Promise<Response> {
       image: "",
       occupation: "",
       XP: 0,
-      passwordHash: bcrypt.hashSync(password, 10),
+      passwordHash: await bcrypt.hash(password, 12),
       mapScope: "bonamoussadi",
+      trustScore: 50,
+      trustTier: "standard",
+      failedLoginCount: 0,
+      lockedUntil: null,
+      wipeRequested: false,
+      suspendedUntil: null,
     };
 
     await upsertUserProfile(identifier, profile);

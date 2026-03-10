@@ -1,12 +1,30 @@
 import { createHash } from "node:crypto";
 import { query } from "../db.js";
-import type { LegacySubmission, MapScope, PointEvent, PointEventType, SubmissionCategory, UserProfile, UserRole } from "../../../shared/types.js";
+import type {
+  ConsentStatus,
+  LegacySubmission,
+  MapScope,
+  PointEvent,
+  PointEventType,
+  SubmissionCategory,
+  TrustTier,
+  UserProfile,
+  UserRole,
+} from "../../../shared/types.js";
 import { isValidCategory } from "../../../shared/verticals.js";
 import { normalizeEmail, normalizePhone } from "../../shared/identifier.js";
+import { normalizeCreatedAt } from "./createdAt.js";
 import type { StorageStore } from "./types.js";
 
 const VALID_MAP_SCOPES: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
 const VALID_ROLES: ReadonlySet<UserRole> = new Set(["agent", "admin", "client"]);
+const VALID_TRUST_TIERS: ReadonlySet<TrustTier> = new Set(["new", "standard", "trusted", "restricted"]);
+const VALID_CONSENT_STATUSES: ReadonlySet<ConsentStatus> = new Set([
+  "obtained",
+  "refused_pii_only",
+  "not_required",
+  "withdrawn",
+]);
 let phoneColumnState: "unknown" | "present" | "missing" = "unknown";
 
 function normalizeUserId(input: string): string {
@@ -33,6 +51,26 @@ function parseXp(input: unknown): number {
   return Math.max(0, Math.round(value));
 }
 
+function parseTrustScore(input: unknown): number {
+  const value = typeof input === "number" ? input : Number(input);
+  if (!Number.isFinite(value)) return 50;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function normalizeTrustTier(input: unknown): TrustTier {
+  if (typeof input !== "string") return "standard";
+  const normalized = input.trim().toLowerCase() as TrustTier;
+  if (!VALID_TRUST_TIERS.has(normalized)) return "standard";
+  return normalized;
+}
+
+function normalizeConsentStatus(input: unknown): ConsentStatus | undefined {
+  if (typeof input !== "string") return undefined;
+  const normalized = input.trim().toLowerCase() as ConsentStatus;
+  if (!VALID_CONSENT_STATUSES.has(normalized)) return undefined;
+  return normalized;
+}
+
 function isUuid(input: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input);
 }
@@ -49,14 +87,6 @@ function normalizeEventId(input: string): string {
   const trimmed = input.trim();
   if (isUuid(trimmed)) return trimmed.toLowerCase();
   return deterministicUuid(`event:${trimmed}`);
-}
-
-function normalizeCreatedAt(input: unknown): string {
-  if (typeof input === "string") {
-    const parsed = new Date(input);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-  }
-  return new Date().toISOString();
 }
 
 function parseCategory(input: unknown): SubmissionCategory {
@@ -92,6 +122,15 @@ function rowToUserProfile(row: Record<string, unknown>): UserProfile {
     isAdmin: Boolean(row.is_admin),
     role: normalizeRole(row.role),
     mapScope: normalizeMapScope(row.map_scope),
+    trustScore: parseTrustScore(row.trust_score),
+    trustTier: normalizeTrustTier(row.trust_tier),
+    suspendedUntil: typeof row.suspended_until === "string" ? normalizeCreatedAt(row.suspended_until) : null,
+    wipeRequested: row.wipe_requested === true,
+    failedLoginCount:
+      typeof row.failed_login_count === "number" && Number.isFinite(row.failed_login_count)
+        ? Math.max(0, Math.round(row.failed_login_count))
+        : 0,
+    lockedUntil: typeof row.locked_until === "string" ? normalizeCreatedAt(row.locked_until) : null,
   };
 }
 
@@ -105,7 +144,8 @@ function isMissingPhoneColumnError(error: unknown): boolean {
 async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
   const result = await query<Record<string, unknown>>(
     `
-      select id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope
+      select id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
+             trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until
       from user_profiles
       where id = $1
       limit 1
@@ -120,6 +160,7 @@ async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
 
 function rowToPointEvent(row: Record<string, unknown>): PointEvent {
   const details = row.details && typeof row.details === "object" ? (row.details as PointEvent["details"]) : {};
+  const consentStatus = normalizeConsentStatus(row.consent_status);
 
   return {
     id: String(row.id),
@@ -136,6 +177,11 @@ function rowToPointEvent(row: Record<string, unknown>): PointEvent {
     createdAt: normalizeCreatedAt(row.created_at),
     source: typeof row.source === "string" ? row.source : undefined,
     externalId: typeof row.external_id === "string" ? row.external_id : undefined,
+    consentStatus,
+    consentRecordedAt: typeof row.consent_recorded_at === "string" ? normalizeCreatedAt(row.consent_recorded_at) : undefined,
+    erasedAt: typeof row.erased_at === "string" ? normalizeCreatedAt(row.erased_at) : null,
+    erasedBy: typeof row.erased_by === "string" ? row.erased_by : null,
+    erasureReason: typeof row.erasure_reason === "string" ? row.erasure_reason : null,
   };
 }
 
@@ -149,6 +195,7 @@ async function getUserProfile(userId: string): Promise<UserProfile | null> {
     const result = await query<Record<string, unknown>>(
       `
         select id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope
+               , trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until
         from user_profiles
         where id = $1
         limit 1
@@ -178,6 +225,12 @@ async function upsertUserProfileLegacy(params: {
   isAdmin: boolean;
   role: UserRole;
   mapScope: MapScope;
+  trustScore: number;
+  trustTier: TrustTier;
+  suspendedUntil: string | null;
+  wipeRequested: boolean;
+  failedLoginCount: number;
+  lockedUntil: string | null;
 }): Promise<void> {
   const legacyEmail = params.email ?? normalizeEmail(params.id);
   if (!legacyEmail) {
@@ -186,8 +239,11 @@ async function upsertUserProfileLegacy(params: {
 
   await query(
     `
-      insert into user_profiles (id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, updated_at)
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+      insert into user_profiles (
+        id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
+        trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, updated_at
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14, $15, $16::timestamptz, now())
       on conflict (id) do update
       set
         email = excluded.email,
@@ -199,6 +255,12 @@ async function upsertUserProfileLegacy(params: {
         is_admin = excluded.is_admin,
         role = excluded.role,
         map_scope = excluded.map_scope,
+        trust_score = excluded.trust_score,
+        trust_tier = excluded.trust_tier,
+        suspended_until = excluded.suspended_until,
+        wipe_requested = excluded.wipe_requested,
+        failed_login_count = excluded.failed_login_count,
+        locked_until = excluded.locked_until,
         updated_at = now()
     `,
     [
@@ -212,6 +274,12 @@ async function upsertUserProfileLegacy(params: {
       params.isAdmin,
       params.role,
       params.mapScope,
+      params.trustScore,
+      params.trustTier,
+      params.suspendedUntil,
+      params.wipeRequested,
+      params.failedLoginCount,
+      params.lockedUntil,
     ],
   );
 }
@@ -230,12 +298,24 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   const isAdmin = profile.isAdmin === true;
   const role = normalizeRole(profile.role);
   const mapScope = normalizeMapScope(profile.mapScope);
+  const trustScore = parseTrustScore(profile.trustScore);
+  const trustTier = normalizeTrustTier(profile.trustTier);
+  const suspendedUntil = typeof profile.suspendedUntil === "string" ? normalizeCreatedAt(profile.suspendedUntil) : null;
+  const wipeRequested = profile.wipeRequested === true;
+  const failedLoginCount =
+    typeof profile.failedLoginCount === "number" && Number.isFinite(profile.failedLoginCount)
+      ? Math.max(0, Math.round(profile.failedLoginCount))
+      : 0;
+  const lockedUntil = typeof profile.lockedUntil === "string" ? normalizeCreatedAt(profile.lockedUntil) : null;
 
   const runWithPhone = async () => {
     await query(
       `
-        insert into user_profiles (id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, updated_at)
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+        insert into user_profiles (
+          id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
+          trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, updated_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::timestamptz, $15, $16, $17::timestamptz, now())
         on conflict (id) do update
         set
           email = excluded.email,
@@ -248,14 +328,55 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
           is_admin = excluded.is_admin,
           role = excluded.role,
           map_scope = excluded.map_scope,
+          trust_score = excluded.trust_score,
+          trust_tier = excluded.trust_tier,
+          suspended_until = excluded.suspended_until,
+          wipe_requested = excluded.wipe_requested,
+          failed_login_count = excluded.failed_login_count,
+          locked_until = excluded.locked_until,
           updated_at = now()
       `,
-      [id, email, phone, name, image, occupation, xp, passwordHash, isAdmin, role, mapScope],
+      [
+        id,
+        email,
+        phone,
+        name,
+        image,
+        occupation,
+        xp,
+        passwordHash,
+        isAdmin,
+        role,
+        mapScope,
+        trustScore,
+        trustTier,
+        suspendedUntil,
+        wipeRequested,
+        failedLoginCount,
+        lockedUntil,
+      ],
     );
   };
 
   if (phoneColumnState === "missing") {
-    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, role, mapScope });
+    await upsertUserProfileLegacy({
+      id,
+      email,
+      name,
+      image,
+      occupation,
+      xp,
+      passwordHash,
+      isAdmin,
+      role,
+      mapScope,
+      trustScore,
+      trustTier,
+      suspendedUntil,
+      wipeRequested,
+      failedLoginCount,
+      lockedUntil,
+    });
     return;
   }
 
@@ -265,7 +386,24 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   } catch (error) {
     if (!isMissingPhoneColumnError(error)) throw error;
     phoneColumnState = "missing";
-    await upsertUserProfileLegacy({ id, email, name, image, occupation, xp, passwordHash, isAdmin, role, mapScope });
+    await upsertUserProfileLegacy({
+      id,
+      email,
+      name,
+      image,
+      occupation,
+      xp,
+      passwordHash,
+      isAdmin,
+      role,
+      mapScope,
+      trustScore,
+      trustTier,
+      suspendedUntil,
+      wipeRequested,
+      failedLoginCount,
+      lockedUntil,
+    });
   }
 }
 
@@ -275,8 +413,8 @@ async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProf
 
   const fetchRows = async (includePhone: boolean): Promise<UserProfile[]> => {
     const cols = includePhone
-      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope"
-      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope";
+      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until"
+      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until";
     const result = await query<Record<string, unknown>>(
       `select ${cols} from user_profiles where id = ANY($1::text[])`,
       [normalizedIds],
@@ -305,6 +443,7 @@ async function getPointEvents(): Promise<PointEvent[]> {
   const result = await query<Record<string, unknown>>(
     `
       select id, point_id, event_type, user_id, category, latitude, longitude, details, photo_url, created_at, source, external_id
+             , consent_status, consent_recorded_at, erased_at, erased_by, erasure_reason
       from point_events
       order by created_at asc
     `,
@@ -326,11 +465,19 @@ async function insertPointEvent(event: PointEvent): Promise<void> {
   const createdAt = normalizeCreatedAt(event.createdAt);
   const source = typeof event.source === "string" ? event.source : null;
   const externalId = typeof event.externalId === "string" ? event.externalId : null;
+  const consentStatus = normalizeConsentStatus(event.consentStatus) ?? null;
+  const consentRecordedAt = typeof event.consentRecordedAt === "string" ? normalizeCreatedAt(event.consentRecordedAt) : null;
+  const erasedAt = typeof event.erasedAt === "string" ? normalizeCreatedAt(event.erasedAt) : null;
+  const erasedBy = typeof event.erasedBy === "string" ? event.erasedBy : null;
+  const erasureReason = typeof event.erasureReason === "string" ? event.erasureReason : null;
 
   await query(
     `
-      insert into point_events (id, point_id, event_type, user_id, category, latitude, longitude, details, photo_url, created_at, source, external_id)
-      values ($1::uuid, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::timestamptz, $11, $12)
+      insert into point_events (
+        id, point_id, event_type, user_id, category, latitude, longitude, details, photo_url, created_at, source, external_id,
+        consent_status, consent_recorded_at, erased_at, erased_by, erasure_reason
+      )
+      values ($1::uuid, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10::timestamptz, $11, $12, $13, $14::timestamptz, $15::timestamptz, $16, $17)
       on conflict (id) do update
       set
         point_id = excluded.point_id,
@@ -343,9 +490,32 @@ async function insertPointEvent(event: PointEvent): Promise<void> {
         photo_url = excluded.photo_url,
         created_at = excluded.created_at,
         source = excluded.source,
-        external_id = excluded.external_id
+        external_id = excluded.external_id,
+        consent_status = excluded.consent_status,
+        consent_recorded_at = excluded.consent_recorded_at,
+        erased_at = excluded.erased_at,
+        erased_by = excluded.erased_by,
+        erasure_reason = excluded.erasure_reason
     `,
-    [id, pointId, eventType, userId, category, location.latitude, location.longitude, JSON.stringify(details), photoUrl, createdAt, source, externalId],
+    [
+      id,
+      pointId,
+      eventType,
+      userId,
+      category,
+      location.latitude,
+      location.longitude,
+      JSON.stringify(details),
+      photoUrl,
+      createdAt,
+      source,
+      externalId,
+      consentStatus,
+      consentRecordedAt,
+      erasedAt,
+      erasedBy,
+      erasureReason,
+    ],
   );
 }
 

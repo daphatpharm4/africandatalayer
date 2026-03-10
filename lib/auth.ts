@@ -1,12 +1,24 @@
 import { decode, getToken } from "@auth/core/jwt";
 import type { JWT } from "@auth/core/jwt";
 
+export const SESSION_CONFIG = {
+  maxAge: 8 * 60 * 60,
+  updateAge: 30 * 60,
+};
+
 export function getAuthSecret(): string | null {
   return process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? null;
 }
 
+export function getAuthBaseUrl(): string | null {
+  const raw = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? null;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  return trimmed || null;
+}
+
 export function isSecureRequest(): boolean {
-  const authUrl = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? "";
+  const authUrl = getAuthBaseUrl() ?? "";
   if (typeof authUrl === "string" && authUrl.startsWith("https://")) return true;
   return process.env.NODE_ENV === "production";
 }

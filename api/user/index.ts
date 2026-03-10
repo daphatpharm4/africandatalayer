@@ -10,6 +10,9 @@ import {
   updateAssignment,
 } from "../../lib/server/collectionAssignments.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import { logSecurityEvent } from "../../lib/server/securityAudit.js";
+import { updateUserTrust } from "../../lib/server/userTrust.js";
+import { userStatusPatchSchema, userUpdateSchema } from "../../lib/server/validation.js";
 import type {
   CollectionAssignmentCreateInput,
   CollectionAssignmentStatus,
@@ -43,12 +46,43 @@ function isAdminToken(token: unknown): boolean {
   return (token as { isAdmin?: unknown } | undefined)?.isAdmin === true;
 }
 
+function sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit<T, "passwordHash"> {
+  const { passwordHash: _passwordHash, ...safe } = profile;
+  return safe;
+}
+
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
   const authIsAdmin = isAdminToken(auth.token);
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
+
+  if (view === "status") {
+    const requestedUserId = url.searchParams.get("userId")?.trim().toLowerCase() ?? auth.id;
+    if (!authIsAdmin && requestedUserId !== auth.id) return errorResponse("Forbidden", 403);
+    try {
+      const profile = await getUserProfile(requestedUserId);
+      if (!profile) return errorResponse("Profile not found", 404);
+      return jsonResponse(
+        {
+          id: profile.id,
+          role: profile.role ?? "agent",
+          trustScore: profile.trustScore ?? 50,
+          trustTier: profile.trustTier ?? "standard",
+          suspendedUntil: profile.suspendedUntil ?? null,
+          wipeRequested: profile.wipeRequested === true,
+          lockedUntil: profile.lockedUntil ?? null,
+        },
+        { status: 200 },
+      );
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
+  }
 
   if (view === "assignments") {
     const status = normalizeAssignmentStatus(url.searchParams.get("status"));
@@ -117,7 +151,7 @@ export async function GET(request: Request): Promise<Response> {
       await upsertUserProfile(auth.id, profile);
     }
 
-    return jsonResponse(profile, { status: 200 });
+    return jsonResponse(sanitizeProfile(profile), { status: 200 });
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
@@ -126,21 +160,22 @@ export async function GET(request: Request): Promise<Response> {
   }
 }
 
-interface UpdateUserBody {
-  occupation?: unknown;
-  mapScope?: unknown;
-}
-
 export async function PUT(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
 
-  let body: UpdateUserBody;
+  let rawBody: unknown;
   try {
-    body = (await request.json()) as UpdateUserBody;
+    rawBody = await request.json();
   } catch {
     return errorResponse("Invalid JSON body", 400);
   }
+
+  const validation = userUpdateSchema.safeParse(rawBody);
+  if (!validation.success) {
+    return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 400);
+  }
+  const body = validation.data;
 
   try {
     const profile = await getUserProfile(auth.id);
@@ -163,7 +198,7 @@ export async function PUT(request: Request): Promise<Response> {
     }
 
     await upsertUserProfile(auth.id, profile);
-    return jsonResponse(profile, { status: 200 });
+    return jsonResponse(sanitizeProfile(profile), { status: 200 });
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
@@ -212,6 +247,55 @@ export async function PATCH(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
+
+  if (view === "status") {
+    if (!authIsAdmin) return errorResponse("Forbidden", 403);
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+    const validation = userStatusPatchSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 400);
+    }
+    const body = validation.data;
+    try {
+      const profile = await getUserProfile(body.userId);
+      if (!profile) return errorResponse("Profile not found", 404);
+      const nextStatus = await updateUserTrust({
+        userId: body.userId,
+        setScore: body.trustScore,
+        suspendedUntil: body.suspendedUntil,
+        wipeRequested: body.wipeRequested,
+      });
+      await logSecurityEvent({
+        eventType: body.wipeRequested ? "remote_wipe_triggered" : "role_changed",
+        userId: body.userId,
+        request,
+        details: {
+          trustScore: nextStatus.trustScore,
+          trustTier: nextStatus.trustTier,
+          suspendedUntil: nextStatus.suspendedUntil,
+          wipeRequested: nextStatus.wipeRequested,
+        },
+      });
+      return jsonResponse(
+        {
+          id: body.userId,
+          ...nextStatus,
+        },
+        { status: 200 },
+      );
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
+  }
+
   if (view !== "assignments") return errorResponse("Invalid view", 400);
 
   let body: AssignmentPatchBody;

@@ -22,6 +22,12 @@ import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } fro
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
 import { getSession } from '../../lib/client/auth';
+import { listQueueItems, subscribeQueueSnapshot, type QueueItem } from '../../lib/client/offlineQueue';
+import {
+  computeAverageQualityForToday,
+  computeContributionSummary,
+  mapQueuedItemsToContributionActivities,
+} from '../../lib/shared/contributionMetrics';
 import BrandLogo from '../BrandLogo';
 import DailyProgressWidget from '../DailyProgressWidget';
 import StreakTracker from '../StreakTracker';
@@ -77,6 +83,15 @@ const selectableCategories: Category[] = [
 ];
 
 
+function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRole = 'agent', onAuth, onContribute, onProfile, language }) => {
   const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
   const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
@@ -86,11 +101,13 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
   const [agentEvents, setAgentEvents] = useState<PointEvent[]>([]);
+  const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? 'global' : 'bonamoussadi'));
   const contributePressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const showAgentWidgets = isAuthenticated && userRole !== 'client';
 
   const selectedCityLabel =
     mapScope === 'cameroon'
@@ -220,6 +237,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       paymentMethods: paymentMethods?.filter((value) => typeof value === 'string' && value.trim().length > 0),
       reliability: typeof details.reliability === 'string' ? details.reliability : undefined,
       photoUrl: typeof point.photoUrl === 'string' ? point.photoUrl : undefined,
+      details,
       gaps: Array.isArray(point.gaps) ? point.gaps : [],
       verified: true
     };
@@ -320,6 +338,33 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   }, [isAuthenticated, isAdmin, language, userRole]);
 
   useEffect(() => {
+    if (!showAgentWidgets) {
+      setQueuedItems([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadQueuedItems = async () => {
+      try {
+        const items = await listQueueItems();
+        if (!cancelled) setQueuedItems(items);
+      } catch {
+        if (!cancelled) setQueuedItems([]);
+      }
+    };
+
+    void loadQueuedItems();
+    const unsubscribe = subscribeQueueSnapshot(() => {
+      void loadQueuedItems();
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [showAgentWidgets]);
+
+  useEffect(() => {
     return () => {
       if (contributePressTimer.current) {
         window.clearTimeout(contributePressTimer.current);
@@ -352,63 +397,57 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     return getCategoryLabel(verticalId, language);
   };
 
-  const showAgentWidgets = isAuthenticated && userRole !== 'client';
   const activeAssignment = useMemo(() => {
     const active = assignments
       .filter((assignment) => assignment.status === 'in_progress' || assignment.status === 'pending')
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     return active[0] ?? null;
   }, [assignments]);
-
-  const todayKey = (() => {
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  })();
-  const localDateKey = (iso: string) => {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return '';
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  };
-  const submissionsToday = agentEvents.filter((event) => localDateKey(event.createdAt) === todayKey).length;
-  const enrichmentsToday = agentEvents.filter((event) => event.eventType === 'ENRICH_EVENT' && localDateKey(event.createdAt) === todayKey).length;
-  const averageQuality = (() => {
-    const todayEvents = agentEvents.filter((event) => localDateKey(event.createdAt) === todayKey);
-    if (todayEvents.length === 0) return 0;
-    const total = todayEvents.reduce((sum, event) => {
-      const details = (event.details ?? {}) as Record<string, unknown>;
-      const score = typeof details.confidenceScore === 'number' ? details.confidenceScore : 75;
-      return sum + score;
-    }, 0);
-    return Math.round(total / todayEvents.length);
-  })();
-  const streakDays = (() => {
-    if (agentEvents.length === 0) return 0;
-    const dates = Array.from(new Set(agentEvents.map((event) => localDateKey(event.createdAt)))).sort().reverse();
-    let streak = 0;
-    let cursor = new Date();
-    while (true) {
-      const key = localDateKey(cursor.toISOString());
-      if (!dates.includes(key)) break;
-      streak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-    }
-    return streak;
-  })();
-  const streakActiveDays = (() => {
-    const dateSet = new Set(agentEvents.map((event) => localDateKey(event.createdAt)));
-    return Array.from({ length: 7 }, (_, index) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - index));
-      return dateSet.has(localDateKey(date.toISOString()));
-    });
-  })();
+  const syncedActivities = useMemo(
+    () => agentEvents.map((event) => ({
+      createdAt: event.createdAt,
+      eventType: event.eventType,
+      details: event.details,
+    })),
+    [agentEvents],
+  );
+  const queuedActivities = useMemo(() => mapQueuedItemsToContributionActivities(queuedItems), [queuedItems]);
+  const contributionSummary = useMemo(
+    () => computeContributionSummary([...syncedActivities, ...queuedActivities]),
+    [queuedActivities, syncedActivities],
+  );
+  const averageQuality = useMemo(() => computeAverageQualityForToday(syncedActivities), [syncedActivities]);
+  const submissionsToday = contributionSummary.submissionsToday;
+  const enrichmentsToday = contributionSummary.enrichmentsToday;
+  const streakDays = contributionSummary.streakDays;
+  const streakActiveDays = contributionSummary.activeWeekdays;
   const dailyTarget = activeAssignment?.pointsExpected && activeAssignment.pointsExpected > 0 ? activeAssignment.pointsExpected : 10;
+
+  const [agentLocation, setAgentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setAgentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  const nearbyEnrichCount = useMemo(() => {
+    if (!agentLocation) return 0;
+    return filteredPoints.filter((p) => {
+      if (!p.coordinates || !p.gaps || p.gaps.length === 0) return false;
+      return haversineMeters(agentLocation.lat, agentLocation.lng, p.coordinates.latitude, p.coordinates.longitude) <= 200;
+    }).length;
+  }, [agentLocation, filteredPoints]);
+
+  const assignmentZones = useMemo(() => {
+    return assignments
+      .filter((a) => a.status === 'in_progress' || a.status === 'pending')
+      .filter((a) => a.zoneBounds)
+      .map((a) => ({ id: a.id, zoneLabel: a.zoneLabel, zoneBounds: a.zoneBounds }));
+  }, [assignments]);
 
   const launchSingleCapture = () => {
     if (isAuthenticated && onContribute) {
@@ -611,6 +650,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               language={language}
               t={t}
               isLowEndDevice={isLowEndDevice}
+              nearbyEnrichCount={nearbyEnrichCount}
+              assignmentZones={assignmentZones}
             />
           </Suspense>
         )}

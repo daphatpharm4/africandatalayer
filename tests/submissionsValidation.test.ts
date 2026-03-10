@@ -1,7 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { isWithinBonamoussadi } from '../shared/geofence.js';
-import { isEnrichFieldAllowed, listCreateMissingFields, listMissingFields } from '../lib/server/pointProjection.js';
+import {
+  canonicalizeEnrichField,
+  filterEnrichDetails,
+  isEnrichFieldAllowed,
+  listCreateMissingFields,
+  listMissingFields,
+} from '../lib/server/pointProjection.js';
 import { isValidCategory, getVertical, categoryLabel, VERTICAL_IDS } from '../shared/verticals.js';
 
 test('strict Bonamoussadi geofence rejects out-of-bounds points', () => {
@@ -17,6 +23,26 @@ test('create validation catches required fuel fields', () => {
 test('enrich rules only allow defined enrichable fields', () => {
   assert.equal(isEnrichFieldAllowed('mobile_money', 'providers'), true);
   assert.equal(isEnrichFieldAllowed('mobile_money', 'name'), false);
+});
+
+test('enrich field aliases normalize to canonical enrichable fields', () => {
+  assert.equal(canonicalizeEnrichField('hours'), 'openingHours');
+  assert.equal(canonicalizeEnrichField('merchantId'), 'merchantIdByProvider');
+  assert.equal(canonicalizeEnrichField('hasCashAvailable'), 'hasMin50000XafAvailable');
+});
+
+test('filterEnrichDetails keeps updates to already filled enrichable fields', () => {
+  assert.deepEqual(
+    filterEnrichDetails('pharmacy', {
+      openingHours: '07:30 - 21:00',
+      isOpenNow: false,
+      name: 'Should not pass enrich filtering',
+    }),
+    {
+      openingHours: '07:30 - 21:00',
+      isOpenNow: false,
+    },
+  );
 });
 
 test('gap computation for pharmacy marks missing opening hours by default', () => {

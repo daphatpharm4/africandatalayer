@@ -37,7 +37,7 @@ const XPPopup: React.FC<Props> = ({
           <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#4c7c59]">
             {t('Submission Captured', 'Soumission capturee')}
           </p>
-          <h2 className="text-3xl font-extrabold text-gray-900">+{totalXp} XP</h2>
+          <h2 className="text-3xl font-extrabold text-gray-900" style={{ animation: 'xp-count-up 0.5s ease-out' }}>+{totalXp} XP</h2>
           <p className="text-sm text-gray-500">
             {isBatchMode
               ? t('Batch capture saved. Keep the corridor momentum.', 'Capture en lot enregistree. Continuez le rythme.')
@@ -47,21 +47,21 @@ const XPPopup: React.FC<Props> = ({
 
         <div className="w-full max-w-sm rounded-3xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
           <div className="grid grid-cols-3 gap-3 text-left">
-            <div className="rounded-2xl bg-[#f2f6fa] p-3">
+            <div className="rounded-2xl bg-[#f2f6fa] p-3" style={{ animation: 'xp-slide-in 0.4s ease-out 0.1s both' }}>
               <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
                 <Award size={12} />
                 {t('Base', 'Base')}
               </div>
               <div className="mt-2 text-lg font-bold text-gray-900">+{baseXp}</div>
             </div>
-            <div className="rounded-2xl bg-[#fff8f4] p-3">
+            <div className="rounded-2xl bg-[#fff8f4] p-3" style={{ animation: 'xp-slide-in 0.4s ease-out 0.2s both' }}>
               <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#c86b4a]">
                 <Zap size={12} />
                 {t('Quality', 'Qualite')}
               </div>
               <div className="mt-2 text-lg font-bold text-gray-900">+{qualityBonus}</div>
             </div>
-            <div className="rounded-2xl bg-[#f7f4ff] p-3">
+            <div className="rounded-2xl bg-[#f7f4ff] p-3" style={{ animation: 'xp-slide-in 0.4s ease-out 0.3s both' }}>
               <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#6b46c1]">
                 <PlusCircle size={12} />
                 {t('Streak', 'Serie')}
@@ -75,7 +75,7 @@ const XPPopup: React.FC<Props> = ({
               {t('Level Progress', 'Progression')}
             </div>
             <div className="mt-3 h-2 rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-[#0f2b46] to-[#4c7c59]" />
+              <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-[#0f2b46] to-[#4c7c59]" style={{ animation: 'xp-pulse 1.5s ease-in-out infinite' }} />
             </div>
             <div className="mt-2 text-xs text-gray-500">
               {t('Strong capture quality and GPS evidence boosted this submission.', 'La qualite de capture et la preuve GPS ont augmente cette soumission.')}

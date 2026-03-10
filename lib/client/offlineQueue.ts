@@ -5,6 +5,9 @@ const STORE_NAME = 'submission_queue';
 const SYNC_ERROR_STORE_NAME = 'submission_sync_errors';
 const DB_VERSION = 2;
 const SESSION_SYNC_COUNT_KEY = 'adl_queue_session_synced';
+const MAX_QUEUE_ITEMS = 75;
+const MAX_QUEUE_RETRY_COUNT = 6;
+const MAX_QUEUE_ITEM_AGE_MS = 72 * 60 * 60 * 1000;
 
 export type QueueStatus = 'pending' | 'syncing' | 'failed' | 'synced';
 
@@ -75,6 +78,10 @@ function ensureIndexedDb(): IDBFactory {
     throw new Error('IndexedDB is not available');
   }
   return indexedDB;
+}
+
+function isStaleItem(item: QueueItem, now = Date.now()): boolean {
+  return now - new Date(item.createdAt).getTime() > MAX_QUEUE_ITEM_AGE_MS;
 }
 
 function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {
@@ -177,6 +184,10 @@ async function deleteSyncErrorRecordsByQueueItemId(queueItemId: string, options:
 }
 
 export async function enqueueSubmission(payload: SubmissionInput): Promise<QueueItem> {
+  const existingItems = await listQueueItems();
+  if (existingItems.length >= MAX_QUEUE_ITEMS) {
+    throw new Error(`Offline queue is full (${MAX_QUEUE_ITEMS} items). Sync or clear older items before adding more.`);
+  }
   const now = new Date().toISOString();
   const item: QueueItem = {
     id: crypto.randomUUID(),
@@ -363,6 +374,29 @@ export async function flushOfflineQueue(
   const permanentFailureMessages = new Set<string>();
 
   for (const item of items) {
+    if (isStaleItem(item, now)) {
+      permanentFailures += 1;
+      permanentFailureIds.push(item.id);
+      permanentFailureMessages.add('Queued submission expired before it could be synced');
+      await putSyncErrorRecord(
+        {
+          id: crypto.randomUUID(),
+          queueItemId: item.id,
+          message: 'Queued submission expired before it could be synced',
+          createdAt: new Date().toISOString(),
+          payloadSummary: {
+            eventType: item.payload.eventType,
+            category: item.payload.category,
+            pointId: item.payload.pointId,
+            location: item.payload.location,
+          },
+        },
+        { notify: false },
+      );
+      await removeItem(item.id, { notify: false });
+      continue;
+    }
+
     if (item.nextRetryAt && new Date(item.nextRetryAt).getTime() > now) {
       failed += 1;
       failedIds.push(item.id);
@@ -389,9 +423,31 @@ export async function flushOfflineQueue(
     } catch (error) {
       const details = toQueueErrorInfo(error);
       if (details.retryable) {
+        const retryCount = (item.retryCount ?? 0) + 1;
+        if (retryCount > MAX_QUEUE_RETRY_COUNT) {
+          permanentFailures += 1;
+          permanentFailureIds.push(item.id);
+          permanentFailureMessages.add(details.message);
+          await putSyncErrorRecord(
+            {
+              id: crypto.randomUUID(),
+              queueItemId: item.id,
+              message: details.message,
+              createdAt: new Date().toISOString(),
+              payloadSummary: {
+                eventType: item.payload.eventType,
+                category: item.payload.category,
+                pointId: item.payload.pointId,
+                location: item.payload.location,
+              },
+            },
+            { notify: false },
+          );
+          await removeItem(item.id, { notify: false });
+          continue;
+        }
         failed += 1;
         failedIds.push(item.id);
-        const retryCount = (item.retryCount ?? 0) + 1;
         const baseDelay = Math.min(30000, 1000 * Math.pow(2, retryCount));
         const jitter = Math.random() * 1000;
         const nextRetryAt = new Date(now + baseDelay + jitter).toISOString();

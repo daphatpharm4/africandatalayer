@@ -1,35 +1,25 @@
 import { requireUser } from "../../lib/auth.js";
 import {
   deletePointEvent,
+  getUserProfile,
   insertPointEvent,
   isStorageUnavailableError,
 } from "../../lib/server/storage/index.js";
 import { query } from "../../lib/server/db.js";
+import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
 import { normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
+import { logSecurityEvent } from "../../lib/server/securityAudit.js";
+import { captureServerException } from "../../lib/server/sentry.js";
 import { canViewEventDetail, toSubmissionAuthContext } from "../../lib/server/submissionAccess.js";
+import { updateUserTrust } from "../../lib/server/userTrust.js";
+import { reviewBodySchema } from "../../lib/server/validation.js";
 import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
 import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
 import { reconcileUserProfileXp } from "../../lib/server/xp.js";
 import { BASE_EVENT_XP } from "../../shared/xp.js";
 
 type ReviewDecision = "approved" | "rejected" | "flagged";
-
-function normalizeReviewDecision(input: unknown): ReviewDecision | null {
-  if (typeof input !== "string") return null;
-  const normalized = input.trim().toLowerCase();
-  if (normalized === "approved" || normalized === "rejected" || normalized === "flagged") {
-    return normalized;
-  }
-  return null;
-}
-
-function trimReviewNotes(input: unknown): string | null {
-  if (typeof input !== "string") return null;
-  const value = input.trim();
-  if (!value) return null;
-  return value.slice(0, 1000);
-}
 
 function isMissingDbObjectError(error: unknown): boolean {
   const pg = error as { code?: unknown; message?: unknown } | null;
@@ -99,6 +89,20 @@ async function applyReviewDecision(params: {
   }
 
   await reconcileUserProfileXp(row.user_id);
+
+  const currentProfile = await getUserProfile(row.user_id);
+  if (currentProfile) {
+    const delta = params.decision === "approved" ? 3 : params.decision === "flagged" ? -5 : -15;
+    const nextSuspension =
+      params.decision === "rejected" && (currentProfile.trustScore ?? 50) <= 20
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        : undefined;
+    await updateUserTrust({
+      userId: row.user_id,
+      delta,
+      suspendedUntil: nextSuspension,
+    });
+  }
 
   return {
     eventId: params.eventId,
@@ -194,11 +198,6 @@ export async function PUT(request: Request): Promise<Response> {
   }
 }
 
-interface ReviewBody {
-  decision?: unknown;
-  notes?: unknown;
-}
-
 export async function PATCH(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
@@ -212,16 +211,19 @@ export async function PATCH(request: Request): Promise<Response> {
   if (!id) return errorResponse("Missing submission id", 400);
   if (view !== "review") return errorResponse("Invalid view", 400);
 
-  let body: ReviewBody;
+  let rawBody: unknown;
   try {
-    body = (await request.json()) as ReviewBody;
+    rawBody = await request.json();
   } catch {
     return errorResponse("Invalid JSON body", 400);
   }
 
-  const decision = normalizeReviewDecision(body.decision);
-  if (!decision) return errorResponse("Invalid review decision", 400);
-  const notes = trimReviewNotes(body.notes);
+  const validation = reviewBodySchema.safeParse(rawBody);
+  if (!validation.success) {
+    return errorResponse(validation.error.issues[0]?.message ?? "Invalid review decision", 400);
+  }
+  const decision = validation.data.decision;
+  const notes = validation.data.notes?.trim() ?? null;
 
   try {
     const updated = await applyReviewDecision({
@@ -230,12 +232,33 @@ export async function PATCH(request: Request): Promise<Response> {
       decision,
       notes,
     });
+    await logSecurityEvent({
+      eventType: decision === "rejected" ? "submission_rejected" : "admin_review",
+      userId: updated.userId,
+      request,
+      details: {
+        eventId: id,
+        reviewerId: auth.id,
+        decision,
+        notes,
+      },
+    });
+    if (decision !== "approved") {
+      await createFraudAlert({
+        eventId: id,
+        userId: updated.userId,
+        alertCode: decision === "rejected" ? "submission_rejected" : "submission_flagged",
+        severity: decision === "rejected" ? "high" : "medium",
+        payload: { reviewerId: auth.id, notes },
+      });
+    }
     return jsonResponse(updated, { status: 200 });
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
     const message = error instanceof Error ? error.message : "Unable to apply review decision";
+    captureServerException(error, { route: "submission_review_patch", eventId: id });
     const status = message.includes("not found") ? 404 : 400;
     return errorResponse(message, status);
   }

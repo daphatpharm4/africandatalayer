@@ -28,6 +28,18 @@ function normalizeDetailsForCategory(category: SubmissionCategory, raw: Submissi
   return getVertical(category).normalizeDetails(raw);
 }
 
+export function canonicalizeEnrichField(field: string): string {
+  return field === "merchantId"
+    ? "merchantIdByProvider"
+    : field === "hasCashAvailable"
+      ? "hasMin50000XafAvailable"
+      : field === "hours"
+        ? "openingHours"
+        : field === "isOnCall" || field === "onDuty"
+          ? "isOnDuty"
+          : field;
+}
+
 function mergeDetails(base: SubmissionDetails, incoming: SubmissionDetails): SubmissionDetails {
   const merged: SubmissionDetails = { ...base };
   const entries = Object.entries(incoming) as Array<[string, unknown]>;
@@ -62,17 +74,18 @@ export function listCreateMissingFields(category: SubmissionCategory, details: S
 }
 
 export function isEnrichFieldAllowed(category: SubmissionCategory, field: string): boolean {
-  const canonicalField =
-    field === "merchantId"
-      ? "merchantIdByProvider"
-      : field === "hasCashAvailable"
-        ? "hasMin50000XafAvailable"
-      : field === "hours"
-        ? "openingHours"
-        : field === "isOnCall" || field === "onDuty"
-          ? "isOnDuty"
-          : field;
+  const canonicalField = canonicalizeEnrichField(field);
   return getVertical(category).enrichableFields.includes(canonicalField);
+}
+
+export function filterEnrichDetails(category: SubmissionCategory, details: SubmissionDetails): SubmissionDetails {
+  const filtered: SubmissionDetails = {};
+  for (const [field, value] of Object.entries(details)) {
+    if (!hasValue(value)) continue;
+    if (!isEnrichFieldAllowed(category, field)) continue;
+    filtered[field] = value;
+  }
+  return filtered;
 }
 
 export function eventToProjectedPoint(event: PointEvent): ProjectedPoint {

@@ -3,9 +3,11 @@ import {
   ArrowLeft,
   Camera,
   MapPin,
-  ShieldCheck
+  ShieldCheck,
+  Signal
 } from 'lucide-react';
 import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
+import { BASE_EVENT_XP } from '../../shared/xp';
 import VerticalIcon from '../shared/VerticalIcon';
 import {
   enqueueSubmission,
@@ -17,13 +19,17 @@ import {
   type QueueSyncSummary,
 } from '../../lib/client/offlineQueue';
 import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/deviceProfile';
+import { collectGpsIntegrity } from '../../lib/client/gpsIntegrity';
+import { hashDataUrl, hashPhoto } from '../../lib/client/photoIntegrity';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
 import { apiJson } from '../../lib/client/api';
-import type { ClientExifData, CollectionAssignment, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
+import type { ClientExifData, CollectionAssignment, ConsentStatus, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
 import { ENRICH_FIELD_CATALOG, getEnrichFieldLabel, type EnrichFieldConfig, type EnrichFieldOption } from '../../shared/enrichFieldCatalog';
 import { Category, ContributionMode, DataPoint } from '../../types';
 import exifr from 'exifr';
 import XPPopup from '../XPPopup';
+import LevelUpCelebration from '../LevelUpCelebration';
+import VoiceMicButton from '../shared/VoiceMicButton';
 
 interface Props {
   onBack: () => void;
@@ -52,6 +58,58 @@ const roadBlockageOptions = ['flooding', 'construction', 'accident', 'debris', '
 const buildingTypeOptions = ['residential', 'commercial', 'mixed', 'industrial', 'institutional', 'religious'];
 const occupancyStatusOptions = ['occupied', 'partially_occupied', 'vacant', 'under_construction'];
 const openingHourPresets = ['08:00 - 20:00', '09:00 - 19:00', '24/7'];
+
+const PHOTO_GUIDE_CONFIG: Record<string, { frameLabel: { en: string; fr: string }; tips: Array<{ en: string; fr: string }> }> = {
+  pharmacy: {
+    frameLabel: { en: 'Pharmacy', fr: 'Pharmacie' },
+    tips: [
+      { en: 'Capture the green cross sign and full storefront', fr: 'Capturez le signe de la croix verte et la devanture complete' },
+      { en: 'Include the pharmacy name if visible', fr: 'Incluez le nom de la pharmacie si visible' },
+    ],
+  },
+  mobile_money: {
+    frameLabel: { en: 'Mobile Money', fr: 'Mobile Money' },
+    tips: [
+      { en: 'Show the provider logo and agent booth', fr: 'Montrez le logo du fournisseur et le kiosque agent' },
+      { en: 'Capture visible signage', fr: 'Capturez la signalisation visible' },
+    ],
+  },
+  fuel_station: {
+    frameLabel: { en: 'Fuel Station', fr: 'Station-service' },
+    tips: [
+      { en: 'Capture the brand sign and pump area', fr: 'Capturez le panneau de marque et la zone de pompe' },
+      { en: 'Include price display if visible', fr: 'Incluez l\'affichage des prix si visible' },
+    ],
+  },
+  alcohol_outlet: {
+    frameLabel: { en: 'Alcohol Outlet', fr: 'Point de vente' },
+    tips: [
+      { en: 'Show the business sign and entrance', fr: 'Montrez l\'enseigne et l\'entree' },
+      { en: 'Capture any license information', fr: 'Capturez toute information de licence' },
+    ],
+  },
+  billboard: {
+    frameLabel: { en: 'Billboard', fr: 'Panneau' },
+    tips: [
+      { en: 'Capture the full billboard face including frame', fr: 'Capturez la face complete du panneau avec le cadre' },
+      { en: 'Include brand/advertiser text', fr: 'Incluez le texte de la marque/annonceur' },
+    ],
+  },
+  transport_road: {
+    frameLabel: { en: 'Road', fr: 'Route' },
+    tips: [
+      { en: 'Capture the road surface and any blockage', fr: 'Capturez la surface de la route et tout blocage' },
+      { en: 'Show road condition clearly', fr: 'Montrez clairement l\'etat de la route' },
+    ],
+  },
+  census_proxy: {
+    frameLabel: { en: 'Building', fr: 'Batiment' },
+    tips: [
+      { en: 'Capture the full building from ground to roof', fr: 'Capturez le batiment complet du sol au toit' },
+      { en: 'Show the entrance and number of floors', fr: 'Montrez l\'entree et le nombre d\'etages' },
+    ],
+  },
+};
 // Vercel serverless payload limit is 4.5MB; base64 adds ~33% overhead.
 // Keep raw threshold at 3MB so base64 + JSON stays under 4.5MB.
 const MAX_SUBMISSION_IMAGE_BYTES = 3 * 1024 * 1024;
@@ -85,6 +143,52 @@ function normalizeNumber(input: unknown): number | null {
 
 function optionLabel(option: EnrichFieldOption, language: 'en' | 'fr'): string {
   return language === 'fr' ? option.labelFr : option.labelEn;
+}
+
+function firstStringRecordEntry(input: unknown): [string, string] | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === 'string' && value.trim()) return [key, value];
+  }
+  return null;
+}
+
+function firstNumberRecordEntry(input: unknown): [string, number] | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  for (const [key, value] of Object.entries(input)) {
+    if (typeof value === 'number' && Number.isFinite(value)) return [key, value];
+  }
+  return null;
+}
+
+function formatEnrichFieldValue(value: unknown, language: 'en' | 'fr'): string | null {
+  if (typeof value === 'boolean') return value ? (language === 'fr' ? 'Oui' : 'Yes') : (language === 'fr' ? 'Non' : 'No');
+  if (typeof value === 'number') return String(value);
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+  if (Array.isArray(value)) {
+    const joined = value
+      .filter((item): item is string | number => typeof item === 'string' || typeof item === 'number')
+      .map((item) => String(item).trim())
+      .filter((item) => item.length > 0)
+      .join(', ');
+    return joined || null;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value)
+      .map(([key, entryValue]) => {
+        if (typeof entryValue === 'string' || typeof entryValue === 'number') {
+          const trimmed = String(entryValue).trim();
+          return trimmed ? `${key}: ${trimmed}` : null;
+        }
+        return null;
+      })
+      .filter((entry): entry is string => Boolean(entry));
+    return entries.length > 0 ? entries.join(', ') : null;
+  }
+  return null;
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array | null {
@@ -280,6 +384,7 @@ const ContributionFlow: React.FC<Props> = ({
   const [draftImageBase64, setDraftImageBase64] = useState<string | null>(null);
   const [draftClientExif, setDraftClientExif] = useState<ClientExifData | null>(null);
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [lastPosition, setLastPosition] = useState<GeolocationPosition | null>(null);
   const [showManualLocation, setShowManualLocation] = useState(false);
   const [manualLatitude, setManualLatitude] = useState('');
   const [manualLongitude, setManualLongitude] = useState('');
@@ -295,6 +400,10 @@ const ContributionFlow: React.FC<Props> = ({
   const [isResolvingDedup, setIsResolvingDedup] = useState(false);
   const [batchCapturedCount, setBatchCapturedCount] = useState(0);
   const [xpBreakdown, setXpBreakdown] = useState({ baseXp: 5, qualityBonus: 0, streakBonus: 0, totalXp: 5 });
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [consentStatus, setConsentStatus] = useState<ConsentStatus>('not_required');
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const [newLevel, setNewLevel] = useState(1);
 
   const [siteName, setSiteName] = useState(seedPoint?.name ?? '');
   const [openingHours, setOpeningHours] = useState(seedPoint?.openingHours ?? '');
@@ -332,7 +441,20 @@ const ContributionFlow: React.FC<Props> = ({
     const details = (queuedDraft?.payload.details ?? {}) as Record<string, unknown>;
     return Object.keys(details).filter((field) => field !== 'clientDevice');
   }, [queuedDraft?.id, queuedDraft?.payload.details]);
-  const gaps = useMemo(() => (seedPoint?.gaps && seedPoint.gaps.length > 0 ? seedPoint.gaps : draftGapKeys), [draftGapKeys, seedPoint]);
+  const seedPointDetails = useMemo(
+    () => (seedPoint?.details && typeof seedPoint.details === 'object' ? seedPoint.details : {}) as Record<string, unknown>,
+    [seedPoint?.id, seedPoint?.details],
+  );
+  const missingFields = useMemo(() => (seedPoint?.gaps && seedPoint.gaps.length > 0 ? seedPoint.gaps : draftGapKeys), [draftGapKeys, seedPoint]);
+  const enrichableFields = useMemo(() => [...VERTICALS[vertical].enrichableFields], [vertical]);
+  const editableEnrichFields = useMemo(() => {
+    if (seedPoint) return enrichableFields;
+    if (draftGapKeys.length === 0) return enrichableFields;
+    const allowedFields = new Set(enrichableFields);
+    const draftFields = draftGapKeys.filter((field) => allowedFields.has(field));
+    return draftFields.length > 0 ? draftFields : enrichableFields;
+  }, [draftGapKeys, enrichableFields, seedPoint]);
+  const missingFieldSet = useMemo(() => new Set(missingFields), [missingFields]);
   const isEnrichMode = mode === 'ENRICH' && (Boolean(seedPoint) || Boolean(queuedDraft?.payload.pointId));
 
   const markEnrichTouched = (field: string) => {
@@ -345,7 +467,20 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const getEnrichFieldValue = (field: string): unknown => {
-    return enrichValues[field];
+    if (Object.prototype.hasOwnProperty.call(enrichValues, field)) {
+      return enrichValues[field];
+    }
+    return seedPointDetails[field];
+  };
+
+  const renderEnrichFieldHint = (field: string) => {
+    if (!seedPoint) return null;
+    if (missingFieldSet.has(field)) {
+      return <p className="text-[11px] font-medium text-[#b85f3f]">{t('Currently missing', 'Actuellement manquant')}</p>;
+    }
+    const currentValue = formatEnrichFieldValue(seedPointDetails[field], language);
+    if (!currentValue) return null;
+    return <p className="text-[11px] text-gray-500">{t('Current', 'Actuel')}: {currentValue}</p>;
   };
 
   const toggleEnrichMultiValue = (field: string, value: string) => {
@@ -371,24 +506,54 @@ const ContributionFlow: React.FC<Props> = ({
     setEnrichValues({});
     setEnrichTouched({});
     setEnrichMultiRaw({});
-    setMerchantId(seedPoint?.merchantId ?? '');
-    setMerchantProvider(seedPoint?.providers?.[0] ?? providerOptions[0]);
-    setPriceFuelType(seedPoint?.fuelType ?? fuelTypeOptions[0]);
-    setPriceValue(seedPoint?.price ? String(seedPoint.price) : '');
-  }, [isEnrichMode, seedPoint?.id]);
+    const merchantEntry = firstStringRecordEntry(seedPointDetails.merchantIdByProvider);
+    const priceEntry = firstNumberRecordEntry(seedPointDetails.pricesByFuel);
+    setMerchantId(merchantEntry?.[1] ?? seedPoint?.merchantId ?? '');
+    setMerchantProvider(merchantEntry?.[0] ?? seedPoint?.providers?.[0] ?? providerOptions[0]);
+    setPriceFuelType(priceEntry?.[0] ?? seedPoint?.fuelType ?? fuelTypeOptions[0]);
+    setPriceValue(
+      priceEntry
+        ? String(priceEntry[1])
+        : typeof seedPoint?.price === 'number'
+          ? String(seedPoint.price)
+          : '',
+    );
+  }, [isEnrichMode, seedPoint?.id, seedPoint?.merchantId, seedPoint?.price, seedPoint?.providers, seedPoint?.fuelType, seedPointDetails]);
 
   useEffect(() => {
     if (!isEnrichMode) return;
     clearDedupPrompt();
   }, [isEnrichMode, seedPoint?.id]);
 
+  // 1A: GPS with accuracy tracking via watchPosition
   useEffect(() => {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        setLastPosition(pos);
+        setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        setGpsAccuracy(pos.coords.accuracy);
+      },
       () => setLocation(null),
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, []);
+
+  // 1C: Smart defaults - read last vertical from localStorage
+  useEffect(() => {
+    if (seedPoint || queuedDraft || isEnrichMode) return;
+    const lastVertical = localStorage.getItem('adl_last_vertical');
+    if (lastVertical && lastVertical in VERTICALS) {
+      setVertical(lastVertical as Vertical);
+    }
+  }, []);
+
+  // 1C: Default isOpenNow based on time of day
+  useEffect(() => {
+    if (seedPoint || queuedDraft) return;
+    const hour = new Date().getHours();
+    setIsOpenNow(hour >= 8 && hour < 18);
   }, []);
 
   useEffect(() => {
@@ -420,6 +585,7 @@ const ContributionFlow: React.FC<Props> = ({
     setDraftImageBase64(typeof queuedDraft.payload.imageBase64 === 'string' ? queuedDraft.payload.imageBase64 : null);
     setDraftClientExif(queuedDraft.payload.clientExif ?? null);
     setLocation(queuedDraft.payload.location ?? null);
+    setConsentStatus((queuedDraft.payload.consentStatus as ConsentStatus | undefined) ?? 'not_required');
     setSiteName(
       (typeof details.siteName === 'string' && details.siteName)
       || (typeof details.name === 'string' && details.name)
@@ -697,7 +863,7 @@ const ContributionFlow: React.FC<Props> = ({
 
   const buildEnrichDetails = (): Record<string, unknown> => {
     const details: Record<string, unknown> = { clientDevice: getClientDeviceInfo() };
-    for (const gap of gaps) {
+    for (const gap of editableEnrichFields) {
       const fieldConfig = ENRICH_FIELD_CATALOG[gap];
       if (!fieldConfig) {
         const fallback = normalizeText(getEnrichFieldValue(gap));
@@ -810,7 +976,7 @@ const ContributionFlow: React.FC<Props> = ({
         return false;
       }
     } else if (Object.keys(details).filter((field) => field !== 'clientDevice').length === 0) {
-      setErrorMessage(t('Fill at least one gap field to enrich this point.', 'Renseignez au moins un champ manquant pour enrichir ce point.'));
+      setErrorMessage(t('Update at least one field before submitting.', 'Mettez a jour au moins un champ avant de soumettre.'));
       return false;
     }
 
@@ -852,7 +1018,28 @@ const ContributionFlow: React.FC<Props> = ({
       return false;
     }
 
-    setXpBreakdown(calculateXp(payload));
+    const xp = calculateXp(payload);
+    setXpBreakdown(xp);
+
+    // 1C: Save last vertical to localStorage
+    localStorage.setItem('adl_last_vertical', vertical);
+
+    // 3B: Level-up detection
+    try {
+      const prevXpStr = localStorage.getItem('adl_total_xp');
+      const prevXp = prevXpStr ? Number(prevXpStr) : 0;
+      const nextXp = prevXp + xp.totalXp;
+      const prevLevel = Math.floor(prevXp / 100) + 1;
+      const nextLevel = Math.floor(nextXp / 100) + 1;
+      localStorage.setItem('adl_total_xp', String(nextXp));
+      if (nextLevel > prevLevel) {
+        setNewLevel(nextLevel);
+        setShowLevelUp(true);
+      }
+    } catch {
+      // localStorage not available
+    }
+
     if (isBatchMode) {
       setBatchCapturedCount((prev) => prev + 1);
     }
@@ -984,6 +1171,46 @@ const ContributionFlow: React.FC<Props> = ({
     }
   };
 
+  const renderQualityPreview = () => {
+    const gpsScore = gpsAccuracy === null ? 0 : gpsAccuracy <= 10 ? 100 : gpsAccuracy <= 25 ? 80 : gpsAccuracy <= 50 ? 60 : gpsAccuracy <= 100 ? 40 : 20;
+    const photoScore = (photoPreview || draftImageBase64) ? 100 : 0;
+    const requiredFields = VERTICALS[vertical]?.createRequiredFields ?? [];
+    const details = isEnrichMode ? buildEnrichDetails() : buildCreateDetails();
+    const filledCount = requiredFields.filter((f) => {
+      const v = (details as Record<string, unknown>)[f];
+      return v !== undefined && v !== null && v !== '';
+    }).length;
+    const completeness = requiredFields.length > 0 ? Math.round((filledCount / requiredFields.length) * 100) : 100;
+    const estimatedXp = BASE_EVENT_XP + (gpsScore >= 60 ? 2 : 0) + (completeness >= 100 ? 1 : 0);
+    const colorFor = (score: number) => score >= 80 ? 'text-[#4c7c59]' : score >= 50 ? 'text-[#d69e2e]' : 'text-[#c86b4a]';
+
+    return (
+      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Quality Preview', 'Apercu qualite')}</h4>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-xl bg-gray-50 p-3 text-center">
+            <Signal size={16} className={`mx-auto ${colorFor(gpsScore)}`} />
+            <div className={`text-lg font-bold ${colorFor(gpsScore)}`}>{gpsScore}%</div>
+            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('GPS', 'GPS')}</div>
+          </div>
+          <div className="rounded-xl bg-gray-50 p-3 text-center">
+            <Camera size={16} className={`mx-auto ${colorFor(photoScore)}`} />
+            <div className={`text-lg font-bold ${colorFor(photoScore)}`}>{photoScore}%</div>
+            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('Photo', 'Photo')}</div>
+          </div>
+          <div className="rounded-xl bg-gray-50 p-3 text-center">
+            <div className={`text-lg font-bold ${colorFor(completeness)}`}>{completeness}%</div>
+            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('Fields', 'Champs')}</div>
+          </div>
+          <div className="rounded-xl bg-[#eaf3ee] p-3 text-center">
+            <div className="text-lg font-bold text-[#4c7c59]">+{estimatedXp}</div>
+            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('Est. XP', 'XP est.')}</div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderVerticalSelector = () => {
     if (isEnrichMode) return null;
     const verticalEntries = Object.values(VERTICALS) as Array<(typeof VERTICALS)[keyof typeof VERTICALS]>;
@@ -1023,6 +1250,20 @@ const ContributionFlow: React.FC<Props> = ({
           ? `GPS: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`
           : t('GPS unavailable. Retry, then use fallback if needed.', 'GPS indisponible. Reessayez, puis utilisez le secours si necessaire.')}
       </p>
+      {location && gpsAccuracy !== null && (() => {
+        const dots = gpsAccuracy <= 10 ? 5 : gpsAccuracy <= 25 ? 4 : gpsAccuracy <= 50 ? 3 : gpsAccuracy <= 100 ? 2 : 1;
+        const label = dots >= 5 ? t('Excellent', 'Excellent') : dots >= 4 ? t('Good', 'Bon') : dots >= 3 ? t('Fair', 'Correct') : t('Poor', 'Faible');
+        return (
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className={`w-2 h-2 rounded-full ${i <= dots ? 'bg-[#4c7c59]' : 'bg-gray-200'}`} />
+              ))}
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label} ({Math.round(gpsAccuracy)}m)</span>
+          </div>
+        );
+      })()}
       {!location && (
         <button
           onClick={() => setShowManualLocation((prev) => !prev)}
@@ -1055,7 +1296,9 @@ const ContributionFlow: React.FC<Props> = ({
     </div>
   );
 
-  const renderPhotoBlock = () => (
+  const renderPhotoBlock = () => {
+    const guide = PHOTO_GUIDE_CONFIG[vertical];
+    return (
     <div className="space-y-3">
       <h4 className="text-sm font-bold text-gray-900">{t('Live Camera Proof', 'Preuve camera en direct')}</h4>
       <p className="text-xs text-gray-500">{t('Camera capture only. Gallery uploads are blocked.', 'Capture camera uniquement. Import galerie bloque.')}</p>
@@ -1064,6 +1307,13 @@ const ContributionFlow: React.FC<Props> = ({
           <img src={photoPreview} alt={t('Captured photo', 'Photo capturee')} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <>
+            {guide && (
+              <div className="absolute inset-4 border-2 border-dashed border-white/60 rounded-xl flex items-center justify-center pointer-events-none z-[1]">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-white/80 bg-black/20 px-3 py-1 rounded-full">
+                  {language === 'fr' ? guide.frameLabel.fr : guide.frameLabel.en}
+                </span>
+              </div>
+            )}
             <Camera size={46} className="mb-4 opacity-40" />
             <p className="text-xs font-bold uppercase tracking-widest opacity-60">{t('Live capture required', 'Capture live requise')}</p>
           </>
@@ -1088,20 +1338,34 @@ const ContributionFlow: React.FC<Props> = ({
           {photoError}
         </div>
       )}
+      {guide && (
+        <ul className="space-y-1 px-1">
+          {guide.tips.map((tip, i) => (
+            <li key={i} className="text-xs text-gray-500 flex items-start space-x-2">
+              <span className="text-gray-300 mt-0.5">•</span>
+              <span>{language === 'fr' ? tip.fr : tip.en}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
-  );
+    );
+  };
 
   const renderCreateFields = () => {
     if (vertical === 'pharmacy') {
       return (
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <h4 className="text-sm font-bold text-gray-900">{t('Create Pharmacy', 'Creer une pharmacie')}</h4>
-          <input
-            value={siteName}
-            onChange={(event) => setSiteName(event.target.value)}
-            placeholder={t('Pharmacy name', 'Nom de la pharmacie')}
-            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              value={siteName}
+              onChange={(event) => setSiteName(event.target.value)}
+              placeholder={t('Pharmacy name', 'Nom de la pharmacie')}
+              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+            />
+            <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-600">{t('Open now', 'Ouvert maintenant')}</span>
             <button
@@ -1136,12 +1400,15 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <h4 className="text-sm font-bold text-gray-900">{t('Create Fuel Station', 'Creer une station-service')}</h4>
-          <input
-            value={siteName}
-            onChange={(event) => setSiteName(event.target.value)}
-            placeholder={t('Fuel station name', 'Nom de la station-service')}
-            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              value={siteName}
+              onChange={(event) => setSiteName(event.target.value)}
+              placeholder={t('Fuel station name', 'Nom de la station-service')}
+              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+            />
+            <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+          </div>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
             <button
@@ -1229,12 +1496,15 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
           <h4 className="text-sm font-bold text-gray-900">{t('Create Road Segment', 'Creer un segment routier')}</h4>
-          <input
-            value={roadName}
-            onChange={(event) => setRoadName(event.target.value)}
-            placeholder={t('Road name', 'Nom de route')}
-            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              value={roadName}
+              onChange={(event) => setRoadName(event.target.value)}
+              placeholder={t('Road name', 'Nom de route')}
+              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+            />
+            <VoiceMicButton language={language} onResult={(text) => setRoadName((prev) => prev ? `${prev} ${text}` : text)} />
+          </div>
           <select
             value={roadCondition}
             onChange={(event) => setRoadCondition(event.target.value)}
@@ -1325,6 +1595,7 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="space-y-2" key={gap}>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{gap}</label>
+          {renderEnrichFieldHint(gap)}
           <input
             value={raw}
             onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
@@ -1342,6 +1613,7 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="space-y-2" key={gap}>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          {renderEnrichFieldHint(gap)}
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -1367,6 +1639,7 @@ const ContributionFlow: React.FC<Props> = ({
         return (
           <div className="space-y-2" key={gap}>
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            {renderEnrichFieldHint(gap)}
             <div className="grid grid-cols-2 gap-3">
               <select
                 value={merchantProvider}
@@ -1397,6 +1670,7 @@ const ContributionFlow: React.FC<Props> = ({
         return (
           <div className="space-y-2" key={gap}>
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            {renderEnrichFieldHint(gap)}
             <div className="grid grid-cols-2 gap-3">
               <select
                 value={priceFuelType}
@@ -1432,6 +1706,7 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="space-y-2" key={gap}>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          {renderEnrichFieldHint(gap)}
           {gap === 'openingHours' && (
             <div className="flex flex-wrap gap-2">
               {openingHourPresets.map((preset) => (
@@ -1463,6 +1738,7 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="space-y-2" key={gap}>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          {renderEnrichFieldHint(gap)}
           <input
             type="number"
             value={value}
@@ -1479,6 +1755,7 @@ const ContributionFlow: React.FC<Props> = ({
         return (
           <div className="space-y-2" key={gap}>
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            {renderEnrichFieldHint(gap)}
             <input
               value={value}
               onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
@@ -1490,6 +1767,7 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="space-y-2" key={gap}>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          {renderEnrichFieldHint(gap)}
           <select
             value={value}
             onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
@@ -1514,6 +1792,7 @@ const ContributionFlow: React.FC<Props> = ({
         return (
           <div className="space-y-2" key={gap}>
             <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            {renderEnrichFieldHint(gap)}
             <input
               value={raw}
               onChange={(event) => {
@@ -1531,6 +1810,7 @@ const ContributionFlow: React.FC<Props> = ({
       return (
         <div className="space-y-2" key={gap}>
           <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          {renderEnrichFieldHint(gap)}
           <div className="flex flex-wrap gap-2">
             {options.map((option) => (
               <button
@@ -1554,6 +1834,7 @@ const ContributionFlow: React.FC<Props> = ({
     return (
       <div className="space-y-2" key={gap}>
         <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+        {renderEnrichFieldHint(gap)}
         <input
           value={fallbackRaw}
           onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
@@ -1565,16 +1846,31 @@ const ContributionFlow: React.FC<Props> = ({
 
   const renderEnrichFields = () => (
     <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-      <h4 className="text-sm font-bold text-gray-900">{t('Enrich Missing Fields', 'Enrichir les champs manquants')}</h4>
+      <div className="space-y-1">
+        <h4 className="text-sm font-bold text-gray-900">{t('Update Point Fields', 'Mettre a jour les champs du point')}</h4>
+        <p className="text-xs text-gray-500">
+          {t(
+            'Missing fields are highlighted. Filled fields can still be updated when something changes.',
+            'Les champs manquants sont mis en avant. Les champs deja remplis peuvent aussi etre mis a jour si quelque chose change.',
+          )}
+        </p>
+      </div>
       <div className="flex flex-wrap gap-2">
-        {gaps.map((gap) => (
-          <span key={gap} className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full bg-[#fff8f4] text-[#b85f3f] border border-[#f5d5c6]">
+        {editableEnrichFields.map((gap) => (
+          <span
+            key={gap}
+            className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full border ${
+              missingFieldSet.has(gap)
+                ? 'bg-[#fff8f4] text-[#b85f3f] border-[#f5d5c6]'
+                : 'bg-gray-50 text-gray-500 border-gray-200'
+            }`}
+          >
             {getEnrichFieldLabel(gap, language)}
           </span>
         ))}
       </div>
       <div className="space-y-4">
-        {gaps.map((gap) => (
+        {editableEnrichFields.map((gap) => (
           <React.Fragment key={`enrich-${gap}`}>
             {renderEnrichFieldInput(gap)}
           </React.Fragment>
@@ -1602,6 +1898,7 @@ const ContributionFlow: React.FC<Props> = ({
     setPendingPayload(null);
     setSelectedDedupPointId('');
     setDedupCheck(null);
+    setConsentStatus('not_required');
     setSiteName('');
     setOpeningHours('');
     setProviders([]);
@@ -1628,6 +1925,15 @@ const ContributionFlow: React.FC<Props> = ({
   const verticalIcon = <VerticalIcon name={VERTICALS[vertical]?.icon ?? 'pill'} size={18} />;
 
   if (submitted) {
+    if (showLevelUp) {
+      return (
+        <LevelUpCelebration
+          level={newLevel}
+          language={language}
+          onDismiss={() => setShowLevelUp(false)}
+        />
+      );
+    }
     return (
       <XPPopup
         language={language}
@@ -1747,6 +2053,7 @@ const ContributionFlow: React.FC<Props> = ({
         {renderPhotoBlock()}
         {renderCommonLocationBlock()}
         {isEnrichMode ? renderEnrichFields() : renderCreateFields()}
+        {renderQualityPreview()}
 
         {errorMessage && (
           <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[10px] font-bold uppercase tracking-widest text-red-600">

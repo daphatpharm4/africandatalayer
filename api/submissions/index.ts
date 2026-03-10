@@ -6,7 +6,7 @@ import {
   isStorageUnavailableError,
 } from "../../lib/server/storage/index.js";
 import {
-  isEnrichFieldAllowed,
+  filterEnrichDetails,
   listCreateMissingFields,
   normalizeEnrichPayload,
   projectPointsFromEvents,
@@ -17,6 +17,11 @@ import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { query } from "../../lib/server/db.js";
 import { diffCategorySets, parseConstraintCategories } from "../../lib/server/schemaGuard.js";
 import { incrementAssignmentsForEvent } from "../../lib/server/collectionAssignments.js";
+import { completeIdempotencyKey, hashIdempotencyPayload, reserveIdempotencyKey } from "../../lib/server/idempotency.js";
+import { stripPiiDetails } from "../../lib/server/privacy.js";
+import { consumeRateLimit } from "../../lib/server/rateLimit.js";
+import { logSecurityEvent } from "../../lib/server/securityAudit.js";
+import { captureServerException } from "../../lib/server/sentry.js";
 import {
   blockStatusFromCode,
   computeEventContentHash,
@@ -46,11 +51,16 @@ import {
   isPhotoMetadataEffectivelyEmpty,
   parseSubmissionFraudCheck,
 } from "../../lib/server/submissionFraud.js";
+import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
+import { getTrustTier } from "../../lib/server/userTrust.js";
+import { submissionInputSchema } from "../../lib/server/validation.js";
 import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../../shared/geofence.js";
 import type {
   AdminSubmissionEvent,
   ClientDeviceInfo,
   ClientExifData,
+  ConsentStatus,
+  GpsIntegrityReport,
   MapScope,
   PointEvent,
   PointEventType,
@@ -74,6 +84,8 @@ const allowedImageMime = new Set(["image/jpeg", "image/jpg", "image/png", "image
 const allowedMapScopes: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
 const PUBLIC_READ_CACHE_CONTROL = "public, s-maxage=30, stale-while-revalidate=300";
 const EXPECTED_SUBMISSION_CATEGORIES = [...VERTICAL_IDS].sort((a, b) => a.localeCompare(b));
+const SUBMISSION_RATE_LIMIT_PER_HOUR = Number(process.env.SUBMISSION_RATE_LIMIT_PER_HOUR ?? "60") || 60;
+const SUBMISSION_IP_RATE_LIMIT_PER_HOUR = Number(process.env.SUBMISSION_IP_RATE_LIMIT_PER_HOUR ?? "120") || 120;
 
 function parseLocation(input: unknown): SubmissionLocation | null {
   if (!input || typeof input !== "object") return null;
@@ -82,15 +94,6 @@ function parseLocation(input: unknown): SubmissionLocation | null {
   const longitude = typeof location.longitude === "string" ? Number(location.longitude) : (location.longitude as number);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   return { latitude, longitude };
-}
-
-function hasValue(input: unknown): boolean {
-  if (typeof input === "string") return Boolean(input.trim());
-  if (typeof input === "boolean") return true;
-  if (typeof input === "number") return Number.isFinite(input);
-  if (Array.isArray(input)) return input.length > 0;
-  if (input && typeof input === "object") return Object.keys(input as object).length > 0;
-  return false;
 }
 
 function trimString(input: unknown, maxLen = 256): string | null {
@@ -148,6 +151,48 @@ function normalizeMapScope(input: string | null): MapScope {
   const normalized = input.trim().toLowerCase();
   if (!allowedMapScopes.has(normalized as MapScope)) return "bonamoussadi";
   return normalized as MapScope;
+}
+
+function normalizeConsentStatus(input: unknown): ConsentStatus | null {
+  if (typeof input !== "string") return null;
+  const normalized = input.trim().toLowerCase();
+  if (
+    normalized === "obtained" ||
+    normalized === "refused_pii_only" ||
+    normalized === "not_required" ||
+    normalized === "withdrawn"
+  ) {
+    return normalized;
+  }
+  return null;
+}
+
+function sanitizeGpsIntegrity(input: unknown): GpsIntegrityReport | null {
+  if (!input || typeof input !== "object") return null;
+  const raw = input as Record<string, unknown>;
+  const gpsAccuracyMeters =
+    typeof raw.gpsAccuracyMeters === "number" && Number.isFinite(raw.gpsAccuracyMeters) ? raw.gpsAccuracyMeters : null;
+  const gpsTimestamp = typeof raw.gpsTimestamp === "number" && Number.isFinite(raw.gpsTimestamp) ? raw.gpsTimestamp : null;
+  const timeDeltaMs = typeof raw.timeDeltaMs === "number" && Number.isFinite(raw.timeDeltaMs) ? raw.timeDeltaMs : null;
+  const networkType = trimString(raw.networkType, 32);
+
+  return {
+    mockLocationDetected: raw.mockLocationDetected === true,
+    mockLocationMethod: trimString(raw.mockLocationMethod, 160),
+    hasAccelerometerData: raw.hasAccelerometerData === true,
+    hasGyroscopeData: raw.hasGyroscopeData === true,
+    accelerometerSampleCount:
+      typeof raw.accelerometerSampleCount === "number" && Number.isFinite(raw.accelerometerSampleCount)
+        ? Math.max(0, Math.round(raw.accelerometerSampleCount))
+        : 0,
+    motionDetectedDuringCapture: raw.motionDetectedDuringCapture === true,
+    gpsAccuracyMeters,
+    networkType,
+    gpsTimestamp,
+    deviceTimestamp:
+      typeof raw.deviceTimestamp === "number" && Number.isFinite(raw.deviceTimestamp) ? raw.deviceTimestamp : Date.now(),
+    timeDeltaMs,
+  };
 }
 
 function stripBase64Prefix(imageBase64: string): string {
@@ -325,10 +370,22 @@ async function getIpInfo(request: Request): Promise<IpLookupResult | null> {
   return await fetchIpInfo(ip);
 }
 
+function currentRequestIp(request: Request): string | null {
+  return normalizeIp(
+    request.headers.get("x-vercel-forwarded-for") ??
+      request.headers.get("x-forwarded-for") ??
+      request.headers.get("x-real-ip"),
+  );
+}
+
 function validateCreatePayload(category: SubmissionCategory, details: SubmissionDetails): string | null {
   const missing = listCreateMissingFields(category, details);
   if (missing.length > 0) return `Missing required fields: ${missing.join(", ")}`;
   return null;
+}
+
+function withReviewFlags(existing: string[], additions: string[]): string[] {
+  return Array.from(new Set([...existing, ...additions].filter((value) => value.length > 0)));
 }
 
 function getUserDisplayName(userId: string, name: string | null, email: string | null): string {
@@ -656,30 +713,83 @@ export async function POST(request: Request): Promise<Response> {
   const authContext = toSubmissionAuthContext(auth);
   const isAdminUser = authContext?.isAdmin === true;
 
-  let body: SubmissionInput;
+  let rawBody: unknown;
   try {
-    body = (await request.json()) as SubmissionInput;
+    rawBody = await request.json();
   } catch {
     return errorResponse("Invalid JSON body", 400);
   }
 
+  const validation = submissionInputSchema.safeParse(rawBody);
+  if (!validation.success) {
+    return errorResponse(validation.error.issues[0]?.message ?? "Invalid submission payload", 400);
+  }
+
+  const body = validation.data as SubmissionInput;
   const category = normalizeCategory(body?.category as string | undefined);
   if (!category) {
     return errorResponse("Invalid category", 400);
   }
 
+  const userProfile = await getUserProfile(auth.id);
+  if (userProfile?.suspendedUntil && new Date(userProfile.suspendedUntil).getTime() > Date.now()) {
+    return errorResponse("Your account is temporarily suspended from submitting data", 403);
+  }
+
+  const userRate = await consumeRateLimit({
+    route: "POST /api/submissions",
+    key: auth.id,
+    windowSeconds: 60 * 60,
+    max: SUBMISSION_RATE_LIMIT_PER_HOUR,
+    request,
+    userId: auth.id,
+  });
+  if (!userRate.allowed) {
+    return jsonResponse(
+      { error: "Submission rate limit exceeded. Please try again later.", code: "rate_limited" },
+      { status: 429, headers: { "retry-after": String(userRate.retryAfterSeconds) } },
+    );
+  }
+
+  const requestIp = currentRequestIp(request);
+  if (requestIp) {
+    const ipRate = await consumeRateLimit({
+      route: "POST /api/submissions:ip",
+      key: requestIp,
+      windowSeconds: 60 * 60,
+      max: SUBMISSION_IP_RATE_LIMIT_PER_HOUR,
+      request,
+      userId: auth.id,
+    });
+    if (!ipRate.allowed) {
+      return jsonResponse(
+        { error: "Submission rate limit exceeded for this network. Please try again later.", code: "rate_limited" },
+        { status: 429, headers: { "retry-after": String(ipRate.retryAfterSeconds) } },
+      );
+    }
+  }
+
   const eventType = normalizeEventType(body?.eventType);
-  const rawBody = body as unknown as Record<string, unknown>;
-  const dedupDecision = normalizeDedupDecision(rawBody?.dedupDecision);
+  const submissionBody = body as unknown as Record<string, unknown>;
+  const dedupDecision = normalizeDedupDecision(submissionBody?.dedupDecision);
   const dedupTargetPointId =
-    typeof rawBody?.dedupTargetPointId === "string"
-      ? (rawBody.dedupTargetPointId as string).trim()
+    typeof submissionBody?.dedupTargetPointId === "string"
+      ? (submissionBody.dedupTargetPointId as string).trim()
       : "";
   const location = parseLocation(body?.location);
-  const details = normalizeEnrichPayload(
+  const consentStatus = normalizeConsentStatus(body.consentStatus) ?? "not_required";
+  const consentRecordedAt = body.consentRecordedAt ?? new Date().toISOString();
+  let details = normalizeEnrichPayload(
     category,
     body?.details && typeof body.details === "object" ? ({ ...(body.details as SubmissionDetails) } as SubmissionDetails) : {},
   );
+  if (consentStatus === "refused_pii_only") {
+    details = {
+      ...stripPiiDetails(details),
+      consentStatus,
+      consentRecordedAt,
+    };
+  }
   const requestUserAgent = trimString(request.headers.get("user-agent"), 256);
   const clientDevice = sanitizeClientDevice((details as Record<string, unknown>).clientDevice);
   if (clientDevice) {
@@ -687,6 +797,14 @@ export async function POST(request: Request): Promise<Response> {
     details.clientDevice = clientDevice;
   } else if ("clientDevice" in details) {
     delete details.clientDevice;
+  }
+  const gpsIntegrity = sanitizeGpsIntegrity(body.gpsIntegrity);
+  if (gpsIntegrity) {
+    details.gpsIntegrity = gpsIntegrity;
+  }
+  if (consentStatus) {
+    details.consentStatus = consentStatus;
+    details.consentRecordedAt = consentRecordedAt;
   }
 
   const imageBase64 = body?.imageBase64 as string | undefined;
@@ -701,6 +819,8 @@ export async function POST(request: Request): Promise<Response> {
   const ipLocation = ipInfo?.location ?? null;
   const ipHash = ipInfo?.ip ? hashIpIdentifier(ipInfo.ip) : null;
   const clientExif = (body as unknown as Record<string, unknown>)?.clientExif as ClientExifData | null | undefined;
+  const clientPhotoEvidenceSha256 =
+    typeof body.photoEvidenceSha256 === "string" && body.photoEvidenceSha256.trim() ? body.photoEvidenceSha256.trim() : null;
   let photoLocation: SubmissionLocation | null = null;
   let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null = null;
 
@@ -751,6 +871,33 @@ export async function POST(request: Request): Promise<Response> {
       `Location outside Bonamoussadi bounds (${BONAMOUSSADI_BOUNDS.south},${BONAMOUSSADI_BOUNDS.west})-(${BONAMOUSSADI_BOUNDS.north},${BONAMOUSSADI_BOUNDS.east})`,
       400,
     );
+  }
+
+  const idempotencyKey = trimString(request.headers.get("x-idempotency-key"), 160);
+  if (idempotencyKey) {
+    const requestHash = hashIdempotencyPayload(body);
+    const reservation = await reserveIdempotencyKey({
+      userId: auth.id,
+      idempotencyKey,
+      requestHash,
+    });
+    if (reservation.status === "conflict") {
+      await logSecurityEvent({
+        eventType: "idempotency_conflict",
+        userId: auth.id,
+        request,
+        details: { idempotencyKey },
+      });
+      return errorResponse("This idempotency key was already used for a different submission", 409, {
+        code: "idempotency_conflict",
+      });
+    }
+    if (reservation.status === "replay" && reservation.eventId) {
+      const replayEvent = (await buildReadableEvents()).find((event) => event.id === reservation.eventId);
+      if (replayEvent) {
+        return jsonResponse(replayEvent, { status: reservation.responseStatus });
+      }
+    }
   }
 
   try {
@@ -815,25 +962,9 @@ export async function POST(request: Request): Promise<Response> {
       if (!target) return errorResponse("Target point not found", 404);
       if (target.category !== category) return errorResponse("Category mismatch for target point", 400);
 
-      const submittedEntries = Object.entries(details).filter(([, value]) => hasValue(value));
-      const allowedGaps = new Set(target.gaps);
-      const filteredEntries = submittedEntries.filter(([field]) => {
-        const canonical =
-          field === "hours"
-            ? "openingHours"
-            : field === "merchantId"
-              ? "merchantIdByProvider"
-              : field === "hasCashAvailable"
-                ? "hasMin50000XafAvailable"
-                : field;
-        return isEnrichFieldAllowed(category, canonical) && allowedGaps.has(canonical);
-      });
-      if (!filteredEntries.length && !allowGaplessEnrich) {
-        return errorResponse("ENRICH_EVENT must include at least one currently missing field", 400);
-      }
-      const filteredDetails: SubmissionDetails = {};
-      for (const [key, value] of filteredEntries) {
-        filteredDetails[key] = value;
+      const filteredDetails = filterEnrichDetails(category, details);
+      if (!Object.keys(filteredDetails).length && !allowGaplessEnrich) {
+        return errorResponse("ENRICH_EVENT must include at least one enrichable field", 400);
       }
       if (allowGaplessEnrich) {
         filteredDetails.dedupResolution = "use_existing";
@@ -919,6 +1050,39 @@ export async function POST(request: Request): Promise<Response> {
       };
     }
 
+    const supplementalReviewFlags: string[] = [];
+    let effectiveReviewStatus = riskEvaluation.reviewStatus;
+    let effectiveRiskScore = riskEvaluation.riskScore;
+
+    if (clientPhotoEvidenceSha256 && clientPhotoEvidenceSha256 !== riskEvaluation.imageHash) {
+      supplementalReviewFlags.push("client_photo_hash_mismatch");
+      effectiveRiskScore = Math.max(effectiveRiskScore, 70);
+      effectiveReviewStatus = "pending_review";
+    }
+
+    if (gpsIntegrity?.mockLocationDetected) {
+      supplementalReviewFlags.push("mock_location_detected");
+      effectiveRiskScore = Math.max(effectiveRiskScore, 75);
+      effectiveReviewStatus = "pending_review";
+    }
+    if (gpsIntegrity?.gpsAccuracyMeters !== null && gpsIntegrity?.gpsAccuracyMeters !== undefined && gpsIntegrity.gpsAccuracyMeters > 75) {
+      supplementalReviewFlags.push("poor_gps_accuracy");
+      effectiveRiskScore = Math.max(effectiveRiskScore, 45);
+      effectiveReviewStatus = "pending_review";
+    }
+    if ((userProfile?.trustScore ?? 50) <= 20) {
+      supplementalReviewFlags.push("restricted_agent");
+      effectiveRiskScore = Math.max(effectiveRiskScore, 65);
+      effectiveReviewStatus = "pending_review";
+    }
+    if (consentStatus === "refused_pii_only") {
+      supplementalReviewFlags.push("consent_refused_pii_only");
+    }
+
+    riskEvaluation.reviewFlags = withReviewFlags(riskEvaluation.reviewFlags, supplementalReviewFlags);
+    riskEvaluation.reviewStatus = effectiveReviewStatus;
+    riskEvaluation.riskScore = effectiveRiskScore;
+
     if (riskEvaluation.shouldBlock) {
       const blockCode = riskEvaluation.blockCode ?? "blocked";
       try {
@@ -932,6 +1096,16 @@ export async function POST(request: Request): Promise<Response> {
       } catch (auditError) {
         console.warn("Unable to write blocked submission audit log", auditError);
       }
+      await createFraudAlert({
+        userId: auth.id,
+        alertCode: blockCode,
+        severity: "high",
+        payload: {
+          reason: riskEvaluation.blockReason,
+          riskScore: riskEvaluation.riskScore,
+          reviewFlags: riskEvaluation.reviewFlags,
+        },
+      });
       return errorResponse(
         riskEvaluation.blockReason ?? "Submission blocked by fraud controls",
         blockStatusFromCode(blockCode),
@@ -1023,6 +1197,14 @@ export async function POST(request: Request): Promise<Response> {
     details.riskComponents = riskEvaluation.riskComponents as unknown as Record<string, unknown>;
     details.exifTrustScore = riskEvaluation.exifTrustScore;
     details.velocitySignals = riskEvaluation.velocity as unknown as Record<string, unknown>;
+    details.consentStatus = consentStatus;
+    details.consentRecordedAt = consentRecordedAt;
+    if (gpsIntegrity) details.gpsIntegrity = gpsIntegrity;
+    if (clientPhotoEvidenceSha256) details.photoEvidenceSha256 = clientPhotoEvidenceSha256;
+    if (userProfile?.trustScore !== undefined) {
+      details.agentTrustScore = userProfile.trustScore;
+      details.agentTrustTier = getTrustTier(userProfile.trustScore);
+    }
     details.ipHash = ipHash ?? undefined;
     if (ipInfo) {
       details.ipReputation = {
@@ -1050,6 +1232,8 @@ export async function POST(request: Request): Promise<Response> {
       createdAt: now,
       source: typeof details.source === "string" ? details.source : undefined,
       externalId: typeof details.externalId === "string" ? details.externalId : undefined,
+      consentStatus,
+      consentRecordedAt,
     };
 
     const projectedWithNewEvent = projectPointsFromEvents([...existingEvents, newEvent]);
@@ -1060,6 +1244,13 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     await insertPointEvent(newEvent);
+    if (idempotencyKey) {
+      await completeIdempotencyKey({
+        userId: auth.id,
+        idempotencyKey,
+        eventId,
+      });
+    }
     try {
       await incrementAssignmentsForEvent(newEvent);
     } catch (assignmentError) {
@@ -1080,6 +1271,29 @@ export async function POST(request: Request): Promise<Response> {
       });
     } catch (riskPersistError) {
       console.warn("Unable to persist submission risk artifacts", riskPersistError);
+    }
+    if (riskEvaluation.reviewStatus === "pending_review" || riskEvaluation.reviewFlags.length > 0) {
+      await createFraudAlert({
+        eventId,
+        userId: auth.id,
+        alertCode: "submission_pending_review",
+        severity: riskEvaluation.riskScore >= 70 ? "high" : "medium",
+        payload: {
+          category,
+          riskScore: riskEvaluation.riskScore,
+          reviewFlags: riskEvaluation.reviewFlags,
+        },
+      });
+      await logSecurityEvent({
+        eventType: "submission_flagged",
+        userId: auth.id,
+        request,
+        details: {
+          eventId,
+          riskScore: riskEvaluation.riskScore,
+          reviewFlags: riskEvaluation.reviewFlags,
+        },
+      });
     }
 
     const exifDeviceMake = primaryPhotoMetadata?.deviceMake ?? null;
@@ -1114,6 +1328,7 @@ export async function POST(request: Request): Promise<Response> {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
+    captureServerException(error, { route: "submissions_post", userId: auth.id });
     throw error;
   }
 }

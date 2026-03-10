@@ -114,7 +114,12 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
         <div className="bg-[#fff8f4] p-4 rounded-2xl border border-[#f7e8e1] shadow-sm space-y-2">
           <h4 className="text-sm font-bold text-[#b85f3f]">{t('Gaps To Enrich', 'Lacunes a enrichir')}</h4>
           {gaps.length === 0 ? (
-            <p className="text-xs text-[#b85f3f]">{t('No gaps detected. Point looks complete.', 'Aucune lacune detectee. Le point semble complet.')}</p>
+            <p className="text-xs text-[#b85f3f]">
+              {t(
+                'No missing fields. You can still update this point if something changed.',
+                'Aucun champ manquant. Vous pouvez quand meme mettre ce point a jour si quelque chose a change.',
+              )}
+            </p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {gaps.map((gap) => (
@@ -145,7 +150,13 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
           className="flex-1 h-14 bg-[#0f2b46] text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-[#0b2236] active:scale-95 transition-all"
         >
           <ShieldCheck size={18} />
-          <span>{isAuthenticated ? t('Enrich Point', 'Enrichir le point') : t('Sign In to Enrich', 'Connectez-vous pour enrichir')}</span>
+          <span>
+            {isAuthenticated
+              ? gaps.length === 0
+                ? t('Update Point', 'Mettre a jour le point')
+                : t('Enrich Point', 'Enrichir le point')
+              : t('Sign In to Enrich', 'Connectez-vous pour enrichir')}
+          </span>
         </button>
         <button
           onClick={isAuthenticated ? onAddNew : onAuth}

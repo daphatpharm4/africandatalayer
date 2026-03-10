@@ -319,6 +319,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all');
   const [isApplyingDecision, setIsApplyingDecision] = useState(false);
+  const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -559,13 +560,37 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
+  const toggleBulkItem = (pointId: string) => {
+    setSelectedForBulk((prev) => {
+      const next = new Set(prev);
+      if (next.has(pointId)) next.delete(pointId);
+      else next.add(pointId);
+      return next;
+    });
+  };
+
+  const selectAllLowRisk = () => {
+    const lowRiskIds = filteredGroups
+      .filter((g) => getRiskBucket(g.latestEvent) === 'low_risk')
+      .map((g) => g.pointId);
+    setSelectedForBulk((prev) => {
+      const allSelected = lowRiskIds.every((id) => prev.has(id));
+      if (allSelected) return new Set();
+      return new Set(lowRiskIds);
+    });
+  };
+
   const handleBulkApproveLowRisk = async () => {
     if (isApplyingDecision) return;
-    const lowRiskGroups = filteredGroups.filter(
-      (group) => getRiskBucket(group.latestEvent) === 'low_risk' && getReviewStatus(group.latestEvent) === 'pending_review',
-    );
-    if (lowRiskGroups.length === 0) {
-      setActionMessage(t('No low-risk pending groups to approve.', 'Aucun groupe faible risque a approuver.'));
+
+    const targetGroups = selectedForBulk.size > 0
+      ? filteredGroups.filter((g) => selectedForBulk.has(g.pointId) && getReviewStatus(g.latestEvent) === 'pending_review')
+      : filteredGroups.filter(
+          (group) => getRiskBucket(group.latestEvent) === 'low_risk' && getReviewStatus(group.latestEvent) === 'pending_review',
+        );
+
+    if (targetGroups.length === 0) {
+      setActionMessage(t('No pending groups to approve.', 'Aucun groupe en attente a approuver.'));
       return;
     }
 
@@ -573,7 +598,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     setDeleteError('');
     try {
       setIsApplyingDecision(true);
-      for (const group of lowRiskGroups) {
+      for (const group of targetGroups) {
         await apiJson(`/api/submissions/${encodeURIComponent(group.latestEvent.event.id)}?view=review`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -581,8 +606,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         });
         applyReviewToLocalState(group.latestEvent.event.id, 'approved');
       }
+      setSelectedForBulk(new Set());
       setActionMessage(
-        t(`${lowRiskGroups.length} low-risk group(s) approved.`, `${lowRiskGroups.length} groupe(s) faible risque approuves.`),
+        t(`${targetGroups.length} group(s) approved.`, `${targetGroups.length} groupe(s) approuves.`),
       );
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : t('Bulk approve failed.', 'Approbation en lot impossible.'));
@@ -728,16 +754,27 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">{t('Risk Queue', 'File de risque')}</div>
               <div className="mt-1 text-sm font-bold text-gray-900">{filteredGroups.length} {t('visible groups', 'groupes visibles')}</div>
             </div>
-            <button
-              type="button"
-              onClick={handleBulkApproveLowRisk}
-              disabled={isApplyingDecision}
-              className={`h-10 rounded-2xl px-4 text-[10px] font-bold uppercase tracking-widest ${
-                isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white'
-              }`}
-            >
-              {t('Approve Low-Risk', 'Approuver faible risque')}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={selectAllLowRisk}
+                className="h-10 rounded-2xl px-3 text-[10px] font-bold uppercase tracking-widest bg-gray-50 text-gray-600 border border-gray-100"
+              >
+                {t('Select Low-Risk', 'Selectionner faible risque')}
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkApproveLowRisk}
+                disabled={isApplyingDecision}
+                className={`h-10 rounded-2xl px-4 text-[10px] font-bold uppercase tracking-widest ${
+                  isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white'
+                }`}
+              >
+                {selectedForBulk.size > 0
+                  ? `${t('Approve', 'Approuver')} (${selectedForBulk.size})`
+                  : t('Approve Low-Risk', 'Approuver faible risque')}
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {([
@@ -989,6 +1026,61 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           </div>
         )}
 
+        <div className="lg:flex lg:gap-4">
+        <div className="lg:w-[380px] lg:shrink-0 lg:overflow-y-auto lg:max-h-[calc(100vh-200px)]">
+        {!isLoading && !error && filteredGroups.length > 0 && (
+          <div className="space-y-3">
+            {filteredGroups.map((group) => {
+              const isSelected = selectedPointId === group.pointId;
+              const state = getMatchState(group.latestEvent.fraudCheck);
+              const preview = group.allPhotos[0]?.url ?? null;
+              const contributors = [...new Set(group.events.map((e) => e.user.name))];
+              const riskScore = getRiskScore(group.latestEvent);
+              const reviewStatus = getReviewStatus(group.latestEvent);
+              return (
+                <div
+                  key={`desktop-${group.pointId}`}
+                  className={`hidden lg:block w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
+                    isSelected ? 'border-[#0f2b46]' : 'border-gray-100 hover:border-[#d5e1eb]'
+                  }`}
+                >
+                  <div className="flex">
+                    <div className="flex items-center pl-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedForBulk.has(group.pointId)}
+                        onChange={() => toggleBulkItem(group.pointId)}
+                        className="w-4 h-4 rounded border-gray-300 text-[#0f2b46] shrink-0"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPointId(group.pointId)}
+                      className="flex flex-1 text-left"
+                    >
+                    <div className="w-16 h-16 bg-gray-100 shrink-0 flex items-center justify-center relative">
+                      {preview ? (
+                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" />
+                      ) : (
+                        <Camera size={14} className="text-gray-300" />
+                      )}
+                    </div>
+                    <div className="flex-1 p-2 space-y-1">
+                      <h4 className="text-xs font-bold text-gray-900 leading-tight truncate">{group.siteName}</h4>
+                      <p className="text-[9px] uppercase tracking-widest text-gray-400">
+                        {categoryLabelLocal(group.category, language)} • {riskScore} • {reviewStatus}
+                      </p>
+                    </div>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        </div>
+        <div className="lg:flex-1 lg:overflow-y-auto lg:max-h-[calc(100vh-200px)]">
+
         {!isLoading && !error && selectedGroup && (() => {
           const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
           const latestFraudCheck = selectedGroup.latestEvent.fraudCheck ?? null;
@@ -1171,6 +1263,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           );
         })()}
 
+        {!isLoading && !error && !selectedGroup && filteredGroups.length > 0 && (
+          <div className="hidden lg:flex bg-white border border-gray-100 rounded-2xl p-8 items-center justify-center text-xs text-gray-400 min-h-[200px]">
+            {t('Select an item to view details', 'Selectionnez un element pour voir les details')}
+          </div>
+        )}
+
+        </div>
+        </div>
+
         {!isLoading && !error && filteredGroups.length === 0 && (
           <div className="bg-white border border-gray-100 rounded-2xl p-6 text-xs text-gray-500 text-center">
             {t('No submissions found.', 'Aucune soumission trouvee.')}
@@ -1178,7 +1279,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         )}
 
         {!isLoading && !error && filteredGroups.length > 0 && (
-          <div className="space-y-3">
+          <div className="space-y-3 lg:hidden">
             {filteredGroups.map((group) => {
               const isSelected = selectedPointId === group.pointId;
               const state = getMatchState(group.latestEvent.fraudCheck);
@@ -1187,15 +1288,29 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               const riskScore = getRiskScore(group.latestEvent);
               const reviewStatus = getReviewStatus(group.latestEvent);
               return (
-                <button
+                <div
                   key={group.pointId}
-                  type="button"
-                  onClick={() => setSelectedPointId(group.pointId)}
                   className={`w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
                     isSelected ? 'border-[#0f2b46]' : 'border-gray-100 hover:border-[#d5e1eb]'
                   }`}
                 >
                   <div className="flex">
+                    <div className="flex items-center pl-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedForBulk.has(group.pointId)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleBulkItem(group.pointId);
+                        }}
+                        className="w-4 h-4 rounded border-gray-300 text-[#0f2b46] shrink-0"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPointId(group.pointId)}
+                      className="flex flex-1 text-left"
+                    >
                     <div className="w-24 h-24 bg-gray-100 shrink-0 flex items-center justify-center relative">
                       {preview ? (
                         <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" />
@@ -1233,8 +1348,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         {t('Risk', 'Risque')}: {riskScore} • {reviewStatus}
                       </div>
                     </div>
+                  </button>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>

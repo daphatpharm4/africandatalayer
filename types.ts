@@ -61,6 +61,7 @@ export interface DataPoint {
   paymentMethods?: string[];
   reliability?: string;
   photoUrl?: string;
+  details?: Record<string, unknown>;
   gaps?: string[];
   verified?: boolean;
 }

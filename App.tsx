@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { Screen, DataPoint, ContributionMode } from './types';
 import { getSession, signOut } from './lib/client/auth';
+import { apiJson } from './lib/client/api';
 import {
   flushOfflineQueue,
   getQueueSnapshot,
@@ -8,6 +9,7 @@ import {
   type QueueItem,
   type QueueSnapshot,
 } from './lib/client/offlineQueue';
+import { executeAppWipe } from './lib/client/remoteWipe';
 import { sendSubmissionPayload } from './lib/client/submissionSync';
 import type { CollectionAssignment, UserRole } from './shared/types';
 import Splash from './components/Screens/Splash';
@@ -141,11 +143,31 @@ const App: React.FC = () => {
     navigateTo(Screen.AUTH);
   };
 
+  const checkSecurityStatus = async (): Promise<{
+    wipeRequested: boolean;
+    suspendedUntil: string | null;
+  } | null> => {
+    if (!isAuthenticated) return null;
+    try {
+      return await apiJson<{ wipeRequested: boolean; suspendedUntil: string | null }>('/api/user?view=status');
+    } catch {
+      return null;
+    }
+  };
+
   const runQueueSync = async () => {
     if (isSyncingRef.current) return;
     isSyncingRef.current = true;
     setIsSyncing(true);
     try {
+      const status = await checkSecurityStatus();
+      if (status?.wipeRequested) {
+        await executeAppWipe();
+        return;
+      }
+      if (status?.suspendedUntil && new Date(status.suspendedUntil).getTime() > Date.now()) {
+        return;
+      }
       await flushOfflineQueue(sendSubmissionPayload);
     } catch (error) {
       console.error('[App] Offline queue sync failed:', error);

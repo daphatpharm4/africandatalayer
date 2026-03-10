@@ -1,4 +1,5 @@
 import React from 'react';
+import { captureClientException } from '../lib/client/sentry';
 
 interface Props {
   children: React.ReactNode;
@@ -20,6 +21,7 @@ class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     console.error('[ErrorBoundary] Uncaught error:', error, info);
+    captureClientException(error, { componentStack: info.componentStack });
   }
 
   render() {
