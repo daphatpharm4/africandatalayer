@@ -217,7 +217,9 @@ export default async function handler(request: Request): Promise<Response> {
       providers,
       secret: authSecret,
       session: { strategy: "jwt", maxAge: SESSION_CONFIG.maxAge, updateAge: SESSION_CONFIG.updateAge },
-      trustHost: false,
+      // Auth.js requires trusted hosts. We already require AUTH_URL and normalize
+      // relative auth requests against that configured origin before calling Auth().
+      trustHost: true,
       basePath: "/api/auth",
       cookies: {
         sessionToken: {
