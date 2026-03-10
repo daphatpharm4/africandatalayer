@@ -11,6 +11,7 @@ import type {
   UserProfile,
   UserRole,
 } from "../../../shared/types.js";
+import { decodeAvatarPreset, encodeAvatarPresetImage } from "../../../shared/avatarPresets.js";
 import { isValidCategory } from "../../../shared/verticals.js";
 import { normalizeEmail, normalizePhone } from "../../shared/identifier.js";
 import { normalizeCreatedAt } from "./createdAt.js";
@@ -116,6 +117,7 @@ function rowToUserProfile(row: Record<string, unknown>): UserProfile {
     phone,
     name: typeof row.name === "string" ? row.name : "",
     image: typeof row.image === "string" ? row.image : "",
+    avatarPreset: decodeAvatarPreset(row.image),
     occupation: typeof row.occupation === "string" ? row.occupation : "",
     XP: parseXp(row.xp),
     passwordHash: typeof row.password_hash === "string" ? row.password_hash : undefined,
@@ -291,7 +293,8 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   const phone = normalizePhone(profile.phone);
   const defaultLabel = email ?? phone ?? id;
   const name = typeof profile.name === "string" && profile.name.trim() ? profile.name.trim() : defaultLabel || "Contributor";
-  const image = typeof profile.image === "string" ? profile.image : "";
+  const avatarPreset = decodeAvatarPreset(profile.avatarPreset ?? profile.image);
+  const image = avatarPreset ? encodeAvatarPresetImage(avatarPreset) : typeof profile.image === "string" ? profile.image : "";
   const occupation = typeof profile.occupation === "string" ? profile.occupation : "";
   const xp = parseXp(profile.XP);
   const passwordHash = typeof profile.passwordHash === "string" && profile.passwordHash.trim() ? profile.passwordHash : null;

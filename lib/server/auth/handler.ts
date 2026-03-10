@@ -4,6 +4,7 @@ import Google from "@auth/core/providers/google";
 import type { AppProviders } from "@auth/core/providers";
 import bcrypt from "bcryptjs";
 import type { UserProfile } from "../../../shared/types.js";
+import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../../shared/avatarPresets.js";
 import { errorResponse } from "../http.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../storage/index.js";
 import { getAuthBaseUrl, getAuthSecret, getSessionCookieName, isSecureRequest, SESSION_CONFIG } from "../../auth.js";
@@ -264,7 +265,8 @@ export default async function handler(request: Request): Promise<Response> {
                   name: user?.name ?? inferDefaultDisplayName(email),
                   email,
                   phone: null,
-                  image: user?.image ?? "",
+                  image: encodeAvatarPresetImage(DEFAULT_AVATAR_PRESET),
+                  avatarPreset: DEFAULT_AVATAR_PRESET,
                   occupation: "",
                   XP: 0,
                   isAdmin: true,
@@ -301,7 +303,8 @@ export default async function handler(request: Request): Promise<Response> {
               name: user?.name ?? inferDefaultDisplayName(email),
               email,
               phone: null,
-              image: user?.image ?? "",
+              image: encodeAvatarPresetImage(DEFAULT_AVATAR_PRESET),
+              avatarPreset: DEFAULT_AVATAR_PRESET,
               occupation: "",
               XP: 0,
               mapScope: "bonamoussadi",

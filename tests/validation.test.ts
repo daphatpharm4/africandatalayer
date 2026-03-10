@@ -4,6 +4,7 @@ import {
   consentStatusSchema,
   reviewBodySchema,
   submissionInputSchema,
+  userUpdateSchema,
   userStatusPatchSchema,
 } from "../lib/server/validation.ts";
 
@@ -74,4 +75,19 @@ test("reviewBodySchema and userStatusPatchSchema enforce pilot review controls",
       wipeRequested: true,
     },
   );
+});
+
+test("userUpdateSchema accepts only built-in avatar presets", () => {
+  assert.deepEqual(
+    userUpdateSchema.parse({
+      avatarPreset: "lagoon",
+      occupation: "Field agent",
+    }),
+    {
+      avatarPreset: "lagoon",
+      occupation: "Field agent",
+    },
+  );
+
+  assert.throws(() => userUpdateSchema.parse({ avatarPreset: "remote-url" }), /Invalid option/);
 });

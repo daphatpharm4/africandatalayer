@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AVATAR_PRESETS } from "../../shared/avatarPresets.js";
 
 const CATEGORY_VALUES = [
   "pharmacy",
@@ -81,6 +82,7 @@ export const userUpdateSchema = z
   .object({
     occupation: z.string().trim().max(120).optional(),
     mapScope: z.enum(["bonamoussadi", "cameroon", "global"]).optional(),
+    avatarPreset: z.enum(AVATAR_PRESETS).optional(),
   })
   .strict();
 

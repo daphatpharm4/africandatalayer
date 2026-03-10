@@ -14,11 +14,13 @@ import {
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
+import { AVATAR_PRESETS, coerceAvatarPreset, encodeAvatarPresetImage, type AvatarPreset } from '../../shared/avatarPresets';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 import { getEffectiveEventXp } from '../../shared/xp';
 import { countActivitiesInCurrentWeek, formatContributionHistoryDate } from '../../lib/shared/contributionMetrics';
 import BadgeGrid, { computeBadges } from '../BadgeSystem';
+import ProfileAvatar from '../shared/ProfileAvatar';
 
 interface Props {
   onBack: () => void;
@@ -46,6 +48,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
   const [assignmentError, setAssignmentError] = useState('');
   const [isUpdatingAssignmentId, setIsUpdatingAssignmentId] = useState<string | null>(null);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [avatarSaveError, setAvatarSaveError] = useState('');
   const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
     if (isAdminMode) return 'global';
     if (value === 'cameroon' || value === 'global') return value;
@@ -53,6 +57,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   };
   const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
   const isMapUnlocked = activeMapScope !== 'bonamoussadi';
+  const activeAvatarPreset = coerceAvatarPreset(profile?.avatarPreset ?? profile?.image);
 
   const submissionToHistory = (submission: PointEvent) => {
     const details = (submission.details ?? {}) as Record<string, unknown>;
@@ -128,6 +133,20 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   }, [language]);
 
   const badges = useMemo(() => computeBadges(ownEvents), [ownEvents]);
+
+  const avatarOptions = useMemo(
+    () =>
+      AVATAR_PRESETS.map((preset) => ({
+        preset,
+        label:
+          preset === 'baobab'
+            ? t('Baobab', 'Baobab')
+            : preset === 'sunrise'
+              ? t('Sunrise', 'Aurore')
+              : t('Lagoon', 'Lagon'),
+      })),
+    [language]
+  );
 
   const pointsThisWeek = useMemo(() => {
     return countActivitiesInCurrentWeek(ownEvents);
@@ -222,6 +241,34 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
     }
   };
 
+  const handleAvatarSelect = async (preset: AvatarPreset) => {
+    if (!profile || isSavingAvatar) return;
+    if (activeAvatarPreset === preset) return;
+
+    const previousProfile = profile;
+    setAvatarSaveError('');
+    setProfile({ ...profile, avatarPreset: preset, image: encodeAvatarPresetImage(preset) });
+
+    try {
+      setIsSavingAvatar(true);
+      const updated = await apiJson<UserProfile>('/api/user', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarPreset: preset }),
+      });
+      setProfile(updated);
+    } catch (error) {
+      setProfile(previousProfile);
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : t('Unable to update avatar.', 'Impossible de mettre a jour l\'avatar.');
+      setAvatarSaveError(message);
+    } finally {
+      setIsSavingAvatar(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
@@ -238,7 +285,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
         <div className="flex flex-col items-center py-4 text-center">
           <div className="relative mb-4">
             <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl bg-[#e7eef4] overflow-hidden">
-              <img src="https://picsum.photos/seed/jeanpaul/300/300" alt={t('avatar', 'avatar')} className="w-full h-full object-cover" />
+              <ProfileAvatar preset={activeAvatarPreset} alt={t('Profile avatar', 'Avatar du profil')} className="w-full h-full" />
             </div>
             <div className="absolute -bottom-1 -right-1 p-1 bg-[#4c7c59] rounded-full border-2 border-white">
               <BadgeCheck size={14} className="text-white" />
@@ -257,6 +304,39 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
               <span>{userLocation}</span>
             </div>
           )}
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-center gap-3">
+              {avatarOptions.map((option) => {
+                const isSelected = option.preset === activeAvatarPreset;
+                return (
+                  <button
+                    key={option.preset}
+                    type="button"
+                    aria-pressed={isSelected}
+                    disabled={!profile || isSavingAvatar}
+                    onClick={() => handleAvatarSelect(option.preset)}
+                    className={`rounded-2xl border p-1.5 transition-all ${
+                      isSelected
+                        ? 'border-[#0f2b46] bg-white shadow-md'
+                        : 'border-[#d5e1eb] bg-white/80 hover:border-[#8fb0c6]'
+                    } ${!profile || isSavingAvatar ? 'cursor-not-allowed opacity-70' : ''}`}
+                    title={option.label}
+                  >
+                    <div className="h-12 w-12 overflow-hidden rounded-xl">
+                      <ProfileAvatar preset={option.preset} alt={option.label} className="h-full w-full" />
+                    </div>
+                    <span className="sr-only">{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              {isSavingAvatar
+                ? t('Saving avatar...', 'Enregistrement de l\'avatar...')
+                : t('Choose 1 of 3 built-in avatars', 'Choisissez 1 des 3 avatars integres')}
+            </div>
+            {avatarSaveError && <div className="text-[10px] font-bold uppercase tracking-widest text-red-500">{avatarSaveError}</div>}
+          </div>
           {loadError && (
             <div className="mt-2 text-[10px] font-bold uppercase tracking-widest text-red-500">
               {loadError}

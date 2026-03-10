@@ -13,6 +13,7 @@ import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { updateUserTrust } from "../../lib/server/userTrust.js";
 import { userStatusPatchSchema, userUpdateSchema } from "../../lib/server/validation.js";
+import { encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type {
   CollectionAssignmentCreateInput,
   CollectionAssignmentStatus,
@@ -196,6 +197,11 @@ export async function PUT(request: Request): Promise<Response> {
         return errorResponse("Only admin users can unlock map scope", 403);
       }
       profile.mapScope = nextScope;
+    }
+
+    if (body?.avatarPreset !== undefined) {
+      profile.avatarPreset = body.avatarPreset;
+      profile.image = encodeAvatarPresetImage(body.avatarPreset);
     }
 
     await upsertUserProfile(auth.id, profile);

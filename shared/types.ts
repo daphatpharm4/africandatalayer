@@ -1,3 +1,5 @@
+import type { AvatarPreset } from "./avatarPresets.js";
+
 export type SubmissionCategory =
   | "pharmacy"
   | "fuel_station"
@@ -253,6 +255,7 @@ export interface UserProfile {
   email: string | null;
   phone?: string | null;
   image?: string;
+  avatarPreset?: AvatarPreset;
   occupation?: string;
   XP: number;
   passwordHash?: string;

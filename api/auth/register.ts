@@ -3,6 +3,7 @@ import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "..
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { registerBodySchema } from "../../lib/server/validation.js";
+import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type { UserProfile } from "../../shared/types.js";
 
 export async function POST(request: Request): Promise<Response> {
@@ -40,7 +41,8 @@ export async function POST(request: Request): Promise<Response> {
       name: name || inferDefaultDisplayName(identifier),
       email: normalizedIdentifier.type === "email" ? identifier : null,
       phone: normalizedIdentifier.type === "phone" ? identifier : null,
-      image: "",
+      image: encodeAvatarPresetImage(DEFAULT_AVATAR_PRESET),
+      avatarPreset: DEFAULT_AVATAR_PRESET,
       occupation: "",
       XP: 0,
       passwordHash: await bcrypt.hash(password, 12),
