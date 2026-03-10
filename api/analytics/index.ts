@@ -176,6 +176,12 @@ async function handleCronDispatch(url: URL): Promise<Response> {
   return jsonResponse(summary, { status: hasFailures ? 500 : 200 });
 }
 
+export async function handleAnalyticsCronDispatchRequest(request: Request): Promise<Response> {
+  const unauthorizedResponse = requireCronAuthorization(request);
+  if (unauthorizedResponse) return unauthorizedResponse;
+  return handleCronDispatch(new URL(request.url));
+}
+
 function isMissingDbObjectError(error: unknown): boolean {
   const pg = error as { code?: unknown; message?: unknown } | null;
   const code = typeof pg?.code === "string" ? pg.code : "";
@@ -190,9 +196,7 @@ export async function GET(request: Request): Promise<Response> {
 
   // Daily cron dispatcher (Hobby-compatible) - authenticated via CRON_SECRET.
   if (view === "cron_dispatch") {
-    const unauthorizedResponse = requireCronAuthorization(request);
-    if (unauthorizedResponse) return unauthorizedResponse;
-    return handleCronDispatch(url);
+    return handleAnalyticsCronDispatchRequest(request);
   }
 
   // Weekly snapshot cron trigger - authenticated via CRON_SECRET.

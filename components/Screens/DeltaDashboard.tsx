@@ -330,7 +330,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               </p>
             </div>
             <div className="rounded-3xl bg-white/10 px-4 py-3 backdrop-blur">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-white/70">{t('Last Updated', 'Derniere mise a jour')}</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-white/70">{t('Latest Snapshot', 'Dernier snapshot')}</div>
               <div className="mt-1 text-lg font-bold">{latestUpdatedLabel}</div>
             </div>
           </div>

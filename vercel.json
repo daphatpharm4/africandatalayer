@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "crons": [
     {
-      "path": "/api/analytics?view=cron_dispatch",
+      "path": "/api/cron/analytics-dispatch",
       "schedule": "0 6 * * *"
     }
   ],
@@ -31,6 +31,12 @@
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization, X-Idempotency-Key" },
         { "key": "Access-Control-Max-Age", "value": "86400" }
+      ]
+    },
+    {
+      "source": "/api/cron/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
       ]
     },
     {
