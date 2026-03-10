@@ -193,7 +193,7 @@ export async function listAssignments(options: ListAssignmentsOptions): Promise<
   }
 
   if (options.status) {
-    conditions.push(`status = $${idx++}`);
+    conditions.push(`status = $${idx}`);
     values.push(options.status);
   }
 

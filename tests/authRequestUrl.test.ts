@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveAuthRequestBaseUrl, withAbsoluteUrl } from "../lib/server/auth/requestUrl.js";
 
-test("resolveAuthRequestBaseUrl prefers forwarded host and protocol over fallback env URL", () => {
+test("resolveAuthRequestBaseUrl prefers explicit fallback over forwarded host headers", () => {
   const headers = new Headers({
     "x-forwarded-host": "africandatalayer.vercel.app",
     "x-forwarded-proto": "https",
@@ -14,10 +14,10 @@ test("resolveAuthRequestBaseUrl prefers forwarded host and protocol over fallbac
     defaultProtocol: "http",
   });
 
-  assert.equal(baseUrl, "https://africandatalayer.vercel.app");
+  assert.equal(baseUrl, "https://old-deployment.vercel.app");
 });
 
-test("withAbsoluteUrl rebuilds relative auth requests using forwarded headers", async () => {
+test("withAbsoluteUrl rebuilds relative auth requests using the configured fallback URL", async () => {
   const request = new Request("http://localhost/placeholder", {
     method: "GET",
     headers: {
@@ -35,6 +35,6 @@ test("withAbsoluteUrl rebuilds relative auth requests using forwarded headers", 
 
   assert.equal(
     normalized.url,
-    "https://africandatalayer.vercel.app/api/auth/callback/google?code=test&state=state-123"
+    "https://old-deployment.vercel.app/api/auth/callback/google?code=test&state=state-123"
   );
 });

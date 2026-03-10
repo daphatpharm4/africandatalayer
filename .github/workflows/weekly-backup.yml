@@ -1,0 +1,35 @@
+name: Weekly Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0"
+
+jobs:
+  postgres-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install PostgreSQL Client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Backup
+        run: node scripts/backup-postgres-to-blob.mjs
+        env:
+          POSTGRES_BACKUP_URL: ${{ secrets.POSTGRES_BACKUP_URL }}
+          ADL_POSTGRES_URL: ${{ secrets.ADL_POSTGRES_URL }}
+          POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
+          POSTGRES_URL: ${{ secrets.POSTGRES_URL }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          POSTGRES_BACKUP_PREFIX: african-data-layer

@@ -25,7 +25,8 @@ import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/s
 import { apiJson } from '../../lib/client/api';
 import type { ClientExifData, CollectionAssignment, ConsentStatus, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
 import { ENRICH_FIELD_CATALOG, getEnrichFieldLabel, type EnrichFieldConfig, type EnrichFieldOption } from '../../shared/enrichFieldCatalog';
-import { Category, ContributionMode, DataPoint } from '../../types';
+import { Category } from '../../types';
+import type { ContributionMode, DataPoint } from '../../types';
 import exifr from 'exifr';
 import XPPopup from '../XPPopup';
 import LevelUpCelebration from '../LevelUpCelebration';
@@ -48,7 +49,6 @@ interface Props {
 type Vertical = SubmissionCategory;
 
 const providerOptions = ['MTN', 'Orange', 'Airtel'];
-const paymentMethodOptions = ['Cash', 'Mobile Money', 'Card'];
 const fuelTypeOptions = ['Super', 'Diesel', 'Gas'];
 const outletTypeOptions = ['bar', 'restaurant', 'off_licence', 'street_vendor', 'nightclub'];
 const billboardTypeOptions = ['standard', 'digital', 'street_furniture', 'wall_paint', 'poster', 'informal'];
@@ -1108,6 +1108,12 @@ const ContributionFlow: React.FC<Props> = ({
       clearDedupPrompt();
       const imageBase64 = photoFile ? await fileToBase64(photoFile) : draftImageBase64;
       const clientExif = photoFile ? await extractClientExif(photoFile, location ?? manual ?? null) : draftClientExif;
+      const gpsIntegrity = await collectGpsIntegrity(lastPosition);
+      const photoEvidenceSha256 = photoFile
+        ? await hashPhoto(photoFile)
+        : draftImageBase64
+          ? await hashDataUrl(draftImageBase64)
+          : null;
       const payload: SubmissionInput = {
         eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
         category: vertical,
@@ -1116,6 +1122,10 @@ const ContributionFlow: React.FC<Props> = ({
         details,
         imageBase64: imageBase64 ?? undefined,
         clientExif,
+        consentStatus,
+        consentRecordedAt: new Date().toISOString(),
+        gpsIntegrity,
+        photoEvidenceSha256: photoEvidenceSha256 ?? undefined,
       };
       const blockedByDedup = await maybePromptDedup(payload);
       if (blockedByDedup) return;
@@ -1351,6 +1361,48 @@ const ContributionFlow: React.FC<Props> = ({
     </div>
     );
   };
+
+  const renderConsentBlock = () => (
+    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-bold text-gray-900">{t('Consent & Privacy', 'Consentement et confidentialite')}</h4>
+          <p className="text-xs text-gray-500">
+            {t(
+              'Choose how this capture should be treated when people or owner-identifiable details are involved.',
+              'Choisissez comment traiter cette capture lorsque des personnes ou des details identifiants sont impliques.',
+            )}
+          </p>
+        </div>
+      </div>
+      <div className="grid gap-2">
+        {([
+          { value: 'not_required', label: t('No consent needed', 'Pas de consentement requis') },
+          { value: 'obtained', label: t('Consent obtained', 'Consentement obtenu') },
+          { value: 'refused_pii_only', label: t('Consent refused: strip PII', 'Consentement refuse : retirer les DCP') },
+        ] as Array<{ value: ConsentStatus; label: string }>).map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setConsentStatus(option.value)}
+            className={`rounded-xl border px-3 py-3 text-left text-xs font-semibold ${
+              consentStatus === option.value ? 'border-[#0f2b46] bg-[#eef4f8] text-[#0f2b46]' : 'border-gray-100 bg-gray-50 text-gray-600'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {consentStatus === 'refused_pii_only' && (
+        <div className="rounded-xl border border-[#f5d5c6] bg-[#fff8f4] p-3 text-[11px] text-[#b85f3f]">
+          {t(
+            'Owner-identifiable fields will be stripped before upload. Avoid capturing faces or personal phone numbers.',
+            'Les champs identifiants seront retires avant l’envoi. Evitez de capturer des visages ou des numeros personnels.',
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   const renderCreateFields = () => {
     if (vertical === 'pharmacy') {
@@ -2053,6 +2105,7 @@ const ContributionFlow: React.FC<Props> = ({
         {renderPhotoBlock()}
         {renderCommonLocationBlock()}
         {isEnrichMode ? renderEnrichFields() : renderCreateFields()}
+        {renderConsentBlock()}
         {renderQualityPreview()}
 
         {errorMessage && (

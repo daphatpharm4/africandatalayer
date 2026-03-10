@@ -53,6 +53,8 @@ Set these environment variables:
 - `DATA_STORE_DRIVER` (`postgres`)
 - Optional: `DATA_READ_FALLBACK_EDGE` (`true` during migration, then `false`)
 - `BLOB_READ_WRITE_TOKEN` (for storing user-submitted photos)
+- Optional monitoring: `SENTRY_DSN`, `VITE_SENTRY_DSN`
+- Optional fraud ops: `FRAUD_ALERT_WEBHOOK_URL`
 - Optional: `MAX_SUBMISSION_IMAGE_BYTES` (default `8388608`)
 - Optional: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
 - Optional (frontend): `VITE_ADMIN_EMAIL` (to show Impact tab for admin users)
@@ -91,3 +93,9 @@ If credentials were shared publicly, rotate them before deploying:
 Local dev (recommended):
 - Backend: `npx vercel@latest dev --listen 3000`
 - Frontend: `npm run dev` (Vite on `http://localhost:5173` with `/api` proxy)
+
+## 🛠️ Pilot Ops
+
+- Release flow: `docs/ops/pilot-release-flow.md`
+- Backup and restore: `docs/ops/backup-restore-runbook.md`
+- Compliance pack: `docs/compliance/`

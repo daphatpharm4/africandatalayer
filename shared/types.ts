@@ -197,7 +197,7 @@ export interface ProjectedPoint {
   eventIds: string[];
 }
 
-export interface Submission extends PointEvent {}
+export type Submission = PointEvent;
 
 export interface AdminSubmissionEvent {
   event: PointEvent;
@@ -205,6 +205,9 @@ export interface AdminSubmissionEvent {
     id: string;
     name: string;
     email: string | null;
+    trustScore?: number;
+    trustTier?: TrustTier;
+    suspendedUntil?: string | null;
   };
   fraudCheck: SubmissionFraudCheck | null;
 }

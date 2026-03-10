@@ -1,6 +1,6 @@
 import React from 'react';
 import { Screen } from '../types';
-import { Map, PlusCircle, BarChart2, Medal, User, TrendingUp, Download, LayoutDashboard } from 'lucide-react';
+import { Map, PlusCircle, BarChart2, Medal, User, TrendingUp, LayoutDashboard } from 'lucide-react';
 
 type UserRole = 'agent' | 'admin' | 'client';
 

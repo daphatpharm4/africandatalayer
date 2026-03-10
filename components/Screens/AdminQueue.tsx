@@ -69,23 +69,10 @@ function getSiteName(item: AdminSubmissionEvent, language: 'en' | 'fr'): string 
   return language === 'fr' ? 'Soumission sans nom' : 'Unnamed submission';
 }
 
-function getPrimaryImageUrl(item: AdminSubmissionEvent): string | null {
-  if (typeof item.event.photoUrl === 'string' && item.event.photoUrl.trim()) return item.event.photoUrl;
-  const details = item.event.details as SubmissionDetails;
-  if (typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim()) return details.secondPhotoUrl;
-  return null;
-}
-
-function getSecondaryImageUrl(item: AdminSubmissionEvent): string | null {
-  const details = item.event.details as SubmissionDetails;
-  if (typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim()) return details.secondPhotoUrl;
-  return null;
-}
-
 function getClientDevice(item: AdminSubmissionEvent): ClientDeviceInfo | null {
   const details = item.event.details as SubmissionDetails;
   if (!details.clientDevice || typeof details.clientDevice !== 'object') return null;
-  const raw = details.clientDevice as Record<string, unknown>;
+  const raw = details.clientDevice;
   if (typeof raw.deviceId !== 'string' || !raw.deviceId.trim()) return null;
   return {
     deviceId: raw.deviceId.trim(),
@@ -1032,9 +1019,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           <div className="space-y-3">
             {filteredGroups.map((group) => {
               const isSelected = selectedPointId === group.pointId;
-              const state = getMatchState(group.latestEvent.fraudCheck);
               const preview = group.allPhotos[0]?.url ?? null;
-              const contributors = [...new Set(group.events.map((e) => e.user.name))];
               const riskScore = getRiskScore(group.latestEvent);
               const reviewStatus = getReviewStatus(group.latestEvent);
               return (
@@ -1163,6 +1148,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   <div key={user.id} className="space-y-0.5">
                     <div className="text-gray-900 font-semibold">{user.name}</div>
                     <div className="text-gray-600">{user.email ?? unavailableLabel}</div>
+                    <div className="text-[11px] text-gray-500">
+                      {t('Trust', 'Confiance')}: {typeof user.trustScore === 'number' ? user.trustScore : '--'} • {user.trustTier ?? unavailableLabel}
+                    </div>
+                    {user.suspendedUntil && (
+                      <div className="text-[11px] text-[#b85f3f]">
+                        {t('Suspended until', 'Suspendu jusqu’au')}: {formatDate(user.suspendedUntil, unavailableLabel)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

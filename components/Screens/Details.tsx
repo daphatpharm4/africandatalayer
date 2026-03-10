@@ -1,5 +1,5 @@
 import React from 'react';
-import { Category, DataPoint } from '../../types';
+import type { DataPoint } from '../../types';
 import {
   ArrowLeft,
   Clock,

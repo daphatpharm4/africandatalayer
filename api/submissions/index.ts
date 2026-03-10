@@ -535,6 +535,9 @@ async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSu
         id: normalizedUserId || event.userId,
         name,
         email,
+        trustScore: profile?.trustScore ?? 50,
+        trustTier: profile?.trustTier ?? "standard",
+        suspendedUntil: profile?.suspendedUntil ?? null,
       },
       fraudCheck,
     });
@@ -822,7 +825,7 @@ export async function POST(request: Request): Promise<Response> {
   const clientPhotoEvidenceSha256 =
     typeof body.photoEvidenceSha256 === "string" && body.photoEvidenceSha256.trim() ? body.photoEvidenceSha256.trim() : null;
   let photoLocation: SubmissionLocation | null = null;
-  let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null = null;
+  let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null;
 
   try {
     primaryPhotoMetadata = await extractPhotoMetadata(parsedPhoto.imageBuffer, {

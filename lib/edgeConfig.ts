@@ -3,8 +3,6 @@ import type { LegacySubmission, PointEvent, UserProfile } from "../shared/types.
 
 type EdgeConfigClient = ReturnType<typeof createClient>;
 
-const memoryStoreKey = "__edgeConfigStore";
-
 function getMemoryStore(): Map<string, unknown> {
   const globalAny = globalThis as typeof globalThis & {
     __edgeConfigStore?: Map<string, unknown>;

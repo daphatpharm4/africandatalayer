@@ -47,7 +47,8 @@ function isAdminToken(token: unknown): boolean {
 }
 
 function sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit<T, "passwordHash"> {
-  const { passwordHash: _passwordHash, ...safe } = profile;
+  const safe = { ...profile } as T & { passwordHash?: unknown };
+  delete safe.passwordHash;
   return safe;
 }
 
@@ -271,7 +272,7 @@ export async function PATCH(request: Request): Promise<Response> {
         wipeRequested: body.wipeRequested,
       });
       await logSecurityEvent({
-        eventType: body.wipeRequested ? "remote_wipe_triggered" : "role_changed",
+        eventType: body.wipeRequested ? "remote_wipe_triggered" : "suspicious_activity",
         userId: body.userId,
         request,
         details: {

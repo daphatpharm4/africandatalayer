@@ -11,10 +11,10 @@ export function getAuthSecret(): string | null {
 }
 
 export function getAuthBaseUrl(): string | null {
-  const raw = process.env.AUTH_URL ?? process.env.NEXTAUTH_URL ?? null;
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  return trimmed || null;
+  const raw = [process.env.AUTH_URL, process.env.NEXTAUTH_URL].find(
+    (value): value is string => typeof value === "string" && value.trim().length > 0,
+  );
+  return raw?.trim() ?? null;
 }
 
 export function isSecureRequest(): boolean {

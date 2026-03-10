@@ -24,7 +24,11 @@ export function toSubmissionAuthContext(auth: RawAuth): SubmissionAuthContext | 
 }
 
 export function redactEventUserIds(events: PointEvent[]): Array<Omit<PointEvent, "userId">> {
-  return events.map(({ userId: _userId, ...rest }) => rest as Omit<PointEvent, "userId">);
+  return events.map((event) => {
+    const redacted = { ...event };
+    delete redacted.userId;
+    return redacted as Omit<PointEvent, "userId">;
+  });
 }
 
 export function filterEventsForViewer(events: PointEvent[], viewer: SubmissionAuthContext): PointEvent[] {

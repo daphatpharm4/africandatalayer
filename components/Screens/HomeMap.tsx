@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Circle, MapContainer, Marker, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Layers, Navigation } from 'lucide-react';
-import { Category, DataPoint } from '../../types';
+import { Category } from '../../types';
+import type { DataPoint } from '../../types';
 import type { MapScope, ZoneBounds } from '../../shared/types';
 import { LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 

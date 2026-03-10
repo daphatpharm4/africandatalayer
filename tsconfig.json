@@ -3,7 +3,7 @@
     "target": "ES2021",
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
-    "module": "NodeNext",
+    "module": "ESNext",
     "lib": [
       "ES2021",
       "DOM",
@@ -13,10 +13,12 @@
     "types": [
       "node"
     ],
-    "moduleResolution": "nodenext",
+    "moduleResolution": "Bundler",
     "isolatedModules": true,
+    "allowImportingTsExtensions": true,
     "allowJs": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"

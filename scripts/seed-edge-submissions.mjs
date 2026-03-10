@@ -17,7 +17,6 @@ function loadEnv() {
 }
 
 function toSubmission({
-  id,
   name,
   type,
   coordinates,

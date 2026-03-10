@@ -7,7 +7,8 @@ const INLINE_PHOTO_PREFIX = "data:image/";
 
 export function stripInlinePhotoData(event: PointEvent): PointEvent {
   if (typeof event.photoUrl !== "string" || !event.photoUrl.startsWith(INLINE_PHOTO_PREFIX)) return event;
-  const { photoUrl: _photoUrl, ...rest } = event;
+  const rest = { ...event };
+  delete rest.photoUrl;
   const details = { ...(event.details ?? {}), hasPhoto: true };
   return { ...rest, details };
 }

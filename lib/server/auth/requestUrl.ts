@@ -34,7 +34,6 @@ export function resolveAuthRequestBaseUrl(
 
 export async function withAbsoluteUrl(request: Request, fallbackUrl: string): Promise<Request> {
   try {
-    // eslint-disable-next-line no-new
     new URL(request.url);
     return request;
   } catch {

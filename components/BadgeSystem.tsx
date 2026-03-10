@@ -28,7 +28,7 @@ export interface Badge {
   target: number;
 }
 
-export function computeBadges(events: PointEvent[], language: 'en' | 'fr'): Badge[] {
+export function computeBadges(events: PointEvent[]): Badge[] {
   const totalSubmissions = events.length;
   const uniqueCategories = new Set(events.map((e) => e.category));
 

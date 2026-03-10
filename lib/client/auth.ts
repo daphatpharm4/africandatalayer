@@ -1,6 +1,6 @@
 import { apiFetch, apiJson, buildUrl } from "./api";
 import { normalizeIdentifier } from "../shared/identifier";
-import { looksLikeHtml, sanitizeErrorMessage } from "./errorUtils";
+import { sanitizeErrorMessage } from "./errorUtils";
 
 export type UserRole = "agent" | "admin" | "client";
 

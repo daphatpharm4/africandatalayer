@@ -5,7 +5,6 @@ import type {
   ProjectedPoint,
   SubmissionCategory,
   SubmissionDetails,
-  SubmissionLocation,
 } from "../../shared/types.js";
 import { getVertical } from "../../shared/verticals.js";
 

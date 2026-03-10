@@ -15,7 +15,7 @@ export interface EnrichFieldConfig {
   placeholderFr?: string;
 }
 
-function option(value: string, labelEn: string, labelFr = labelEn): EnrichFieldOption {
+function option(value: string, labelEn = value, labelFr = labelEn): EnrichFieldOption {
   return { value, labelEn, labelFr };
 }
 

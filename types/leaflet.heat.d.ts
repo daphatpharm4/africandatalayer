@@ -1,5 +1,5 @@
 declare module 'leaflet.heat' {
-  import * as L from 'leaflet';
+  import type * as L from 'leaflet';
 
   namespace HeatLayer {
     interface Options {

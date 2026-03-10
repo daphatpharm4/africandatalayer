@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { Screen, DataPoint, ContributionMode } from './types';
+import { Screen } from './types';
+import type { ContributionMode, DataPoint } from './types';
 import { getSession, signOut } from './lib/client/auth';
 import { apiJson } from './lib/client/api';
 import {

@@ -1,5 +1,6 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Category, DataPoint } from '../../types';
+import { Category } from '../../types';
+import type { DataPoint } from '../../types';
 import type { CollectionAssignment, MapScope, PointEvent, ProjectedPoint, UserRole } from '../../shared/types';
 import {
   BONAMOUSSADI_CENTER,
@@ -54,12 +55,6 @@ const HomeMap = React.lazy(() => import('./HomeMap'));
 
 const BONAMOUSSADI_MAP_BOUNDS = bonamoussadiLeafletBounds();
 const CAMEROON_MAP_BOUNDS = cameroonLeafletBounds();
-
-const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
-  if (isAdminMode) return 'global';
-  if (scope === 'cameroon' || scope === 'global') return scope;
-  return 'bonamoussadi';
-};
 
 const categoryFromSubmission = (category: ProjectedPoint['category']): Category => {
   if (category === 'pharmacy') return Category.PHARMACY;

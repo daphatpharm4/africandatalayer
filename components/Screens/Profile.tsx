@@ -127,9 +127,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
     loadProfile();
   }, [language]);
 
-  const badges = useMemo(() => computeBadges(ownEvents, language), [ownEvents, language]);
-  const earnedBadgeCount = badges.filter((b) => b.earned).length;
-  const nextBadge = badges.find((b) => !b.earned);
+  const badges = useMemo(() => computeBadges(ownEvents), [ownEvents]);
 
   const pointsThisWeek = useMemo(() => {
     return countActivitiesInCurrentWeek(ownEvents);
