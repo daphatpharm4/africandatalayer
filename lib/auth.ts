@@ -1,5 +1,6 @@
 import { decode, getToken } from "@auth/core/jwt";
 import type { JWT } from "@auth/core/jwt";
+import type { UserRole } from "../shared/types.js";
 
 export const SESSION_CONFIG = {
   maxAge: 8 * 60 * 60,
@@ -42,7 +43,7 @@ export async function getAuthToken(request: Request): Promise<JWT | null> {
   return await getToken({ req: request, secret, salt, cookieName, secureCookie });
 }
 
-export async function requireUser(request: Request): Promise<{ id: string; token: JWT } | null> {
+export async function requireUser(request: Request): Promise<{ id: string; token: JWT; role: UserRole } | null> {
   const token = await getAuthToken(request);
   if (!token) return null;
   const email = typeof token.email === "string" ? token.email.toLowerCase().trim() : null;
@@ -51,5 +52,8 @@ export async function requireUser(request: Request): Promise<{ id: string; token
   const sub = typeof token.sub === "string" ? token.sub.trim() : null;
   const id = email || normalizedUid || sub;
   if (!id) return null;
-  return { id, token };
+  const role = typeof (token as JWT & { role?: unknown }).role === "string"
+    ? (token as JWT & { role?: unknown }).role as UserRole
+    : "agent";
+  return { id, token, role };
 }

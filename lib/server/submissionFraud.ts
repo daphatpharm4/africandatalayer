@@ -42,6 +42,9 @@ export interface ExtractedPhotoMetadata {
   exifStatus: SubmissionExifStatus;
   exifReason: string | null;
   exifSource: SubmissionExifSource;
+  software?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
 }
 
 type BuildPhotoFraudMetadataParams = {
@@ -361,6 +364,9 @@ function createExtractedPhotoMetadata(
     exifStatus: status,
     exifReason: reason,
     exifSource: source,
+    software: null,
+    imageWidth: null,
+    imageHeight: null,
   };
 }
 
@@ -432,6 +438,118 @@ export function haversineKm(a: SubmissionLocation, b: SubmissionLocation): numbe
   return 2 * EARTH_RADIUS_KM * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+export function computePhotoFreshnessScore(capturedAt: string | null, submittedAt: string | null): number {
+  if (!capturedAt) return 0;
+  const captured = new Date(capturedAt).getTime();
+  const submitted = submittedAt ? new Date(submittedAt).getTime() : Date.now();
+  if (Number.isNaN(captured) || Number.isNaN(submitted)) return 0;
+
+  const diffMs = submitted - captured;
+  // Tolerate -5 min clock skew
+  if (diffMs < -5 * 60 * 1000) return 0;
+  // Detect exact-hour timezone offsets (likely clock misconfiguration)
+  const diffHours = Math.abs(diffMs) / (60 * 60 * 1000);
+  if (diffHours > 0.5 && Math.abs(diffHours - Math.round(diffHours)) < 0.01) {
+    // Likely timezone offset, treat as fresh
+    return 80;
+  }
+
+  const diffMinutes = diffMs / (60 * 1000);
+  if (diffMinutes < 30) return 100;
+  if (diffMinutes < 120) return 80;
+  if (diffMinutes < 24 * 60) return 60;
+  if (diffMinutes < 7 * 24 * 60) return 30;
+  if (diffMinutes < 365 * 24 * 60) return 10;
+  return 0;
+}
+
+export interface PhotoManipulationResult {
+  isScreenshot: boolean;
+  isEdited: boolean;
+  isDownloaded: boolean;
+  flags: string[];
+}
+
+const EDITING_SOFTWARE_PATTERNS = [
+  "photoshop", "gimp", "snapseed", "lightroom", "vsco", "picsart",
+  "canva", "pixlr", "fotor", "afterlight", "enlight", "darkroom",
+  "adobe", "capture one", "affinity",
+];
+
+const COMMON_SCREEN_RESOLUTIONS = new Set([
+  "1920x1080", "2560x1440", "1440x900", "1366x768", "2880x1800",
+  "3840x2160", "1080x1920", "1440x2560", "1080x2400", "1080x2340",
+  "1284x2778", "1170x2532", "1125x2436",
+]);
+
+export function detectPhotoManipulation(metadata: {
+  gps: { latitude: number; longitude: number } | null;
+  capturedAt: string | null;
+  deviceMake: string | null;
+  deviceModel: string | null;
+  software?: string | null;
+  imageWidth?: number | null;
+  imageHeight?: number | null;
+  fileSize?: number | null;
+}): PhotoManipulationResult {
+  const flags: string[] = [];
+  let isScreenshot = false;
+  let isEdited = false;
+  let isDownloaded = false;
+
+  const width = metadata.imageWidth ?? 0;
+  const height = metadata.imageHeight ?? 0;
+
+  // Screenshot detection
+  if (width > 0 && height > 0) {
+    const aspectRatio = Math.max(width, height) / Math.min(width, height);
+    if (aspectRatio > 2.0) {
+      flags.push("extreme_aspect_ratio");
+      isScreenshot = true;
+    }
+    const resolution = `${width}x${height}`;
+    const reverseResolution = `${height}x${width}`;
+    if (COMMON_SCREEN_RESOLUTIONS.has(resolution) || COMMON_SCREEN_RESOLUTIONS.has(reverseResolution)) {
+      flags.push("common_screen_resolution");
+      isScreenshot = true;
+    }
+  }
+
+  // Editing detection via EXIF Software tag
+  const software = (metadata.software ?? "").toLowerCase().trim();
+  if (software) {
+    for (const pattern of EDITING_SOFTWARE_PATTERNS) {
+      if (software.includes(pattern)) {
+        flags.push("editing_software_detected");
+        isEdited = true;
+        break;
+      }
+    }
+  }
+
+  // Downloaded image detection: triple-null (no GPS + no device + no timestamp)
+  if (!metadata.gps && !metadata.deviceMake && !metadata.capturedAt) {
+    flags.push("triple_null_metadata");
+    isDownloaded = true;
+    // Standard web dimensions
+    if (width > 0 && height > 0) {
+      const standardWebWidths = [640, 800, 1024, 1200, 1280, 1600, 1920];
+      if (standardWebWidths.includes(width) || standardWebWidths.includes(height)) {
+        flags.push("standard_web_dimensions");
+      }
+    }
+  }
+
+  // File size flags
+  if (metadata.fileSize !== undefined && metadata.fileSize !== null) {
+    if (metadata.fileSize < 50 * 1024) {
+      flags.push("very_small_file");
+    }
+  }
+
+  return { isScreenshot, isEdited, isDownloaded, flags };
+}
+
 export async function extractPhotoMetadata(
   imageBuffer: Buffer,
   options: ExtractPhotoMetadataOptions = {},
@@ -458,6 +576,9 @@ export async function extractPhotoMetadata(
       "ModifyDate",
       "Make",
       "Model",
+      "Software",
+      "ImageWidth",
+      "ImageHeight",
     ],
   });
   const gpsAttempt = await safeParseGps(imageBuffer);
@@ -474,6 +595,9 @@ export async function extractPhotoMetadata(
     parseDateIso(merged.ModifyDate);
   const deviceMake = normalizeString(merged.Make);
   const deviceModel = normalizeString(merged.Model);
+  const software = normalizeString(merged.Software);
+  const imageWidth = typeof merged.ImageWidth === "number" ? merged.ImageWidth : null;
+  const imageHeight = typeof merged.ImageHeight === "number" ? merged.ImageHeight : null;
 
   if (hasExifSignal({ gps, capturedAt, deviceMake, deviceModel })) {
     const exifStatus: SubmissionExifStatus = source === "remote_url" ? "fallback_recovered" : "ok";
@@ -489,6 +613,9 @@ export async function extractPhotoMetadata(
       exifStatus,
       exifReason,
       exifSource: source,
+      software,
+      imageWidth,
+      imageHeight,
     };
   }
 
@@ -616,6 +743,9 @@ export function applyClientExifFallback(
     exifStatus: "fallback_recovered",
     exifReason: `EXIF supplemented from client-side metadata for fields: ${supplementedFields.join(", ")} (server source=${metadata.exifSource}; status=${metadata.exifStatus}; reason=${metadata.exifReason ?? "no details"})`,
     exifSource: "client_fallback",
+    software: metadata.software,
+    imageWidth: metadata.imageWidth,
+    imageHeight: metadata.imageHeight,
   };
 }
 

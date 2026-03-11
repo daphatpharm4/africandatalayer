@@ -535,6 +535,7 @@ async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSu
         id: normalizedUserId || event.userId,
         name,
         email,
+        avatarPreset: profile?.avatarPreset ?? undefined,
         trustScore: profile?.trustScore ?? 50,
         trustTier: profile?.trustTier ?? "standard",
         suspendedUntil: profile?.suspendedUntil ?? null,
@@ -824,6 +825,15 @@ export async function POST(request: Request): Promise<Response> {
   const clientExif = (body as unknown as Record<string, unknown>)?.clientExif as ClientExifData | null | undefined;
   const clientPhotoEvidenceSha256 =
     typeof body.photoEvidenceSha256 === "string" && body.photoEvidenceSha256.trim() ? body.photoEvidenceSha256.trim() : null;
+
+  // 5C: Server-side photo hash verification
+  if (clientPhotoEvidenceSha256) {
+    const serverPhotoHash = computeImageSha256(parsedPhoto.imageBuffer);
+    if (serverPhotoHash !== clientPhotoEvidenceSha256) {
+      return errorResponse("Photo integrity check failed: hash mismatch between client and server", 400);
+    }
+  }
+
   let photoLocation: SubmissionLocation | null = null;
   let primaryPhotoMetadata: Awaited<ReturnType<typeof extractPhotoMetadata>> | null;
 
@@ -1016,6 +1026,13 @@ export async function POST(request: Request): Promise<Response> {
             }
           : null,
         hasSecondaryPhoto: Boolean(body?.secondImageBase64),
+        gpsIntegrity: gpsIntegrity ?? null,
+        photoExifExtra: {
+          software: primaryPhotoMetadata?.software ?? null,
+          imageWidth: primaryPhotoMetadata?.imageWidth ?? null,
+          imageHeight: primaryPhotoMetadata?.imageHeight ?? null,
+          fileSize: parsedPhoto.imageBuffer.byteLength,
+        },
       });
     } catch (riskError) {
       console.warn("Submission risk engine fallback activated", riskError);
@@ -1035,6 +1052,7 @@ export async function POST(request: Request): Promise<Response> {
         reviewFlags: ["risk_engine_unavailable"],
         riskScore: 55,
         exifTrustScore: 0,
+        xpAction: "escrow" as const,
         velocity: {
           user15m: 0,
           device15m: null,
@@ -1219,8 +1237,13 @@ export async function POST(request: Request): Promise<Response> {
       };
     }
 
-    const xpAwarded = riskEvaluation.reviewStatus === "auto_approved" ? BASE_EVENT_XP : 0;
+    // 6E: XP escrow mechanism
+    const xpAwarded = riskEvaluation.xpAction === "award" ? BASE_EVENT_XP : 0;
     details.xpAwarded = xpAwarded;
+    details.xpAction = riskEvaluation.xpAction;
+    if (riskEvaluation.xpAction === "escrow") {
+      details.xpEscrow = true;
+    }
 
     const now = new Date().toISOString();
     const newEvent: PointEvent = {
@@ -1271,6 +1294,7 @@ export async function POST(request: Request): Promise<Response> {
         riskScore: riskEvaluation.riskScore,
         riskComponents: riskEvaluation.riskComponents,
         clientDevice,
+        imageBuffer: parsedPhoto.imageBuffer,
       });
     } catch (riskPersistError) {
       console.warn("Unable to persist submission risk artifacts", riskPersistError);

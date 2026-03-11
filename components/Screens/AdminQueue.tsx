@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Camera, MapPin, ShieldCheck, Trash2, User, X } from 'lucide-react';
+import ProfileAvatar from '../shared/ProfileAvatar';
+import { coerceAvatarPreset } from '../../shared/avatarPresets';
 import { apiFetch, apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type {
@@ -1145,7 +1147,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Contributors', 'Contributeurs')}</div>
                 {contributors.map((user) => (
-                  <div key={user.id} className="space-y-0.5">
+                  <div key={user.id} className="flex items-start gap-2">
+                    <ProfileAvatar preset={coerceAvatarPreset(user.avatarPreset)} alt={user.name} className="w-8 h-8 shrink-0" />
+                    <div className="space-y-0.5">
                     <div className="text-gray-900 font-semibold">{user.name}</div>
                     <div className="text-gray-600">{user.email ?? unavailableLabel}</div>
                     <div className="text-[11px] text-gray-500">
@@ -1153,9 +1157,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     </div>
                     {user.suspendedUntil && (
                       <div className="text-[11px] text-[#b85f3f]">
-                        {t('Suspended until', 'Suspendu jusqu’au')}: {formatDate(user.suspendedUntil, unavailableLabel)}
+                        {t("Suspended until", "Suspendu jusqu’au")}: {formatDate(user.suspendedUntil, unavailableLabel)}
                       </div>
                     )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1330,7 +1335,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         </span>
                       </div>
                       <div className="text-[11px] text-gray-600 flex items-center gap-1">
-                        <User size={12} />
+                        <ProfileAvatar preset={coerceAvatarPreset(group.events[0]?.user.avatarPreset)} alt="" className="w-4 h-4 shrink-0" />
                         <span className="truncate">{contributors.join(', ')}</span>
                       </div>
                       <div className="text-[11px] text-gray-500 flex items-center gap-1">

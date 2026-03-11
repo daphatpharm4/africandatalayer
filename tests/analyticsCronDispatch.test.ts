@@ -12,6 +12,8 @@ test("getCronDispatchSchedule enables weekly snapshot on Monday at daily cron ti
     weeklySnapshot: true,
     monthlyRollup: false,
     dailyRoadSnapshot: true,
+    dailyTrustDecay: true,
+    dailyGpsAnomaly: true,
   });
 });
 
@@ -21,6 +23,8 @@ test("getCronDispatchSchedule enables monthly rollup on day 1 at daily cron time
     weeklySnapshot: false,
     monthlyRollup: true,
     dailyRoadSnapshot: true,
+    dailyTrustDecay: true,
+    dailyGpsAnomaly: true,
   });
 });
 
@@ -30,6 +34,8 @@ test("getCronDispatchSchedule enables daily road snapshot only at 06:00 UTC", ()
     weeklySnapshot: false,
     monthlyRollup: false,
     dailyRoadSnapshot: true,
+    dailyTrustDecay: true,
+    dailyGpsAnomaly: true,
   });
 });
 
@@ -39,6 +45,8 @@ test("getCronDispatchSchedule handles non-matching hours", () => {
     weeklySnapshot: false,
     monthlyRollup: false,
     dailyRoadSnapshot: false,
+    dailyTrustDecay: false,
+    dailyGpsAnomaly: false,
   });
 
   const nonMatchingHour = getCronDispatchSchedule(utc("2026-03-02T05:00:00.000Z"));
@@ -46,6 +54,8 @@ test("getCronDispatchSchedule handles non-matching hours", () => {
     weeklySnapshot: false,
     monthlyRollup: false,
     dailyRoadSnapshot: false,
+    dailyTrustDecay: false,
+    dailyGpsAnomaly: false,
   });
 });
 
@@ -55,6 +65,8 @@ test("getCronDispatchSchedule does not trigger outside minute zero", () => {
     weeklySnapshot: false,
     monthlyRollup: false,
     dailyRoadSnapshot: false,
+    dailyTrustDecay: false,
+    dailyGpsAnomaly: false,
   });
 });
 
@@ -64,5 +76,7 @@ test("getCronDispatchSchedule prioritizes the configured UTC hours on combined c
     weeklySnapshot: true,
     monthlyRollup: true,
     dailyRoadSnapshot: true,
+    dailyTrustDecay: true,
+    dailyGpsAnomaly: true,
   });
 });

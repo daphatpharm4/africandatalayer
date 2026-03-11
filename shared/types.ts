@@ -14,7 +14,7 @@ export type UserRole = "agent" | "admin" | "client";
 export type CollectionAssignmentStatus = "pending" | "in_progress" | "completed" | "expired";
 export type DedupDecision = "allow_create" | "use_existing";
 export type ConsentStatus = "obtained" | "refused_pii_only" | "not_required" | "withdrawn";
-export type TrustTier = "new" | "standard" | "trusted" | "restricted";
+export type TrustTier = "new" | "standard" | "trusted" | "elite" | "restricted";
 
 export interface SubmissionLocation {
   latitude: number;
@@ -207,6 +207,7 @@ export interface AdminSubmissionEvent {
     id: string;
     name: string;
     email: string | null;
+    avatarPreset?: string;
     trustScore?: number;
     trustTier?: TrustTier;
     suspendedUntil?: string | null;

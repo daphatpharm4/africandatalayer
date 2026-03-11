@@ -48,7 +48,7 @@ test("POST /api/ai/search returns 401 for unauthenticated requests", async () =>
 
 test("POST /api/ai/search returns 400 for invalid JSON", async () => {
   const handler = createAiSearchHandler({
-    requireUserFn: async () => ({ id: "user-1", token: {} }),
+    requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
   });
 
   const request = new Request("http://localhost/api/ai/search", {
@@ -62,7 +62,7 @@ test("POST /api/ai/search returns 400 for invalid JSON", async () => {
 
 test("POST /api/ai/search returns 400 for invalid query payload", async () => {
   const handler = createAiSearchHandler({
-    requireUserFn: async () => ({ id: "user-1", token: {} }),
+    requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
   });
 
   const response = await handler(makeJsonRequest({ query: "   " }));
@@ -71,7 +71,7 @@ test("POST /api/ai/search returns 400 for invalid query payload", async () => {
 
 test("POST /api/ai/search maps Gemini config errors to 503", async () => {
   const handler = createAiSearchHandler({
-    requireUserFn: async () => ({ id: "user-1", token: {} }),
+    requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
     searchFn: async () => {
       throw new GeminiConfigError("missing key");
     },
@@ -85,7 +85,7 @@ test("POST /api/ai/search maps Gemini config errors to 503", async () => {
 
 test("POST /api/ai/search maps Gemini upstream errors to 503", async () => {
   const handler = createAiSearchHandler({
-    requireUserFn: async () => ({ id: "user-1", token: {} }),
+    requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
     searchFn: async () => {
       throw new GeminiUpstreamError("upstream");
     },
@@ -100,7 +100,7 @@ test("POST /api/ai/search maps Gemini upstream errors to 503", async () => {
 test("POST /api/ai/search returns 200 and response payload for valid requests", async () => {
   let captured: { query?: string; lat?: number; lng?: number } | null = null;
   const handler = createAiSearchHandler({
-    requireUserFn: async () => ({ id: "user-1", token: {} }),
+    requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
     searchFn: async (query, lat, lng) => {
       captured = { query, lat, lng };
       return { text: "ok", grounding: [{ source: "maps" }] };

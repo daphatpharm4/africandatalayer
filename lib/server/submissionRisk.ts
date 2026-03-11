@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { query } from "./db.js";
-import { haversineKm } from "./submissionFraud.js";
+import { haversineKm, computePhotoFreshnessScore, detectPhotoManipulation } from "./submissionFraud.js";
+import { validateGps } from "./gpsValidation.js";
 import type {
   ClientDeviceInfo,
+  GpsIntegrityReport,
   PointEventType,
   SubmissionCategory,
   SubmissionDetails,
@@ -80,7 +82,16 @@ export interface SubmissionRiskInput {
     isTor: boolean;
   } | null;
   hasSecondaryPhoto: boolean;
+  gpsIntegrity: GpsIntegrityReport | null;
+  photoExifExtra?: {
+    software?: string | null;
+    imageWidth?: number | null;
+    imageHeight?: number | null;
+    fileSize?: number | null;
+  } | null;
 }
+
+export type XpAction = "award" | "escrow" | "deny";
 
 export interface SubmissionRiskEvaluation {
   shouldBlock: boolean;
@@ -92,6 +103,7 @@ export interface SubmissionRiskEvaluation {
   reviewFlags: string[];
   riskScore: number;
   exifTrustScore: number;
+  xpAction: XpAction;
   velocity: {
     user15m: number;
     device15m: number | null;
@@ -114,6 +126,8 @@ export interface PersistSubmissionRiskInput {
   riskScore: number;
   riskComponents: RiskComponents;
   clientDevice: ClientDeviceInfo | null;
+  perceptualHash?: string | null;
+  imageBuffer?: Buffer;
 }
 
 function toNumber(input: unknown, fallback = 0): number {
@@ -175,6 +189,44 @@ function hashText(input: string): string {
 
 export function computeImageSha256(imageBuffer: Buffer): string {
   return createHash("sha256").update(imageBuffer).digest("hex");
+}
+
+export async function computePerceptualHash(imageBuffer: Buffer): Promise<string | null> {
+  try {
+    const sharp = (await import("sharp")).default;
+    const { data } = await sharp(imageBuffer)
+      .resize(8, 8, { fit: "fill" })
+      .grayscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const pixels = Array.from(data);
+    const mean = pixels.reduce((sum, v) => sum + v, 0) / pixels.length;
+    let hash = "";
+    for (const pixel of pixels) {
+      hash += pixel >= mean ? "1" : "0";
+    }
+    // Convert binary string to hex
+    let hex = "";
+    for (let i = 0; i < hash.length; i += 4) {
+      hex += parseInt(hash.slice(i, i + 4), 2).toString(16);
+    }
+    return hex;
+  } catch {
+    return null;
+  }
+}
+
+export function hammingDistance(a: string, b: string): number {
+  if (a.length !== b.length) return Math.max(a.length, b.length);
+  let distance = 0;
+  for (let i = 0; i < a.length; i++) {
+    const aBits = parseInt(a[i]!, 16).toString(2).padStart(4, "0");
+    const bBits = parseInt(b[i]!, 16).toString(2).padStart(4, "0");
+    for (let j = 0; j < 4; j++) {
+      if (aBits[j] !== bBits[j]) distance++;
+    }
+  }
+  return distance;
 }
 
 export function computeEventContentHash(input: {
@@ -308,6 +360,24 @@ async function getDuplicateImageMatches(imageHash: string): Promise<Array<{ even
       [imageHash],
     );
     return result.rows.map((row) => ({ eventId: row.event_id, pointId: row.point_id, userId: row.user_id }));
+  } catch (error) {
+    if (isMissingDbObjectError(error)) return [];
+    throw error;
+  }
+}
+
+async function getPerceptualHashMatches(perceptualHash: string): Promise<Array<{ eventId: string; pointId: string; hash: string }>> {
+  try {
+    const result = await query<{ event_id: string; point_id: string; perceptual_hash: string }>(
+      `SELECT event_id::text, point_id, perceptual_hash
+       FROM submission_image_hashes
+       WHERE perceptual_hash IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 100`,
+    );
+    return result.rows
+      .filter((row) => hammingDistance(row.perceptual_hash, perceptualHash) <= 5)
+      .map((row) => ({ eventId: row.event_id, pointId: row.point_id, hash: row.perceptual_hash }));
   } catch (error) {
     if (isMissingDbObjectError(error)) return [];
     throw error;
@@ -480,6 +550,19 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
     locationRisk += 40;
     blockingCodes.add("tor_exit_ip");
   }
+  // 6A: GPS validation integration
+  const gpsValidation = validateGps({
+    submissionLocation: input.submissionLocation,
+    photoLocation: input.photoMetadata.gps,
+    gpsIntegrity: input.gpsIntegrity,
+  });
+  if (gpsValidation.score < 50) {
+    locationRisk += Math.round((100 - gpsValidation.score) * 0.3);
+    for (const flag of gpsValidation.flags) reviewFlags.add(`gps_${flag}`);
+  }
+  if (gpsValidation.mockDetected) {
+    reviewFlags.add("gps_mock_detected");
+  }
   locationRisk = Math.min(100, locationRisk);
 
   let photoRisk = 0;
@@ -497,6 +580,43 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
   if (duplicateForSamePoint) {
     reviewFlags.add("duplicate_photo_same_point");
     photoRisk += 25;
+  }
+
+  // 6B: Photo freshness scoring
+  const freshnessScore = computePhotoFreshnessScore(
+    input.photoMetadata.capturedAt,
+    new Date().toISOString(),
+  );
+  if (freshnessScore < 30) {
+    photoRisk += 20;
+    reviewFlags.add("stale_photo");
+  } else if (freshnessScore < 60) {
+    photoRisk += 10;
+    reviewFlags.add("aging_photo");
+  }
+
+  // 6C: Screenshot & editing detection
+  const manipulation = detectPhotoManipulation({
+    gps: input.photoMetadata.gps,
+    capturedAt: input.photoMetadata.capturedAt,
+    deviceMake: input.photoMetadata.deviceMake,
+    deviceModel: input.photoMetadata.deviceModel,
+    software: input.photoExifExtra?.software ?? null,
+    imageWidth: input.photoExifExtra?.imageWidth ?? null,
+    imageHeight: input.photoExifExtra?.imageHeight ?? null,
+    fileSize: input.photoExifExtra?.fileSize ?? null,
+  });
+  if (manipulation.isScreenshot) {
+    photoRisk += 25;
+    reviewFlags.add("screenshot_detected");
+  }
+  if (manipulation.isEdited) {
+    photoRisk += 20;
+    reviewFlags.add("editing_software_detected");
+  }
+  if (manipulation.isDownloaded) {
+    photoRisk += 15;
+    reviewFlags.add("downloaded_image_detected");
   }
 
   if (input.clientDevice?.isLowEnd && photoRisk > 0 && photoRisk <= 35) {
@@ -624,8 +744,35 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
     blockingCodes.clear();
   }
 
+  // 6D: Perceptual hash duplicate detection
+  try {
+    const perceptualHash = await computePerceptualHash(input.imageBuffer);
+    if (perceptualHash) {
+      const perceptualMatches = await getPerceptualHashMatches(perceptualHash);
+      const nearDuplicate = perceptualMatches.some((row) => row.pointId !== input.pointId);
+      if (nearDuplicate) {
+        photoRisk = Math.min(100, photoRisk + 30);
+        reviewFlags.add("perceptual_near_duplicate");
+      }
+    }
+  } catch {
+    // Perceptual hashing is best-effort; don't block submissions if sharp fails
+  }
+
   const firstBlockCode = blockingCodes.values().next().value ?? null;
   const block = firstBlockCode ? blockDetailsForCode(firstBlockCode) : null;
+
+  // 6E: XP escrow logic
+  let xpAction: XpAction;
+  if (Boolean(firstBlockCode)) {
+    xpAction = "deny";
+  } else if (riskScore > 75) {
+    xpAction = "deny";
+  } else if (riskScore > 50) {
+    xpAction = "escrow";
+  } else {
+    xpAction = "award";
+  }
 
   return {
     shouldBlock: Boolean(firstBlockCode),
@@ -637,6 +784,7 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
     reviewFlags: Array.from(reviewFlags),
     riskScore,
     exifTrustScore,
+    xpAction,
     velocity: {
       user15m: userVelocity,
       device15m: input.clientDevice?.deviceId ? deviceVelocity.count : null,
@@ -665,11 +813,19 @@ async function persistContentHash(eventId: string, contentHash: string): Promise
 
 async function insertImageHashRecord(input: PersistSubmissionRiskInput): Promise<void> {
   try {
+    let perceptualHash = input.perceptualHash ?? null;
+    if (!perceptualHash && input.imageBuffer) {
+      try {
+        perceptualHash = await computePerceptualHash(input.imageBuffer);
+      } catch {
+        // Best-effort perceptual hash computation
+      }
+    }
     await query(
-      `INSERT INTO submission_image_hashes (event_id, point_id, user_id, sha256_hash)
-       VALUES ($1::uuid, $2, $3, $4)
+      `INSERT INTO submission_image_hashes (event_id, point_id, user_id, sha256_hash, perceptual_hash)
+       VALUES ($1::uuid, $2, $3, $4, $5)
        ON CONFLICT (event_id) DO NOTHING`,
-      [input.eventId, input.pointId, input.userId, input.imageHash],
+      [input.eventId, input.pointId, input.userId, input.imageHash, perceptualHash],
     );
   } catch (error) {
     if (isMissingDbObjectError(error) || isUniqueViolationError(error)) return;

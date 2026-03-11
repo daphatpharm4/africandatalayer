@@ -233,6 +233,19 @@ export default async function handler(request: Request): Promise<Response> {
           },
         },
       },
+      events: {
+        async signOut(message) {
+          const token = "token" in message ? message.token : null;
+          const uid = (token as { uid?: string } | null)?.uid;
+          if (uid) {
+            await logSecurityEvent({
+              eventType: "logout",
+              userId: uid,
+              details: { method: "signout" },
+            });
+          }
+        },
+      },
       callbacks: {
         async signIn({ user, account }) {
           const email = normalizeEmail(user?.email);

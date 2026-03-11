@@ -402,6 +402,7 @@ const ContributionFlow: React.FC<Props> = ({
   const [xpBreakdown, setXpBreakdown] = useState({ baseXp: 5, qualityBonus: 0, streakBonus: 0, totalXp: 5 });
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [consentStatus, setConsentStatus] = useState<ConsentStatus>('not_required');
+  const [consentAcknowledged, setConsentAcknowledged] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [newLevel, setNewLevel] = useState(1);
 
@@ -980,6 +981,23 @@ const ContributionFlow: React.FC<Props> = ({
       return false;
     }
 
+    // Consent validation for PII-rich categories
+    const piiRichCategories: SubmissionCategory[] = ['pharmacy', 'mobile_money'];
+    if (piiRichCategories.includes(vertical) && consentStatus === 'not_required') {
+      setErrorMessage(t(
+        'This category involves personal data. Please select a consent status.',
+        'Cette categorie implique des donnees personnelles. Veuillez selectionner un statut de consentement.',
+      ));
+      return false;
+    }
+    if (consentStatus === 'obtained' && !consentAcknowledged) {
+      setErrorMessage(t(
+        'Please acknowledge that consent was properly obtained.',
+        'Veuillez confirmer que le consentement a ete correctement obtenu.',
+      ));
+      return false;
+    }
+
     return true;
   };
 
@@ -1384,7 +1402,7 @@ const ContributionFlow: React.FC<Props> = ({
           <button
             key={option.value}
             type="button"
-            onClick={() => setConsentStatus(option.value)}
+            onClick={() => { setConsentStatus(option.value); setConsentAcknowledged(false); }}
             className={`rounded-xl border px-3 py-3 text-left text-xs font-semibold ${
               consentStatus === option.value ? 'border-[#0f2b46] bg-[#eef4f8] text-[#0f2b46]' : 'border-gray-100 bg-gray-50 text-gray-600'
             }`}
@@ -1400,6 +1418,22 @@ const ContributionFlow: React.FC<Props> = ({
             'Les champs identifiants seront retires avant l’envoi. Evitez de capturer des visages ou des numeros personnels.',
           )}
         </div>
+      )}
+      {consentStatus === 'obtained' && (
+        <label className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={consentAcknowledged}
+            onChange={(e) => setConsentAcknowledged(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#0f2b46] focus:ring-[#0f2b46]"
+          />
+          <span className="text-[11px] text-gray-600">
+            {t(
+              'I confirm that consent was obtained from the relevant person(s) before capturing this data.',
+              'Je confirme que le consentement a ete obtenu des personnes concernees avant de capturer ces donnees.',
+            )}
+          </span>
+        </label>
       )}
     </div>
   );
@@ -1951,6 +1985,7 @@ const ContributionFlow: React.FC<Props> = ({
     setSelectedDedupPointId('');
     setDedupCheck(null);
     setConsentStatus('not_required');
+    setConsentAcknowledged(false);
     setSiteName('');
     setOpeningHours('');
     setProviders([]);

@@ -275,3 +275,57 @@ export async function signInWithGoogle(): Promise<void> {
   document.body.appendChild(form);
   form.submit();
 }
+
+const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+
+export function startIdleWatcher(
+  onTimeout: () => void,
+  timeoutMs: number = DEFAULT_IDLE_TIMEOUT_MS,
+): () => void {
+  let timer = setTimeout(onTimeout, timeoutMs);
+
+  function resetTimer() {
+    clearTimeout(timer);
+    timer = setTimeout(onTimeout, timeoutMs);
+  }
+
+  const events: Array<keyof WindowEventMap> = ["mousemove", "keydown", "touchstart", "scroll", "click"];
+  for (const event of events) {
+    window.addEventListener(event, resetTimer, { passive: true });
+  }
+
+  return () => {
+    clearTimeout(timer);
+    for (const event of events) {
+      window.removeEventListener(event, resetTimer);
+    }
+  };
+}
+
+export function checkRemoteWipe(onWipe: () => void): () => void {
+  let stopped = false;
+
+  async function poll() {
+    if (stopped) return;
+    try {
+      const session = await getSession();
+      if (!session?.user?.id) return;
+      const response = await apiFetch(`/api/user?id=${encodeURIComponent(session.user.id)}`);
+      if (!response.ok) return;
+      const data = await response.json() as { wipeRequested?: boolean };
+      if (data.wipeRequested === true) {
+        onWipe();
+      }
+    } catch {
+      // Silently ignore network errors during wipe check
+    }
+  }
+
+  const interval = setInterval(poll, 5 * 60 * 1000);
+  poll();
+
+  return () => {
+    stopped = true;
+    clearInterval(interval);
+  };
+}

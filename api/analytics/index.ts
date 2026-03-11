@@ -18,6 +18,8 @@ export interface CronDispatchSchedule {
   weeklySnapshot: boolean;
   monthlyRollup: boolean;
   dailyRoadSnapshot: boolean;
+  dailyTrustDecay: boolean;
+  dailyGpsAnomaly: boolean;
 }
 
 type CronJobSummaryStatus = "skipped" | "ok" | "error";
@@ -38,6 +40,8 @@ interface CronDispatchSummary {
     weeklySnapshot: CronJobSummary;
     monthlyRollup: CronJobSummary;
     dailyRoadSnapshot: CronJobSummary;
+    dailyTrustDecay: CronJobSummary;
+    dailyGpsAnomaly: CronJobSummary;
   };
 }
 
@@ -67,6 +71,8 @@ export function getCronDispatchSchedule(now: Date): CronDispatchSchedule {
     weeklySnapshot: isDailyCronWindow && dayOfWeek === 1,
     monthlyRollup: isDailyCronWindow && dayOfMonth === 1,
     dailyRoadSnapshot: isDailyCronWindow,
+    dailyTrustDecay: isDailyCronWindow,
+    dailyGpsAnomaly: isDailyCronWindow,
   };
 }
 
@@ -92,6 +98,16 @@ async function runDailyRoadSnapshotCron(dateOverride?: string): Promise<unknown>
   return runDailyRoadSnapshot(dateOverride);
 }
 
+async function runDailyTrustDecayCron(): Promise<unknown> {
+  const { decayInactiveTrust } = await import("../../lib/server/userTrust.js");
+  return decayInactiveTrust();
+}
+
+async function runDailyGpsAnomalyCron(): Promise<unknown> {
+  const { analyzeAgentMovementPatterns } = await import("../../lib/server/gpsAnomalyDetection.js");
+  return analyzeAgentMovementPatterns();
+}
+
 async function handleCronDispatch(url: URL): Promise<Response> {
   const now = resolveCronDispatchInstant(url.searchParams.get("at"));
   if (!now) {
@@ -104,6 +120,8 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     weeklySnapshot: { due: schedule.weeklySnapshot, status: "skipped", message: "Not scheduled for this run" },
     monthlyRollup: { due: schedule.monthlyRollup, status: "skipped", message: "Not scheduled for this run" },
     dailyRoadSnapshot: { due: schedule.dailyRoadSnapshot, status: "skipped", message: "Not scheduled for this run" },
+    dailyTrustDecay: { due: schedule.dailyTrustDecay, status: "skipped", message: "Not scheduled for this run" },
+    dailyGpsAnomaly: { due: schedule.dailyGpsAnomaly, status: "skipped", message: "Not scheduled for this run" },
   };
 
   let hasFailures = false;
@@ -165,10 +183,48 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     }
   }
 
+  if (schedule.dailyTrustDecay) {
+    try {
+      jobs.dailyTrustDecay = {
+        due: true,
+        status: "ok",
+        message: "Daily trust decay executed",
+        result: await runDailyTrustDecayCron(),
+      };
+    } catch (error) {
+      hasFailures = true;
+      jobs.dailyTrustDecay = {
+        due: true,
+        status: "error",
+        message: asErrorMessage(error),
+      };
+      console.error("Cron dispatch daily trust decay failed:", error);
+    }
+  }
+
+  if (schedule.dailyGpsAnomaly) {
+    try {
+      jobs.dailyGpsAnomaly = {
+        due: true,
+        status: "ok",
+        message: "Daily GPS anomaly detection executed",
+        result: await runDailyGpsAnomalyCron(),
+      };
+    } catch (error) {
+      hasFailures = true;
+      jobs.dailyGpsAnomaly = {
+        due: true,
+        status: "error",
+        message: asErrorMessage(error),
+      };
+      console.error("Cron dispatch daily GPS anomaly detection failed:", error);
+    }
+  }
+
   const summary: CronDispatchSummary = {
     evaluatedAtUtc: now.toISOString(),
     schedule,
-    executedAnyJob: schedule.weeklySnapshot || schedule.monthlyRollup || schedule.dailyRoadSnapshot,
+    executedAnyJob: schedule.weeklySnapshot || schedule.monthlyRollup || schedule.dailyRoadSnapshot || schedule.dailyTrustDecay || schedule.dailyGpsAnomaly,
     hasFailures,
     jobs,
   };
@@ -271,7 +327,7 @@ export async function GET(request: Request): Promise<Response> {
       return handleKpiWeekly(url);
     default:
       return errorResponse(
-        `Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, kpi_summary, kpi_weekly, cron_dispatch, cron, cron_monthly, cron_daily_road`,
+        `Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, kpi_summary, kpi_weekly, cron_dispatch, cron, cron_monthly, cron_daily_road, cron_daily_trust_decay, cron_daily_gps_anomaly`,
         400,
       );
   }

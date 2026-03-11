@@ -12,7 +12,7 @@ import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { captureServerException } from "../../lib/server/sentry.js";
 import { canViewEventDetail, toSubmissionAuthContext } from "../../lib/server/submissionAccess.js";
-import { updateUserTrust } from "../../lib/server/userTrust.js";
+import { adjustTrustOnReview, updateUserTrust } from "../../lib/server/userTrust.js";
 import { reviewBodySchema } from "../../lib/server/validation.js";
 import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
 import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
@@ -90,18 +90,17 @@ async function applyReviewDecision(params: {
 
   await reconcileUserProfileXp(row.user_id);
 
-  const currentProfile = await getUserProfile(row.user_id);
-  if (currentProfile) {
-    const delta = params.decision === "approved" ? 3 : params.decision === "flagged" ? -5 : -15;
-    const nextSuspension =
-      params.decision === "rejected" && (currentProfile.trustScore ?? 50) <= 20
-        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-        : undefined;
-    await updateUserTrust({
-      userId: row.user_id,
-      delta,
-      suspendedUntil: nextSuspension,
-    });
+  // 6G: Use centralized trust adjustment
+  await adjustTrustOnReview({ userId: row.user_id, decision: params.decision });
+  // Apply suspension for rejected submissions from restricted agents
+  if (params.decision === "rejected") {
+    const currentProfile = await getUserProfile(row.user_id);
+    if (currentProfile && (currentProfile.trustScore ?? 50) <= 20) {
+      await updateUserTrust({
+        userId: row.user_id,
+        suspendedUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+    }
   }
 
   return {
