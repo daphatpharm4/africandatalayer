@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Camera, MapPin, ShieldCheck, Trash2, User, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Camera, MapPin, ShieldCheck, Trash2, X } from 'lucide-react';
 import ProfileAvatar from '../shared/ProfileAvatar';
 import { coerceAvatarPreset } from '../../shared/avatarPresets';
 import { apiFetch, apiJson } from '../../lib/client/api';

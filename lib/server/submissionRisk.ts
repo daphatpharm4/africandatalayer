@@ -764,7 +764,7 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
 
   // 6E: XP escrow logic
   let xpAction: XpAction;
-  if (Boolean(firstBlockCode)) {
+  if (firstBlockCode) {
     xpAction = "deny";
   } else if (riskScore > 75) {
     xpAction = "deny";
