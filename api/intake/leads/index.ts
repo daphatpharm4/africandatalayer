@@ -1,8 +1,8 @@
 import { errorResponse, jsonResponse } from "../../../lib/server/http.js";
 import { isStorageUnavailableError } from "../../../lib/server/db.js";
 import { requireAutomationOrAdmin, requireAutomationSecret } from "../../../lib/server/automationAuth.js";
-import { ingestAutomationLeadBatch, listAutomationLeads } from "../../../lib/server/automationLeads.js";
-import { automationRunInputSchema } from "../../../lib/server/validation.js";
+import { ingestAutomationLeadBatch, listAutomationLeads, applyAutomationLeadAction } from "../../../lib/server/automationLeads.js";
+import { automationRunInputSchema, automationLeadActionSchema } from "../../../lib/server/validation.js";
 import { isValidCategory } from "../../../shared/verticals.js";
 import type { AutomationLeadPriority, AutomationLeadStatus, SubmissionCategory } from "../../../shared/types.js";
 
@@ -95,6 +95,45 @@ export async function POST(request: Request): Promise<Response> {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
     const message = error instanceof Error ? error.message : "Unable to ingest automation leads";
+    return errorResponse(message, 400);
+  }
+}
+
+function extractLeadId(request: Request): string | null {
+  const url = new URL(request.url);
+  const segments = url.pathname.replace(/\/+$/, "").split("/");
+  const last = segments[segments.length - 1];
+  return last && last !== "leads" ? last : null;
+}
+
+export async function PATCH(request: Request): Promise<Response> {
+  const access = await requireAutomationOrAdmin(request);
+  if (access instanceof Response) return access;
+
+  const id = extractLeadId(request);
+  if (!id) return errorResponse("Missing lead id", 400);
+
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+
+  const validation = automationLeadActionSchema.safeParse(rawBody);
+  if (!validation.success) {
+    return errorResponse(validation.error.issues[0]?.message ?? "Invalid lead action", 400);
+  }
+
+  try {
+    const updated = await applyAutomationLeadAction(id, validation.data);
+    if (!updated) return errorResponse("Automation lead not found", 404);
+    return jsonResponse(updated, { status: 200 });
+  } catch (error) {
+    if (isStorageUnavailableError(error)) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
+    const message = error instanceof Error ? error.message : "Unable to update automation lead";
     return errorResponse(message, 400);
   }
 }

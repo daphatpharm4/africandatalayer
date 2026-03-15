@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GET as getAutomationLeads, POST as postAutomationLeads } from "../api/intake/leads/index.js";
-import { PATCH as patchAutomationLead } from "../api/intake/leads/[id].js";
+import { GET as getAutomationLeads, POST as postAutomationLeads, PATCH as patchAutomationLead } from "../api/intake/leads/index.js";
 import {
   classifyAutomationLead,
   deriveAutomationRunStatus,
