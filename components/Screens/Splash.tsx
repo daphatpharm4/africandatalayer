@@ -33,19 +33,19 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
     {
       title: t('See the map', 'Voir la carte'),
       desc: t('Browse Bonamoussadi points across pharmacies, fuel stations, and mobile money kiosks.', 'Parcourez les points de Bonamoussadi: pharmacies, stations-service et kiosques mobile money.'),
-      icon: <MapPin size={46} className="text-[#0f2b46]" />,
+      icon: <MapPin size={46} className="text-navy" />,
       action: t('Next', 'Suivant')
     },
     {
       title: t('Contribute local info', 'Contribuez des infos locales'),
       desc: t('Capture live photos, add prices, and confirm availability in minutes.', 'Capturez des photos en direct, ajoutez les prix et confirmez la disponibilite en quelques minutes.'),
-      icon: <Camera size={46} className="text-[#0f2b46]" />,
+      icon: <Camera size={46} className="text-navy" />,
       action: t('Next', 'Suivant')
     },
     {
       title: t('Earn rewards, power change', 'Gagnez des recompenses, creez le changement'),
       desc: t('Collect XP, unlock badges, and redeem local rewards.', 'Gagnez des XP, debloquez des badges et echangez des recompenses locales.'),
-      icon: <ShieldCheck size={46} className="text-[#0f2b46]" />,
+      icon: <ShieldCheck size={46} className="text-navy" />,
       action: t('Get Started', 'Commencer')
     }
   ];
@@ -57,15 +57,15 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
   };
 
   const isFinalSlide = step === slides.length - 1;
-  const heroIconBg = step === 0 ? 'bg-white' : step < 2 ? 'bg-[#0f2b46]' : 'bg-[#f2f4f7]';
+  const heroIconBg = step === 0 ? 'bg-white' : step < 2 ? 'bg-navy' : 'bg-gray-100';
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb] text-[#1f2933]">
+    <div className="flex flex-col h-full bg-page text-ink">
       <div className="flex-1 flex flex-col items-center justify-center px-8 text-center animate-in fade-in duration-700">
         <div className={`w-24 h-24 ${heroIconBg} rounded-2xl flex items-center justify-center mb-10 shadow-xl`}>
           {slides[step].icon}
         </div>
-        <h1 className="text-2xl font-bold tracking-tight mb-4 text-[#1f2933]">{slides[step].title}</h1>
+        <h1 className="text-2xl font-bold tracking-tight mb-4 text-ink">{slides[step].title}</h1>
         <p className="text-sm text-gray-500 max-w-[280px] leading-relaxed mb-12">
           {slides[step].desc}
         </p>
@@ -74,14 +74,14 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
       <div className="px-8 pb-12 space-y-4">
         <div className="flex justify-center space-x-1.5 mb-8">
           {slides.map((_, i) => (
-            <div key={i} className={`h-1 rounded-full transition-all duration-300 ${i === step ? 'w-8 bg-[#0f2b46]' : 'w-2 bg-gray-200'}`} />
+            <div key={i} className={`h-1 rounded-full transition-all duration-300 ${i === step ? 'w-8 bg-navy' : 'w-2 bg-gray-200'}`} />
           ))}
         </div>
 
         {!isFinalSlide && (
           <button
             onClick={handleNext}
-            className="w-full h-14 bg-[#0f2b46] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 active:scale-95 transition-all"
+            className="w-full h-14 bg-navy text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 active:scale-95 transition-all"
           >
             <span>{slides[step].action}</span>
             <ArrowRight size={18} />
@@ -92,13 +92,13 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
           <div className="space-y-3">
             <button
               onClick={() => onStart(Screen.HOME)}
-              className="w-full h-14 bg-white text-[#0f2b46] border border-[#0f2b46]/20 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-[#f2f4f7] transition-all"
+              className="w-full h-14 bg-white text-navy border border-navy/20 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-gray-100 transition-all"
             >
               {t('Browse as Guest', 'Continuer en invite')}
             </button>
             <button
               onClick={() => onStart(Screen.AUTH)}
-              className="w-full h-14 bg-[#c86b4a] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-[#b85f3f] transition-all"
+              className="w-full h-14 bg-terra text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-terra-dark transition-all"
             >
               <Globe size={16} />
               <span>{t('Sign In', 'Connexion')}</span>

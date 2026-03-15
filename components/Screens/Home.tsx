@@ -1,4 +1,4 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Category } from '../../types';
 import type { DataPoint } from '../../types';
 import type { CollectionAssignment, MapScope, PointEvent, ProjectedPoint, UserRole } from '../../shared/types';
@@ -15,7 +15,6 @@ import {
   Map as MapIcon,
   MapPin,
   Plus,
-  ShieldCheck,
   User
 } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
@@ -100,9 +99,21 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? 'global' : 'bonamoussadi'));
   const contributePressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
+  const verticalPickerRef = useRef<HTMLDivElement>(null);
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
+
+  useEffect(() => {
+    if (!isVerticalPickerOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (verticalPickerRef.current && !verticalPickerRef.current.contains(e.target as Node)) {
+        setIsVerticalPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isVerticalPickerOpen]);
 
   const selectedCityLabel =
     mapScope === 'cameroon'
@@ -123,8 +134,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     mapScope === 'bonamoussadi' ? BONAMOUSSADI_MAP_BOUNDS : mapScope === 'cameroon' ? CAMEROON_MAP_BOUNDS : undefined;
   const mapLockLabel =
     mapScope === 'bonamoussadi'
-      ? t('GPS Locked', 'GPS verrouille')
-      : t('GPS Unlocked (Admin)', 'GPS debloque (admin)');
+      ? t('GPS Locked', 'GPS verrouillé')
+      : t('GPS Unlocked (Admin)', 'GPS débloqué (admin)');
 
   const formatTimeAgo = (iso: string) => {
     const created = new Date(iso).getTime();
@@ -240,7 +251,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
   const formatPaymentMethods = (paymentMethods: string[] | undefined) => {
     if (!paymentMethods || paymentMethods.length === 0) {
-      return t('Accepted payments unavailable', 'Paiements acceptes indisponibles');
+      return t('Accepted payments unavailable', 'Paiements acceptés indisponibles');
     }
     return paymentMethods.join(', ');
   };
@@ -256,7 +267,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       return `${t('Paiements', 'Paiements')}: ${formatPaymentMethods(point.paymentMethods)}`;
     }
     const operator = point.operator || point.provider || point.providers?.[0];
-    return operator ? `${t('Operateur', 'Operateur')}: ${operator}` : t('Operateur indisponible', 'Operateur indisponible');
+    return operator ? `${t('Opérateur', 'Opérateur')}: ${operator}` : t('Operateur indisponible', 'Operateur indisponible');
   };
 
   const formatPharmacyOpenStatus = (point: DataPoint) => {
@@ -293,7 +304,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       }
     };
     void loadPoints();
-  }, [language, mapScope]);
+  }, [mapScope]); // language removed: API response is language-independent
 
   useEffect(() => {
     let cancelled = false;
@@ -330,7 +341,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, isAdmin, language, userRole]);
+  }, [isAuthenticated, isAdmin, userRole]); // language removed: API data is language-independent
 
   useEffect(() => {
     if (!showAgentWidgets) {
@@ -480,7 +491,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-y-auto bg-[#f9fafb] no-scrollbar"
+      className="flex h-full min-h-0 flex-col overflow-y-auto bg-page no-scrollbar"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       <header className="px-4 pt-4 pb-3 bg-white border-b border-gray-100 shrink-0">
@@ -488,14 +499,14 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           <div className="flex flex-col">
             <div className="flex items-center space-x-2">
               <BrandLogo size={18} className="shrink-0" />
-              <h2 className="text-lg font-bold text-[#1f2933] leading-tight">{t('African Data Layer', 'African Data Layer')}</h2>
+              <h2 className="text-lg font-bold text-ink leading-tight">{t('African Data Layer', 'African Data Layer')}</h2>
               {isAdmin && (
-                <span className="px-2 py-0.5 rounded-full bg-[#e7eef4] text-[#0f2b46] text-[9px] font-bold uppercase tracking-widest">
+                <span className="px-2 py-0.5 rounded-full bg-navy-light text-navy text-[10px] font-bold uppercase tracking-widest">
                   {t('Admin', 'Admin')}
                 </span>
               )}
               {userRole === 'client' && (
-                <span className="px-2 py-0.5 rounded-full bg-[#fff8f4] text-[#c86b4a] text-[9px] font-bold uppercase tracking-widest">
+                <span className="px-2 py-0.5 rounded-full bg-terra-wash text-terra text-[10px] font-bold uppercase tracking-widest">
                   {t('Client', 'Client')}
                 </span>
               )}
@@ -513,23 +524,19 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </button>
         </div>
 
-        <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-[#4c7c59] mb-3">
-          <ShieldCheck size={12} />
-          <span>{t('Offline-first sync ready', 'Synchronisation hors ligne prete')}</span>
-        </div>
         {isLowEndDevice && (
-          <div className="mb-3 rounded-xl border border-[#d5e1eb] bg-[#f2f6fa] px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-            {t('Lite Mode Active (Low-end device)', 'Mode Lite actif (appareil entree de gamme)')}
+          <div className="mb-3 rounded-xl border border-navy-border bg-navy-wash px-3 py-2 micro-label text-navy">
+            {t('Lite Mode — Faster on your device', 'Mode Lite — Plus rapide sur votre appareil')}
           </div>
         )}
 
-        <div className="relative mb-2">
+        <div ref={verticalPickerRef} className="relative mb-2">
           <button
             onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
-            className="w-full h-11 px-3 bg-gray-100 rounded-xl text-xs font-semibold text-[#0f2b46] flex items-center justify-between"
+            className="w-full h-11 px-3 bg-gray-100 rounded-xl text-xs font-semibold text-navy flex items-center justify-between"
           >
             <span>
-              {t('Vertical', 'Verticale')}: {categoryLabel(activeCategory)}
+              {t('Category', 'Catégorie')} : {categoryLabel(activeCategory)}
             </span>
             <ChevronDown size={14} className={`transition-transform ${isVerticalPickerOpen ? 'rotate-180' : ''}`} />
           </button>
@@ -548,8 +555,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                         setActiveCategory(category);
                         setIsVerticalPickerOpen(false);
                       }}
-                      className={`h-10 rounded-xl border text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-1 ${
-                        isActive ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-gray-50 text-gray-600 border-gray-100'
+                      className={`h-10 rounded-xl border micro-label flex items-center justify-center gap-1 ${
+                        isActive ? 'bg-navy text-white border-navy' : 'bg-gray-50 text-gray-600 border-gray-100'
                       }`}
                     >
                       <VerticalIcon name={vertical?.icon ?? 'pill'} size={12} />
@@ -566,7 +573,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           <div className="mb-3 rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">
+                <div className="micro-label-wide text-gray-400">
                   {t('Active Assignment', 'Affectation active')}
                 </div>
                 <h4 className="mt-1 text-base font-bold text-gray-900">{activeAssignment.zoneLabel}</h4>
@@ -574,32 +581,21 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                   {activeAssignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}
                 </p>
               </div>
-              <div className="rounded-full bg-[#f2f6fa] px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+              <div className="rounded-full bg-navy-wash px-3 py-1 micro-label text-navy">
                 {activeAssignment.status}
               </div>
             </div>
             <div>
-              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <div className="flex items-center justify-between micro-label text-gray-400">
                 <span>{t('Progress', 'Progression')}</span>
                 <span>{activeAssignment.pointsSubmitted}/{activeAssignment.pointsExpected}</span>
               </div>
               <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-[#0f2b46] to-[#4c7c59]" style={{ width: `${Math.min(100, activeAssignment.completionRate)}%` }} />
+                <div className="h-full rounded-full bg-gradient-to-r from-navy to-forest" style={{ width: `${Math.min(100, activeAssignment.completionRate)}%` }} />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-xs text-gray-500">
-                {t('Due', 'Echeance')}: {activeAssignment.dueDate}
-              </div>
-              {onContribute && (
-                <button
-                  type="button"
-                  onClick={() => onContribute({ assignment: activeAssignment })}
-                  className="h-10 rounded-2xl bg-[#0f2b46] px-4 text-[10px] font-bold uppercase tracking-widest text-white"
-                >
-                  {t('Start Capture', 'Commencer la capture')}
-                </button>
-              )}
+            <div className="text-xs text-gray-500">
+              {t('Due', 'Échéance')}: {activeAssignment.dueDate}
             </div>
           </div>
         )}
@@ -623,8 +619,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         {viewMode === 'map' && (
           <Suspense
             fallback={
-              <div className="flex-1 bg-[#e7eef4] relative overflow-hidden z-0 min-h-0 p-4">
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+              <div className="flex-1 bg-navy-light relative overflow-hidden z-0 min-h-0 p-4">
+                <div className="card p-4 text-xs text-gray-500">
                   {t('Loading map...', 'Chargement de la carte...')}
                 </div>
               </div>
@@ -651,11 +647,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </Suspense>
         )}
         {viewMode === 'list' && (
-          <div className="flex-1 relative z-30 bg-[#f9fafb] overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="flex-1 relative z-30 bg-page overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
             <div className="p-4 space-y-3 pb-24">
               {isLoadingPoints && (
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
-                  {t('Loading data points...', 'Chargement des points de donnees...')}
+                  {t('Loading data points...', 'Chargement des points de données...')}
                 </div>
               )}
               {filteredPoints.map((point) => (
@@ -679,9 +675,9 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                       <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">{formatPharmacyOpenStatus(point)}</p>
                     )}
                     <div className="flex items-center space-x-2 mt-2">
-                      <span className="text-[10px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis a jour')} {point.lastUpdated}</span>
+                      <span className="text-[10px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis à jour')} {point.lastUpdated}</span>
                       {point.verified && (
-                        <span className="text-[8px] px-1.5 py-0.5 bg-[#eaf3ee] text-[#4c7c59] rounded-full font-bold uppercase tracking-wider">{t('Verified', 'Verifie')}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-forest-wash text-forest rounded-full font-bold uppercase tracking-wider">{t('Verified', 'Vérifié')}</span>
                       )}
                     </div>
                   </div>
@@ -694,7 +690,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
         <button
           onClick={() => setViewMode((v) => (v === 'map' ? 'list' : 'map'))}
-          className="fixed bottom-[calc(6rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 px-5 py-2.5 bg-[#1f2933] text-white rounded-full shadow-2xl flex items-center space-x-2 z-40 hover:bg-black active:scale-95 transition-all"
+          className="fixed bottom-[calc(6rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 px-5 py-2.5 bg-ink text-white rounded-full shadow-2xl flex items-center space-x-2 z-40 hover:bg-black active:scale-95 transition-all"
         >
           {viewMode === 'map' ? <List size={16} /> : <MapIcon size={16} />}
           <span className="text-xs font-bold uppercase tracking-wider">{viewMode === 'map' ? t('List View', 'Vue liste') : t('Map View', 'Vue carte')}</span>
@@ -725,7 +721,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               }
             }}
             onContextMenu={(event) => event.preventDefault()}
-            className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-[#c86b4a] text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-[#b85f3f] active:scale-95 transition-all"
+            className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-terra text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-terra-dark active:scale-95 transition-all"
             aria-label={
               isAuthenticated
                 ? t('Contribute', 'Contribuer')
@@ -737,18 +733,13 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         )}
 
         {!isAuthenticated && (
-          <div className="absolute top-20 left-4 right-4 bg-white/95 backdrop-blur p-3 rounded-xl shadow-xl border border-[#f2f4f7] z-20 flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-[#c86b4a] uppercase tracking-widest">{t('Contributor Access', 'Acces contributeur')}</span>
-              <p className="text-xs text-gray-700 font-medium">{t('Log in to add data and earn XP.', 'Connectez-vous pour ajouter des donnees et gagner des XP.')}</p>
-            </div>
-            <button
-              onClick={onAuth}
-              className="px-4 py-2 bg-[#0f2b46] text-white text-[10px] font-bold uppercase rounded-xl tracking-wide hover:bg-[#0b2236]"
-            >
-              {t('Sign In', 'Connexion')}
-            </button>
-          </div>
+          <button
+            onClick={onAuth}
+            className="absolute top-20 left-4 right-4 bg-white/95 backdrop-blur p-3 rounded-xl shadow-xl border border-gray-100 z-20 flex items-center justify-between"
+          >
+            <span className="text-sm font-bold text-gray-900">{t('Sign in to contribute', 'Connectez-vous pour contribuer')}</span>
+            <span className="px-3 py-1.5 bg-navy text-white micro-label rounded-lg">{t('Sign In', 'Connexion')}</span>
+          </button>
         )}
       </div>
     </div>

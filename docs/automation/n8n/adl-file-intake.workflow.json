@@ -1,0 +1,106 @@
+{
+  "name": "ADL File Intake",
+  "active": false,
+  "nodes": [
+    {
+      "id": "incoming-webhook",
+      "name": "Inbound File Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 260],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "adl-file-intake",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "map-file-rows",
+      "name": "Map File Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 260],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const rows = Array.isArray($json.rows) ? $json.rows : [];\nconst sourceSystem = typeof $json.sourceSystem === 'string' ? $json.sourceSystem : 'partner_file';\nconst workflowName = 'adl-file-intake';\nconst runKey = `${sourceSystem}-${Date.now()}`;\nconst leads = rows.map((row, index) => ({\n  sourceRecordId: String(row.sourceRecordId ?? row.external_id ?? `${sourceSystem}-${index}`),\n  sourceUrl: row.sourceUrl ?? null,\n  category: String(row.category ?? row.vertical ?? ''),\n  location: {\n    latitude: Number(row.latitude ?? row.lat),\n    longitude: Number(row.longitude ?? row.lon),\n  },\n  normalizedDetails: row.normalizedDetails ?? {\n    name: row.name ?? null,\n    brand: row.brand ?? null,\n  },\n  rawPayload: row,\n  evidenceUrls: Array.isArray(row.evidenceUrls) ? row.evidenceUrls : [],\n  freshnessAt: row.freshnessAt ?? new Date().toISOString(),\n  priority: row.priority ?? 'medium',\n}));\nreturn [{ json: { runKey, workflowName, sourceSystem, triggerType: 'file', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), leads } }];"
+      }
+    },
+    {
+      "id": "post-file-leads",
+      "name": "Post File Leads To ADL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 260],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ADL_BASE_URL + '/api/intake/leads'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.AUTOMATION_SECRET}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1080, 260],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}"
+      }
+    }
+  ],
+  "connections": {
+    "Inbound File Webhook": {
+      "main": [
+        [
+          {
+            "node": "Map File Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map File Rows": {
+      "main": [
+        [
+          {
+            "node": "Post File Leads To ADL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post File Leads To ADL": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "versionId": "adl-file-intake-v1",
+  "meta": null,
+  "pinData": {}
+}

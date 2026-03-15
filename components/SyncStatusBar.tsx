@@ -30,9 +30,9 @@ const SyncStatusBar: React.FC<Props> = ({
 
   const status = hasFailed
     ? {
-        bgClass: 'bg-[#c53030]',
+        bgClass: 'bg-danger',
         textClass: 'text-white',
-        label: t(`${failed} failed — Tap to view`, `${failed} echecs — Appuyez pour voir`),
+        label: t(`${failed} failed — Tap to view`, `${failed} échecs — Appuyez pour voir`),
         icon: <AlertCircle size={12} className="text-white flex-shrink-0" />,
       }
     : isOfflinePending
@@ -44,16 +44,16 @@ const SyncStatusBar: React.FC<Props> = ({
         }
       : isSyncing
         ? {
-            bgClass: 'bg-[#0f2b46]',
+            bgClass: 'bg-navy',
             textClass: 'text-white',
-            label: t('Syncing...', 'Synchronisation...'),
+            label: t('Uploading...', 'Envoi en cours...'),
             icon: <RefreshCw size={12} className="text-white animate-spin flex-shrink-0" />,
           }
         : {
-            bgClass: 'bg-[#4c7c59]/10',
-            textClass: 'text-[#4c7c59]',
-            label: t(`${synced} synced`, `${synced} synchronises`),
-            icon: <CheckCircle size={12} className="text-[#4c7c59] flex-shrink-0" />,
+            bgClass: 'bg-forest/10',
+            textClass: 'text-forest',
+            label: t(`${synced} uploaded`, `${synced} envoyés`),
+            icon: <CheckCircle size={12} className="text-forest flex-shrink-0" />,
           };
 
   return (
@@ -66,7 +66,7 @@ const SyncStatusBar: React.FC<Props> = ({
         className="flex items-center gap-1.5 min-w-0 flex-1"
       >
         {status.icon}
-        <span className={`text-[10px] font-bold uppercase tracking-widest truncate ${status.textClass}`}>
+        <span className={`micro-label truncate ${status.textClass}`}>
           {status.label}
         </span>
       </button>

@@ -27,42 +27,42 @@ const XPPopup: React.FC<Props> = ({
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb]">
+    <div className="flex flex-col h-full bg-page">
       <div className="flex-1 px-6 py-8 flex flex-col items-center justify-center text-center space-y-5">
-        <div className="w-20 h-20 rounded-[28px] bg-[#eaf3ee] text-[#4c7c59] flex items-center justify-center shadow-sm">
-          <CheckCircle size={38} />
+        <div className="w-16 h-16 rounded-2xl bg-forest-wash text-forest flex items-center justify-center">
+          <CheckCircle size={30} />
         </div>
 
         <div className="space-y-2">
-          <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-[#4c7c59]">
-            {t('Submission Captured', 'Soumission capturee')}
+          <p className="micro-label-wide text-forest">
+            {t('Data Captured!', 'Données capturées !')}
           </p>
           <h2 className="text-3xl font-extrabold text-gray-900" style={{ animation: 'xp-count-up 0.5s ease-out' }}>+{totalXp} XP</h2>
           <p className="text-sm text-gray-500">
             {isBatchMode
-              ? t('Batch capture saved. Keep the corridor momentum.', 'Capture en lot enregistree. Continuez le rythme.')
-              : t('Saved locally first, then synced when connectivity allows.', 'Sauvegarde locale d abord, puis synchronisation des que possible.')}
+              ? t('Saved! Keep going, you\'re on a roll.', 'Sauvegardé ! Continuez, vous êtes lancé.')
+              : t('Saved! Will upload automatically when you have internet.', 'Sauvegardé ! Sera envoyé automatiquement avec internet.')}
           </p>
         </div>
 
         <div className="w-full max-w-sm rounded-3xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
           <div className="grid grid-cols-3 gap-3 text-left">
-            <div className="rounded-2xl bg-[#f2f6fa] p-3" style={{ animation: 'xp-slide-in 0.4s ease-out 0.1s both' }}>
-              <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+            <div className="stat-tile bg-navy-wash" style={{ animation: 'xp-slide-in 0.4s ease-out 0.1s both' }}>
+              <div className="inline-flex items-center gap-1 micro-label text-navy">
                 <Award size={12} />
                 {t('Base', 'Base')}
               </div>
               <div className="mt-2 text-lg font-bold text-gray-900">+{baseXp}</div>
             </div>
-            <div className="rounded-2xl bg-[#fff8f4] p-3" style={{ animation: 'xp-slide-in 0.4s ease-out 0.2s both' }}>
-              <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#c86b4a]">
+            <div className="stat-tile bg-terra-wash" style={{ animation: 'xp-slide-in 0.4s ease-out 0.2s both' }}>
+              <div className="inline-flex items-center gap-1 micro-label text-terra">
                 <Zap size={12} />
                 {t('Quality', 'Qualite')}
               </div>
               <div className="mt-2 text-lg font-bold text-gray-900">+{qualityBonus}</div>
             </div>
-            <div className="rounded-2xl bg-[#f7f4ff] p-3" style={{ animation: 'xp-slide-in 0.4s ease-out 0.3s both' }}>
-              <div className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-[#6b46c1]">
+            <div className="stat-tile bg-streak-wash" style={{ animation: 'xp-slide-in 0.4s ease-out 0.3s both' }}>
+              <div className="inline-flex items-center gap-1 micro-label text-streak">
                 <PlusCircle size={12} />
                 {t('Streak', 'Serie')}
               </div>
@@ -70,20 +70,8 @@ const XPPopup: React.FC<Props> = ({
             </div>
           </div>
 
-          <div className="rounded-2xl bg-[#f9fafb] p-4 text-left">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              {t('Level Progress', 'Progression')}
-            </div>
-            <div className="mt-3 h-2 rounded-full bg-gray-200 overflow-hidden">
-              <div className="h-full w-2/3 rounded-full bg-gradient-to-r from-[#0f2b46] to-[#4c7c59]" style={{ animation: 'xp-pulse 1.5s ease-in-out infinite' }} />
-            </div>
-            <div className="mt-2 text-xs text-gray-500">
-              {t('Strong capture quality and GPS evidence boosted this submission.', 'La qualite de capture et la preuve GPS ont augmente cette soumission.')}
-            </div>
-          </div>
-
           {syncMessage && (
-            <div className="rounded-2xl border border-[#d5e1eb] bg-[#f2f6fa] p-4 text-xs text-[#0f2b46] text-left">
+            <div className="rounded-2xl border border-navy-border bg-navy-wash p-4 text-xs text-navy text-left">
               {syncMessage}
             </div>
           )}
@@ -94,14 +82,14 @@ const XPPopup: React.FC<Props> = ({
         <button
           type="button"
           onClick={onPrimary}
-          className="h-14 rounded-2xl bg-[#c86b4a] text-white text-xs font-bold uppercase tracking-widest shadow-sm"
+          className="btn-cta"
         >
           {isBatchMode ? t('Capture Next', 'Capture suivante') : t('Add Another', 'Ajouter encore')}
         </button>
         <button
           type="button"
           onClick={onSecondary}
-          className="h-14 rounded-2xl border border-gray-200 bg-white text-xs font-bold uppercase tracking-widest text-[#0f2b46]"
+          className="btn-ghost"
         >
           <span className="inline-flex items-center gap-2">
             <Map size={14} />

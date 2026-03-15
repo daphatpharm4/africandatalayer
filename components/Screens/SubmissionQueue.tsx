@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Pencil, RefreshCw, RotateCcw, Trash2, Wifi, WifiOff } from 'lucide-react';
+import { AlertTriangle, Pencil, RefreshCw, RotateCcw, Trash2, Wifi, WifiOff } from 'lucide-react';
+import ScreenHeader from '../shared/ScreenHeader';
 import {
   clearSyncErrorRecords,
   deleteQueueItem,
@@ -82,7 +83,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
         setSnapshot(nextSnapshot);
       } catch (error) {
         if (cancelled) return;
-        setActionError(error instanceof Error ? error.message : t('Unable to load queue.', 'Impossible de charger la file.'));
+        setActionError(error instanceof Error ? error.message : 'LOAD_FAILED');
       }
     };
 
@@ -102,7 +103,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
       cancelled = true;
       unsubscribe();
     };
-  }, [language]);
+  }, []);
 
   const failedItems = useMemo(() => items.filter((item) => item.status === 'failed'), [items]);
   const pendingItems = useMemo(() => items.filter((item) => item.status === 'pending' || item.status === 'syncing'), [items]);
@@ -114,14 +115,14 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
       setIsRefreshing(true);
       const summary = await flushOfflineQueue(sendSubmissionPayload);
       if (summary.synced > 0) {
-        setActionMessage(t(`${summary.synced} item(s) synced.`, `${summary.synced} element(s) synchronises.`));
+        setActionMessage(t(`${summary.synced} item(s) uploaded.`, `${summary.synced} élément(s) envoyé(s).`));
       } else if (summary.failed > 0 || summary.permanentFailures > 0) {
-        setActionMessage(t('Some items still need attention.', 'Certains elements necessitent encore une action.'));
+        setActionMessage(t('Some uploads still need attention.', 'Certains envois nécessitent encore une action.'));
       } else {
-        setActionMessage(t('Queue already up to date.', 'La file est deja a jour.'));
+        setActionMessage(t('Everything is already uploaded.', 'Tout est déjà envoyé.'));
       }
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : t('Unable to sync queue.', 'Impossible de synchroniser la file.'));
+      setActionError(error instanceof Error ? error.message : t('Unable to upload. Try again later.', 'Impossible d\'envoyer. Réessayez plus tard.'));
     } finally {
       setIsRefreshing(false);
     }
@@ -133,9 +134,9 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
     try {
       setActiveItemId(itemId);
       await retryQueueItem(itemId, sendSubmissionPayload);
-      setActionMessage(t('Retry scheduled.', 'Nouvelle tentative planifiee.'));
+      setActionMessage(t('Retrying now...', 'Nouvelle tentative en cours...'));
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : t('Unable to retry item.', 'Impossible de relancer cet element.'));
+      setActionError(error instanceof Error ? error.message : t('Unable to retry. Check your connection.', 'Impossible de réessayer. Vérifiez votre connexion.'));
     } finally {
       setActiveItemId(null);
     }
@@ -147,9 +148,9 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
     try {
       setActiveItemId(itemId);
       await deleteQueueItem(itemId);
-      setActionMessage(t('Queue item deleted.', 'Element supprime.'));
+      setActionMessage(t('Upload removed.', 'Envoi supprimé.'));
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : t('Unable to delete queue item.', 'Impossible de supprimer cet element.'));
+      setActionError(error instanceof Error ? error.message : t('Unable to remove. Try again.', 'Impossible de supprimer. Réessayez.'));
     } finally {
       setActiveItemId(null);
     }
@@ -160,101 +161,102 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
     setActionMessage('');
     try {
       await clearSyncErrorRecords();
-      setActionMessage(t('Rejected records cleared.', 'Les rejets ont ete effaces.'));
+      setActionMessage(t('Cleared.', 'Effacé.'));
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : t('Unable to clear rejected records.', 'Impossible d effacer les rejets.'));
+      setActionError(error instanceof Error ? error.message : t('Unable to clear. Try again.', 'Impossible d\'effacer. Réessayez.'));
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-[#0f2b46] transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <h3 className="text-sm font-bold mx-auto">{t('Submission Queue', 'File de soumission')}</h3>
-        <button
-          type="button"
-          onClick={handleForceSync}
-          disabled={isRefreshing}
-          className="p-2 text-[#0f2b46] absolute right-2 disabled:text-gray-300"
-          aria-label={t('Force sync', 'Forcer la synchronisation')}
-        >
-          <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
-        </button>
-      </div>
+    <div className="screen-shell">
+      <ScreenHeader
+        title={t('Pending Uploads', 'Envois en attente')}
+        onBack={onBack}
+        language={language}
+        trailing={
+          <button
+            type="button"
+            onClick={handleForceSync}
+            disabled={isRefreshing}
+            className="p-2 text-navy disabled:text-gray-300"
+            aria-label={t('Upload now', 'Envoyer maintenant')}
+          >
+            <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
+        }
+      />
 
       <div className="p-4 space-y-4">
         <div className="grid grid-cols-3 gap-3">
-          <div className="rounded-2xl border border-gray-100 bg-white p-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Pending', 'En attente')}</div>
-            <div className="mt-2 text-2xl font-bold text-[#0f2b46]">{snapshot.pending}</div>
+          <div className="card p-4">
+            <div className="micro-label text-gray-400">{t('Pending', 'En attente')}</div>
+            <div className="mt-2 text-2xl font-bold text-navy">{snapshot.pending}</div>
           </div>
-          <div className="rounded-2xl border border-gray-100 bg-white p-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Failed', 'Echecs')}</div>
-            <div className="mt-2 text-2xl font-bold text-[#c86b4a]">{snapshot.failed}</div>
+          <div className="card p-4">
+            <div className="micro-label text-gray-400">{t('Failed', 'Échecs')}</div>
+            <div className="mt-2 text-2xl font-bold text-terra">{snapshot.failed}</div>
           </div>
-          <div className="rounded-2xl border border-gray-100 bg-white p-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Synced', 'Synchronises')}</div>
-            <div className="mt-2 text-2xl font-bold text-[#4c7c59]">{snapshot.synced}</div>
+          <div className="card p-4">
+            <div className="micro-label text-gray-400">{t('Uploaded', 'Envoyés')}</div>
+            <div className="mt-2 text-2xl font-bold text-forest">{snapshot.synced}</div>
           </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-100 bg-white p-4 space-y-3">
+        <div className="card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Storage', 'Stockage')}</div>
+              <div className="micro-label text-gray-400">{t('Storage', 'Stockage')}</div>
               <div className="text-sm font-semibold text-gray-900">{formatStorage(snapshot.storageBytes, language)}</div>
             </div>
             <div className="flex items-center gap-2 text-xs font-semibold text-gray-600">
-              {navigator.onLine ? <Wifi size={14} className="text-[#4c7c59]" /> : <WifiOff size={14} className="text-[#c86b4a]" />}
+              {navigator.onLine ? <Wifi size={14} className="text-forest" /> : <WifiOff size={14} className="text-terra" />}
               <span>{navigator.onLine ? t('Online', 'En ligne') : t('Offline', 'Hors ligne')}</span>
             </div>
           </div>
           <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
             <div
-              className="h-full bg-[#0f2b46]"
+              className="h-full bg-navy"
               style={{ width: `${Math.min(100, snapshot.total > 0 ? (snapshot.pending / snapshot.total) * 100 : 0)}%` }}
             />
           </div>
         </div>
 
         {actionMessage && (
-          <div className="rounded-2xl border border-[#d2e6d8] bg-[#eaf3ee] p-4 text-xs text-[#2f855a]">
+          <div className="rounded-2xl border border-forest-wash bg-forest-wash p-4 text-xs text-forest">
             {actionMessage}
           </div>
         )}
 
         {actionError && (
           <div className="rounded-2xl border border-red-100 bg-red-50 p-4 text-xs text-red-600">
-            {actionError}
+            {actionError === 'LOAD_FAILED' ? t('Unable to load uploads.', 'Impossible de charger les envois.') : actionError}
           </div>
         )}
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-[#0f2b46]">
-              {t('Failed Queue Items', 'Elements en echec')}
+            <h4 className="text-xs font-bold uppercase tracking-widest text-navy">
+              {t('Failed Uploads', 'Envois échoués')}
             </h4>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{failedItems.length}</span>
+            <span className="micro-label text-gray-400">{failedItems.length}</span>
           </div>
           {failedItems.length === 0 && (
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 text-xs text-gray-500">
-              {t('No failed queue items.', 'Aucun element en echec.')}
+            <div className="card p-4 text-xs text-gray-500">
+              {t('No issues here. All uploads are good.', 'Aucun problème. Tous les envois sont bons.')}
             </div>
           )}
           {failedItems.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-[#f5d5c6] bg-white p-4 space-y-3 shadow-sm">
+            <div key={item.id} className="rounded-2xl border border-terra-wash bg-white p-4 space-y-3 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-bold text-gray-900">{queueTitle(item, language)}</div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-[#c86b4a]">
+                  <div className="micro-label text-terra">
                     {categoryLabel(item.payload.category, language)}
                   </div>
                   <div className="text-[11px] text-gray-500 mt-1">{formatWhen(item.updatedAt, language)}</div>
                 </div>
-                <span className="rounded-full bg-[#fff8f4] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-[#c86b4a]">
-                  {item.status}
+                <span className="rounded-full bg-terra-wash px-2 py-1 micro-label text-terra">
+                  {t('Failed', 'Échoué')}
                 </span>
               </div>
               {item.lastError && (
@@ -267,7 +269,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
                   type="button"
                   onClick={() => handleRetryItem(item.id)}
                   disabled={activeItemId === item.id}
-                  className="h-10 rounded-xl bg-[#0f2b46] text-white text-[10px] font-bold uppercase tracking-widest disabled:bg-gray-100 disabled:text-gray-400"
+                  className="h-10 rounded-xl bg-navy text-white micro-label disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <span className="inline-flex items-center gap-1">
                     <RotateCcw size={12} />
@@ -277,7 +279,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
                 <button
                   type="button"
                   onClick={() => onEditDraft(item)}
-                  className="h-10 rounded-xl border border-gray-100 bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-700"
+                  className="h-10 rounded-xl border border-gray-100 bg-gray-50 micro-label text-gray-700"
                 >
                   <span className="inline-flex items-center gap-1">
                     <Pencil size={12} />
@@ -288,7 +290,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
                   type="button"
                   onClick={() => handleDeleteItem(item.id)}
                   disabled={activeItemId === item.id}
-                  className="h-10 rounded-xl border border-red-100 bg-red-50 text-[10px] font-bold uppercase tracking-widest text-red-600 disabled:bg-gray-100 disabled:text-gray-400"
+                  className="h-10 rounded-xl border border-red-100 bg-red-50 micro-label text-red-600 disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <span className="inline-flex items-center gap-1">
                     <Trash2 size={12} />
@@ -302,28 +304,28 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-[#0f2b46]">
-              {t('Pending Queue', 'File en attente')}
+            <h4 className="text-xs font-bold uppercase tracking-widest text-navy">
+              {t('Waiting to Upload', 'En attente d\'envoi')}
             </h4>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{pendingItems.length}</span>
+            <span className="micro-label text-gray-400">{pendingItems.length}</span>
           </div>
           {pendingItems.length === 0 && (
-            <div className="rounded-2xl border border-gray-100 bg-white p-4 text-xs text-gray-500">
-              {t('No queued items.', 'Aucun element en file.')}
+            <div className="card p-4 text-xs text-gray-500">
+              {t('All clear! No uploads waiting.', 'Tout est envoyé ! Rien en attente.')}
             </div>
           )}
           {pendingItems.map((item) => (
-            <div key={item.id} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+            <div key={item.id} className="card p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-bold text-gray-900">{queueTitle(item, language)}</div>
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                  <div className="micro-label text-navy">
                     {categoryLabel(item.payload.category, language)}
                   </div>
                   <div className="text-[11px] text-gray-500 mt-1">{formatWhen(item.createdAt, language)}</div>
                 </div>
-                <span className="rounded-full bg-[#e7eef4] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                  {item.status}
+                <span className="rounded-full bg-navy-light px-2 py-1 micro-label text-navy">
+                  {item.status === 'syncing' ? t('Uploading', 'Envoi') : t('Waiting', 'En attente')}
                 </span>
               </div>
             </div>
@@ -335,14 +337,14 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
             <div className="flex items-center justify-between">
               <div className="inline-flex items-center gap-2 text-red-700">
                 <AlertTriangle size={14} />
-                <span className="text-[10px] font-bold uppercase tracking-widest">
-                  {t('Rejected by Server', 'Rejetes par le serveur')} ({syncErrors.length})
+                <span className="micro-label">
+                  {t('Could not be processed', 'Impossible à traiter')} ({syncErrors.length})
                 </span>
               </div>
               <button
                 type="button"
                 onClick={handleClearRejected}
-                className="text-[10px] font-bold uppercase tracking-widest text-red-700"
+                className="micro-label text-red-700"
               >
                 {t('Clear', 'Effacer')}
               </button>
@@ -350,7 +352,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
             <div className="space-y-2">
               {syncErrors.map((record) => (
                 <div key={record.id} className="rounded-xl border border-red-100 bg-white p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-widest text-red-700">
+                  <div className="micro-label text-red-700">
                     {categoryLabel(record.payloadSummary.category, language)}
                   </div>
                   <div className="text-xs text-red-600 mt-1">{record.message}</div>

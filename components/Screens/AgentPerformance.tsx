@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ShieldCheck, TrendingUp, Users, WalletCards } from 'lucide-react';
+import { ShieldCheck, TrendingUp, Users, WalletCards } from 'lucide-react';
+import ScreenHeader from '../shared/ScreenHeader';
 import { apiJson } from '../../lib/client/api';
 import type { AdminSubmissionEvent, CollectionAssignment } from '../../shared/types';
 
@@ -124,42 +125,36 @@ const AgentPerformance: React.FC<Props> = ({ onBack, language }) => {
   const avgQuality = agentRows.length > 0 ? Math.round(agentRows.reduce((sum, row) => sum + row.averageQuality, 0) / agentRows.length) : 0;
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-[#0f2b46] transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <h3 className="text-sm font-bold mx-auto">{t('Agent Performance', 'Performance agents')}</h3>
-        <div className="w-8" />
-      </div>
+    <div className="screen-shell">
+      <ScreenHeader title={t('Agent Performance', 'Performance agents')} onBack={onBack} language={language} />
 
       <div className="p-4 space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <div className="inline-flex items-center gap-2 micro-label text-gray-400">
               <Users size={12} />
               {t('Active Agents', 'Agents actifs')}
             </div>
-            <div className="mt-3 text-3xl font-bold text-[#0f2b46]">{loading ? '--' : activeAgents}</div>
+            <div className="mt-3 text-3xl font-bold text-navy">{loading ? '--' : activeAgents}</div>
           </div>
           <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <div className="inline-flex items-center gap-2 micro-label text-gray-400">
               <TrendingUp size={12} />
-              {t('Avg Quality', 'Qualite moyenne')}
+              {t('Avg Quality', 'Qualité moyenne')}
             </div>
-            <div className="mt-3 text-3xl font-bold text-[#4c7c59]">{loading ? '--' : `${avgQuality}%`}</div>
+            <div className="mt-3 text-3xl font-bold text-forest">{loading ? '--' : `${avgQuality}%`}</div>
           </div>
           <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <div className="inline-flex items-center gap-2 micro-label text-gray-400">
               <ShieldCheck size={12} />
               {t('Fraud Rate', 'Taux fraude')}
             </div>
-            <div className="mt-3 text-3xl font-bold text-[#c86b4a]">
+            <div className="mt-3 text-3xl font-bold text-terra">
               {loading ? '--' : `${Math.round(kpis?.fraudRatePct ?? 0)}%`}
             </div>
           </div>
           <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-            <div className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <div className="inline-flex items-center gap-2 micro-label text-gray-400">
               <WalletCards size={12} />
               {t('Pending Review', 'En attente')}
             </div>
@@ -167,59 +162,59 @@ const AgentPerformance: React.FC<Props> = ({ onBack, language }) => {
           </div>
         </div>
 
-        <div className="rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm space-y-4">
+        <div className="card-pill p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">
-                {t('Team Table', 'Table equipe')}
+              <div className="micro-label-wide text-gray-400">
+                {t('Team Table', 'Table équipe')}
               </div>
               <h4 className="mt-1 text-lg font-bold text-gray-900">
-                {t('Review capture quality by agent', 'Examiner la qualite par agent')}
+                {t('Review capture quality by agent', 'Examiner la qualité par agent')}
               </h4>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <span className="micro-label text-gray-400">
               {agentRows.length} {t('rows', 'lignes')}
             </span>
           </div>
 
           <div className="space-y-3">
             {loading && (
-              <div className="rounded-2xl border border-gray-100 bg-[#f9fafb] p-4 text-xs text-gray-500">
-                {t('Loading agent metrics...', 'Chargement des metriques agents...')}
+              <div className="rounded-2xl border border-gray-100 bg-page p-4 text-xs text-gray-500">
+                {t('Loading agent metrics...', 'Chargement des métriques agents...')}
               </div>
             )}
             {!loading && agentRows.length === 0 && (
-              <div className="rounded-2xl border border-gray-100 bg-[#f9fafb] p-4 text-xs text-gray-500">
-                {t('No agent performance data yet.', 'Pas encore de donnees de performance agents.')}
+              <div className="rounded-2xl border border-gray-100 bg-page p-4 text-xs text-gray-500">
+                {t('No agent performance data yet.', 'Pas encore de données de performance agents.')}
               </div>
             )}
             {!loading &&
               agentRows.map((row) => (
-                <div key={row.id} className="rounded-2xl border border-gray-100 bg-[#f9fafb] p-4">
+                <div key={row.id} className="rounded-2xl border border-gray-100 bg-page p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-bold text-gray-900">{row.name}</div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{row.id}</div>
+                      <div className="micro-label text-gray-400">{row.id}</div>
                     </div>
-                    <div className="rounded-full bg-white px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                    <div className="rounded-full bg-white px-3 py-1 micro-label text-navy">
                       {row.pendingAssignments} {t('active assignment(s)', 'affectation(s) active(s)')}
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
                     <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Submissions', 'Soumissions')}</div>
+                      <div className="micro-label text-gray-400">{t('Submissions', 'Soumissions')}</div>
                       <div className="mt-1 text-xl font-bold text-gray-900">{row.submissions}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Quality', 'Qualite')}</div>
-                      <div className="mt-1 text-xl font-bold text-[#4c7c59]">{row.averageQuality}%</div>
+                      <div className="micro-label text-gray-400">{t('Quality', 'Qualité')}</div>
+                      <div className="mt-1 text-xl font-bold text-forest">{row.averageQuality}%</div>
                     </div>
                     <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Flags', 'Drapeaux')}</div>
-                      <div className="mt-1 text-xl font-bold text-[#c86b4a]">{row.flagged}</div>
+                      <div className="micro-label text-gray-400">{t('Flags', 'Drapeaux')}</div>
+                      <div className="mt-1 text-xl font-bold text-terra">{row.flagged}</div>
                     </div>
                     <div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Last Seen', 'Derniere activite')}</div>
+                      <div className="micro-label text-gray-400">{t('Last Seen', 'Dernière activité')}</div>
                       <div className="mt-1 text-sm font-semibold text-gray-900">
                         {row.lastSubmissionAt
                           ? new Date(row.lastSubmissionAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US', {

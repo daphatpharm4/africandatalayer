@@ -32,14 +32,14 @@ const ExportPanel: React.FC<Props> = ({
   ];
 
   return (
-    <div className="rounded-[28px] border border-gray-100 bg-white p-5 shadow-sm space-y-4">
+    <div className="card-pill p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">
+          <div className="micro-label-wide text-gray-400">
             {t('Export Workflow', 'Workflow export')}
           </div>
           <h4 className="mt-1 text-lg font-bold text-gray-900">
-            {t('Capture the current story', 'Capturer l histoire actuelle')}
+            {t('Capture the current story', 'Capturer l\'histoire actuelle')}
           </h4>
         </div>
         <button
@@ -47,7 +47,7 @@ const ExportPanel: React.FC<Props> = ({
           onClick={() => onExport('pdf')}
           disabled={!canExport}
           className={`h-10 w-10 rounded-2xl flex items-center justify-center ${
-            canExport ? 'bg-[#0f2b46] text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            canExport ? 'bg-navy text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
           }`}
           aria-label={t('Print report', 'Imprimer le rapport')}
         >
@@ -66,8 +66,8 @@ const ExportPanel: React.FC<Props> = ({
               !canExport
                 ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed'
                 : selectedFormat === option.id
-                ? 'border-[#0f2b46] bg-[#0f2b46] text-white'
-                : 'border-gray-100 bg-[#f9fafb] text-gray-700'
+                ? 'border-navy bg-navy text-white'
+                : 'border-gray-100 bg-page text-gray-700'
             }`}
           >
             {option.icon}
@@ -76,15 +76,15 @@ const ExportPanel: React.FC<Props> = ({
         ))}
       </div>
 
-      <div className="rounded-2xl bg-[#f9fafb] p-4 space-y-2">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-          {t('API Preview', 'Apercu API')}
+      <div className="rounded-2xl bg-page p-4 space-y-2">
+        <div className="micro-label text-gray-400">
+          {t('API Preview', 'Aperçu API')}
         </div>
-        <code className="block text-xs text-[#0f2b46] break-all">{apiPreview}</code>
+        <code className="block text-xs text-navy break-all">{apiPreview}</code>
         <button
           type="button"
           onClick={onCopyApi}
-          className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]"
+          className="inline-flex items-center gap-2 micro-label text-navy"
         >
           <Copy size={12} />
           {t('Copy API Path', 'Copier le chemin API')}
@@ -102,7 +102,7 @@ const ExportPanel: React.FC<Props> = ({
         onClick={() => onExport(selectedFormat)}
         disabled={!canExport}
         className={`w-full h-12 rounded-2xl text-xs font-bold uppercase tracking-widest ${
-          canExport ? 'bg-[#c86b4a] text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          canExport ? 'bg-terra text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
         }`}
       >
         <span className="inline-flex items-center gap-2">

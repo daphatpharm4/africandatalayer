@@ -86,7 +86,7 @@ export default function VoiceMicButton({
       onClick={toggleListening}
       aria-label={isListening ? "Stop voice input" : "Start voice input"}
       className={`
-        inline-flex items-center justify-center h-11 w-11 rounded-xl border
+        inline-flex items-center justify-center h-12 w-12 rounded-xl border
         transition-colors duration-200
         ${
           isListening

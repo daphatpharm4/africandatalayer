@@ -13,6 +13,14 @@ const CATEGORY_VALUES = [
 
 const EVENT_TYPE_VALUES = ["CREATE_EVENT", "ENRICH_EVENT"] as const;
 const CONSENT_STATUS_VALUES = ["obtained", "refused_pii_only", "not_required", "withdrawn"] as const;
+const AUTOMATION_LEAD_PRIORITY_VALUES = ["high", "medium", "low"] as const;
+const AUTOMATION_LEAD_ACTION_VALUES = [
+  "reject",
+  "mark_assigned",
+  "mark_verified",
+  "promote_to_import_candidate",
+] as const;
+const AUTOMATION_RUN_TRIGGER_VALUES = ["schedule", "webhook", "file", "manual", "api"] as const;
 
 export const consentStatusSchema = z.enum(CONSENT_STATUS_VALUES);
 
@@ -90,6 +98,42 @@ export const reviewBodySchema = z
   .object({
     decision: z.enum(["approved", "rejected", "flagged"]),
     notes: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
+export const automationLeadInputSchema = z
+  .object({
+    sourceRecordId: z.string().trim().min(1).max(200),
+    sourceUrl: z.string().trim().url().max(1000).nullable().optional(),
+    category: z.string().trim().min(1).max(80),
+    location: z.object({
+      latitude: z.number().finite(),
+      longitude: z.number().finite(),
+    }),
+    normalizedDetails: z.record(z.string(), z.unknown()).optional(),
+    rawPayload: z.record(z.string(), z.unknown()).optional(),
+    evidenceUrls: z.array(z.string().trim().url().max(1000)).max(20).optional(),
+    freshnessAt: z.string().datetime().nullable().optional(),
+    priority: z.enum(AUTOMATION_LEAD_PRIORITY_VALUES).optional(),
+  })
+  .strict();
+
+export const automationRunInputSchema = z
+  .object({
+    runKey: z.string().trim().min(1).max(200),
+    workflowName: z.string().trim().min(1).max(160),
+    sourceSystem: z.string().trim().min(1).max(120),
+    triggerType: z.enum(AUTOMATION_RUN_TRIGGER_VALUES).optional(),
+    startedAt: z.string().datetime().nullable().optional(),
+    completedAt: z.string().datetime().nullable().optional(),
+    leads: z.array(automationLeadInputSchema).min(1).max(500),
+  })
+  .strict();
+
+export const automationLeadActionSchema = z
+  .object({
+    action: z.enum(AUTOMATION_LEAD_ACTION_VALUES),
+    assignmentId: z.string().trim().uuid().nullable().optional(),
   })
   .strict();
 

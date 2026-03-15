@@ -137,7 +137,7 @@ const AgentLocationMarker: React.FC = () => {
       />
       <Marker position={[position.lat, position.lng]} icon={agentLocationIcon} zIndexOffset={1000}>
         <Popup>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">Your location</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-navy">Your location</span>
         </Popup>
       </Marker>
     </>
@@ -190,7 +190,7 @@ const HomeMap: React.FC<Props> = ({
     : [];
 
   return (
-    <div className="flex-1 bg-[#e7eef4] relative overflow-hidden z-0 min-h-0">
+    <div className="flex-1 bg-navy-light relative overflow-hidden z-0 min-h-0">
       <MapContainer
         key={`map-${mapScope}`}
         center={mapCenter}
@@ -217,7 +217,7 @@ const HomeMap: React.FC<Props> = ({
             pathOptions={{ color: '#c86b4a', fillColor: '#c86b4a', fillOpacity: 0.1, weight: 2 }}
           >
             <Popup>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{zone.zoneLabel}</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-navy">{zone.zoneLabel}</span>
             </Popup>
           </Rectangle>
         ))}
@@ -247,7 +247,7 @@ const HomeMap: React.FC<Props> = ({
               <Popup>
                 {singlePoint ? (
                   <div className="space-y-1">
-                    <span className="text-[9px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-navy">
                       {categoryLabel(singlePoint.type)}
                     </span>
                     <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
@@ -256,7 +256,7 @@ const HomeMap: React.FC<Props> = ({
                       <p className="text-[10px] text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                     )}
                     <button
-                      className="mt-2 w-full rounded-lg bg-[#0f2b46] px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
+                      className="mt-2 w-full rounded-lg bg-navy px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
                       onClick={() => onSelectPoint(singlePoint)}
                     >
                       {t('View Details', 'Voir details')}
@@ -264,7 +264,7 @@ const HomeMap: React.FC<Props> = ({
                   </div>
                 ) : (
                   <div className="space-y-2 min-w-[220px]">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-navy">
                       {language === 'fr' ? `${group.points.length} points au meme endroit` : `${group.points.length} points at this location`}
                     </p>
                     <div className="space-y-1.5">
@@ -275,7 +275,7 @@ const HomeMap: React.FC<Props> = ({
                           onClick={() => onSelectPoint(point)}
                         >
                           <p className="text-[11px] font-semibold text-gray-900 truncate">{point.name}</p>
-                          <p className="text-[9px] uppercase tracking-wider text-gray-500">
+                          <p className="text-[10px] uppercase tracking-wider text-gray-500">
                             {categoryLabel(point.type)}
                           </p>
                         </button>
@@ -291,7 +291,7 @@ const HomeMap: React.FC<Props> = ({
       <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-navy">
               {mapScope === 'bonamoussadi'
                 ? t('Bonamoussadi Geofence', 'Geofence Bonamoussadi')
                 : mapScope === 'cameroon'
@@ -302,14 +302,14 @@ const HomeMap: React.FC<Props> = ({
               {mapScope === 'bonamoussadi' ? t('Map blocked to', 'Carte bloquee sur') : t('Map unlocked to', 'Carte debloquee sur')} {selectedCityLabel}
             </p>
           </div>
-          <div className="w-2 h-2 rounded-full bg-[#4c7c59] animate-pulse"></div>
+          <div className="w-2 h-2 rounded-full bg-forest animate-pulse"></div>
         </div>
       </div>
       <button
         type="button"
         onClick={() => setShowHeatmap((prev) => !prev)}
         className={`absolute top-20 right-4 z-20 w-10 h-10 rounded-xl border shadow-sm flex items-center justify-center transition-colors ${
-          showHeatmap ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-white/95 text-gray-600 border-gray-100'
+          showHeatmap ? 'bg-navy text-white border-navy' : 'bg-white/95 text-gray-600 border-gray-100'
         }`}
         title={t('Toggle heatmap', 'Basculer carte thermique')}
       >
@@ -318,12 +318,12 @@ const HomeMap: React.FC<Props> = ({
       {nearbyEnrichCount > 0 && (
         <div className="absolute bottom-4 inset-x-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <Navigation size={14} className="text-[#c86b4a]" />
+            <Navigation size={14} className="text-terra" />
             <span className="text-xs font-bold text-gray-900">
               {nearbyEnrichCount} {t('points nearby to enrich', 'points a enrichir a proximite')}
             </span>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-[#c86b4a]">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-terra">
             {'<200m'}
           </span>
         </div>

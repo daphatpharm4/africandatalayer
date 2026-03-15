@@ -6,9 +6,12 @@ import { apiFetch, apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type {
   AdminSubmissionEvent,
+  AutomationLeadPriority,
+  AutomationLeadStatus,
   AssignmentPlannerContext,
   ClientDeviceInfo,
   CollectionAssignment,
+  LeadCandidate,
   SubmissionDetails,
   SubmissionFraudCheck,
   SubmissionLocation,
@@ -25,12 +28,14 @@ interface Props {
 type MatchState = 'match' | 'mismatch' | 'unavailable';
 type RiskFilter = 'all' | 'flagged' | 'pending' | 'low_risk';
 type ReviewDecision = 'approved' | 'rejected' | 'flagged';
+type AutomationStatusFilter = '' | AutomationLeadStatus;
+type AutomationPriorityFilter = '' | AutomationLeadPriority;
 
 function exifStatusLabel(status: SubmissionPhotoMetadata['exifStatus'] | null | undefined, language: 'en' | 'fr'): string {
   if (status === 'ok') return language === 'fr' ? 'EXIF present' : 'EXIF present';
-  if (status === 'fallback_recovered') return language === 'fr' ? 'Recupere via fallback' : 'Recovered via fallback';
+  if (status === 'fallback_recovered') return language === 'fr' ? 'Récupéré via fallback' : 'Recovered via fallback';
   if (status === 'missing') return language === 'fr' ? 'EXIF absent' : 'EXIF missing';
-  if (status === 'unsupported_format') return language === 'fr' ? 'Format non supporte' : 'Unsupported format';
+  if (status === 'unsupported_format') return language === 'fr' ? 'Format non supporté' : 'Unsupported format';
   if (status === 'parse_error') return language === 'fr' ? 'Erreur de lecture EXIF' : 'EXIF parse error';
   return language === 'fr' ? 'Indisponible' : 'Unavailable';
 }
@@ -103,13 +108,13 @@ function getMatchState(fraudCheck: SubmissionFraudCheck | null): MatchState {
 
 function matchStateLabel(state: MatchState, language: 'en' | 'fr'): string {
   if (state === 'match') return language === 'fr' ? 'OK' : 'Match';
-  if (state === 'mismatch') return language === 'fr' ? 'Ecart' : 'Mismatch';
+  if (state === 'mismatch') return language === 'fr' ? 'Écart' : 'Mismatch';
   return language === 'fr' ? 'Indisponible' : 'Unavailable';
 }
 
 function matchStateClass(state: MatchState): string {
-  if (state === 'match') return 'text-[#4c7c59] bg-[#eaf3ee] border-[#d2e6d8]';
-  if (state === 'mismatch') return 'text-[#c86b4a] bg-[#fdf0ea] border-[#f4d5c6]';
+  if (state === 'match') return 'text-forest bg-forest-wash border-forest-wash';
+  if (state === 'mismatch') return 'text-terra bg-terra-wash border-terra-wash';
   return 'text-gray-500 bg-gray-100 border-gray-200';
 }
 
@@ -132,6 +137,32 @@ function getRiskBucket(item: AdminSubmissionEvent): Exclude<RiskFilter, 'all'> {
   return 'low_risk';
 }
 
+function getAutomationLeadName(lead: LeadCandidate, language: 'en' | 'fr'): string {
+  const details = lead.normalizedDetails as SubmissionDetails;
+  const direct =
+    (typeof details.siteName === 'string' && details.siteName.trim()) ||
+    (typeof details.name === 'string' && details.name.trim()) ||
+    (typeof details.roadName === 'string' && details.roadName.trim()) ||
+    (typeof details.brand === 'string' && details.brand.trim());
+  return direct || (language === 'fr' ? 'Lead automatisé' : 'Automated lead');
+}
+
+function getAutomationEvidenceUrl(lead: LeadCandidate): string | null {
+  if (Array.isArray(lead.evidenceUrls) && lead.evidenceUrls.length > 0) {
+    return lead.evidenceUrls[0] ?? null;
+  }
+  return lead.sourceUrl ?? null;
+}
+
+function automationStatusClass(status: AutomationLeadStatus): string {
+  if (status === 'ready_for_assignment') return 'bg-forest-wash border-forest-wash text-forest';
+  if (status === 'matched_existing' || status === 'assignment_created' || status === 'verified') {
+    return 'bg-navy-light border-navy-border text-navy';
+  }
+  if (status.startsWith('rejected')) return 'bg-red-50 border-red-100 text-red-600';
+  return 'bg-terra-wash border-terra-wash text-terra';
+}
+
 const DetailMetadataBlock: React.FC<{
   label: string;
   metadata: SubmissionPhotoMetadata | null;
@@ -142,16 +173,16 @@ const DetailMetadataBlock: React.FC<{
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const status = metadata?.submissionGpsMatch;
   const statusText =
-    status === true ? t('Match', 'OK') : status === false ? t('Mismatch', 'Ecart') : t('Unavailable', 'Indisponible');
+    status === true ? t('Match', 'OK') : status === false ? t('Mismatch', 'Écart') : t('Unavailable', 'Indisponible');
   const statusClass =
-    status === true ? 'text-[#4c7c59]' : status === false ? 'text-[#c86b4a]' : 'text-gray-500';
+    status === true ? 'text-forest' : status === false ? 'text-terra' : 'text-gray-500';
   const exifStatusText = metadata ? exifStatusLabel(metadata.exifStatus, language) : unavailable;
   const exifReasonText = metadata?.exifReason ?? unavailable;
   const exifSourceText = metadata ? exifSourceLabel(metadata.exifSource, language) : unavailable;
 
   return (
-    <div className="rounded-2xl border border-gray-100 bg-[#f9fafb] p-4 space-y-2">
-      <div className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">{label}</div>
+    <div className="rounded-2xl border border-gray-100 bg-page p-4 space-y-2">
+      <div className="micro-label text-navy">{label}</div>
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-gray-500">{t('EXIF Status', 'Statut EXIF')}</span>
         <span className="text-gray-800">{exifStatusText}</span>
@@ -279,6 +310,17 @@ function addDaysDateOnly(days: number): string {
 const DEFAULT_ASSIGNMENT_STATUS: CollectionAssignment['status'] = 'pending';
 const ASSIGNMENT_STATUSES: CollectionAssignment['status'][] = ['pending', 'in_progress', 'completed', 'expired'];
 const ASSIGNABLE_VERTICALS = VERTICAL_IDS as SubmissionCategory[];
+const AUTOMATION_LEAD_STATUSES: AutomationLeadStatus[] = [
+  'ready_for_assignment',
+  'needs_field_verify',
+  'matched_existing',
+  'assignment_created',
+  'verified',
+  'import_candidate',
+  'rejected_manual',
+  'rejected_out_of_zone',
+];
+const AUTOMATION_PRIORITIES: AutomationLeadPriority[] = ['high', 'medium', 'low'];
 
 const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -299,6 +341,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [assignmentActionMessage, setAssignmentActionMessage] = useState('');
   const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<CollectionAssignment['status'] | ''>(DEFAULT_ASSIGNMENT_STATUS);
   const [assignmentAgentFilter, setAssignmentAgentFilter] = useState('');
+  const [automationLeads, setAutomationLeads] = useState<LeadCandidate[]>([]);
+  const [isLoadingAutomationLeads, setIsLoadingAutomationLeads] = useState(true);
+  const [automationLeadError, setAutomationLeadError] = useState('');
+  const [automationLeadMessage, setAutomationLeadMessage] = useState('');
+  const [automationStatusFilter, setAutomationStatusFilter] = useState<AutomationStatusFilter>('ready_for_assignment');
+  const [automationPriorityFilter, setAutomationPriorityFilter] = useState<AutomationPriorityFilter>('');
+  const [automationCategoryFilter, setAutomationCategoryFilter] = useState<SubmissionCategory | ''>('');
+  const [selectedAutomationLeadIds, setSelectedAutomationLeadIds] = useState<Set<string>>(new Set());
+  const [isApplyingAutomationAction, setIsApplyingAutomationAction] = useState(false);
   const [plannerAgent, setPlannerAgent] = useState('');
   const [plannerZone, setPlannerZone] = useState('');
   const [plannerDueDate, setPlannerDueDate] = useState(addDaysDateOnly(4));
@@ -418,9 +469,47 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    const loadAutomationLeads = async () => {
+      try {
+        setIsLoadingAutomationLeads(true);
+        setAutomationLeadError('');
+        const params = new URLSearchParams();
+        if (automationStatusFilter) params.set('status', automationStatusFilter);
+        if (automationPriorityFilter) params.set('priority', automationPriorityFilter);
+        if (automationCategoryFilter) params.set('category', automationCategoryFilter);
+        params.set('limit', '120');
+        const data = await apiJson<LeadCandidate[]>(`/api/intake/leads?${params.toString()}`);
+        if (cancelled) return;
+        setAutomationLeads(Array.isArray(data) ? data : []);
+      } catch (loadError) {
+        if (cancelled) return;
+        const message =
+          loadError instanceof Error
+            ? loadError.message
+            : t('Unable to load automation leads.', 'Impossible de charger les leads automatisés.');
+        setAutomationLeadError(message);
+        setAutomationLeads([]);
+      } finally {
+        if (!cancelled) setIsLoadingAutomationLeads(false);
+      }
+    };
+
+    void loadAutomationLeads();
+    return () => {
+      cancelled = true;
+    };
+  }, [automationStatusFilter, automationPriorityFilter, automationCategoryFilter, language]);
+
+  useEffect(() => {
     setDeleteError('');
     setActionMessage('');
   }, [selectedPointId]);
+
+  useEffect(() => {
+    setSelectedAutomationLeadIds((prev) => new Set([...prev].filter((id) => automationLeads.some((lead) => lead.id === id))));
+  }, [automationLeads]);
 
   const groupedPoints = useMemo(() => groupEventsByPoint(items, language), [items, language]);
   const filteredGroups = useMemo(() => {
@@ -439,6 +528,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     });
   }, [groupedPoints, riskFilter]);
   const selectedGroup = useMemo(() => filteredGroups.find((g) => g.pointId === selectedPointId) ?? null, [filteredGroups, selectedPointId]);
+  const selectedAutomationLeads = useMemo(
+    () => automationLeads.filter((lead) => selectedAutomationLeadIds.has(lead.id)),
+    [automationLeads, selectedAutomationLeadIds],
+  );
   const unavailableLabel = t('Unavailable', 'Indisponible');
 
   useEffect(() => {
@@ -455,7 +548,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     if (!selectedGroup) return;
     const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
     if (hasReadOnly) {
-      setDeleteError(t('This point contains read-only events that cannot be deleted.', 'Ce point contient des evenements en lecture seule qui ne peuvent pas etre supprimes.'));
+      setDeleteError(t('This point contains read-only events that cannot be deleted.', 'Ce point contient des événements en lecture seule qui ne peuvent pas être supprimés.'));
       return;
     }
 
@@ -463,7 +556,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     const confirmed = window.confirm(
       evtCount > 1
         ? t(`Delete all ${evtCount} events for this point permanently?`, `Supprimer definitivement les ${evtCount} evenements de ce point ?`)
-        : t('Delete this submission event permanently?', 'Supprimer definitivement cet evenement de soumission ?')
+        : t('Delete this submission event permanently?', 'Supprimer définitivement cet événement de soumission ?')
     );
     if (!confirmed) return;
 
@@ -486,7 +579,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       const nextItems = items.filter((item) => !deletedIds.has(item.event.id));
       setItems(nextItems);
       setSelectedPointId(nextItems[0]?.event.pointId ?? null);
-      setActionMessage(t('Point deleted successfully.', 'Point supprime avec succes.'));
+      setActionMessage(t('Point deleted successfully.', 'Point supprimé avec succès.'));
     } catch (deleteActionError) {
       const message =
         deleteActionError instanceof Error
@@ -533,16 +626,16 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       applyReviewToLocalState(group.latestEvent.event.id, decision);
       setActionMessage(
         decision === 'approved'
-          ? t('Latest event approved.', 'Dernier evenement approuve.')
+          ? t('Latest event approved.', 'Dernier événement approuvé.')
           : decision === 'rejected'
-            ? t('Latest event rejected.', 'Dernier evenement rejete.')
-            : t('Latest event put on hold.', 'Dernier evenement mis en attente.'),
+            ? t('Latest event rejected.', 'Dernier événement rejeté.')
+            : t('Latest event put on hold.', 'Dernier événement mis en attente.'),
       );
     } catch (reviewError) {
       const message =
         reviewError instanceof Error
           ? reviewError.message
-          : t('Unable to apply review decision.', 'Impossible d appliquer la decision.');
+          : t('Unable to apply review decision.', 'Impossible d\'appliquer la décision.');
       setDeleteError(message);
     } finally {
       setIsApplyingDecision(false);
@@ -579,7 +672,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         );
 
     if (targetGroups.length === 0) {
-      setActionMessage(t('No pending groups to approve.', 'Aucun groupe en attente a approuver.'));
+      setActionMessage(t('No pending groups to approve.', 'Aucun groupe en attente à approuver.'));
       return;
     }
 
@@ -674,19 +767,19 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     setAssignmentError('');
     setAssignmentActionMessage('');
     if (!plannerAgent) {
-      setAssignmentError(t('Select an agent.', 'Selectionnez un agent.'));
+      setAssignmentError(t('Select an agent.', 'Sélectionnez un agent.'));
       return;
     }
     if (!plannerZone) {
-      setAssignmentError(t('Select a zone.', 'Selectionnez une zone.'));
+      setAssignmentError(t('Select a zone.', 'Sélectionnez une zone.'));
       return;
     }
     if (!plannerDueDate) {
-      setAssignmentError(t('Select a due date.', 'Selectionnez une date limite.'));
+      setAssignmentError(t('Select a due date.', 'Sélectionnez une date limite.'));
       return;
     }
     if (plannerVerticals.length === 0) {
-      setAssignmentError(t('Select at least one vertical.', 'Selectionnez au moins une verticale.'));
+      setAssignmentError(t('Select at least one vertical.', 'Sélectionnez au moins une verticale.'));
       return;
     }
 
@@ -709,54 +802,187 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       });
       setAssignments((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
       setPlannerNotes('');
-      setAssignmentActionMessage(t('Assignment created.', 'Affectation creee.'));
+      setAssignmentActionMessage(t('Assignment created.', 'Affectation créée.'));
     } catch (createError) {
       const message =
         createError instanceof Error
           ? createError.message
-          : t('Unable to create assignment.', 'Impossible de creer l\'affectation.');
+          : t('Unable to create assignment.', 'Impossible de créer l\'affectation.');
       setAssignmentError(message);
     } finally {
       setIsCreatingAssignment(false);
     }
   };
 
+  const toggleAutomationLead = (leadId: string) => {
+    setSelectedAutomationLeadIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+  };
+
+  const handleRejectAutomationLeads = async () => {
+    if (isApplyingAutomationAction) return;
+    if (selectedAutomationLeads.length === 0) {
+      setAutomationLeadMessage(t('Select at least one automation lead.', 'Sélectionnez au moins un lead automatisé.'));
+      return;
+    }
+
+    try {
+      setIsApplyingAutomationAction(true);
+      setAutomationLeadError('');
+      setAutomationLeadMessage('');
+      for (const lead of selectedAutomationLeads) {
+        const updated = await apiJson<LeadCandidate>(`/api/intake/leads/${encodeURIComponent(lead.id)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reject' }),
+        });
+        setAutomationLeads((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      }
+      setSelectedAutomationLeadIds(new Set());
+      setAutomationLeadMessage(
+        t(`${selectedAutomationLeads.length} automation lead(s) rejected.`, `${selectedAutomationLeads.length} lead(s) automatisés rejetés.`),
+      );
+    } catch (actionError) {
+      const message =
+        actionError instanceof Error
+          ? actionError.message
+          : t('Unable to reject automation leads.', 'Impossible de rejeter les leads automatisés.');
+      setAutomationLeadError(message);
+    } finally {
+      setIsApplyingAutomationAction(false);
+    }
+  };
+
+  const handleCreateAssignmentFromAutomationLeads = async () => {
+    if (isApplyingAutomationAction || isCreatingAssignment) return;
+    if (!plannerAgent) {
+      setAutomationLeadError(t('Select an agent first.', 'Sélectionnez d\'abord un agent.'));
+      return;
+    }
+    if (!plannerDueDate) {
+      setAutomationLeadError(t('Select a due date first.', 'Sélectionnez d\'abord une date limite.'));
+      return;
+    }
+    if (selectedAutomationLeads.length === 0) {
+      setAutomationLeadMessage(t('Select at least one automation lead.', 'Sélectionnez au moins un lead automatisé.'));
+      return;
+    }
+
+    const actionable = selectedAutomationLeads.filter((lead) => lead.zoneId);
+    if (actionable.length !== selectedAutomationLeads.length) {
+      setAutomationLeadError(
+        t('Selected leads must all be within a known collection zone.', 'Les leads sélectionnés doivent tous appartenir à une zone de collecte connue.'),
+      );
+      return;
+    }
+
+    const zoneIds = Array.from(new Set(actionable.map((lead) => lead.zoneId)));
+    if (zoneIds.length !== 1 || !zoneIds[0]) {
+      setAutomationLeadError(t('Select leads from a single zone.', 'Sélectionnez des leads provenant d\'une seule zone.'));
+      return;
+    }
+
+    const assignedVerticals = Array.from(new Set(actionable.map((lead) => lead.category)));
+    const sources = Array.from(new Set(actionable.map((lead) => lead.sourceSystem)));
+    const leadIds = actionable.map((lead) => lead.id).join(', ');
+    const notes = [
+      `Automation leads: ${actionable.length}`,
+      `Sources: ${sources.join(', ')}`,
+      `Lead IDs: ${leadIds}`,
+    ]
+      .join(' | ')
+      .slice(0, 950);
+
+    try {
+      setIsApplyingAutomationAction(true);
+      setIsCreatingAssignment(true);
+      setAutomationLeadError('');
+      setAutomationLeadMessage('');
+      const created = await apiJson<CollectionAssignment>('/api/user?view=assignments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentUserId: plannerAgent,
+          zoneId: zoneIds[0],
+          assignedVerticals,
+          dueDate: plannerDueDate,
+          pointsExpected: actionable.length,
+          notes,
+        }),
+      });
+      const patchedIds = new Set<string>();
+      for (const lead of actionable) {
+        try {
+          const updated = await apiJson<LeadCandidate>(`/api/intake/leads/${encodeURIComponent(lead.id)}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'mark_assigned', assignmentId: created.id }),
+          });
+          patchedIds.add(updated.id);
+          setAutomationLeads((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+        } catch {
+          // Keep the assignment creation successful even if one lead patch fails.
+        }
+      }
+      setAssignments((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
+      setSelectedAutomationLeadIds(new Set());
+      setAutomationLeadMessage(
+        patchedIds.size === actionable.length
+          ? t('Assignment created from automation leads.', 'Affectation créée à partir des leads automatisés.')
+          : t('Assignment created. Some lead statuses need a manual refresh.', 'Affectation créée. Certains statuts de lead doivent être rafraîchis manuellement.'),
+      );
+    } catch (createError) {
+      const message =
+        createError instanceof Error
+          ? createError.message
+          : t('Unable to create assignment from leads.', 'Impossible de créer une affectation depuis les leads.');
+      setAutomationLeadError(message);
+    } finally {
+      setIsApplyingAutomationAction(false);
+      setIsCreatingAssignment(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
-      <div className="sticky top-0 z-30 bg-[#1f2933] text-white px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 hover:text-[#c86b4a] transition-colors">
+    <div className="flex flex-col h-full bg-page overflow-y-auto no-scrollbar">
+      <div className="sticky top-0 z-30 bg-ink text-white px-4 h-14 flex items-center justify-between">
+        <button onClick={onBack} className="p-2 -ml-2 hover:text-terra transition-colors" aria-label={t('Go back', 'Retour')}>
           <ArrowLeft size={20} />
         </button>
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em]">{t('Submission Forensics', 'Analyse forensique')}</h3>
-        <ShieldCheck size={18} className="text-[#c86b4a]" />
+        <h1 className="text-xs font-bold uppercase tracking-[0.2em]">{t('Submission Forensics', 'Analyse forensique')}</h1>
+        <ShieldCheck size={18} className="text-terra" />
       </div>
 
       <div className="p-4 space-y-4">
-        <div className="bg-white border border-gray-100 rounded-xl p-3 text-[10px] font-bold uppercase tracking-widest text-gray-500 flex items-center justify-between">
-          <span>{t('Global Admin Scope', 'Portee admin globale')}</span>
-          <span>{items.length} {t('items', 'elements')}</span>
+        <div className="bg-white border border-gray-100 rounded-xl p-3 micro-label text-gray-500 flex items-center justify-between">
+          <span>{t('All Submissions', 'Toutes les soumissions')}</span>
+          <span>{items.length} {t('items', 'éléments')}</span>
         </div>
 
         <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-gray-400">{t('Risk Queue', 'File de risque')}</div>
+              <div className="micro-label-wide text-gray-400">{t('Risk Queue', 'File de risque')}</div>
               <div className="mt-1 text-sm font-bold text-gray-900">{filteredGroups.length} {t('visible groups', 'groupes visibles')}</div>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={selectAllLowRisk}
-                className="h-10 rounded-2xl px-3 text-[10px] font-bold uppercase tracking-widest bg-gray-50 text-gray-600 border border-gray-100"
+                className="h-10 rounded-2xl px-3 micro-label bg-gray-50 text-gray-600 border border-gray-100"
               >
-                {t('Select Low-Risk', 'Selectionner faible risque')}
+                {t('Select Low-Risk', 'Sélectionner faible risque')}
               </button>
               <button
                 type="button"
                 onClick={handleBulkApproveLowRisk}
                 disabled={isApplyingDecision}
-                className={`h-10 rounded-2xl px-4 text-[10px] font-bold uppercase tracking-widest ${
-                  isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white'
+                className={`h-10 rounded-2xl px-4 micro-label ${
+                  isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
                 }`}
               >
                 {selectedForBulk.size > 0
@@ -768,7 +994,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {([
               ['all', t('All', 'Tous')],
-              ['flagged', t('Flagged', 'Signales')],
+              ['flagged', t('Flagged', 'Signalés')],
               ['pending', t('Pending', 'En attente')],
               ['low_risk', t('Low Risk', 'Faible risque')],
             ] as Array<[RiskFilter, string]>).map(([filter, label]) => (
@@ -776,32 +1002,32 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 key={filter}
                 type="button"
                 onClick={() => setRiskFilter(filter)}
-                className={`h-10 rounded-xl border text-[10px] font-bold uppercase tracking-widest ${
-                  riskFilter === filter ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-[#f9fafb] text-gray-600 border-gray-100'
+                className={`h-10 rounded-xl border micro-label ${
+                  riskFilter === filter ? 'bg-navy text-white border-navy' : 'bg-page text-gray-600 border-gray-100'
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+          <div className="micro-label text-gray-400">
             {t('Keyboard', 'Clavier')}: J/K {t('navigate', 'naviguer')} • A {t('approve', 'approuver')} • R {t('reject', 'rejeter')} • H {t('hold', 'mettre en attente')}
           </div>
         </div>
 
         {schemaGuard?.ok === false && (
           <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700">
-              {t('Schema Guard Warning', 'Alerte garde schema')}
+            <div className="micro-label text-amber-700">
+              {t('Schema Guard Warning', 'Alerte garde schéma')}
             </div>
             {schemaGuard.missing.length > 0 && (
               <div className="text-xs text-amber-800">
-                {t('Missing categories:', 'Categories manquantes:')} {schemaGuard.missing.map((value) => getCategoryLabel(value, language)).join(', ')}
+                {t('Missing categories:', 'Catégories manquantes :')} {schemaGuard.missing.map((value) => getCategoryLabel(value, language)).join(', ')}
               </div>
             )}
             {schemaGuard.extra.length > 0 && (
               <div className="text-xs text-amber-800">
-                {t('Unexpected categories:', 'Categories inattendues:')} {schemaGuard.extra.join(', ')}
+                {t('Unexpected categories:', 'Catégories inattendues :')} {schemaGuard.extra.join(', ')}
               </div>
             )}
           </div>
@@ -809,16 +1035,16 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
         <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4 shadow-sm">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-[#0f2b46]">
+            <h4 className="text-xs font-bold uppercase tracking-widest text-navy">
               {t('Assignment Planner', 'Planification des affectations')}
             </h4>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+            <span className="micro-label text-gray-400">
               {assignments.length} {t('active rows', 'lignes')}
             </span>
           </div>
 
           {assignmentActionMessage && (
-            <div className="rounded-xl border border-[#d2e6d8] bg-[#eaf3ee] p-3 text-[11px] text-[#2f855a]">
+            <div className="rounded-xl border border-forest-wash bg-forest-wash p-3 text-[11px] text-forest">
               {assignmentActionMessage}
             </div>
           )}
@@ -856,8 +1082,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
             </select>
           </div>
 
-          <div className="rounded-xl border border-gray-100 p-3 space-y-3 bg-[#f9fafb]">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+          <div className="rounded-xl border border-gray-100 p-3 space-y-3 bg-page">
+            <div className="micro-label text-gray-500">
               {t('Add Assignment', 'Ajouter une affectation')}
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -916,8 +1142,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     key={vertical}
                     type="button"
                     onClick={() => togglePlannerVertical(vertical)}
-                    className={`h-9 rounded-xl border text-[10px] font-bold uppercase tracking-widest ${
-                      active ? 'bg-[#0f2b46] text-white border-[#0f2b46]' : 'bg-white text-gray-600 border-gray-100'
+                    className={`h-9 rounded-xl border micro-label ${
+                      active ? 'bg-navy text-white border-navy' : 'bg-white text-gray-600 border-gray-100'
                     }`}
                   >
                     {getCategoryLabel(vertical, language)}
@@ -929,11 +1155,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               type="button"
               onClick={handleCreateAssignment}
               disabled={isCreatingAssignment}
-              className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white hover:bg-[#123a5f]'
+              className={`h-10 rounded-xl micro-label ${
+                isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white hover:bg-navy-mid'
               }`}
             >
-              {isCreatingAssignment ? t('Creating...', 'Creation...') : t('Create Assignment', 'Creer affectation')}
+              {isCreatingAssignment ? t('Creating...', 'Création...') : t('Create Assignment', 'Créer affectation')}
             </button>
           </div>
 
@@ -942,8 +1168,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           ) : (
             <div className="space-y-2">
               {assignments.length === 0 && (
-                <div className="rounded-xl border border-gray-100 bg-[#f9fafb] p-3 text-xs text-gray-500">
-                  {t('No assignments found.', 'Aucune affectation trouvee.')}
+                <div className="rounded-xl border border-gray-100 bg-page p-3 text-xs text-gray-500">
+                  {t('No assignments found.', 'Aucune affectation trouvée.')}
                 </div>
               )}
               {assignments.map((assignment) => (
@@ -956,7 +1182,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     {assignment.agentUserId} · {assignment.pointsSubmitted}/{assignment.pointsExpected} ({assignment.completionRate}%)
                   </div>
                   <div className="text-[10px] text-gray-500">
-                    {t('Due', 'Echeance')}: {assignment.dueDate}
+                    {t('Due', 'Échéance')}: {assignment.dueDate}
                   </div>
                   <div className="text-[10px] text-gray-500">
                     {assignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}
@@ -967,12 +1193,162 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           )}
         </div>
 
+        <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-widest text-navy">
+                {t('Automation Intake', 'Intake automatisé')}
+              </h4>
+              <div className="mt-1 text-[11px] text-gray-500">
+                {automationLeads.length} {t('lead(s) loaded', 'lead(s) chargés')}
+              </div>
+            </div>
+            <div className="micro-label text-gray-400">
+              {selectedAutomationLeadIds.size} {t('selected', 'sélectionnés')}
+            </div>
+          </div>
+
+          {automationLeadMessage && (
+            <div className="rounded-xl border border-forest-wash bg-forest-wash p-3 text-[11px] text-forest">
+              {automationLeadMessage}
+            </div>
+          )}
+
+          {automationLeadError && (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
+              {automationLeadError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <select
+              value={automationStatusFilter}
+              onChange={(event) => setAutomationStatusFilter(event.target.value as AutomationStatusFilter)}
+              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
+            >
+              <option value="">{t('All statuses', 'Tous les statuts')}</option>
+              {AUTOMATION_LEAD_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </select>
+            <select
+              value={automationCategoryFilter}
+              onChange={(event) => setAutomationCategoryFilter((event.target.value as SubmissionCategory) || '')}
+              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
+            >
+              <option value="">{t('All verticals', 'Toutes les verticales')}</option>
+              {ASSIGNABLE_VERTICALS.map((vertical) => (
+                <option key={vertical} value={vertical}>
+                  {getCategoryLabel(vertical, language)}
+                </option>
+              ))}
+            </select>
+            <select
+              value={automationPriorityFilter}
+              onChange={(event) => setAutomationPriorityFilter((event.target.value as AutomationPriorityFilter) || '')}
+              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
+            >
+              <option value="">{t('All priorities', 'Toutes les priorités')}</option>
+              {AUTOMATION_PRIORITIES.map((priority) => (
+                <option key={priority} value={priority}>
+                  {priority}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleCreateAssignmentFromAutomationLeads}
+              disabled={isApplyingAutomationAction || isCreatingAssignment}
+              className={`h-10 rounded-xl px-4 micro-label ${
+                isApplyingAutomationAction || isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
+              }`}
+            >
+              {t('Create Assignment from Selection', 'Créer affectation depuis la sélection')}
+            </button>
+            <button
+              type="button"
+              onClick={handleRejectAutomationLeads}
+              disabled={isApplyingAutomationAction}
+              className={`h-10 rounded-xl px-4 micro-label ${
+                isApplyingAutomationAction ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600 border border-red-100'
+              }`}
+            >
+              {t('Reject Selection', 'Rejeter la sélection')}
+            </button>
+          </div>
+
+          {isLoadingAutomationLeads ? (
+            <div className="text-xs text-gray-500">{t('Loading automation leads...', 'Chargement des leads automatisés...')}</div>
+          ) : automationLeads.length === 0 ? (
+            <div className="rounded-xl border border-gray-100 bg-page p-3 text-xs text-gray-500">
+              {t('No automation leads found.', 'Aucun lead automatisé trouvé.')}
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+              {automationLeads.map((lead) => {
+                const evidenceUrl = getAutomationEvidenceUrl(lead);
+                return (
+                  <div key={lead.id} className="rounded-xl border border-gray-100 p-3 bg-page">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedAutomationLeadIds.has(lead.id)}
+                        onChange={() => toggleAutomationLead(lead.id)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-navy"
+                      />
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-xs font-bold text-gray-900">{getAutomationLeadName(lead, language)}</div>
+                            <div className="text-[10px] uppercase tracking-widest text-gray-400">
+                              {getCategoryLabel(lead.category, language)} • {lead.sourceSystem}
+                            </div>
+                          </div>
+                          <span className={`rounded-lg border px-2 py-1 micro-label ${automationStatusClass(lead.status)}`}>
+                            {lead.status}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-gray-600">
+                          <div>{t('Zone', 'Zone')}: {lead.zoneId ?? unavailableLabel}</div>
+                          <div>{t('Priority', 'Priorité')}: {lead.priority}</div>
+                          <div>
+                            {t('Match', 'Correspondance')}: {lead.matchPointId ? `${lead.matchPointId} (${typeof lead.matchConfidence === 'number' ? lead.matchConfidence.toFixed(2) : '--'})` : unavailableLabel}
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-gray-600">
+                          {t('Source record', 'Enregistrement source')}: {lead.sourceRecordId}
+                        </div>
+                        {evidenceUrl && (
+                          <a
+                            href={evidenceUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] text-navy underline break-all"
+                          >
+                            <MapPin size={12} />
+                            {t('Evidence', 'Preuve')}: {evidenceUrl}
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         {syncErrors.length > 0 && (
           <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center space-x-2 text-red-700">
                 <AlertTriangle size={14} />
-                <span className="text-[10px] font-bold uppercase tracking-widest">
+                <span className="micro-label">
                   {t('Local Sync Errors', 'Erreurs locales de synchronisation')} ({syncErrors.length})
                 </span>
               </div>
@@ -980,7 +1356,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 type="button"
                 onClick={handleClearSyncErrors}
                 disabled={isClearingSyncErrors}
-                className={`text-[10px] font-bold uppercase tracking-widest ${isClearingSyncErrors ? 'text-red-300' : 'text-red-700'}`}
+                className={`micro-label ${isClearingSyncErrors ? 'text-red-300' : 'text-red-700'}`}
               >
                 {isClearingSyncErrors ? t('Clearing...', 'Suppression...') : t('Clear', 'Effacer')}
               </button>
@@ -1004,7 +1380,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         )}
 
         {!isLoading && !error && actionMessage && (
-          <div className="bg-[#eaf3ee] border border-[#d2e6d8] rounded-2xl p-4 text-xs text-[#2f855a]">
+          <div className="bg-forest-wash border border-forest-wash rounded-2xl p-4 text-xs text-forest">
             {actionMessage}
           </div>
         )}
@@ -1028,7 +1404,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 <div
                   key={`desktop-${group.pointId}`}
                   className={`hidden lg:block w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
-                    isSelected ? 'border-[#0f2b46]' : 'border-gray-100 hover:border-[#d5e1eb]'
+                    isSelected ? 'border-navy' : 'border-gray-100 hover:border-navy-border'
                   }`}
                 >
                   <div className="flex">
@@ -1037,7 +1413,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         type="checkbox"
                         checked={selectedForBulk.has(group.pointId)}
                         onChange={() => toggleBulkItem(group.pointId)}
-                        className="w-4 h-4 rounded border-gray-300 text-[#0f2b46] shrink-0"
+                        className="w-4 h-4 rounded border-gray-300 text-navy shrink-0"
                       />
                     </div>
                     <button
@@ -1047,14 +1423,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     >
                     <div className="w-16 h-16 bg-gray-100 shrink-0 flex items-center justify-center relative">
                       {preview ? (
-                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" />
+                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" loading="lazy" />
                       ) : (
                         <Camera size={14} className="text-gray-300" />
                       )}
                     </div>
                     <div className="flex-1 p-2 space-y-1">
                       <h4 className="text-xs font-bold text-gray-900 leading-tight truncate">{group.siteName}</h4>
-                      <p className="text-[9px] uppercase tracking-widest text-gray-400">
+                      <p className="text-[10px] uppercase tracking-widest text-gray-400">
                         {categoryLabelLocal(group.category, language)} • {riskScore} • {reviewStatus}
                       </p>
                     </div>
@@ -1074,9 +1450,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           const latestDevice = getClientDevice(selectedGroup.latestEvent);
           const contributors = [...new Map<string, AdminSubmissionEvent['user']>(selectedGroup.events.map((e) => [e.user.id, e.user])).values()];
           return (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+          <div className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-gray-900">{t('Point Detail', 'Detail du point')}</h4>
+              <h4 className="text-sm font-bold text-gray-900">{t('Point Detail', 'Détail du point')}</h4>
               <button
                 type="button"
                 onClick={() => setSelectedPointId(null)}
@@ -1088,15 +1464,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
             <div className="flex items-center justify-between gap-3">
               <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-                {selectedGroup.events.length} {t('event(s)', 'evenement(s)')}
+                {selectedGroup.events.length} {t('event(s)', 'événement(s)')}
               </p>
               <div className="flex flex-wrap justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
                   disabled={isApplyingDecision}
-                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#eaf3ee] text-[#2f855a]'
+                  className={`h-10 px-3 rounded-xl micro-label ${
+                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-forest-wash text-forest'
                   }`}
                 >
                   {t('Approve', 'Approuver')}
@@ -1105,8 +1481,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   type="button"
                   onClick={() => void handleReviewDecision(selectedGroup, 'flagged')}
                   disabled={isApplyingDecision}
-                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-[#fff8f4] text-[#c86b4a]'
+                  className={`h-10 px-3 rounded-xl micro-label ${
+                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-terra-wash text-terra'
                   }`}
                 >
                   {t('Hold', 'Mettre en attente')}
@@ -1115,7 +1491,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   type="button"
                   onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
                   disabled={isApplyingDecision}
-                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
+                  className={`h-10 px-3 rounded-xl micro-label ${
                     isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600'
                   }`}
                 >
@@ -1125,7 +1501,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   type="button"
                   onClick={handleDeleteSelected}
                   disabled={isDeleting || hasReadOnly}
-                  className={`h-10 px-3 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center space-x-2 ${
+                  className={`h-10 px-3 rounded-xl micro-label flex items-center space-x-2 ${
                     isDeleting || hasReadOnly
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
@@ -1145,7 +1521,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
             <div className="grid grid-cols-1 gap-3 text-[11px]">
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Contributors', 'Contributeurs')}</div>
+                <div className="micro-label text-gray-400">{t('Contributors', 'Contributeurs')}</div>
                 {contributors.map((user) => (
                   <div key={user.id} className="flex items-start gap-2">
                     <ProfileAvatar preset={coerceAvatarPreset(user.avatarPreset)} alt={user.name} className="w-8 h-8 shrink-0" />
@@ -1156,7 +1532,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       {t('Trust', 'Confiance')}: {typeof user.trustScore === 'number' ? user.trustScore : '--'} • {user.trustTier ?? unavailableLabel}
                     </div>
                     {user.suspendedUntil && (
-                      <div className="text-[11px] text-[#b85f3f]">
+                      <div className="text-[11px] text-terra-dark">
                         {t("Suspended until", "Suspendu jusqu’au")}: {formatDate(user.suspendedUntil, unavailableLabel)}
                       </div>
                     )}
@@ -1166,23 +1542,23 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Point Metadata', 'Metadonnees du point')}</div>
-                <div>{t('Category', 'Categorie')}: {categoryLabelLocal(selectedGroup.category, language)}</div>
+                <div className="micro-label text-gray-400">{t('Point Metadata', 'Métadonnées du point')}</div>
+                <div>{t('Category', 'Catégorie')}: {categoryLabelLocal(selectedGroup.category, language)}</div>
                 <div>Point ID: {selectedGroup.pointId}</div>
-                <div>{t('Events', 'Evenements')}: {selectedGroup.events.length}</div>
+                <div>{t('Events', 'Événements')}: {selectedGroup.events.length}</div>
                 <div>{t('Risk Score', 'Score de risque')}: {getRiskScore(selectedGroup.latestEvent)}</div>
                 <div>{t('Review Status', 'Statut revue')}: {getReviewStatus(selectedGroup.latestEvent)}</div>
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Event Timeline', 'Historique des evenements')}</div>
+                <div className="micro-label text-gray-400">{t('Event Timeline', 'Historique des événements')}</div>
                 {selectedGroup.events.map((ev, idx) => {
                   const device = getClientDevice(ev);
                   return (
-                    <div key={ev.event.id} className={`p-2 rounded-xl ${idx === 0 ? 'bg-[#eaf3ee] border border-[#d2e6d8]' : 'bg-gray-50 border border-gray-100'}`}>
+                    <div key={ev.event.id} className={`p-2 rounded-xl ${idx === 0 ? 'bg-forest-wash border border-forest-wash' : 'bg-gray-50 border border-gray-100'}`}>
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-                          {ev.event.eventType === 'CREATE_EVENT' ? t('Create', 'Creation') : t('Enrich', 'Enrichissement')}
+                        <span className="micro-label text-navy">
+                          {ev.event.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : t('Enrich', 'Enrichissement')}
                         </span>
                         <span className="text-[10px] text-gray-500">{formatDate(ev.event.createdAt, unavailableLabel)}</span>
                       </div>
@@ -1194,24 +1570,24 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Location', 'Localisation')}</div>
+                <div className="micro-label text-gray-400">{t('Location', 'Localisation')}</div>
                 <div>{t('Submission GPS', 'GPS soumis')}: {formatLocation(latestFraudCheck?.submissionLocation, unavailableLabel)}</div>
                 <div>{t('Effective GPS', 'GPS effectif')}: {formatLocation(latestFraudCheck?.effectiveLocation, unavailableLabel)}</div>
                 <div>{t('IP GPS', 'GPS IP')}: {formatLocation(latestFraudCheck?.ipLocation, unavailableLabel)}</div>
               </div>
 
               <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Client Device', 'Appareil client')}</div>
+                <div className="micro-label text-gray-400">{t('Client Device', 'Appareil client')}</div>
                 <div>{t('Device ID', 'Device ID')}: {latestDevice?.deviceId ?? unavailableLabel}</div>
                 <div>{t('Platform', 'Plateforme')}: {latestDevice?.platform ?? unavailableLabel}</div>
                 <div>
-                  {t('Low-end flag', 'Indicateur entree de gamme')}:{' '}
+                  {t('Low-end flag', 'Indicateur entrée de gamme')}:{' '}
                   {latestDevice ? (latestDevice.isLowEnd === true ? t('Yes', 'Oui') : t('No', 'Non')) : unavailableLabel}
                 </div>
               </div>
 
               <div className="space-y-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                <div className="micro-label text-gray-400">
                   {t('All Photos', 'Toutes les photos')} ({selectedGroup.allPhotos.length})
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -1225,10 +1601,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   {selectedGroup.allPhotos.map((photo, idx) => (
                     <div key={idx} className="space-y-1">
                       <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
-                        <img src={photo.url} alt={`${t('Photo', 'Photo')} ${idx + 1}`} className="h-full w-full object-cover" />
+                        <img src={photo.url} alt={`${t('Photo', 'Photo')} ${idx + 1}`} className="h-full w-full object-cover" loading="lazy" />
                       </div>
                       <div className="text-[10px] text-gray-500 text-center">
-                        {photo.eventType === 'CREATE_EVENT' ? t('Create', 'Creation') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}
+                        {photo.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}
                       </div>
                     </div>
                   ))}
@@ -1236,8 +1612,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </div>
 
               <div className="space-y-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                  {t('Photo EXIF Metadata', 'Metadonnees EXIF des photos')}
+                <div className="micro-label text-gray-400">
+                  {t('Photo EXIF Metadata', 'Métadonnées EXIF des photos')}
                 </div>
                 {selectedGroup.allPhotos.length === 0 && (
                   <div className="text-[11px] text-gray-500">{unavailableLabel}</div>
@@ -1245,7 +1621,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 {selectedGroup.allPhotos.map((photo, idx) => (
                   <DetailMetadataBlock
                     key={idx}
-                    label={`${t('Photo', 'Photo')} ${idx + 1} — ${photo.eventType === 'CREATE_EVENT' ? t('Create', 'Creation') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}`}
+                    label={`${t('Photo', 'Photo')} ${idx + 1} — ${photo.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}`}
                     metadata={photo.metadata}
                     thresholdKm={latestFraudCheck?.submissionMatchThresholdKm ?? 1}
                     unavailable={unavailableLabel}
@@ -1263,7 +1639,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
         {!isLoading && !error && !selectedGroup && filteredGroups.length > 0 && (
           <div className="hidden lg:flex bg-white border border-gray-100 rounded-2xl p-8 items-center justify-center text-xs text-gray-400 min-h-[200px]">
-            {t('Select an item to view details', 'Selectionnez un element pour voir les details')}
+            {t('Select an item to view details', 'Sélectionnez un élément pour voir les détails')}
           </div>
         )}
 
@@ -1272,7 +1648,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
         {!isLoading && !error && filteredGroups.length === 0 && (
           <div className="bg-white border border-gray-100 rounded-2xl p-6 text-xs text-gray-500 text-center">
-            {t('No submissions found.', 'Aucune soumission trouvee.')}
+            {t('No submissions found.', 'Aucune soumission trouvée.')}
           </div>
         )}
 
@@ -1289,7 +1665,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 <div
                   key={group.pointId}
                   className={`w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
-                    isSelected ? 'border-[#0f2b46]' : 'border-gray-100 hover:border-[#d5e1eb]'
+                    isSelected ? 'border-navy' : 'border-gray-100 hover:border-navy-border'
                   }`}
                 >
                   <div className="flex">
@@ -1301,7 +1677,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                           e.stopPropagation();
                           toggleBulkItem(group.pointId);
                         }}
-                        className="w-4 h-4 rounded border-gray-300 text-[#0f2b46] shrink-0"
+                        className="w-4 h-4 rounded border-gray-300 text-navy shrink-0"
                       />
                     </div>
                     <button
@@ -1311,12 +1687,12 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     >
                     <div className="w-24 h-24 bg-gray-100 shrink-0 flex items-center justify-center relative">
                       {preview ? (
-                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" />
+                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" loading="lazy" />
                       ) : (
                         <Camera size={18} className="text-gray-300" />
                       )}
                       {group.allPhotos.length > 1 && (
-                        <div className="absolute top-1 right-1 bg-[#0f2b46] text-white text-[9px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        <div className="absolute top-1 right-1 bg-navy text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                           {group.allPhotos.length}
                         </div>
                       )}
@@ -1327,10 +1703,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                           <h4 className="text-sm font-bold text-gray-900 leading-tight">{group.siteName}</h4>
                           <p className="text-[10px] uppercase tracking-widest text-gray-400">
                             {categoryLabelLocal(group.category, language)}
-                            {group.events.length > 1 && ` · ${group.events.length} ${t('events', 'evenements')}`}
+                            {group.events.length > 1 && ` · ${group.events.length} ${t('events', 'événements')}`}
                           </p>
                         </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-lg border ${matchStateClass(state)}`}>
+                        <span className={`micro-label px-2 py-1 rounded-lg border ${matchStateClass(state)}`}>
                           {matchStateLabel(state, language)}
                         </span>
                       </div>
@@ -1342,7 +1718,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         <MapPin size={12} />
                         <span>{formatDate(group.latestEvent.event.createdAt, unavailableLabel)}</span>
                       </div>
-                      <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                      <div className="micro-label text-gray-400">
                         {t('Risk', 'Risque')}: {riskScore} • {reviewStatus}
                       </div>
                     </div>

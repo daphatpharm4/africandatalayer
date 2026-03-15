@@ -37,7 +37,10 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
   const navItems = userRole === 'client' ? clientNav : agentNav;
 
   return (
-    <nav className="min-h-16 bg-white border-t border-gray-200 flex items-center justify-around px-2 pt-1 pb-[calc(0.25rem+var(--safe-bottom))] z-40">
+    <nav
+      className="min-h-16 bg-white border-t border-gray-200 flex items-center justify-around px-2 pt-1 pb-[calc(0.25rem+var(--safe-bottom))] z-40"
+      aria-label={t('Main navigation', 'Navigation principale')}
+    >
       {navItems.map((item) => {
         const Icon = item.icon;
         const isActive = currentScreen === item.id;
@@ -45,12 +48,13 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
           <button
             key={item.id}
             onClick={() => onNavigate(item.id)}
+            aria-current={isActive ? 'page' : undefined}
             className={`flex flex-col items-center justify-center space-y-1 w-full transition-colors ${
-              isActive ? 'text-[#0f2b46]' : 'text-gray-400 hover:text-gray-600'
+              isActive ? 'text-navy' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            <Icon size={20} />
-            <span className="text-[10px] font-medium tracking-tight uppercase">{item.label}</span>
+            <Icon size={20} aria-hidden="true" />
+            <span className="text-[11px] font-medium tracking-tight uppercase">{item.label}</span>
           </button>
         );
       })}
@@ -58,4 +62,4 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
   );
 };
 
-export default Navigation;
+export default React.memo(Navigation);

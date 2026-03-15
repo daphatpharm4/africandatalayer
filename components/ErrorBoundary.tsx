@@ -28,12 +28,13 @@ class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
-          <h2 style={{ marginBottom: '1rem' }}>Something went wrong.</h2>
+          <h2 style={{ marginBottom: '0.5rem' }}>The app ran into a problem.</h2>
+          <p style={{ marginBottom: '1rem', color: '#666', fontSize: '0.875rem' }}>Your data is saved offline — nothing is lost.</p>
           <button
             onClick={() => window.location.reload()}
-            style={{ padding: '0.5rem 1.5rem', cursor: 'pointer' }}
+            style={{ padding: '0.5rem 1.5rem', cursor: 'pointer', borderRadius: '0.5rem', border: '1px solid #ccc' }}
           >
-            Reload
+            Reload App
           </button>
         </div>
       );

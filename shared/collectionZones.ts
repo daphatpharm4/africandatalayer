@@ -29,3 +29,13 @@ const ZONE_BY_ID = new Map(BONAMOUSSADI_COLLECTION_ZONES.map((zone) => [zone.id,
 export function getCollectionZone(zoneId: string): CollectionZone | null {
   return ZONE_BY_ID.get(zoneId) ?? null;
 }
+
+export function findCollectionZoneByLocation(latitude: number, longitude: number): CollectionZone | null {
+  return BONAMOUSSADI_COLLECTION_ZONES.find(
+    (zone) =>
+      latitude >= zone.bounds.south &&
+      latitude <= zone.bounds.north &&
+      longitude >= zone.bounds.west &&
+      longitude <= zone.bounds.east,
+  ) ?? null;
+}

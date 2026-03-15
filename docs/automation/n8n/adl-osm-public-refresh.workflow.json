@@ -1,0 +1,136 @@
+{
+  "name": "ADL OSM Public Refresh",
+  "active": false,
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 260],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "set-config",
+      "name": "Set Run Metadata",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [500, 260],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\n  \"runKey\": \"osm-{{$now.toISO()}}\",\n  \"workflowName\": \"adl-osm-public-refresh\",\n  \"sourceSystem\": \"osm_overpass\",\n  \"triggerType\": \"schedule\",\n  \"startedAt\": \"{{$now.toISO()}}\"\n}"
+      }
+    },
+    {
+      "id": "fetch-public-source",
+      "name": "Fetch Public Source",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 260],
+      "parameters": {
+        "method": "GET",
+        "url": "https://overpass-api.de/api/interpreter",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"data\": \"[out:json];(node[\\\"amenity\\\"=\\\"fuel\\\"](4.0755,9.7185,4.0999,9.7602);node[\\\"amenity\\\"=\\\"pharmacy\\\"](4.0755,9.7185,4.0999,9.7602););out body;\"\n}"
+      }
+    },
+    {
+      "id": "map-leads",
+      "name": "Map To Lead Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1020, 260],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const run = $items('Set Run Metadata', 0, 0)[0].json;\nconst elements = Array.isArray($json.elements) ? $json.elements : [];\nconst leads = elements.map((item) => ({\n  sourceRecordId: `osm:${item.id}`,\n  sourceUrl: `https://www.openstreetmap.org/node/${item.id}`,\n  category: item.tags?.amenity === 'fuel' ? 'fuel_station' : item.tags?.amenity === 'pharmacy' ? 'pharmacy' : 'billboard',\n  location: {\n    latitude: Number(item.lat),\n    longitude: Number(item.lon),\n  },\n  normalizedDetails: {\n    name: item.tags?.name ?? null,\n    brand: item.tags?.brand ?? null,\n  },\n  rawPayload: item,\n  evidenceUrls: [`https://www.openstreetmap.org/node/${item.id}`],\n  freshnessAt: new Date().toISOString(),\n  priority: item.tags?.amenity === 'fuel' ? 'high' : 'medium',\n}));\nreturn [{ json: { ...run, completedAt: new Date().toISOString(), leads } }];"
+      }
+    },
+    {
+      "id": "post-to-adl",
+      "name": "Post To ADL Intake",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1280, 260],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ADL_BASE_URL + '/api/intake/leads'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.AUTOMATION_SECRET}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}"
+      }
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Run Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Run Metadata": {
+      "main": [
+        [
+          {
+            "node": "Fetch Public Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Public Source": {
+      "main": [
+        [
+          {
+            "node": "Map To Lead Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map To Lead Payload": {
+      "main": [
+        [
+          {
+            "node": "Post To ADL Intake",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "versionId": "adl-osm-public-refresh-v1",
+  "meta": null,
+  "pinData": {}
+}

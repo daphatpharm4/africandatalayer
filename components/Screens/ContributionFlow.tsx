@@ -63,7 +63,7 @@ const PHOTO_GUIDE_CONFIG: Record<string, { frameLabel: { en: string; fr: string 
   pharmacy: {
     frameLabel: { en: 'Pharmacy', fr: 'Pharmacie' },
     tips: [
-      { en: 'Capture the green cross sign and full storefront', fr: 'Capturez le signe de la croix verte et la devanture complete' },
+      { en: 'Capture the green cross sign and full storefront', fr: 'Capturez le signe de la croix verte et la devanture complète' },
       { en: 'Include the pharmacy name if visible', fr: 'Incluez le nom de la pharmacie si visible' },
     ],
   },
@@ -84,14 +84,14 @@ const PHOTO_GUIDE_CONFIG: Record<string, { frameLabel: { en: string; fr: string 
   alcohol_outlet: {
     frameLabel: { en: 'Alcohol Outlet', fr: 'Point de vente' },
     tips: [
-      { en: 'Show the business sign and entrance', fr: 'Montrez l\'enseigne et l\'entree' },
+      { en: 'Show the business sign and entrance', fr: 'Montrez l\'enseigne et l\'entrée' },
       { en: 'Capture any license information', fr: 'Capturez toute information de licence' },
     ],
   },
   billboard: {
     frameLabel: { en: 'Billboard', fr: 'Panneau' },
     tips: [
-      { en: 'Capture the full billboard face including frame', fr: 'Capturez la face complete du panneau avec le cadre' },
+      { en: 'Capture the full billboard face including frame', fr: 'Capturez la face complète du panneau avec le cadre' },
       { en: 'Include brand/advertiser text', fr: 'Incluez le texte de la marque/annonceur' },
     ],
   },
@@ -99,14 +99,14 @@ const PHOTO_GUIDE_CONFIG: Record<string, { frameLabel: { en: string; fr: string 
     frameLabel: { en: 'Road', fr: 'Route' },
     tips: [
       { en: 'Capture the road surface and any blockage', fr: 'Capturez la surface de la route et tout blocage' },
-      { en: 'Show road condition clearly', fr: 'Montrez clairement l\'etat de la route' },
+      { en: 'Show road condition clearly', fr: 'Montrez clairement l\'état de la route' },
     ],
   },
   census_proxy: {
-    frameLabel: { en: 'Building', fr: 'Batiment' },
+    frameLabel: { en: 'Building', fr: 'Bâtiment' },
     tips: [
-      { en: 'Capture the full building from ground to roof', fr: 'Capturez le batiment complet du sol au toit' },
-      { en: 'Show the entrance and number of floors', fr: 'Montrez l\'entree et le nombre d\'etages' },
+      { en: 'Capture the full building from ground to roof', fr: 'Capturez le bâtiment complet du sol au toit' },
+      { en: 'Show the entrance and number of floors', fr: 'Montrez l\'entrée et le nombre d\'étages' },
     ],
   },
 };
@@ -477,7 +477,7 @@ const ContributionFlow: React.FC<Props> = ({
   const renderEnrichFieldHint = (field: string) => {
     if (!seedPoint) return null;
     if (missingFieldSet.has(field)) {
-      return <p className="text-[11px] font-medium text-[#b85f3f]">{t('Currently missing', 'Actuellement manquant')}</p>;
+      return <p className="text-[11px] font-medium text-terra-dark">{t('Currently missing', 'Actuellement manquant')}</p>;
     }
     const currentValue = formatEnrichFieldValue(seedPointDetails[field], language);
     if (!currentValue) return null;
@@ -650,29 +650,29 @@ const ContributionFlow: React.FC<Props> = ({
     try {
       const summary = await flushOfflineQueue(sendSubmissionPayload);
       if (summary.permanentFailures > 0) {
-        const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetee par la validation serveur.');
+        const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetée par la validation serveur.');
         const rejectedMessage = t(
           `${summary.permanentFailures} queued item(s) were rejected: ${reason}`,
-          `${summary.permanentFailures} element(s) en file ont ete rejetes : ${reason}`
+          `${summary.permanentFailures} élément(s) en file ont été rejetés : ${reason}`
         );
         if (summary.failed > 0) {
-          setSyncMessage(`${rejectedMessage} ${t(`${summary.failed} item(s) still pending sync.`, `${summary.failed} element(s) en attente de synchronisation.`)}`);
+          setSyncMessage(`${rejectedMessage} ${t(`${summary.failed} item(s) still pending sync.`, `${summary.failed} élément(s) en attente de synchronisation.`)}`);
         } else {
           setSyncMessage(rejectedMessage);
         }
       } else if (summary.failed > 0) {
-        setSyncMessage(t(`Saved offline. ${summary.failed} item(s) still pending sync.`, `${summary.failed} element(s) en attente de synchronisation.`));
+        setSyncMessage(t(`Saved offline. ${summary.failed} item(s) still pending sync.`, `${summary.failed} élément(s) en attente de synchronisation.`));
       } else if (summary.synced > 0) {
-        setSyncMessage(t('Saved offline and synced successfully.', 'Enregistre hors ligne puis synchronise avec succes.'));
+        setSyncMessage(t('Saved offline and synced successfully.', 'Enregistré hors ligne puis synchronisé avec succès.'));
       } else {
         const stats = await getQueueStats();
         if (stats.total > 0) {
-          setSyncMessage(t(`${stats.total} item(s) queued for sync.`, `${stats.total} element(s) en file de synchronisation.`));
+          setSyncMessage(t(`${stats.total} item(s) queued for sync.`, `${stats.total} élément(s) en file de synchronisation.`));
         }
       }
       return summary;
     } catch (error) {
-      setSyncMessage(error instanceof Error ? error.message : t('Saved offline. Sync will retry automatically.', 'Enregistre hors ligne. La synchronisation reessaiera automatiquement.'));
+      setSyncMessage(error instanceof Error ? error.message : t('Saved offline. Sync will retry automatically.', 'Enregistré hors ligne. La synchronisation réessaiera automatiquement.'));
       return null;
     }
   };
@@ -680,12 +680,12 @@ const ContributionFlow: React.FC<Props> = ({
   const getCurrentLocation = () =>
     new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error(t('Geolocation not supported.', 'Geolocalisation non supportee.')));
+        reject(new Error(t('Geolocation not supported.', 'Géolocalisation non supportée.')));
         return;
       }
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-        () => reject(new Error(t('Unable to access location.', 'Impossible d\'acceder a la localisation.'))),
+        () => reject(new Error(t('Unable to access location.', 'Impossible d\'accéder à la localisation.'))),
         { enableHighAccuracy: true, timeout: 10000 }
       );
     });
@@ -698,7 +698,7 @@ const ContributionFlow: React.FC<Props> = ({
       setShowManualLocation(false);
     } catch {
       setLocation(null);
-      setLocationError(t('Unable to access location. Use manual fallback coordinates.', 'Impossible d\'acceder a la localisation. Utilisez les coordonnees manuelles.'));
+      setLocationError(t('Unable to access location. Enter coordinates manually below.', 'Impossible d\'accéder à la localisation. Saisissez les coordonnées ci-dessous.'));
       setShowManualLocation(true);
     }
   };
@@ -935,7 +935,7 @@ const ContributionFlow: React.FC<Props> = ({
     }
 
     if (!location && !parseManualLocation()) {
-      setLocationError(t('GPS is required. Retry location or enter fallback coordinates.', 'Le GPS est requis. Reessayez la localisation ou saisissez des coordonnees de secours.'));
+      setLocationError(t('Location is required. Tap "Retry GPS" or enter coordinates manually.', 'La localisation est requise. Appuyez sur « Réessayer GPS » ou saisissez les coordonnées.'));
       return false;
     }
 
@@ -945,7 +945,7 @@ const ContributionFlow: React.FC<Props> = ({
         return false;
       }
       if (vertical === 'mobile_money' && providers.length === 0) {
-        setErrorMessage(t('Select at least one provider.', 'Selectionnez au moins un operateur.'));
+        setErrorMessage(t('Select at least one provider.', 'Sélectionnez au moins un opérateur.'));
         return false;
       }
       if (vertical === 'fuel_station' && !siteName.trim()) {
@@ -965,11 +965,11 @@ const ContributionFlow: React.FC<Props> = ({
         return false;
       }
       if (vertical === 'transport_road' && !roadCondition) {
-        setErrorMessage(t('Road condition is required.', 'L\'etat de la route est requis.'));
+        setErrorMessage(t('Road condition is required.', 'L\'état de la route est requis.'));
         return false;
       }
       if (vertical === 'census_proxy' && !buildingType) {
-        setErrorMessage(t('Building type is required.', 'Le type de batiment est requis.'));
+        setErrorMessage(t('Building type is required.', 'Le type de bâtiment est requis.'));
         return false;
       }
       if (vertical === 'census_proxy' && !occupancyStatus) {
@@ -977,7 +977,7 @@ const ContributionFlow: React.FC<Props> = ({
         return false;
       }
     } else if (Object.keys(details).filter((field) => field !== 'clientDevice').length === 0) {
-      setErrorMessage(t('Update at least one field before submitting.', 'Mettez a jour au moins un champ avant de soumettre.'));
+      setErrorMessage(t('Update at least one field before submitting.', 'Mettez à jour au moins un champ avant de soumettre.'));
       return false;
     }
 
@@ -986,14 +986,14 @@ const ContributionFlow: React.FC<Props> = ({
     if (piiRichCategories.includes(vertical) && consentStatus === 'not_required') {
       setErrorMessage(t(
         'This category involves personal data. Please select a consent status.',
-        'Cette categorie implique des donnees personnelles. Veuillez selectionner un statut de consentement.',
+        'Cette catégorie implique des données personnelles. Veuillez sélectionner un statut de consentement.',
       ));
       return false;
     }
     if (consentStatus === 'obtained' && !consentAcknowledged) {
       setErrorMessage(t(
         'Please acknowledge that consent was properly obtained.',
-        'Veuillez confirmer que le consentement a ete correctement obtenu.',
+        'Veuillez confirmer que le consentement a été correctement obtenu.',
       ));
       return false;
     }
@@ -1027,11 +1027,11 @@ const ContributionFlow: React.FC<Props> = ({
       }
     } else {
       const stats = await getQueueStats();
-      setSyncMessage(t(`Saved offline. ${stats.total} item(s) pending sync.`, `Enregistre hors ligne. ${stats.total} element(s) en attente de synchronisation.`));
+      setSyncMessage(t(`Saved offline. ${stats.total} item(s) pending sync.`, `Enregistré hors ligne. ${stats.total} élément(s) en attente de synchronisation.`));
     }
 
     if (summary && queuedItem && summary.permanentFailureIds.includes(queuedItem.id)) {
-      const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetee par la validation serveur.');
+      const reason = summary.permanentFailureMessages[0] ?? t('Submission rejected by server validation.', 'Soumission rejetée par la validation serveur.');
       setErrorMessage(reason);
       return false;
     }
@@ -1150,7 +1150,7 @@ const ContributionFlow: React.FC<Props> = ({
       await submitPayload(payload);
     } catch (error) {
       const syncError = toSubmissionSyncError(error);
-      setErrorMessage(syncError.message || t('Submission failed.', 'Echec de la soumission.'));
+      setErrorMessage(syncError.message || t('Submission failed.', 'Échec de la soumission.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -1160,7 +1160,7 @@ const ContributionFlow: React.FC<Props> = ({
     if (!pendingPayload || !dedupCheck) return;
     const targetPointId = selectedDedupPointId || dedupCheck.bestCandidatePointId || dedupCheck.candidates[0]?.pointId;
     if (!targetPointId) {
-      setErrorMessage(t('No target point selected for enrich mode.', 'Aucun point cible selectionne pour le mode enrichissement.'));
+      setErrorMessage(t('No target point selected for enrich mode.', 'Aucun point cible sélectionné pour le mode enrichissement.'));
       return;
     }
 
@@ -1175,7 +1175,7 @@ const ContributionFlow: React.FC<Props> = ({
       if (success) clearDedupPrompt();
     } catch (error) {
       const syncError = toSubmissionSyncError(error);
-      setErrorMessage(syncError.message || t('Submission failed.', 'Echec de la soumission.'));
+      setErrorMessage(syncError.message || t('Submission failed.', 'Échec de la soumission.'));
     } finally {
       setIsResolvingDedup(false);
     }
@@ -1193,7 +1193,7 @@ const ContributionFlow: React.FC<Props> = ({
       if (success) clearDedupPrompt();
     } catch (error) {
       const syncError = toSubmissionSyncError(error);
-      setErrorMessage(syncError.message || t('Submission failed.', 'Echec de la soumission.'));
+      setErrorMessage(syncError.message || t('Submission failed.', 'Échec de la soumission.'));
     } finally {
       setIsResolvingDedup(false);
     }
@@ -1210,29 +1210,29 @@ const ContributionFlow: React.FC<Props> = ({
     }).length;
     const completeness = requiredFields.length > 0 ? Math.round((filledCount / requiredFields.length) * 100) : 100;
     const estimatedXp = BASE_EVENT_XP + (gpsScore >= 60 ? 2 : 0) + (completeness >= 100 ? 1 : 0);
-    const colorFor = (score: number) => score >= 80 ? 'text-[#4c7c59]' : score >= 50 ? 'text-[#d69e2e]' : 'text-[#c86b4a]';
+    const colorFor = (score: number) => score >= 80 ? 'text-forest' : score >= 50 ? 'text-gold' : 'text-terra';
 
     return (
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
-        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Quality Preview', 'Apercu qualite')}</h4>
+      <div className="card p-4 space-y-3">
+        <h4 className="micro-label text-gray-400">{t('Quality Preview', 'Aperçu qualité')}</h4>
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl bg-gray-50 p-3 text-center">
             <Signal size={16} className={`mx-auto ${colorFor(gpsScore)}`} />
             <div className={`text-lg font-bold ${colorFor(gpsScore)}`}>{gpsScore}%</div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('GPS', 'GPS')}</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('GPS', 'GPS')}</div>
           </div>
           <div className="rounded-xl bg-gray-50 p-3 text-center">
             <Camera size={16} className={`mx-auto ${colorFor(photoScore)}`} />
             <div className={`text-lg font-bold ${colorFor(photoScore)}`}>{photoScore}%</div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('Photo', 'Photo')}</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Photo', 'Photo')}</div>
           </div>
           <div className="rounded-xl bg-gray-50 p-3 text-center">
             <div className={`text-lg font-bold ${colorFor(completeness)}`}>{completeness}%</div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('Fields', 'Champs')}</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Fields', 'Champs')}</div>
           </div>
-          <div className="rounded-xl bg-[#eaf3ee] p-3 text-center">
-            <div className="text-lg font-bold text-[#4c7c59]">+{estimatedXp}</div>
-            <div className="text-[9px] font-bold uppercase tracking-widest text-gray-400">{t('Est. XP', 'XP est.')}</div>
+          <div className="rounded-xl bg-forest-wash p-3 text-center">
+            <div className="text-lg font-bold text-forest">+{estimatedXp}</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Est. XP', 'XP est.')}</div>
           </div>
         </div>
       </div>
@@ -1243,14 +1243,14 @@ const ContributionFlow: React.FC<Props> = ({
     if (isEnrichMode) return null;
     const verticalEntries = Object.values(VERTICALS) as Array<(typeof VERTICALS)[keyof typeof VERTICALS]>;
     return (
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
-        <h4 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Vertical', 'Verticale')}</h4>
+      <div className="card p-4 space-y-3">
+        <h4 className="micro-label text-gray-400">{t('Category', 'Catégorie')}</h4>
         <div className="grid grid-cols-2 gap-2">
           {verticalEntries.map((v) => (
             <button
               key={v.id}
               onClick={() => setVertical(v.id as Vertical)}
-              className={`h-11 rounded-xl border text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-1 ${vertical === v.id ? `border-current` : 'border-gray-100 text-gray-500'}`}
+              className={`h-11 rounded-xl border micro-label flex items-center justify-center gap-1 ${vertical === v.id ? `border-current` : 'border-gray-100 text-gray-500'}`}
               style={vertical === v.id ? { backgroundColor: v.bgColor, color: v.color, borderColor: v.color } : undefined}
             >
               <VerticalIcon name={v.icon} size={12} />
@@ -1263,20 +1263,20 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const renderCommonLocationBlock = () => (
-    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+    <div className="card p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
-          <MapPin size={16} className="text-[#0f2b46]" />
+          <MapPin size={16} className="text-navy" />
           <span className="text-xs font-bold text-gray-900">{t('GPS Location', 'Localisation GPS')}</span>
         </div>
-        <button onClick={retryLocation} className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
-          {t('Retry', 'Reessayer')}
+        <button onClick={retryLocation} className="micro-label text-navy">
+          {t('Retry', 'Réessayer')}
         </button>
       </div>
       <p className="text-[11px] text-gray-500">
         {location
           ? `GPS: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`
-          : t('GPS unavailable. Retry, then use fallback if needed.', 'GPS indisponible. Reessayez, puis utilisez le secours si necessaire.')}
+          : t('GPS unavailable. Retry or enter coordinates manually.', 'GPS indisponible. Réessayez ou saisissez les coordonnées.')}
       </p>
       {location && gpsAccuracy !== null && (() => {
         const dots = gpsAccuracy <= 10 ? 5 : gpsAccuracy <= 25 ? 4 : gpsAccuracy <= 50 ? 3 : gpsAccuracy <= 100 ? 2 : 1;
@@ -1285,19 +1285,19 @@ const ContributionFlow: React.FC<Props> = ({
           <div className="flex items-center space-x-2">
             <div className="flex items-center space-x-1">
               {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className={`w-2 h-2 rounded-full ${i <= dots ? 'bg-[#4c7c59]' : 'bg-gray-200'}`} />
+                <div key={i} className={`w-2 h-2 rounded-full ${i <= dots ? 'bg-forest' : 'bg-gray-200'}`} />
               ))}
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{label} ({Math.round(gpsAccuracy)}m)</span>
+            <span className="micro-label text-gray-400">{label} ({Math.round(gpsAccuracy)}m)</span>
           </div>
         );
       })()}
       {!location && (
         <button
           onClick={() => setShowManualLocation((prev) => !prev)}
-          className="text-[10px] font-bold uppercase tracking-widest text-[#c86b4a]"
+          className="micro-label text-terra"
         >
-          {showManualLocation ? t('Hide Manual Fallback', 'Masquer secours manuel') : t('Use Manual Fallback', 'Utiliser secours manuel')}
+          {showManualLocation ? t('Hide Manual Entry', 'Masquer saisie manuelle') : t('Enter Coordinates Manually', 'Saisir les coordonnées')}
         </button>
       )}
       {showManualLocation && (
@@ -1317,7 +1317,7 @@ const ContributionFlow: React.FC<Props> = ({
         </div>
       )}
       {locationError && (
-        <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[10px] font-bold uppercase tracking-widest text-red-600">
+        <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
           {locationError}
         </div>
       )}
@@ -1328,16 +1328,16 @@ const ContributionFlow: React.FC<Props> = ({
     const guide = PHOTO_GUIDE_CONFIG[vertical];
     return (
     <div className="space-y-3">
-      <h4 className="text-sm font-bold text-gray-900">{t('Live Camera Proof', 'Preuve camera en direct')}</h4>
-      <p className="text-xs text-gray-500">{t('Camera capture only. Gallery uploads are blocked.', 'Capture camera uniquement. Import galerie bloque.')}</p>
+      <h4 className="text-sm font-bold text-gray-900">{t('Live Camera Proof', 'Preuve caméra en direct')}</h4>
+      <p className="text-xs text-gray-500">{t('Camera capture only. Gallery uploads are blocked.', 'Capture caméra uniquement. Import galerie bloqué.')}</p>
       <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
         {photoPreview ? (
-          <img src={photoPreview} alt={t('Captured photo', 'Photo capturee')} className="absolute inset-0 h-full w-full object-cover" />
+          <img src={photoPreview} alt={t('Captured photo', 'Photo capturée')} className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <>
             {guide && (
               <div className="absolute inset-4 border-2 border-dashed border-white/60 rounded-xl flex items-center justify-center pointer-events-none z-[1]">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-white/80 bg-black/20 px-3 py-1 rounded-full">
+                <span className="micro-label text-white/80 bg-black/20 px-3 py-1 rounded-full">
                   {language === 'fr' ? guide.frameLabel.fr : guide.frameLabel.en}
                 </span>
               </div>
@@ -1356,13 +1356,13 @@ const ContributionFlow: React.FC<Props> = ({
         />
         <label
           htmlFor="capture-photo"
-          className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/90 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-gray-600 shadow-sm backdrop-blur hover:bg-white"
+          className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/90 px-4 py-2 micro-label text-gray-600 shadow-sm backdrop-blur hover:bg-white"
         >
           {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
         </label>
       </div>
       {photoError && (
-        <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[10px] font-bold uppercase tracking-widest text-red-600">
+        <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
           {photoError}
         </div>
       )}
@@ -1381,14 +1381,14 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const renderConsentBlock = () => (
-    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+    <div className="card p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h4 className="text-sm font-bold text-gray-900">{t('Consent & Privacy', 'Consentement et confidentialite')}</h4>
+          <h4 className="text-sm font-bold text-gray-900">{t('Consent & Privacy', 'Consentement et confidentialité')}</h4>
           <p className="text-xs text-gray-500">
             {t(
               'Choose how this capture should be treated when people or owner-identifiable details are involved.',
-              'Choisissez comment traiter cette capture lorsque des personnes ou des details identifiants sont impliques.',
+              'Choisissez comment traiter cette capture lorsque des personnes ou des détails identifiants sont impliqués.',
             )}
           </p>
         </div>
@@ -1397,14 +1397,14 @@ const ContributionFlow: React.FC<Props> = ({
         {([
           { value: 'not_required', label: t('No consent needed', 'Pas de consentement requis') },
           { value: 'obtained', label: t('Consent obtained', 'Consentement obtenu') },
-          { value: 'refused_pii_only', label: t('Consent refused: strip PII', 'Consentement refuse : retirer les DCP') },
+          { value: 'refused_pii_only', label: t('Consent refused: strip PII', 'Consentement refusé : retirer les DCP') },
         ] as Array<{ value: ConsentStatus; label: string }>).map((option) => (
           <button
             key={option.value}
             type="button"
             onClick={() => { setConsentStatus(option.value); setConsentAcknowledged(false); }}
             className={`rounded-xl border px-3 py-3 text-left text-xs font-semibold ${
-              consentStatus === option.value ? 'border-[#0f2b46] bg-[#eef4f8] text-[#0f2b46]' : 'border-gray-100 bg-gray-50 text-gray-600'
+              consentStatus === option.value ? 'border-navy bg-navy-light text-navy' : 'border-gray-100 bg-gray-50 text-gray-600'
             }`}
           >
             {option.label}
@@ -1412,10 +1412,10 @@ const ContributionFlow: React.FC<Props> = ({
         ))}
       </div>
       {consentStatus === 'refused_pii_only' && (
-        <div className="rounded-xl border border-[#f5d5c6] bg-[#fff8f4] p-3 text-[11px] text-[#b85f3f]">
+        <div className="rounded-xl border border-terra-wash bg-terra-wash p-3 text-[11px] text-terra-dark">
           {t(
             'Owner-identifiable fields will be stripped before upload. Avoid capturing faces or personal phone numbers.',
-            'Les champs identifiants seront retires avant l’envoi. Evitez de capturer des visages ou des numeros personnels.',
+            'Les champs identifiants seront retirés avant l’envoi. Évitez de capturer des visages ou des numéros personnels.',
           )}
         </div>
       )}
@@ -1425,12 +1425,12 @@ const ContributionFlow: React.FC<Props> = ({
             type="checkbox"
             checked={consentAcknowledged}
             onChange={(e) => setConsentAcknowledged(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#0f2b46] focus:ring-[#0f2b46]"
+            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-navy focus:ring-navy"
           />
           <span className="text-[11px] text-gray-600">
             {t(
               'I confirm that consent was obtained from the relevant person(s) before capturing this data.',
-              'Je confirme que le consentement a ete obtenu des personnes concernees avant de capturer ces donnees.',
+              'Je confirme que le consentement a été obtenu des personnes concernées avant de capturer ces données.',
             )}
           </span>
         </label>
@@ -1441,8 +1441,8 @@ const ContributionFlow: React.FC<Props> = ({
   const renderCreateFields = () => {
     if (vertical === 'pharmacy') {
       return (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Pharmacy', 'Creer une pharmacie')}</h4>
+        <div className="card p-4 space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Pharmacy', 'Créer une pharmacie')}</h4>
           <div className="flex items-center gap-2">
             <input
               value={siteName}
@@ -1456,7 +1456,7 @@ const ContributionFlow: React.FC<Props> = ({
             <span className="text-xs font-semibold text-gray-600">{t('Open now', 'Ouvert maintenant')}</span>
             <button
               onClick={() => setIsOpenNow((prev) => !prev)}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isOpenNow ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 rounded-full micro-label ${isOpenNow ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1466,14 +1466,14 @@ const ContributionFlow: React.FC<Props> = ({
     }
     if (vertical === 'mobile_money') {
       return (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Kiosk', 'Creer un kiosque')}</h4>
+        <div className="card p-4 space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Kiosk', 'Créer un kiosque')}</h4>
           <div className="flex flex-wrap gap-2">
             {providerOptions.map((provider) => (
               <button
                 key={provider}
                 onClick={() => setProviders((prev) => toggleListValue(prev, provider))}
-                className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${providers.includes(provider) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
+                className={`px-3 py-2 rounded-full micro-label ${providers.includes(provider) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
               >
                 {provider}
               </button>
@@ -1484,8 +1484,8 @@ const ContributionFlow: React.FC<Props> = ({
     }
     if (vertical === 'fuel_station') {
       return (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Fuel Station', 'Creer une station-service')}</h4>
+        <div className="card p-4 space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Fuel Station', 'Créer une station-service')}</h4>
           <div className="flex items-center gap-2">
             <input
               value={siteName}
@@ -1499,7 +1499,7 @@ const ContributionFlow: React.FC<Props> = ({
             <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
             <button
               onClick={() => setHasFuelAvailable((prev) => !prev)}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${hasFuelAvailable ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 rounded-full micro-label ${hasFuelAvailable ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1510,8 +1510,8 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'alcohol_outlet') {
       return (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Alcohol Outlet', 'Creer un point de vente d\'alcool')}</h4>
+        <div className="card p-4 space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Alcohol Outlet', 'Créer un point de vente d\'alcool')}</h4>
           <input
             value={siteName}
             onChange={(event) => setSiteName(event.target.value)}
@@ -1528,10 +1528,10 @@ const ContributionFlow: React.FC<Props> = ({
             ))}
           </select>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Formal / licensed', 'Formel / licence')}</span>
+            <span className="text-xs font-semibold text-gray-600">{t('Formal / licensed', 'Formel / licencié')}</span>
             <button
               onClick={() => setIsFormal((prev) => !prev)}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isFormal ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 rounded-full micro-label ${isFormal ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {isFormal ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1542,8 +1542,8 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'billboard') {
       return (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Billboard', 'Creer un panneau')}</h4>
+        <div className="card p-4 space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Billboard', 'Créer un panneau')}</h4>
           <input
             value={siteName}
             onChange={(event) => setSiteName(event.target.value)}
@@ -1566,10 +1566,10 @@ const ContributionFlow: React.FC<Props> = ({
             className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
           />
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Occupied', 'Occupe')}</span>
+            <span className="text-xs font-semibold text-gray-600">{t('Occupied', 'Occupé')}</span>
             <button
               onClick={() => setIsOccupied((prev) => !prev)}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${isOccupied ? 'bg-[#4c7c59] text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 rounded-full micro-label ${isOccupied ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {isOccupied ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1580,8 +1580,8 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'transport_road') {
       return (
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Road Segment', 'Creer un segment routier')}</h4>
+        <div className="card p-4 space-y-4">
+          <h4 className="text-sm font-bold text-gray-900">{t('Create Road Segment', 'Créer un segment routier')}</h4>
           <div className="flex items-center gap-2">
             <input
               value={roadName}
@@ -1610,10 +1610,10 @@ const ContributionFlow: React.FC<Props> = ({
             ))}
           </select>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Blocked', 'Bloque')}</span>
+            <span className="text-xs font-semibold text-gray-600">{t('Blocked', 'Bloqué')}</span>
             <button
               onClick={() => setRoadBlocked((prev) => !prev)}
-              className={`px-4 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${roadBlocked ? 'bg-[#c86b4a] text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 rounded-full micro-label ${roadBlocked ? 'bg-terra text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {roadBlocked ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1634,8 +1634,8 @@ const ContributionFlow: React.FC<Props> = ({
     }
 
     return (
-      <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
-        <h4 className="text-sm font-bold text-gray-900">{t('Create Building', 'Creer un batiment')}</h4>
+      <div className="card p-4 space-y-4">
+        <h4 className="text-sm font-bold text-gray-900">{t('Create Building', 'Créer un bâtiment')}</h4>
         <select
           value={buildingType}
           onChange={(event) => setBuildingType(event.target.value)}
@@ -1659,14 +1659,14 @@ const ContributionFlow: React.FC<Props> = ({
             type="number"
             value={storeyCount}
             onChange={(event) => setStoreyCount(event.target.value)}
-            placeholder={t('Storeys', 'Etages')}
+            placeholder={t('Storeys', 'Étages')}
             className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
           />
           <input
             type="number"
             value={estimatedUnits}
             onChange={(event) => setEstimatedUnits(event.target.value)}
-            placeholder={t('Estimated units', 'Unites estimees')}
+            placeholder={t('Estimated units', 'Unités estimées')}
             className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
           />
         </div>
@@ -1680,7 +1680,7 @@ const ContributionFlow: React.FC<Props> = ({
       const raw = typeof getEnrichFieldValue(gap) === 'string' ? String(getEnrichFieldValue(gap)) : '';
       return (
         <div className="space-y-2" key={gap}>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{gap}</label>
+          <label className="micro-label text-gray-400">{gap}</label>
           {renderEnrichFieldHint(gap)}
           <input
             value={raw}
@@ -1698,20 +1698,20 @@ const ContributionFlow: React.FC<Props> = ({
       const selected = typeof getEnrichFieldValue(gap) === 'boolean' ? (getEnrichFieldValue(gap) as boolean) : null;
       return (
         <div className="space-y-2" key={gap}>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <label className="micro-label text-gray-400">{label}</label>
           {renderEnrichFieldHint(gap)}
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
               onClick={() => setEnrichFieldValue(gap, true)}
-              className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${selected === true ? 'bg-[#4c7c59] text-white' : 'bg-gray-50 text-gray-500'}`}
+              className={`h-10 rounded-xl micro-label ${selected === true ? 'bg-forest text-white' : 'bg-gray-50 text-gray-500'}`}
             >
               {t('Yes', 'Oui')}
             </button>
             <button
               type="button"
               onClick={() => setEnrichFieldValue(gap, false)}
-              className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${selected === false ? 'bg-[#c86b4a] text-white' : 'bg-gray-50 text-gray-500'}`}
+              className={`h-10 rounded-xl micro-label ${selected === false ? 'bg-terra text-white' : 'bg-gray-50 text-gray-500'}`}
             >
               {t('No', 'Non')}
             </button>
@@ -1724,7 +1724,7 @@ const ContributionFlow: React.FC<Props> = ({
       if (gap === 'merchantIdByProvider') {
         return (
           <div className="space-y-2" key={gap}>
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <label className="micro-label text-gray-400">{label}</label>
             {renderEnrichFieldHint(gap)}
             <div className="grid grid-cols-2 gap-3">
               <select
@@ -1755,7 +1755,7 @@ const ContributionFlow: React.FC<Props> = ({
       if (gap === 'pricesByFuel') {
         return (
           <div className="space-y-2" key={gap}>
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <label className="micro-label text-gray-400">{label}</label>
             {renderEnrichFieldHint(gap)}
             <div className="grid grid-cols-2 gap-3">
               <select
@@ -1791,7 +1791,7 @@ const ContributionFlow: React.FC<Props> = ({
       const placeholder = language === 'fr' ? (fieldConfig.placeholderFr ?? fieldConfig.labelFr) : (fieldConfig.placeholderEn ?? fieldConfig.labelEn);
       return (
         <div className="space-y-2" key={gap}>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <label className="micro-label text-gray-400">{label}</label>
           {renderEnrichFieldHint(gap)}
           {gap === 'openingHours' && (
             <div className="flex flex-wrap gap-2">
@@ -1800,7 +1800,7 @@ const ContributionFlow: React.FC<Props> = ({
                   key={preset}
                   type="button"
                   onClick={() => setEnrichFieldValue(gap, preset)}
-                  className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${value === preset ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
+                  className={`px-3 py-2 rounded-full micro-label ${value === preset ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
                 >
                   {preset}
                 </button>
@@ -1823,7 +1823,7 @@ const ContributionFlow: React.FC<Props> = ({
         : '';
       return (
         <div className="space-y-2" key={gap}>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <label className="micro-label text-gray-400">{label}</label>
           {renderEnrichFieldHint(gap)}
           <input
             type="number"
@@ -1840,7 +1840,7 @@ const ContributionFlow: React.FC<Props> = ({
       if (options.length === 0) {
         return (
           <div className="space-y-2" key={gap}>
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <label className="micro-label text-gray-400">{label}</label>
             {renderEnrichFieldHint(gap)}
             <input
               value={value}
@@ -1852,14 +1852,14 @@ const ContributionFlow: React.FC<Props> = ({
       }
       return (
         <div className="space-y-2" key={gap}>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <label className="micro-label text-gray-400">{label}</label>
           {renderEnrichFieldHint(gap)}
           <select
             value={value}
             onChange={(event) => setEnrichFieldValue(gap, event.target.value)}
             className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
           >
-            <option value="">{t('Select...', 'Selectionner...')}</option>
+            <option value="">{t('Select...', 'Sélectionner...')}</option>
             {options.map((option) => (
               <option key={option.value} value={option.value}>{optionLabel(option, language)}</option>
             ))}
@@ -1873,11 +1873,11 @@ const ContributionFlow: React.FC<Props> = ({
       if (options.length === 0) {
         const raw = enrichMultiRaw[gap] ?? selectedValues.join(', ');
         const placeholder = language === 'fr'
-          ? (fieldConfig.placeholderFr ?? t('Valeurs separees par virgules', 'Valeurs separees par virgules'))
-          : (fieldConfig.placeholderEn ?? t('Comma-separated values', 'Valeurs separees par virgules'));
+          ? (fieldConfig.placeholderFr ?? t('Valeurs séparées par virgules', 'Valeurs séparées par virgules'))
+          : (fieldConfig.placeholderEn ?? t('Comma-separated values', 'Valeurs séparées par virgules'));
         return (
           <div className="space-y-2" key={gap}>
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+            <label className="micro-label text-gray-400">{label}</label>
             {renderEnrichFieldHint(gap)}
             <input
               value={raw}
@@ -1895,7 +1895,7 @@ const ContributionFlow: React.FC<Props> = ({
       }
       return (
         <div className="space-y-2" key={gap}>
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+          <label className="micro-label text-gray-400">{label}</label>
           {renderEnrichFieldHint(gap)}
           <div className="flex flex-wrap gap-2">
             {options.map((option) => (
@@ -1903,7 +1903,7 @@ const ContributionFlow: React.FC<Props> = ({
                 key={option.value}
                 type="button"
                 onClick={() => toggleEnrichMultiValue(gap, option.value)}
-                className={`px-3 py-2 rounded-full text-[10px] font-bold uppercase tracking-widest ${selectedValues.includes(option.value) ? 'bg-[#0f2b46] text-white' : 'bg-gray-50 text-gray-500'}`}
+                className={`px-3 py-2 rounded-full micro-label ${selectedValues.includes(option.value) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
               >
                 {optionLabel(option, language)}
               </button>
@@ -1919,7 +1919,7 @@ const ContributionFlow: React.FC<Props> = ({
         : '';
     return (
       <div className="space-y-2" key={gap}>
-        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{label}</label>
+        <label className="micro-label text-gray-400">{label}</label>
         {renderEnrichFieldHint(gap)}
         <input
           value={fallbackRaw}
@@ -1931,13 +1931,13 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const renderEnrichFields = () => (
-    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+    <div className="card p-4 space-y-4">
       <div className="space-y-1">
-        <h4 className="text-sm font-bold text-gray-900">{t('Update Point Fields', 'Mettre a jour les champs du point')}</h4>
+        <h4 className="text-sm font-bold text-gray-900">{t('Update Point Fields', 'Mettre à jour les champs du point')}</h4>
         <p className="text-xs text-gray-500">
           {t(
             'Missing fields are highlighted. Filled fields can still be updated when something changes.',
-            'Les champs manquants sont mis en avant. Les champs deja remplis peuvent aussi etre mis a jour si quelque chose change.',
+            'Les champs manquants sont mis en avant. Les champs déjà remplis peuvent aussi être mis à jour si quelque chose change.',
           )}
         </p>
       </div>
@@ -1945,9 +1945,9 @@ const ContributionFlow: React.FC<Props> = ({
         {editableEnrichFields.map((gap) => (
           <span
             key={gap}
-            className={`text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded-full border ${
+            className={`micro-label px-2 py-1 rounded-full border ${
               missingFieldSet.has(gap)
-                ? 'bg-[#fff8f4] text-[#b85f3f] border-[#f5d5c6]'
+                ? 'bg-terra-wash text-terra-dark border-terra-wash'
                 : 'bg-gray-50 text-gray-500 border-gray-200'
             }`}
           >
@@ -2042,18 +2042,18 @@ const ContributionFlow: React.FC<Props> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb]">
+    <div className="flex flex-col h-full bg-page">
       <div className="pt-6 px-6">
         <div className="flex items-center justify-between mb-3">
           <button onClick={handleBackPress} className="p-1 -ml-1 text-gray-500">
             <ArrowLeft size={24} />
           </button>
           <span className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em]">
-            {isEnrichMode ? t('Enrich Point', 'Enrichir point') : t('Create Point', 'Creer point')}
+            {isEnrichMode ? t('Enrich Point', 'Enrichir point') : t('Create Point', 'Créer point')}
           </span>
           <span className="w-6"></span>
         </div>
-        <div className="flex items-center space-x-2 text-[10px] font-bold uppercase tracking-widest text-[#4c7c59] mb-3">
+        <div className="flex items-center space-x-2 micro-label text-forest mb-3">
           <ShieldCheck size={12} />
           <span>{t('Live photo + GPS mandatory', 'Photo live + GPS obligatoires')}</span>
         </div>
@@ -2062,19 +2062,19 @@ const ContributionFlow: React.FC<Props> = ({
             { label: t('Type', 'Type'), done: Boolean(vertical) },
             { label: t('Photo', 'Photo'), done: Boolean(photoPreview) },
             { label: t('GPS', 'GPS'), done: Boolean(location) },
-            { label: t('Details', 'Details'), done: Boolean(siteName) },
+            { label: t('Details', 'Détails'), done: Boolean(siteName) },
           ];
           return (
             <div className="flex items-center gap-1.5 mb-4">
               {steps.map((step, i) => (
                 <React.Fragment key={step.label}>
                   <div className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full transition-colors ${step.done ? 'bg-[#4c7c59]' : 'bg-gray-200'}`} />
-                    <span className={`text-[9px] font-bold uppercase tracking-widest ${step.done ? 'text-[#4c7c59]' : 'text-gray-300'}`}>
+                    <div className={`w-2 h-2 rounded-full transition-colors ${step.done ? 'bg-forest' : 'bg-gray-200'}`} />
+                    <span className={`text-[10px] font-bold uppercase tracking-widest ${step.done ? 'text-forest' : 'text-gray-300'}`}>
                       {step.label}
                     </span>
                   </div>
-                  {i < steps.length - 1 && <div className={`flex-1 h-px ${steps[i].done ? 'bg-[#4c7c59]' : 'bg-gray-200'}`} />}
+                  {i < steps.length - 1 && <div className={`flex-1 h-px ${steps[i].done ? 'bg-forest' : 'bg-gray-200'}`} />}
                 </React.Fragment>
               ))}
             </div>
@@ -2083,22 +2083,22 @@ const ContributionFlow: React.FC<Props> = ({
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-5">
-        <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-[#0f2b46]">
+        <div className="card p-4 flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-navy">
             {verticalIcon}
             <span className="text-sm font-bold">
               {getCategoryLabel(vertical, language)}
             </span>
           </div>
           {isEnrichMode && seedPoint && (
-            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400 truncate max-w-[140px]">
+            <span className="micro-label text-gray-400 truncate max-w-[140px]">
               {seedPoint.name}
             </span>
           )}
         </div>
 
         {assignment && (
-          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+          <div className="card p-4">
             <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">{t('Assignment Context', 'Contexte affectation')}</div>
             <div className="mt-2 flex items-center justify-between gap-3">
               <div>
@@ -2108,17 +2108,17 @@ const ContributionFlow: React.FC<Props> = ({
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]">
+                <div className="micro-label text-navy">
                   {assignment.pointsSubmitted}/{assignment.pointsExpected}
                 </div>
-                <div className="text-[10px] text-gray-400">{t('Due', 'Echeance')} {assignment.dueDate}</div>
+                <div className="text-[10px] text-gray-400">{t('Due', 'Échéance')} {assignment.dueDate}</div>
               </div>
             </div>
           </div>
         )}
 
         {isBatchMode && (
-          <div className="bg-[#0f2b46] text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
+          <div className="bg-navy text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">{t('Batch Capture', 'Capture en lot')}</div>
               <div className="mt-1 text-sm font-bold">{t('Captured', 'Captures')}: {batchCapturedCount}</div>
@@ -2129,7 +2129,7 @@ const ContributionFlow: React.FC<Props> = ({
                 onBatchExit?.();
                 onComplete();
               }}
-              className="rounded-full bg-white/10 px-3 py-2 text-[10px] font-bold uppercase tracking-widest"
+              className="rounded-full bg-white/10 px-3 py-2 micro-label"
             >
               {t('End Batch', 'Fin du lot')}
             </button>
@@ -2144,18 +2144,18 @@ const ContributionFlow: React.FC<Props> = ({
         {renderQualityPreview()}
 
         {errorMessage && (
-          <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[10px] font-bold uppercase tracking-widest text-red-600">
+          <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
             {errorMessage}
           </div>
         )}
 
         {dedupCheck && (
-          <div className="rounded-2xl border border-[#f5d5c6] bg-[#fff8f4] p-4 space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-[#b85f3f]">
+          <div className="rounded-2xl border border-terra-wash bg-terra-wash p-4 space-y-3">
+            <div className="micro-label text-terra-dark">
               {t('Potential Duplicate', 'Doublon potentiel')}
             </div>
             <div className="text-xs text-gray-700">
-              {t('A nearby point looks similar. Choose whether to enrich it or create a new one.', 'Un point proche semble similaire. Choisissez entre l\'enrichir ou creer un nouveau point.')}
+              {t('A nearby point looks similar. Choose whether to enrich it or create a new one.', 'Un point proche semble similaire. Choisissez entre l\'enrichir ou créer un nouveau point.')}
             </div>
             <div className="space-y-2">
               {dedupCheck.candidates.map((candidate) => {
@@ -2166,14 +2166,14 @@ const ContributionFlow: React.FC<Props> = ({
                     type="button"
                     onClick={() => setSelectedDedupPointId(candidate.pointId)}
                     className={`w-full rounded-xl border px-3 py-2 text-left ${
-                      isSelected ? 'border-[#c86b4a] bg-white' : 'border-[#f5d5c6] bg-[#fffdfb]'
+                      isSelected ? 'border-terra bg-white' : 'border-terra-wash bg-terra-wash'
                     }`}
                   >
                     <div className="text-xs font-bold text-gray-900">
                       {candidate.siteName || candidate.pointId}
                     </div>
                     <div className="text-[10px] text-gray-500">
-                      {candidate.distanceMeters}m · {t('similarity', 'similarite')}: {Math.round(candidate.similarityScore * 100)}%
+                      {candidate.distanceMeters}m · {t('similarity', 'similarité')}: {Math.round(candidate.similarityScore * 100)}%
                     </div>
                   </button>
                 );
@@ -2184,8 +2184,8 @@ const ContributionFlow: React.FC<Props> = ({
                 type="button"
                 onClick={handleDedupUseExisting}
                 disabled={isResolvingDedup}
-                className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                  isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-[#0f2b46] text-white'
+                className={`h-10 rounded-xl micro-label ${
+                  isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
                 }`}
               >
                 {t('Enrich Existing', 'Enrichir existant')}
@@ -2194,17 +2194,17 @@ const ContributionFlow: React.FC<Props> = ({
                 type="button"
                 onClick={handleDedupCreateNew}
                 disabled={isResolvingDedup}
-                className={`h-10 rounded-xl text-[10px] font-bold uppercase tracking-widest ${
-                  isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-[#c86b4a] text-white'
+                className={`h-10 rounded-xl micro-label ${
+                  isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-terra text-white'
                 }`}
               >
-                {t('Create New', 'Creer nouveau')}
+                {t('Create New', 'Créer nouveau')}
               </button>
             </div>
             <button
               type="button"
               onClick={clearDedupPrompt}
-              className="text-[10px] font-bold uppercase tracking-widest text-gray-500"
+              className="micro-label text-gray-500"
             >
               {t('Dismiss', 'Ignorer')}
             </button>
@@ -2212,13 +2212,13 @@ const ContributionFlow: React.FC<Props> = ({
         )}
 
         {syncMessage && (
-          <div className="rounded-xl border border-[#d5e1eb] bg-white p-3 text-xs text-[#0f2b46] space-y-2">
+          <div className="rounded-xl border border-navy-border bg-white p-3 text-xs text-navy space-y-2">
             <div>{syncMessage}</div>
             {onQueueOpen && (
               <button
                 type="button"
                 onClick={onQueueOpen}
-                className="text-[10px] font-bold uppercase tracking-widest text-[#0f2b46]"
+                className="micro-label text-navy"
               >
                 {t('Open queue', 'Ouvrir la file')}
               </button>
@@ -2227,11 +2227,11 @@ const ContributionFlow: React.FC<Props> = ({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 p-6 pt-2 bg-[#f9fafb] border-t border-gray-100">
+      <div className="sticky bottom-0 z-20 p-6 pt-2 bg-page border-t border-gray-100">
         <button
           onClick={handleSubmit}
           disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
-          className="w-full h-14 bg-[#0f2b46] text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-[#0b2236] active:scale-95 transition-all disabled:opacity-70"
+          className="w-full h-14 bg-navy text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-navy-dark active:scale-95 transition-all disabled:opacity-70"
         >
           {isSubmitting ? (
             <>
@@ -2239,7 +2239,7 @@ const ContributionFlow: React.FC<Props> = ({
               <span>{t('Saving', 'Enregistrement')}</span>
             </>
           ) : (
-            <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Creer point')}</span>
+            <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Créer point')}</span>
           )}
         </button>
       </div>

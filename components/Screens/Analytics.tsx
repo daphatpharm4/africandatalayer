@@ -23,6 +23,9 @@ import { getSession } from '../../lib/client/auth';
 import { apiJson } from '../../lib/client/api';
 import type { LeaderboardEntry, MapScope, PointEvent, ProjectedPoint, SubmissionCategory } from '../../shared/types';
 import { categoryPluralLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
+import ProfileAvatar from '../shared/ProfileAvatar';
+import ScreenHeader from '../shared/ScreenHeader';
+import { coerceAvatarPreset, type AvatarPreset } from '../../shared/avatarPresets';
 
 interface Props {
   onBack: () => void;
@@ -36,8 +39,8 @@ interface Props {
 type HeatLevel = 'High' | 'Medium' | 'Low';
 
 const HEATMAP_COLORS: Record<HeatLevel, string> = {
-  High: 'bg-[#4c7c59]',
-  Medium: 'bg-[#c86b4a]',
+  High: 'bg-forest',
+  Medium: 'bg-terra',
   Low: 'bg-gray-200'
 };
 
@@ -51,6 +54,7 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
   const adminMode = Boolean(isAdmin);
   const [adminName, setAdminName] = useState<string | null>(null);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
+  const [adminAvatar, setAdminAvatar] = useState<AvatarPreset>('baobab');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
   const [isLoadingAdminData, setIsLoadingAdminData] = useState(false);
@@ -74,6 +78,7 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
       const session = await getSession();
       setAdminName(session?.user?.name ?? null);
       setAdminEmail(session?.user?.email ?? null);
+      setAdminAvatar(coerceAvatarPreset(session?.user?.image));
     };
     void loadSession();
   }, [adminMode]);
@@ -230,38 +235,39 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
   }, [leaderboard]);
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-[#0f2b46] transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <h3 className="text-sm font-bold mx-auto">{adminMode ? t('Investor Analytics', 'Analytique investisseur') : t('Leaderboard', 'Classement')}</h3>
-        <button className="p-2 text-gray-400 absolute right-2">
-          <Share2 size={20} />
-        </button>
-      </div>
+    <div className="screen-shell">
+      <ScreenHeader
+        title={adminMode ? t('Investor Analytics', 'Analytique investisseur') : t('Leaderboard', 'Classement')}
+        onBack={onBack}
+        language={language}
+        trailing={
+          <button className="p-2 text-gray-400" aria-label={t('Share', 'Partager')}>
+            <Share2 size={20} />
+          </button>
+        }
+      />
 
-      <div className="p-4 space-y-6">
+      <div className="p-4 pb-24 space-y-6">
         {adminMode ? (
           <div className="flex items-center justify-between py-2">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-full border-2 border-white shadow bg-[#e7eef4] overflow-hidden">
-                <img src="https://picsum.photos/seed/kofi/300/300" alt={t('avatar', 'avatar')} className="w-full h-full object-cover" />
+              <div className="w-12 h-12 rounded-full border-2 border-white shadow bg-navy-light overflow-hidden">
+                <ProfileAvatar preset={adminAvatar} alt={t('avatar', 'avatar')} className="w-full h-full" />
               </div>
               <div className="flex flex-col">
                 <h4 className="font-bold text-gray-900 text-sm">
                   {adminName || adminEmail || t('Admin', 'Admin')}
                 </h4>
                 <div className="flex items-center space-x-1.5">
-                  <ShieldCheck size={12} className="text-[#4c7c59]" />
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Senior Contributor', 'Contributeur senior')}</span>
+                  <ShieldCheck size={12} className="text-forest" />
+                  <span className="micro-label text-gray-400">{t('Senior Contributor', 'Contributeur senior')}</span>
                 </div>
               </div>
             </div>
             {onAdmin && (
               <button
                 onClick={onAdmin}
-                className="px-3 py-1.5 bg-[#1f2933] text-white text-[10px] font-bold uppercase rounded-xl tracking-wider hover:bg-black transition-colors shadow-sm"
+                className="px-3 py-1.5 bg-ink text-white text-[10px] font-bold uppercase rounded-xl tracking-wider hover:bg-black transition-colors shadow-sm"
               >
                 {t('Admin', 'Admin')}
               </button>
@@ -270,8 +276,8 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
         ) : (
           <div className="flex items-center justify-between py-2">
             <div className="flex flex-col">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Leaderboard', 'Classement')}</span>
-              <span className="text-sm font-semibold text-gray-900">{t('Top contributors near you', 'Top contributeurs pres de vous')}</span>
+              <span className="micro-label text-gray-400">{t('Leaderboard', 'Classement')}</span>
+              <span className="text-sm font-semibold text-gray-900">{t('Top contributors near you', 'Top contributeurs près de vous')}</span>
             </div>
           </div>
         )}
@@ -280,7 +286,7 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             <button
               onClick={onDeltaDashboard}
-              className="w-full flex items-center justify-between bg-[#0f2b46] text-white p-4 rounded-2xl shadow-sm hover:bg-[#1a3d5c] transition-colors"
+              className="w-full flex items-center justify-between bg-navy text-white p-4 rounded-2xl shadow-sm hover:bg-navy-mid transition-colors"
             >
               <div className="flex items-center space-x-3">
                 <BarChart3 size={18} />
@@ -294,7 +300,7 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
             {onAgentPerformance && (
               <button
                 onClick={onAgentPerformance}
-                className="w-full flex items-center justify-between bg-white border border-gray-100 text-[#0f2b46] p-4 rounded-2xl shadow-sm hover:border-[#0f2b46] transition-colors"
+                className="w-full flex items-center justify-between bg-white border border-gray-100 text-navy p-4 rounded-2xl shadow-sm hover:border-navy transition-colors"
               >
                 <div className="flex items-center space-x-3">
                   <Users size={18} />
@@ -311,29 +317,29 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
 
         {adminMode && (
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-2">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Data Complete', 'Donnees completes')}</span>
+            <div className="card p-5 space-y-2">
+              <span className="micro-label text-gray-400">{t('Data Complete', 'Données complètes')}</span>
               <div className="flex items-baseline space-x-1">
                 <span className="text-xl font-bold text-gray-900">{completionRate}%</span>
-                <span className="text-[10px] text-[#4c7c59] font-bold">{isLoadingAdminData ? '...' : t('live', 'live')}</span>
+                <span className="text-[10px] text-forest font-bold">{isLoadingAdminData ? '...' : t('live', 'live')}</span>
               </div>
             </div>
-            <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-2">
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t('Active Contributors', 'Contributeurs actifs')}</span>
+            <div className="card p-5 space-y-2">
+              <span className="micro-label text-gray-400">{t('Active Contributors', 'Contributeurs actifs')}</span>
               <div className="flex items-baseline space-x-1">
                 <span className="text-xl font-bold text-gray-900">{activeContributors}</span>
-                <span className="text-[10px] text-[#0f2b46] font-bold">{t('30d', '30j')}</span>
+                <span className="text-[10px] text-navy font-bold">{t('30d', '30j')}</span>
               </div>
             </div>
           </div>
         )}
 
         {adminMode && (
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <div className="card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <BarChart3 size={16} className="text-[#0f2b46]" />
-                <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">{t('Contributions by Category', 'Contributions par categorie')}</span>
+                <BarChart3 size={16} className="text-navy" />
+                <span className="micro-label text-gray-900">{t('Contributions by Category', 'Contributions par catégorie')}</span>
               </div>
               <span className="text-[10px] font-bold text-gray-400 uppercase">{t('Live', 'Live')}</span>
             </div>
@@ -355,11 +361,11 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
         )}
 
         {adminMode && (
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <div className="card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <Medal size={16} className="text-[#4c7c59]" />
-                <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">{t('XP Distribution', 'Distribution XP')}</span>
+                <Medal size={16} className="text-forest" />
+                <span className="micro-label text-gray-900">{t('XP Distribution', 'Distribution XP')}</span>
               </div>
               <span className="text-[10px] font-bold text-gray-400 uppercase">{t('All Users', 'Tous les utilisateurs')}</span>
             </div>
@@ -379,11 +385,11 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
         )}
 
         {adminMode && (
-          <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+          <div className="card p-5 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
-                <ThermometerSun size={16} className="text-[#c86b4a]" />
-                <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">{t('Data Freshness Heatmap', 'Heatmap fraicheur des donnees')}</span>
+                <ThermometerSun size={16} className="text-terra" />
+                <span className="micro-label text-gray-900">{t('Data Freshness Heatmap', 'Heatmap fraîcheur des données')}</span>
               </div>
               <span className="text-[10px] font-bold text-gray-400 uppercase">{t('Last 24h', 'Dernieres 24h')}</span>
             </div>
@@ -400,43 +406,43 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
           </div>
         )}
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <div className="card p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Medal size={16} className="text-[#0f2b46]" />
-              <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">
-                {adminMode ? t('Top Contributor Leaderboard', 'Classement des top contributeurs') : t('Top Contributors Near You', 'Top contributeurs pres de vous')}
+              <Medal size={16} className="text-navy" />
+              <span className="micro-label text-gray-900">
+                {adminMode ? t('Top Contributor Leaderboard', 'Classement des top contributeurs') : t('Top Contributors Near You', 'Top contributeurs près de vous')}
               </span>
             </div>
             <span className="text-[10px] font-bold text-gray-400 uppercase">{adminMode ? t('Monthly', 'Mensuel') : t('Local', 'Local')}</span>
           </div>
-          <div className="rounded-2xl bg-[#f9fafb] p-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-              {t('Ranking Model', 'Modele de classement')}
+          <div className="rounded-2xl bg-page p-4">
+            <div className="micro-label text-gray-400">
+              {t('How rankings work', 'Comment fonctionne le classement')}
             </div>
             <div className="mt-2 text-sm font-semibold text-gray-900">
-              {t('Ranking score = submissions x average quality', 'Score = soumissions x qualite moyenne')}
+              {t('Ranking score = submissions x average quality', 'Score = soumissions x qualité moyenne')}
             </div>
             {topVerticalChampion && (
               <div className="mt-2 text-xs text-gray-500">
-                {t('Busiest vertical:', 'Verticale la plus active:')} {categorylabel(topVerticalChampion[0] as SubmissionCategory)} ({topVerticalChampion[1]})
+                {t('Busiest category:', 'Catégorie la plus active :')} {categorylabel(topVerticalChampion[0] as SubmissionCategory)} ({topVerticalChampion[1]})
               </div>
             )}
           </div>
           <div className="space-y-3">
             {isLoadingLeaderboard && (
-              <div className="bg-[#f9fafb] border border-gray-100 rounded-2xl p-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
+              <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
                 {t('Loading contributors...', 'Chargement des contributeurs...')}
               </div>
             )}
             {!isLoadingLeaderboard && leaderboard.length === 0 && (
-              <div className="bg-[#f9fafb] border border-gray-100 rounded-2xl p-3 text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                {t('No contributor data yet.', 'Pas encore de donnees contributeur.')}
+              <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
+                {t('No contributor data yet.', 'Pas encore de données contributeur.')}
               </div>
             )}
             {!isLoadingLeaderboard &&
               leaderboard.map((entry) => (
-                <div key={entry.userId} className="flex items-center justify-between bg-[#f9fafb] border border-gray-100 rounded-2xl p-3">
+                <div key={entry.userId} className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3">
                   <div>
                     <p className="text-sm font-bold text-gray-900">#{entry.rank} {entry.name}</p>
                     <p className="text-[10px] text-gray-400 uppercase tracking-widest">
@@ -448,10 +454,10 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="block text-xs font-bold text-[#0f2b46]">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
-                    <span className="block text-xs font-bold text-[#4c7c59]">{entry.xp.toLocaleString()} XP</span>
-                    <span className="block text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                      {entry.averageQualityScore}% {t('quality', 'qualite')}
+                    <span className="block text-xs font-bold text-navy">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
+                    <span className="block text-xs font-bold text-forest">{entry.xp.toLocaleString()} XP</span>
+                    <span className="block micro-label text-gray-400">
+                      {entry.averageQualityScore}% {t('quality', 'qualité')}
                     </span>
                   </div>
                 </div>
@@ -460,15 +466,14 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
         </div>
 
         {adminMode && (
-          <div className="bg-[#f9fafb] p-6 rounded-2xl border-2 border-dashed border-gray-200 text-center space-y-3">
-            <p className="text-[10px] font-bold text-[#0f2b46] uppercase tracking-widest">{t('API Monetization Ready', 'API prete a monetiser')}</p>
+          <div className="bg-page p-6 rounded-2xl border-2 border-dashed border-gray-200 text-center space-y-3">
+            <p className="micro-label text-navy">{t('API Monetization Ready', 'API prête à monétiser')}</p>
             <p className="text-xs text-gray-500">
               {t('Tiered access for municipalities, NGOs, and logistics providers with real-time SLAs.', 'Acces par paliers pour municipalites, ONG et logisticiens avec SLA temps reel.')}
             </p>
           </div>
         )}
 
-        <div className="h-24"></div>
       </div>
     </div>
   );

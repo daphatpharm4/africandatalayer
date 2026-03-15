@@ -30,9 +30,67 @@
 
   body {
     font-family: "Inter", system-ui, sans-serif;
-    background-color: #f9fafb;
-    color: #111827;
+    background-color: theme('colors.page.DEFAULT');
+    color: theme('colors.ink.dark');
     -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* ── Design system utilities ────────────────────────────── */
+@layer components {
+  /* Micro label — sunlight-readable uppercase label (11px min for field use) */
+  .micro-label {
+    @apply text-[11px] font-bold uppercase tracking-widest;
+  }
+
+  /* Wider micro label variant (used in section headers) */
+  .micro-label-wide {
+    @apply text-[11px] font-bold uppercase tracking-[0.25em];
+  }
+
+  /* Card — the standard container */
+  .card {
+    @apply rounded-2xl border border-gray-100 shadow-sm bg-white;
+  }
+
+  /* Pill card — rounder variant used for widgets */
+  .card-pill {
+    @apply rounded-[28px] border border-gray-100 shadow-sm bg-white;
+  }
+
+  /* Screen shell — standard scrollable screen background */
+  .screen-shell {
+    @apply flex flex-col h-full bg-page overflow-y-auto no-scrollbar;
+  }
+
+  /* Screen header — sticky top bar */
+  .screen-header {
+    @apply sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between;
+  }
+
+  /* Back button */
+  .btn-back {
+    @apply p-2 -ml-2 text-gray-700 hover:text-navy transition-colors;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply h-14 rounded-2xl bg-navy text-white text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-navy-dark active:scale-95 transition-all;
+  }
+
+  /* Secondary / CTA button */
+  .btn-cta {
+    @apply h-14 rounded-2xl bg-terra text-white text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-terra-dark active:scale-95 transition-all;
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply h-14 rounded-2xl border border-gray-200 bg-white text-xs font-bold uppercase tracking-widest text-navy;
+  }
+
+  /* Stat tile — colored background with micro label + large number */
+  .stat-tile {
+    @apply rounded-2xl p-3;
   }
 }
 
@@ -87,6 +145,17 @@
 
 .high-contrast .border-gray-100 {
   border-color: #d1d5db !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 @keyframes xp-count-up {

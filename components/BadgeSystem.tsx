@@ -72,7 +72,7 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       labelEn: 'First Steps',
       labelFr: 'Premiers pas',
       descriptionEn: 'Complete your first submission',
-      descriptionFr: 'Completez votre premiere soumission',
+      descriptionFr: 'Complétez votre première soumission',
       icon: Footprints,
       color: '#4c7c59',
       bgColor: '#eaf3ee',
@@ -85,7 +85,7 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       labelEn: 'Explorer',
       labelFr: 'Explorateur',
       descriptionEn: 'Submit in 3 different verticals',
-      descriptionFr: 'Soumettez dans 3 verticales differentes',
+      descriptionFr: 'Soumettez dans 3 verticales différentes',
       icon: Compass,
       color: '#0f2b46',
       bgColor: '#e7eef4',
@@ -96,7 +96,7 @@ export function computeBadges(events: PointEvent[]): Badge[] {
     {
       id: 'specialist',
       labelEn: 'Specialist',
-      labelFr: 'Specialiste',
+      labelFr: 'Spécialiste',
       descriptionEn: '50 submissions in one vertical',
       descriptionFr: '50 soumissions dans une verticale',
       icon: Star,
@@ -109,9 +109,9 @@ export function computeBadges(events: PointEvent[]): Badge[] {
     {
       id: 'quality_star',
       labelEn: 'Quality Star',
-      labelFr: 'Etoile qualite',
+      labelFr: 'Étoile qualité',
       descriptionEn: '10 consecutive high-quality submissions',
-      descriptionFr: '10 soumissions haute qualite consecutives',
+      descriptionFr: '10 soumissions haute qualité consécutives',
       icon: Award,
       color: '#d69e2e',
       bgColor: '#fefcbf',
@@ -124,7 +124,7 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       labelEn: 'Night Owl',
       labelFr: 'Oiseau de nuit',
       descriptionEn: '10 submissions after 6pm (alcohol)',
-      descriptionFr: '10 soumissions apres 18h (alcool)',
+      descriptionFr: '10 soumissions après 18h (alcool)',
       icon: Moon,
       color: '#6b46c1',
       bgColor: '#f7f4ff',
@@ -148,9 +148,9 @@ export function computeBadges(events: PointEvent[]): Badge[] {
     {
       id: 'streak_master',
       labelEn: 'Streak Master',
-      labelFr: 'Maitre de la serie',
+      labelFr: 'Maître de la série',
       descriptionEn: '14-day consecutive streak',
-      descriptionFr: 'Serie de 14 jours consecutifs',
+      descriptionFr: 'Série de 14 jours consécutifs',
       icon: Flame,
       color: '#c53030',
       bgColor: '#fde8e8',
@@ -174,7 +174,7 @@ export function computeBadges(events: PointEvent[]): Badge[] {
     {
       id: 'data_champion',
       labelEn: 'Data Champion',
-      labelFr: 'Champion des donnees',
+      labelFr: 'Champion des données',
       descriptionEn: '500 total submissions',
       descriptionFr: '500 soumissions au total',
       icon: Trophy,
@@ -187,9 +187,9 @@ export function computeBadges(events: PointEvent[]): Badge[] {
     {
       id: 'trust_elite',
       labelEn: 'Trust Elite',
-      labelFr: 'Elite de confiance',
+      labelFr: 'Élite de confiance',
       descriptionEn: 'Maintain 95%+ quality for 4 weeks',
-      descriptionFr: 'Maintenez 95%+ de qualite pendant 4 semaines',
+      descriptionFr: 'Maintenez 95%+ de qualité pendant 4 semaines',
       icon: Shield,
       color: '#4c7c59',
       bgColor: '#eaf3ee',
@@ -214,7 +214,7 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
         <div className="flex flex-col">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+          <span className="micro-label text-gray-400">
             {t('Badges', 'Badges')}
           </span>
           <span className="text-sm font-bold text-gray-900">
@@ -222,7 +222,7 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
           </span>
         </div>
         {nextBadge && (
-          <span className="text-[10px] font-bold text-[#0f2b46] uppercase tracking-widest">
+          <span className="micro-label text-navy">
             {t('Next', 'Suivant')}: {language === 'fr' ? nextBadge.labelFr : nextBadge.labelEn}
           </span>
         )}
@@ -242,7 +242,7 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
               >
                 <Icon size={18} />
               </div>
-              <span className="text-[8px] font-bold text-gray-500 text-center leading-tight truncate w-full">
+              <span className="text-[10px] font-bold text-gray-500 text-center leading-tight truncate w-full">
                 {language === 'fr' ? badge.labelFr : badge.labelEn}
               </span>
               {!badge.earned && (

@@ -63,8 +63,7 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('agent');
   const [language, setLanguage] = useState<'en' | 'fr'>(() => {
-    const saved = localStorage.getItem('adl_language');
-    return saved === 'en' ? 'en' : 'fr';
+    try { const saved = localStorage.getItem('adl_language'); return saved === 'en' ? 'en' : 'fr'; } catch { return 'fr'; }
   });
   const [history, setHistory] = useState<Screen[]>([]);
   const [authReturnScreen, setAuthReturnScreen] = useState<Screen>(Screen.SPLASH);
@@ -79,7 +78,7 @@ const App: React.FC = () => {
 
   const navigateTo = (screen: Screen, point: DataPoint | null = null) => {
     if (currentScreen === Screen.SPLASH && screen !== Screen.SPLASH) {
-      localStorage.setItem('adl_splash_seen', 'true');
+      try { localStorage.setItem('adl_splash_seen', 'true'); } catch { /* private browsing */ }
     }
     if (screen === Screen.AUTH) {
       setAuthReturnScreen(currentScreen);
@@ -179,7 +178,7 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    localStorage.setItem('adl_language', language);
+    try { localStorage.setItem('adl_language', language); } catch { /* private browsing */ }
     document.documentElement.lang = language;
   }, [language]);
 
@@ -227,7 +226,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const bootstrap = async () => {
       const hasUser = await refreshSession();
-      const hasSeenSplash = localStorage.getItem('adl_splash_seen') === 'true';
+      const hasSeenSplash = (() => { try { return localStorage.getItem('adl_splash_seen') === 'true'; } catch { return false; } })();
       if (currentScreen === Screen.SPLASH && (hasUser || hasSeenSplash)) {
         setHistory([]);
         const session = await getSession();
@@ -239,7 +238,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const hasSeenSplash = localStorage.getItem('adl_splash_seen') === 'true';
+    const hasSeenSplash = (() => { try { return localStorage.getItem('adl_splash_seen') === 'true'; } catch { return false; } })();
     if (currentScreen === Screen.SPLASH && hasSeenSplash) {
       setHistory([]);
       setCurrentScreen(isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
@@ -410,7 +409,7 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-hidden relative">
           <Suspense
             fallback={
-              <div className="h-full w-full bg-[#f9fafb] p-4">
+              <div className="h-full w-full bg-page p-4">
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
                   {language === 'fr' ? 'Chargement de l ecran...' : 'Loading screen...'}
                 </div>

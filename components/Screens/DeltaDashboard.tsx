@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, AlertTriangle, Download, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { AlertTriangle, Download, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import ScreenHeader from '../shared/ScreenHeader';
 import {
   LineChart,
   Line,
@@ -126,7 +127,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const hasSelectedVerticalData = selectedVertical === 'all' || activeVerticalSet.has(selectedVertical);
 
   const latestStats = filteredStats.length > 0 ? filteredStats[0] : null;
-  const selectedVerticalLabel = selectedVertical === 'all' ? t('All Verticals', 'Toutes les verticales') : categoryLabel(selectedVertical, language);
+  const selectedVerticalLabel = selectedVertical === 'all' ? t('All Categories', 'Toutes les catégories') : categoryLabel(selectedVertical, language);
 
   const latestDate = stats.length > 0 ? stats[0].snapshot_date : null;
 
@@ -176,7 +177,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
     : [];
 
   const latestUpdatedLabel = useMemo(() => {
-    if (!latestDate) return t('No snapshots yet', 'Aucun snapshot');
+    if (!latestDate) return t('No data yet', 'Aucune donnée');
     return new Date(latestDate).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', {
       month: 'short',
       day: 'numeric',
@@ -218,8 +219,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const canExport = exportRows.length > 0;
   const exportDisabledReason = !canExport
     ? selectedVertical === 'all'
-      ? t('No snapshot data is available to export yet.', 'Aucune donnee snapshot n est encore disponible pour l export.')
-      : t('This vertical is supported, but it has no snapshot history to export yet.', 'Cette verticale est prise en charge, mais elle n a pas encore d historique snapshot a exporter.')
+      ? t('No data is available to export yet.', 'Aucune donnée n\'est encore disponible pour l\'export.')
+      : t('This category is supported, but it has no data history to export yet.', 'Cette catégorie est prise en charge, mais elle n\'a pas encore d\'historique à exporter.')
     : null;
 
   const downloadBlob = (filename: string, blob: Blob) => {
@@ -289,48 +290,48 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const deltaTypeLabel = (type: string) => {
     switch (type) {
       case 'new': return t('NEW', 'NOUVEAU');
-      case 'removed': return t('REMOVED', 'SUPPRIME');
-      case 'changed': return t('CHANGED', 'MODIFIE');
-      default: return t('UNCHANGED', 'INCHANGE');
+      case 'removed': return t('REMOVED', 'SUPPRIMÉ');
+      case 'changed': return t('CHANGED', 'MODIFIÉ');
+      default: return t('UNCHANGED', 'INCHANGÉ');
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f9fafb] overflow-y-auto no-scrollbar">
-      {/* Header */}
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-[#0f2b46] transition-colors">
-          <ArrowLeft size={20} />
-        </button>
-        <h3 className="text-sm font-bold mx-auto">{t('Delta Intelligence', 'Intelligence Delta')}</h3>
-        <button
-          type="button"
-          onClick={() => handleExport(selectedFormat)}
-          className="absolute right-2 p-2 text-[#0f2b46]"
-          aria-label={t('Export current view', 'Exporter la vue')}
-        >
-          <Download size={18} />
-        </button>
-      </div>
+    <div className="screen-shell">
+      <ScreenHeader
+        title={t('Delta Intelligence', 'Intelligence Delta')}
+        onBack={onBack}
+        language={language}
+        trailing={
+          <button
+            type="button"
+            onClick={() => handleExport(selectedFormat)}
+            className="p-2 text-navy"
+            aria-label={t('Export current view', 'Exporter la vue')}
+          >
+            <Download size={18} />
+          </button>
+        }
+      />
 
       <div className="p-4 space-y-4">
-        <div className="rounded-[32px] bg-gradient-to-br from-[#0f2b46] via-[#1d4565] to-[#345d7d] text-white p-6 shadow-sm">
+        <div className="rounded-[32px] bg-gradient-to-br from-navy via-navy-mid to-[#345d7d] text-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/70">
+              <div className="micro-label-wide text-white/70">
                 {t('Client Dashboard', 'Tableau client')}
               </div>
               <h2 className="mt-2 text-2xl font-extrabold">
                 {selectedVertical === 'all'
-                  ? t('What changed across the monitored network', 'Ce qui a change sur le reseau suivi')
-                  : `${t('Change story for', 'Recit de changement pour')} ${selectedVerticalLabel}`}
+                  ? t('What changed across the monitored network', 'Ce qui a changé sur le réseau suivi')
+                  : `${t('Change story for', 'Récit de changement pour')} ${selectedVerticalLabel}`}
               </h2>
               <p className="mt-2 text-sm text-white/80">
-                {t('Exports inherit the exact current filter state.', 'Les exports reprennent exactement l etat courant des filtres.')}
+                {t('Exports inherit the exact current filter state.', 'Les exports reprennent exactement l\'état courant des filtres.')}
               </p>
             </div>
             <div className="rounded-3xl bg-white/10 px-4 py-3 backdrop-blur">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-white/70">{t('Latest Snapshot', 'Dernier snapshot')}</div>
+              <div className="micro-label text-white/70">{t('Latest Report', 'Dernier rapport')}</div>
               <div className="mt-1 text-lg font-bold">{latestUpdatedLabel}</div>
             </div>
           </div>
@@ -342,7 +343,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             <AlertTriangle size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-bold text-red-700">
-                {filteredAnomalies.length} {t('Anomalies Detected', 'Anomalies detectees')}
+                {filteredAnomalies.length} {t('Anomalies Detected', 'Anomalies détectées')}
               </p>
               <div className="mt-1 space-y-1">
                 {filteredAnomalies.slice(0, 3).map((a, i) => (
@@ -357,12 +358,12 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
 
         {/* Summary Cards */}
         <div className="grid grid-cols-4 gap-2">
-          <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm text-center">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">{t('Points', 'Points')}</span>
+          <div className="card p-3 text-center">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('Points', 'Points')}</span>
             <span className="text-lg font-bold text-gray-900">{summaryTotalPoints}</span>
           </div>
-          <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm text-center">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">{t('WoW', 'WoW')}</span>
+          <div className="card p-3 text-center">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('WoW', 'WoW')}</span>
             <div className="flex items-center justify-center space-x-0.5">
               {summaryWoW !== null ? (
                 <>
@@ -376,12 +377,12 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               )}
             </div>
           </div>
-          <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm text-center">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">{t('Complete', 'Complet')}</span>
+          <div className="card p-3 text-center">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('Complete', 'Complet')}</span>
             <span className="text-sm font-bold text-gray-900">{summaryCompletion}%</span>
           </div>
-          <div className="bg-white p-3 rounded-2xl border border-gray-100 shadow-sm text-center">
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block">{t('Alerts', 'Alertes')}</span>
+          <div className="card p-3 text-center">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('Alerts', 'Alertes')}</span>
             <span className={`text-sm font-bold ${filteredAnomalies.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>{filteredAnomalies.length}</span>
           </div>
         </div>
@@ -391,7 +392,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           <button
             onClick={() => setSelectedVertical('all')}
             className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${
-              selectedVertical === 'all' ? 'bg-[#0f2b46] text-white' : 'bg-white text-gray-600 border border-gray-200'
+              selectedVertical === 'all' ? 'bg-navy text-white' : 'bg-white text-gray-600 border border-gray-200'
             }`}
           >
             {t('All', 'Tout')}
@@ -401,7 +402,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               key={vid}
               onClick={() => setSelectedVertical(vid)}
               className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${
-                selectedVertical === vid ? 'bg-[#0f2b46] text-white' : 'bg-white text-gray-600 border border-gray-200'
+                selectedVertical === vid ? 'bg-navy text-white' : 'bg-white text-gray-600 border border-gray-200'
               }`}
             >
               {categoryLabel(vid, language)}
@@ -421,32 +422,32 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         />
 
         {loading ? (
-          <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm text-center">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              {t('Loading snapshot data...', 'Chargement des donnees...')}
+          <div className="card p-8 text-center">
+            <p className="micro-label text-gray-400">
+              {t('Loading data...', 'Chargement des données...')}
             </p>
           </div>
         ) : stats.length === 0 ? (
-          <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm text-center space-y-2">
+          <div className="card p-8 text-center space-y-2">
             <p className="text-xs font-bold text-gray-600">
-              {t('No snapshot data yet', 'Pas encore de donnees')}
+              {t('No data yet', 'Pas encore de données')}
             </p>
             <p className="text-[10px] text-gray-400">
-              {t('Snapshots are taken weekly. Check back after the first run.', 'Les snapshots sont pris chaque semaine.')}
+              {t('Data is collected weekly. Check back after the first run.', 'Les données sont collectées chaque semaine.')}
             </p>
           </div>
         ) : !hasSelectedVerticalData ? (
-          <div className="bg-white p-8 rounded-2xl border border-gray-100 shadow-sm text-center space-y-3">
+          <div className="card p-8 text-center space-y-3">
             <p className="text-xs font-bold text-gray-700">
               {selectedVerticalLabel}
             </p>
             <p className="text-sm font-semibold text-gray-900">
-              {t('No snapshot history for this vertical yet', 'Pas encore d historique snapshot pour cette verticale')}
+              {t('No weekly data for this category yet. It will appear once collection starts.', 'Pas encore de données hebdomadaires pour cette catégorie. Elles apparaîtront dès que la collecte commencera.')}
             </p>
             <p className="text-[11px] text-gray-500 max-w-md mx-auto">
               {t(
-                'This vertical is available in ADL, but no weekly snapshot rows have been generated for it yet. Once coverage starts, charts and exports will appear here.',
-                'Cette verticale est disponible dans ADL, mais aucune ligne de snapshot hebdomadaire n a encore ete generee pour elle. Des que la couverture demarre, les graphiques et exports apparaitront ici.'
+                'This category is available in ADL, but no weekly data has been generated for it yet. Once coverage starts, charts and exports will appear here.',
+                'Cette catégorie est disponible dans ADL, mais aucune donnée hebdomadaire n\'a encore été générée pour elle. Dès que la couverture démarre, les graphiques et exports apparaîtront ici.'
               )}
             </p>
           </div>
@@ -454,8 +455,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           <>
             {/* Point Count Trend */}
             {selectedVertical !== 'all' && trendData.length > 1 && (
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
-                <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">
+              <div className="card p-4 space-y-3">
+                <span className="micro-label text-gray-900">
                   {t('Point Count Trend', 'Tendance des points')}
                 </span>
                 <div className="h-48 w-full">
@@ -464,7 +465,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d: string) => d.slice(5)} />
                       <YAxis tick={{ fontSize: 9 }} width={35} />
                       <Tooltip labelFormatter={(d: string) => d} />
-                      <Line type="monotone" dataKey="value" stroke="#0f2b46" strokeWidth={2} dot={{ r: 3 }} name={t('Actual', 'Reel')} />
+                      <Line type="monotone" dataKey="value" stroke="#0f2b46" strokeWidth={2} dot={{ r: 3 }} name={t('Actual', 'Réel')} />
                       <Line type="monotone" dataKey="movingAvg" stroke="#4c7c59" strokeWidth={1.5} strokeDasharray="5 3" dot={false} name={t('4w Avg', 'Moy. 4s')} />
                       <Legend wrapperStyle={{ fontSize: 10 }} />
                     </LineChart>
@@ -475,9 +476,9 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
 
             {/* Delta Breakdown */}
             {deltaBreakdown.length > 0 && (
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
-                <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">
-                  {t('Delta Breakdown', 'Repartition des deltas')}
+              <div className="card p-4 space-y-3">
+                <span className="micro-label text-gray-900">
+                  {t('Delta Breakdown', 'Répartition des changements')}
                 </span>
                 <div className="h-48 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -486,9 +487,9 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       <YAxis tick={{ fontSize: 9 }} width={35} />
                       <Tooltip />
                       <Bar dataKey="new" stackId="delta" fill="#22c55e" name={t('New', 'Nouveau')} />
-                      <Bar dataKey="removed" stackId="delta" fill="#ef4444" name={t('Removed', 'Supprime')} />
-                      <Bar dataKey="changed" stackId="delta" fill="#eab308" name={t('Changed', 'Modifie')} />
-                      <Bar dataKey="unchanged" stackId="delta" fill="#d1d5db" name={t('Unchanged', 'Inchange')} />
+                      <Bar dataKey="removed" stackId="delta" fill="#ef4444" name={t('Removed', 'Supprimé')} />
+                      <Bar dataKey="changed" stackId="delta" fill="#eab308" name={t('Changed', 'Modifié')} />
+                      <Bar dataKey="unchanged" stackId="delta" fill="#d1d5db" name={t('Unchanged', 'Inchangé')} />
                       <Legend wrapperStyle={{ fontSize: 10 }} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -498,8 +499,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
 
             {/* Price Trend (fuel only) */}
             {showPriceTrend && priceTrend.length > 1 && (
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
-                <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">
+              <div className="card p-4 space-y-3">
+                <span className="micro-label text-gray-900">
                   {t('Average Fuel Price', 'Prix moyen du carburant')}
                 </span>
                 <div className="h-40 w-full">
@@ -517,14 +518,14 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
 
             {/* Recent Deltas */}
             {selectedVertical !== 'all' && recentDeltas.length > 0 && (
-              <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-3">
-                <span className="text-[10px] font-bold text-gray-900 uppercase tracking-widest">
-                  {t('Recent Changes', 'Changements recents')}
+              <div className="card p-4 space-y-3">
+                <span className="micro-label text-gray-900">
+                  {t('Recent Changes', 'Changements récents')}
                 </span>
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {recentDeltas.filter((d) => d.delta_type !== 'unchanged').slice(0, 15).map((delta) => (
-                    <div key={delta.id} className="flex items-start space-x-2 p-2 bg-[#f9fafb] rounded-xl">
-                      <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${deltaTypeColor(delta.delta_type)}`}>
+                    <div key={delta.id} className="flex items-start space-x-2 p-2 bg-page rounded-xl">
+                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${deltaTypeColor(delta.delta_type)}`}>
                         {deltaTypeLabel(delta.delta_type)}
                       </span>
                       <div className="flex-1 min-w-0">

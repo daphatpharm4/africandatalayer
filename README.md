@@ -55,6 +55,7 @@ Set these environment variables:
 - `BLOB_READ_WRITE_TOKEN` (for storing user-submitted photos)
 - Optional monitoring: `SENTRY_DSN`, `VITE_SENTRY_DSN`
 - Optional fraud ops: `FRAUD_ALERT_WEBHOOK_URL`
+- Optional automation intake: `AUTOMATION_SECRET` (shared bearer secret for `POST /api/intake/leads`)
 - Optional: `MAX_SUBMISSION_IMAGE_BYTES` (default `8388608`)
 - Optional: `ADMIN_EMAIL`, `ADMIN_PASSWORD`
 - Optional (frontend): `VITE_ADMIN_EMAIL` (to show Impact tab for admin users)
@@ -65,6 +66,8 @@ Endpoints:
 - `GET/POST /api/submissions` (default returns projected points; add `?view=events` for raw append-only events)
 - `GET/PUT /api/submissions/:id`
 - `GET/PUT /api/user`
+- `GET/POST /api/intake/leads`
+- `PATCH /api/intake/leads/:id`
 - `GET/POST /api/auth/*` (Auth.js)
 
 ## 🗄️ Database Schema

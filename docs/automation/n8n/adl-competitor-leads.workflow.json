@@ -1,0 +1,106 @@
+{
+  "name": "ADL Competitor Lead Intake",
+  "active": false,
+  "nodes": [
+    {
+      "id": "source-webhook",
+      "name": "Competitor Source Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 260],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "adl-competitor-leads",
+        "responseMode": "responseNode"
+      }
+    },
+    {
+      "id": "filter-allowed-sources",
+      "name": "Filter Allowed Sources",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 260],
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const sourceSystem = typeof $json.sourceSystem === 'string' ? $json.sourceSystem : 'competitor_feed';\nconst records = Array.isArray($json.records) ? $json.records : [];\nconst blocked = ['google_maps'];\nif (blocked.includes(sourceSystem)) {\n  throw new Error('Blocked sourceSystem. Review ToS before enabling this feed.');\n}\nconst leads = records.map((row, index) => ({\n  sourceRecordId: String(row.sourceRecordId ?? `${sourceSystem}-${index}`),\n  sourceUrl: row.sourceUrl ?? null,\n  category: String(row.category ?? row.vertical ?? ''),\n  location: {\n    latitude: Number(row.latitude ?? row.lat),\n    longitude: Number(row.longitude ?? row.lon),\n  },\n  normalizedDetails: row.normalizedDetails ?? {\n    name: row.name ?? null,\n    brand: row.brand ?? null,\n  },\n  rawPayload: row,\n  evidenceUrls: Array.isArray(row.evidenceUrls) ? row.evidenceUrls : [],\n  freshnessAt: row.freshnessAt ?? new Date().toISOString(),\n  priority: row.priority ?? 'medium',\n}));\nreturn [{ json: { runKey: `${sourceSystem}-${Date.now()}`, workflowName: 'adl-competitor-leads', sourceSystem, triggerType: 'webhook', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), leads } }];"
+      }
+    },
+    {
+      "id": "post-competitor-leads",
+      "name": "Post Competitor Leads To ADL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [820, 260],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.ADL_BASE_URL + '/api/intake/leads'}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{'Bearer ' + $env.AUTOMATION_SECRET}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json}}"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1080, 260],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}"
+      }
+    }
+  ],
+  "connections": {
+    "Competitor Source Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Allowed Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Allowed Sources": {
+      "main": [
+        [
+          {
+            "node": "Post Competitor Leads To ADL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Competitor Leads To ADL": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "versionId": "adl-competitor-leads-v1",
+  "meta": null,
+  "pinData": {}
+}

@@ -424,3 +424,91 @@ export interface DedupCheckResult {
   bestCandidatePointId: string | null;
   candidates: DedupCandidate[];
 }
+
+export type AutomationLeadPriority = "high" | "medium" | "low";
+export type AutomationLeadStatus =
+  | "rejected_out_of_zone"
+  | "rejected_manual"
+  | "matched_existing"
+  | "needs_field_verify"
+  | "ready_for_assignment"
+  | "assignment_created"
+  | "verified"
+  | "import_candidate";
+export type AutomationRunStatus = "pending" | "completed" | "partial" | "failed";
+export type AutomationRunTriggerType = "schedule" | "webhook" | "file" | "manual" | "api";
+export type AutomationLeadAction = "reject" | "mark_assigned" | "mark_verified" | "promote_to_import_candidate";
+
+export interface LeadCandidateInput {
+  sourceRecordId: string;
+  sourceUrl?: string | null;
+  category: string;
+  location: SubmissionLocation;
+  normalizedDetails?: SubmissionDetails;
+  rawPayload?: Record<string, unknown>;
+  evidenceUrls?: string[];
+  freshnessAt?: string | null;
+  priority?: AutomationLeadPriority;
+}
+
+export interface LeadCandidate {
+  id: string;
+  runId: string | null;
+  sourceSystem: string;
+  sourceRecordId: string;
+  sourceUrl: string | null;
+  category: SubmissionCategory;
+  zoneId: string | null;
+  location: SubmissionLocation;
+  normalizedDetails: SubmissionDetails;
+  rawPayload: Record<string, unknown>;
+  evidenceUrls: string[];
+  freshnessAt: string | null;
+  matchPointId: string | null;
+  matchConfidence: number | null;
+  status: AutomationLeadStatus;
+  priority: AutomationLeadPriority;
+  assignmentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastIngestedAt: string;
+}
+
+export interface AutomationRunInput {
+  runKey: string;
+  workflowName: string;
+  sourceSystem: string;
+  triggerType?: AutomationRunTriggerType;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  leads: LeadCandidateInput[];
+}
+
+export interface AutomationRunRecord {
+  id: string;
+  runKey: string;
+  workflowName: string;
+  sourceSystem: string;
+  triggerType: AutomationRunTriggerType;
+  status: AutomationRunStatus;
+  requestedCount: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  errorCount: number;
+  failureSummary: Array<{ sourceRecordId: string; message: string }>;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AutomationLeadBatchResult {
+  run: AutomationRunRecord;
+  leads: LeadCandidate[];
+  errors: Array<{ sourceRecordId: string; message: string }>;
+}
+
+export interface AutomationLeadActionInput {
+  action: AutomationLeadAction;
+  assignmentId?: string | null;
+}
