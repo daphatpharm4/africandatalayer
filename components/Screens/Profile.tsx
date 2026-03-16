@@ -367,7 +367,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
             </div>
           </div>
           <div className="relative z-10">
-            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm border border-white/30">
+            <div className="w-12 h-12 bg-white/25 rounded-2xl flex items-center justify-center border border-white/30">
               <Award size={24} />
             </div>
           </div>
@@ -449,7 +449,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
                     <div className="text-[11px] text-gray-600">
                       {assignment.pointsSubmitted}/{assignment.pointsExpected} {t('points', 'points')} · {assignment.completionRate}%
                     </div>
-                    <div className="text-[10px] text-gray-500">
+                    <div className="text-[11px] text-gray-500">
                       {assignment.assignedVerticals
                         .map((vertical) => getCategoryLabelFromRegistry(vertical, language))
                         .join(', ')}
@@ -506,11 +506,11 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
               </div>
               <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-navy to-forest transition-all duration-700"
+                  className="h-full rounded-full bg-navy transition-all duration-700"
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="text-[10px] text-gray-500">
+              <p className="text-[11px] text-gray-500">
                 {pointsThisWeek >= WEEKLY_TARGET
                   ? t('Target reached! +20 XP bonus earned.', 'Objectif atteint ! +20 XP bonus gagnes.')
                   : t('Complete 50 this week for a 20 XP bonus!', 'Completez 50 cette semaine pour un bonus de 20 XP !')}
@@ -539,7 +539,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900">{pointsThisWeek}</span>
-              <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{t('submissions', 'soumissions')}</p>
+              <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">{t('submissions', 'soumissions')}</p>
             </div>
           </div>
         </div>
@@ -555,7 +555,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
               <button
                 type="button"
                 onClick={() => setShowAllHistory((prev) => !prev)}
-                className="text-[10px] font-bold text-navy uppercase"
+                className="text-[11px] font-bold text-navy uppercase"
               >
                 {showAllHistory ? t('Show Less', 'Voir moins') : t('View All', 'Voir tout')}
               </button>
@@ -576,8 +576,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-gray-900">{act.type}</span>
-                    <span className="text-[10px] text-gray-400 font-bold uppercase">{act.date}</span>
-                    <span className="text-[10px] text-gray-400 font-medium">{act.location}</span>
+                    <span className="text-[11px] text-gray-400 font-bold uppercase">{act.date}</span>
+                    <span className="text-[11px] text-gray-400 font-medium">{act.location}</span>
                   </div>
                 </div>
                 <div className="text-right">
@@ -596,7 +596,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
                 type="button"
                 onClick={handleClearSyncErrors}
                 disabled={isClearingSyncErrors}
-                className={`text-[10px] font-bold uppercase flex items-center space-x-1 ${isClearingSyncErrors ? 'text-gray-300' : 'text-terra'}`}
+                className={`text-[11px] font-bold uppercase flex items-center space-x-1 ${isClearingSyncErrors ? 'text-gray-300' : 'text-terra'}`}
               >
                 <Trash2 size={12} />
                 <span>{isClearingSyncErrors ? t('Clearing...', 'Suppression...') : t('Clear', 'Effacer')}</span>

@@ -1219,20 +1219,20 @@ const ContributionFlow: React.FC<Props> = ({
           <div className="rounded-xl bg-gray-50 p-3 text-center">
             <Signal size={16} className={`mx-auto ${colorFor(gpsScore)}`} />
             <div className={`text-lg font-bold ${colorFor(gpsScore)}`}>{gpsScore}%</div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('GPS', 'GPS')}</div>
+            <div className="micro-label text-gray-400">{t('GPS', 'GPS')}</div>
           </div>
           <div className="rounded-xl bg-gray-50 p-3 text-center">
             <Camera size={16} className={`mx-auto ${colorFor(photoScore)}`} />
             <div className={`text-lg font-bold ${colorFor(photoScore)}`}>{photoScore}%</div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Photo', 'Photo')}</div>
+            <div className="micro-label text-gray-400">{t('Photo', 'Photo')}</div>
           </div>
           <div className="rounded-xl bg-gray-50 p-3 text-center">
             <div className={`text-lg font-bold ${colorFor(completeness)}`}>{completeness}%</div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Fields', 'Champs')}</div>
+            <div className="micro-label text-gray-400">{t('Fields', 'Champs')}</div>
           </div>
           <div className="rounded-xl bg-forest-wash p-3 text-center">
             <div className="text-lg font-bold text-forest">+{estimatedXp}</div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400">{t('Est. XP', 'XP est.')}</div>
+            <div className="micro-label text-gray-400">{t('Est. XP', 'XP est.')}</div>
           </div>
         </div>
       </div>
@@ -1356,7 +1356,7 @@ const ContributionFlow: React.FC<Props> = ({
         />
         <label
           htmlFor="capture-photo"
-          className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white/90 px-4 py-2 micro-label text-gray-600 shadow-sm backdrop-blur hover:bg-white"
+          className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
         >
           {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
         </label>
@@ -2070,7 +2070,7 @@ const ContributionFlow: React.FC<Props> = ({
                 <React.Fragment key={step.label}>
                   <div className="flex items-center gap-1.5">
                     <div className={`w-2 h-2 rounded-full transition-colors ${step.done ? 'bg-forest' : 'bg-gray-200'}`} />
-                    <span className={`text-[10px] font-bold uppercase tracking-widest ${step.done ? 'text-forest' : 'text-gray-300'}`}>
+                    <span className={`micro-label ${step.done ? 'text-forest' : 'text-gray-300'}`}>
                       {step.label}
                     </span>
                   </div>
@@ -2099,7 +2099,7 @@ const ContributionFlow: React.FC<Props> = ({
 
         {assignment && (
           <div className="card p-4">
-            <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400">{t('Assignment Context', 'Contexte affectation')}</div>
+            <div className="micro-label-wide text-gray-400">{t('Assignment Context', 'Contexte affectation')}</div>
             <div className="mt-2 flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-bold text-gray-900">{assignment.zoneLabel}</div>
@@ -2111,7 +2111,7 @@ const ContributionFlow: React.FC<Props> = ({
                 <div className="micro-label text-navy">
                   {assignment.pointsSubmitted}/{assignment.pointsExpected}
                 </div>
-                <div className="text-[10px] text-gray-400">{t('Due', 'Échéance')} {assignment.dueDate}</div>
+                <div className="text-[11px] text-gray-400">{t('Due', 'Échéance')} {assignment.dueDate}</div>
               </div>
             </div>
           </div>
@@ -2120,7 +2120,7 @@ const ContributionFlow: React.FC<Props> = ({
         {isBatchMode && (
           <div className="bg-navy text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
             <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">{t('Batch Capture', 'Capture en lot')}</div>
+              <div className="micro-label-wide text-white/70">{t('Batch Capture', 'Capture en lot')}</div>
               <div className="mt-1 text-sm font-bold">{t('Captured', 'Captures')}: {batchCapturedCount}</div>
             </div>
             <button
@@ -2172,7 +2172,7 @@ const ContributionFlow: React.FC<Props> = ({
                     <div className="text-xs font-bold text-gray-900">
                       {candidate.siteName || candidate.pointId}
                     </div>
-                    <div className="text-[10px] text-gray-500">
+                    <div className="text-[11px] text-gray-500">
                       {candidate.distanceMeters}m · {t('similarity', 'similarité')}: {Math.round(candidate.similarityScore * 100)}%
                     </div>
                   </button>

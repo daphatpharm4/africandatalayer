@@ -45,17 +45,17 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
         <div className="space-y-4">
           <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em] px-1">{t('Account', 'Compte')}</h4>
           <div className="card divide-y divide-gray-50">
-            <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+            <button disabled className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed transition-colors">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-navy-light text-navy rounded-xl"><User size={20} /></div>
-                <span className="text-sm font-bold text-gray-900">{t('Edit Profile Info', 'Modifier le profil')}</span>
+                <span className="text-sm font-bold text-gray-900">{t('Edit Profile Info (Coming soon)', 'Modifier le profil (Bientôt)')}</span>
               </div>
               <ChevronRight size={18} className="text-gray-300" />
             </button>
-            <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+            <button disabled className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed transition-colors">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-navy-light text-navy rounded-xl"><Shield size={20} /></div>
-                <span className="text-sm font-bold text-gray-900">{t('Security & Password', 'Sécurité et mot de passe')}</span>
+                <span className="text-sm font-bold text-gray-900">{t('Security & Password (Coming soon)', 'Sécurité et mot de passe (Bientôt)')}</span>
               </div>
               <ChevronRight size={18} className="text-gray-300" />
             </button>
@@ -65,20 +65,20 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
         <div className="space-y-4">
           <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em] px-1">{t('Data & Connectivity', 'Données et connectivité')}</h4>
           <div className="card divide-y divide-gray-50">
-            <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors text-left">
+            <button disabled className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed transition-colors text-left">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-navy-light text-navy rounded-xl"><WifiOff size={20} /></div>
                 <div className="flex flex-col">
-                  <span className="text-sm font-bold text-gray-900">{t('Offline & Uploads', 'Hors ligne & envois')}</span>
-                  <span className="text-[10px] text-gray-400 font-medium">{t('Last upload: 2m ago', 'Dernier envoi : il y a 2 min')}</span>
+                  <span className="text-sm font-bold text-gray-900">{t('Offline & Uploads (Coming soon)', 'Hors ligne et envois (Bientôt)')}</span>
+                  <span className="text-[11px] text-gray-400 font-medium">{t('Last upload: 2m ago', 'Dernier envoi : il y a 2 min')}</span>
                 </div>
               </div>
               <ChevronRight size={18} className="text-gray-300" />
             </button>
-            <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+            <button disabled className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed transition-colors">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-navy-light text-navy rounded-xl"><BarChart size={20} /></div>
-                <span className="text-sm font-bold text-gray-900">{t('Data Usage & Limits', 'Usage et limites')}</span>
+                <span className="text-sm font-bold text-gray-900">{t('Data Usage & Limits (Coming soon)', 'Utilisation des données (Bientôt)')}</span>
               </div>
               <ChevronRight size={18} className="text-gray-300" />
             </button>
@@ -88,10 +88,10 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
         <div className="space-y-4">
           <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em] px-1">{t('Preferences', 'Préférences')}</h4>
           <div className="card divide-y divide-gray-50">
-            <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+            <button disabled className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed transition-colors">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-navy-light text-navy rounded-xl"><Bell size={20} /></div>
-                <span className="text-sm font-bold text-gray-900">{t('Notifications', 'Notifications')}</span>
+                <span className="text-sm font-bold text-gray-900">{t('Notifications (Coming soon)', 'Notifications (Bientôt)')}</span>
               </div>
               <ChevronRight size={18} className="text-gray-300" />
             </button>
@@ -143,17 +143,17 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
         <div className="space-y-4">
           <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-[0.2em] px-1">{t('Privacy & Terms', 'Confidentialité et conditions')}</h4>
           <div className="card divide-y divide-gray-50">
-            <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+            <button disabled className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed transition-colors">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-navy-light text-navy rounded-xl"><FileText size={20} /></div>
-                <span className="text-sm font-bold text-gray-900">{t('Privacy Terms', 'Conditions de confidentialité')}</span>
+                <span className="text-sm font-bold text-gray-900">{t('Privacy Terms (Coming soon)', 'Conditions de confidentialité (Bientôt)')}</span>
               </div>
               <ChevronRight size={18} className="text-gray-300" />
             </button>
-            <button className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors">
+            <button disabled className="w-full flex items-center justify-between p-4 opacity-50 cursor-not-allowed transition-colors">
               <div className="flex items-center space-x-4">
                 <div className="p-2 bg-navy-light text-navy rounded-xl"><Shield size={20} /></div>
-                <span className="text-sm font-bold text-gray-900">{t('Data Usage', 'Utilisation des données')}</span>
+                <span className="text-sm font-bold text-gray-900">{t('Data Usage (Coming soon)', 'Utilisation des données (Bientôt)')}</span>
               </div>
               <ChevronRight size={18} className="text-gray-300" />
             </button>
@@ -170,7 +170,7 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
           </button>
           <div className="text-center">
             <BrandLogo size={18} className="mx-auto mb-2" />
-            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-[0.2em]">{t('African Data Layer v2.4.0 (Build 892)', 'African Data Layer v2.4.0 (Compilation 892)')}</p>
+            <p className="micro-label-wide text-gray-300">{t('African Data Layer v2.4.0 (Build 892)', 'African Data Layer v2.4.0 (Compilation 892)')}</p>
           </div>
         </div>
       </div>

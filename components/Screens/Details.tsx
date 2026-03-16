@@ -69,8 +69,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
             />
           ) : (
             <div
-              className="w-full h-full"
-              style={{ background: 'linear-gradient(135deg, #e7eef4 0%, #d5e1eb 50%, #c8d6e0 100%)' }}
+              className="w-full h-full bg-gradient-to-br from-navy-light via-navy-border to-navy-border"
               role="img"
               aria-label={t('No photo available', 'Aucune photo disponible')}
             />
@@ -87,23 +86,23 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
 
         <div className="grid grid-cols-2 gap-4">
           <div className="card p-4">
-            <span className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+            <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
               <ShieldCheck size={10} className="mr-1" />
               {t('Trust Score', 'Score de confiance')}
             </span>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900 tracking-tight">{point.trustScore}%</span>
-              <span className="text-[10px] text-gray-500 font-medium">{t('Community confidence', 'Confiance de la communauté')}</span>
+              <span className="text-[11px] text-gray-500 font-medium">{t('Community confidence', 'Confiance de la communauté')}</span>
             </div>
           </div>
           <div className="card p-4">
-            <span className="text-[10px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+            <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
               <Clock size={10} className="mr-1" />
               {t('Updated', 'Mis à jour')}
             </span>
             <div className="flex flex-col">
               <span className="text-xl font-bold text-gray-900 tracking-tight">{point.lastUpdated}</span>
-              <span className="text-[10px] text-gray-500 font-medium">{t('Live sync state', 'État sync live')}</span>
+              <span className="text-[11px] text-gray-500 font-medium">{t('Live sync state', 'État sync live')}</span>
             </div>
           </div>
         </div>

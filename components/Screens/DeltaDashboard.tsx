@@ -315,7 +315,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       />
 
       <div className="p-4 space-y-4">
-        <div className="rounded-[32px] bg-gradient-to-br from-navy via-navy-mid to-[#345d7d] text-white p-6 shadow-sm">
+        <div className="rounded-[32px] bg-gradient-to-br from-navy via-navy-mid to-navy-mid text-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="micro-label-wide text-white/70">
@@ -330,7 +330,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                 {t('Exports inherit the exact current filter state.', 'Les exports reprennent exactement l\'état courant des filtres.')}
               </p>
             </div>
-            <div className="rounded-3xl bg-white/10 px-4 py-3 backdrop-blur">
+            <div className="rounded-3xl bg-white/15 px-4 py-3">
               <div className="micro-label text-white/70">{t('Latest Report', 'Dernier rapport')}</div>
               <div className="mt-1 text-lg font-bold">{latestUpdatedLabel}</div>
             </div>
@@ -347,7 +347,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               </p>
               <div className="mt-1 space-y-1">
                 {filteredAnomalies.slice(0, 3).map((a, i) => (
-                  <p key={i} className="text-[10px] text-red-600">
+                  <p key={i} className="text-[11px] text-red-600">
                     {categoryLabel(a.vertical_id, language)}: {a.anomaly_flags.map((f) => `${f.metric} z=${f.zScore}`).join(', ')}
                   </p>
                 ))}
@@ -359,11 +359,11 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         {/* Summary Cards */}
         <div className="grid grid-cols-4 gap-2">
           <div className="card p-3 text-center">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('Points', 'Points')}</span>
+            <span className="micro-label text-gray-400 block">{t('Points', 'Points')}</span>
             <span className="text-lg font-bold text-gray-900">{summaryTotalPoints}</span>
           </div>
           <div className="card p-3 text-center">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('WoW', 'WoW')}</span>
+            <span className="micro-label text-gray-400 block">{t('WoW', 'WoW')}</span>
             <div className="flex items-center justify-center space-x-0.5">
               {summaryWoW !== null ? (
                 <>
@@ -378,11 +378,11 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             </div>
           </div>
           <div className="card p-3 text-center">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('Complete', 'Complet')}</span>
+            <span className="micro-label text-gray-400 block">{t('Complete', 'Complet')}</span>
             <span className="text-sm font-bold text-gray-900">{summaryCompletion}%</span>
           </div>
           <div className="card p-3 text-center">
-            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">{t('Alerts', 'Alertes')}</span>
+            <span className="micro-label text-gray-400 block">{t('Alerts', 'Alertes')}</span>
             <span className={`text-sm font-bold ${filteredAnomalies.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>{filteredAnomalies.length}</span>
           </div>
         </div>
@@ -391,7 +391,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         <div className="flex overflow-x-auto space-x-2 no-scrollbar pb-1">
           <button
             onClick={() => setSelectedVertical('all')}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${
+            className={`flex-shrink-0 px-3 py-1.5 rounded-xl micro-label transition-colors ${
               selectedVertical === 'all' ? 'bg-navy text-white' : 'bg-white text-gray-600 border border-gray-200'
             }`}
           >
@@ -401,7 +401,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             <button
               key={vid}
               onClick={() => setSelectedVertical(vid)}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${
+              className={`flex-shrink-0 px-3 py-1.5 rounded-xl micro-label transition-colors ${
                 selectedVertical === vid ? 'bg-navy text-white' : 'bg-white text-gray-600 border border-gray-200'
               }`}
             >
@@ -432,7 +432,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             <p className="text-xs font-bold text-gray-600">
               {t('No data yet', 'Pas encore de données')}
             </p>
-            <p className="text-[10px] text-gray-400">
+            <p className="text-[11px] text-gray-400">
               {t('Data is collected weekly. Check back after the first run.', 'Les données sont collectées chaque semaine.')}
             </p>
           </div>
@@ -465,8 +465,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d: string) => d.slice(5)} />
                       <YAxis tick={{ fontSize: 9 }} width={35} />
                       <Tooltip labelFormatter={(d: string) => d} />
-                      <Line type="monotone" dataKey="value" stroke="#0f2b46" strokeWidth={2} dot={{ r: 3 }} name={t('Actual', 'Réel')} />
-                      <Line type="monotone" dataKey="movingAvg" stroke="#4c7c59" strokeWidth={1.5} strokeDasharray="5 3" dot={false} name={t('4w Avg', 'Moy. 4s')} />
+                      <Line type="monotone" dataKey="value" stroke="var(--chart-navy)" strokeWidth={2} dot={{ r: 3 }} name={t('Actual', 'Réel')} />
+                      <Line type="monotone" dataKey="movingAvg" stroke="var(--chart-forest)" strokeWidth={1.5} strokeDasharray="5 3" dot={false} name={t('4w Avg', 'Moy. 4s')} />
                       <Legend wrapperStyle={{ fontSize: 10 }} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -486,10 +486,10 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d: string) => d.slice(5)} />
                       <YAxis tick={{ fontSize: 9 }} width={35} />
                       <Tooltip />
-                      <Bar dataKey="new" stackId="delta" fill="#22c55e" name={t('New', 'Nouveau')} />
-                      <Bar dataKey="removed" stackId="delta" fill="#ef4444" name={t('Removed', 'Supprimé')} />
-                      <Bar dataKey="changed" stackId="delta" fill="#eab308" name={t('Changed', 'Modifié')} />
-                      <Bar dataKey="unchanged" stackId="delta" fill="#d1d5db" name={t('Unchanged', 'Inchangé')} />
+                      <Bar dataKey="new" stackId="delta" fill="var(--chart-green)" name={t('New', 'Nouveau')} />
+                      <Bar dataKey="removed" stackId="delta" fill="var(--chart-red)" name={t('Removed', 'Supprimé')} />
+                      <Bar dataKey="changed" stackId="delta" fill="var(--chart-yellow)" name={t('Changed', 'Modifié')} />
+                      <Bar dataKey="unchanged" stackId="delta" fill="var(--chart-gray)" name={t('Unchanged', 'Inchangé')} />
                       <Legend wrapperStyle={{ fontSize: 10 }} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -509,7 +509,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       <XAxis dataKey="date" tick={{ fontSize: 9 }} tickFormatter={(d: string) => d.slice(5)} />
                       <YAxis tick={{ fontSize: 9 }} width={45} />
                       <Tooltip labelFormatter={(d: string) => d} formatter={(v: number) => [`${v} XAF`, t('Price', 'Prix')]} />
-                      <Line type="monotone" dataKey="price" stroke="#c86b4a" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="price" stroke="var(--chart-terra)" strokeWidth={2} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -525,7 +525,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {recentDeltas.filter((d) => d.delta_type !== 'unchanged').slice(0, 15).map((delta) => (
                     <div key={delta.id} className="flex items-start space-x-2 p-2 bg-page rounded-xl">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${deltaTypeColor(delta.delta_type)}`}>
+                      <span className={`micro-label px-1.5 py-0.5 rounded ${deltaTypeColor(delta.delta_type)}`}>
                         {deltaTypeLabel(delta.delta_type)}
                       </span>
                       <div className="flex-1 min-w-0">
@@ -533,7 +533,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                           {delta.delta_summary ?? `${delta.point_id.slice(0, 8)}...`}
                         </p>
                         {delta.delta_magnitude !== null && (
-                          <p className="text-[10px] text-gray-400">
+                          <p className="text-[11px] text-gray-400">
                             {delta.delta_direction === 'increase' ? '+' : ''}{delta.delta_magnitude}
                           </p>
                         )}

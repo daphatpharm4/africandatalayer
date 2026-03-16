@@ -7,6 +7,14 @@
     --safe-top: env(safe-area-inset-top);
     --safe-bottom: env(safe-area-inset-bottom);
     --app-height: 100vh;
+    --chart-navy: #0f2b46;
+    --chart-forest: #4c7c59;
+    --chart-terra: #c86b4a;
+    --chart-green: #22c55e;
+    --chart-red: #ef4444;
+    --chart-yellow: #eab308;
+    --chart-gray: #d1d5db;
+    --chart-blue: #3b82f6;
   }
 
   @supports (height: 100svh) {

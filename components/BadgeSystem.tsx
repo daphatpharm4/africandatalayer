@@ -14,6 +14,17 @@ import {
 import type { PointEvent } from '../shared/types';
 import { computeContributionSummary } from '../lib/shared/contributionMetrics';
 
+const BADGE_COLORS = {
+  forest: { color: '#4c7c59', bg: '#eaf3ee' },
+  navy: { color: '#0f2b46', bg: '#e7eef4' },
+  terra: { color: '#c86b4a', bg: '#fff8f4' },
+  gold: { color: '#d69e2e', bg: '#fefcbf' },
+  streak: { color: '#6b46c1', bg: '#f7f4ff' },
+  blue: { color: '#2b6cb0', bg: '#ebf4ff' },
+  danger: { color: '#c53030', bg: '#fde8e8' },
+  neutral: { color: '#4a5568', bg: '#e2e8f0' },
+} as const;
+
 export interface Badge {
   id: string;
   labelEn: string;
@@ -74,8 +85,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: 'Complete your first submission',
       descriptionFr: 'Complétez votre première soumission',
       icon: Footprints,
-      color: '#4c7c59',
-      bgColor: '#eaf3ee',
+      color: BADGE_COLORS.forest.color,
+      bgColor: BADGE_COLORS.forest.bg,
       earned: totalSubmissions >= 1,
       progress: Math.min(totalSubmissions, 1),
       target: 1,
@@ -87,8 +98,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: 'Submit in 3 different verticals',
       descriptionFr: 'Soumettez dans 3 verticales différentes',
       icon: Compass,
-      color: '#0f2b46',
-      bgColor: '#e7eef4',
+      color: BADGE_COLORS.navy.color,
+      bgColor: BADGE_COLORS.navy.bg,
       earned: uniqueCategories.size >= 3,
       progress: Math.min(uniqueCategories.size, 3),
       target: 3,
@@ -100,8 +111,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: '50 submissions in one vertical',
       descriptionFr: '50 soumissions dans une verticale',
       icon: Star,
-      color: '#c86b4a',
-      bgColor: '#fff8f4',
+      color: BADGE_COLORS.terra.color,
+      bgColor: BADGE_COLORS.terra.bg,
       earned: maxInOneVertical >= 50,
       progress: Math.min(maxInOneVertical, 50),
       target: 50,
@@ -113,8 +124,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: '10 consecutive high-quality submissions',
       descriptionFr: '10 soumissions haute qualité consécutives',
       icon: Award,
-      color: '#d69e2e',
-      bgColor: '#fefcbf',
+      color: BADGE_COLORS.gold.color,
+      bgColor: BADGE_COLORS.gold.bg,
       earned: maxConsecutiveHighQuality >= 10,
       progress: Math.min(maxConsecutiveHighQuality, 10),
       target: 10,
@@ -126,8 +137,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: '10 submissions after 6pm (alcohol)',
       descriptionFr: '10 soumissions après 18h (alcool)',
       icon: Moon,
-      color: '#6b46c1',
-      bgColor: '#f7f4ff',
+      color: BADGE_COLORS.streak.color,
+      bgColor: BADGE_COLORS.streak.bg,
       earned: eveningEvents.length >= 10,
       progress: Math.min(eveningEvents.length, 10),
       target: 10,
@@ -139,8 +150,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: 'Submit during rainy season (Jun-Oct)',
       descriptionFr: 'Soumettez pendant la saison des pluies',
       icon: CloudRain,
-      color: '#2b6cb0',
-      bgColor: '#ebf4ff',
+      color: BADGE_COLORS.blue.color,
+      bgColor: BADGE_COLORS.blue.bg,
       earned: rainySeasonEvents.length >= 10,
       progress: Math.min(rainySeasonEvents.length, 10),
       target: 10,
@@ -152,8 +163,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: '14-day consecutive streak',
       descriptionFr: 'Série de 14 jours consécutifs',
       icon: Flame,
-      color: '#c53030',
-      bgColor: '#fde8e8',
+      color: BADGE_COLORS.danger.color,
+      bgColor: BADGE_COLORS.danger.bg,
       earned: streakDays >= 14,
       progress: Math.min(streakDays, 14),
       target: 14,
@@ -165,8 +176,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: '100 total submissions',
       descriptionFr: '100 soumissions au total',
       icon: Building2,
-      color: '#4a5568',
-      bgColor: '#e2e8f0',
+      color: BADGE_COLORS.neutral.color,
+      bgColor: BADGE_COLORS.neutral.bg,
       earned: totalSubmissions >= 100,
       progress: Math.min(totalSubmissions, 100),
       target: 100,
@@ -178,8 +189,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: '500 total submissions',
       descriptionFr: '500 soumissions au total',
       icon: Trophy,
-      color: '#c86b4a',
-      bgColor: '#fff8f4',
+      color: BADGE_COLORS.terra.color,
+      bgColor: BADGE_COLORS.terra.bg,
       earned: totalSubmissions >= 500,
       progress: Math.min(totalSubmissions, 500),
       target: 500,
@@ -191,8 +202,8 @@ export function computeBadges(events: PointEvent[]): Badge[] {
       descriptionEn: 'Maintain 95%+ quality for 4 weeks',
       descriptionFr: 'Maintenez 95%+ de qualité pendant 4 semaines',
       icon: Shield,
-      color: '#4c7c59',
-      bgColor: '#eaf3ee',
+      color: BADGE_COLORS.forest.color,
+      bgColor: BADGE_COLORS.forest.bg,
       earned: qualityEvents.length >= 100,
       progress: Math.min(qualityEvents.length, 100),
       target: 100,
@@ -242,7 +253,7 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
               >
                 <Icon size={18} />
               </div>
-              <span className="text-[10px] font-bold text-gray-500 text-center leading-tight truncate w-full">
+              <span className="text-[11px] font-bold text-gray-500 text-center leading-tight truncate w-full">
                 {language === 'fr' ? badge.labelFr : badge.labelEn}
               </span>
               {!badge.earned && (

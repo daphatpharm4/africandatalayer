@@ -1,5 +1,13 @@
 import React, { useCallback, useEffect, useRef } from "react";
 
+/** Brand palette tokens — keep in sync with tailwind.config.js */
+const BRAND = {
+  terra: '#c86b4a',
+  forest: '#4c7c59',
+  navy: '#0f2b46',
+  gold: '#d69e2e',
+} as const;
+
 interface LevelUpCelebrationProps {
   level: number;
   language: "en" | "fr";
@@ -7,10 +15,10 @@ interface LevelUpCelebrationProps {
 }
 
 const CONFETTI_COLORS = [
-  "#c86b4a",
-  "#4c7c59",
-  "#0f2b46",
-  "#d69e2e",
+  BRAND.terra,
+  BRAND.forest,
+  BRAND.navy,
+  BRAND.gold,
   "#3b82f6",
   "#9b2c2c",
 ];
@@ -93,7 +101,7 @@ export default function LevelUpCelebration({
           : `Reached level ${level}!`
       }
       tabIndex={-1}
-      className="fixed inset-0 z-50 bg-navy/90 backdrop-blur flex items-center justify-center outline-none"
+      className="fixed inset-0 z-50 bg-navy/95 flex items-center justify-center outline-none"
       onClick={onDismiss}
       onKeyDown={handleKeyDown}
     >

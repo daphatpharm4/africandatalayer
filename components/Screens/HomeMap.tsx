@@ -137,7 +137,7 @@ const AgentLocationMarker: React.FC = () => {
       />
       <Marker position={[position.lat, position.lng]} icon={agentLocationIcon} zIndexOffset={1000}>
         <Popup>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-navy">Your location</span>
+          <span className="micro-label text-navy">Your location</span>
         </Popup>
       </Marker>
     </>
@@ -217,7 +217,7 @@ const HomeMap: React.FC<Props> = ({
             pathOptions={{ color: '#c86b4a', fillColor: '#c86b4a', fillOpacity: 0.1, weight: 2 }}
           >
             <Popup>
-              <span className="text-[10px] font-bold uppercase tracking-widest text-navy">{zone.zoneLabel}</span>
+              <span className="micro-label text-navy">{zone.zoneLabel}</span>
             </Popup>
           </Rectangle>
         ))}
@@ -247,16 +247,16 @@ const HomeMap: React.FC<Props> = ({
               <Popup>
                 {singlePoint ? (
                   <div className="space-y-1">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-navy">
+                    <span className="micro-label text-navy">
                       {categoryLabel(singlePoint.type)}
                     </span>
                     <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
-                    <p className="text-[10px] text-gray-600">{formatExplorerPrimaryMeta(singlePoint)}</p>
+                    <p className="text-[11px] text-gray-600">{formatExplorerPrimaryMeta(singlePoint)}</p>
                     {singlePoint.type === Category.PHARMACY && (
-                      <p className="text-[10px] text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
+                      <p className="text-[11px] text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                     )}
                     <button
-                      className="mt-2 w-full rounded-lg bg-navy px-2 py-1 text-[10px] font-bold uppercase tracking-widest text-white"
+                      className="mt-2 w-full rounded-lg bg-navy px-2 py-1 micro-label text-white"
                       onClick={() => onSelectPoint(singlePoint)}
                     >
                       {t('View Details', 'Voir details')}
@@ -264,7 +264,7 @@ const HomeMap: React.FC<Props> = ({
                   </div>
                 ) : (
                   <div className="space-y-2 min-w-[220px]">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-navy">
+                    <p className="micro-label text-navy">
                       {language === 'fr' ? `${group.points.length} points au meme endroit` : `${group.points.length} points at this location`}
                     </p>
                     <div className="space-y-1.5">
@@ -275,7 +275,7 @@ const HomeMap: React.FC<Props> = ({
                           onClick={() => onSelectPoint(point)}
                         >
                           <p className="text-[11px] font-semibold text-gray-900 truncate">{point.name}</p>
-                          <p className="text-[10px] uppercase tracking-wider text-gray-500">
+                          <p className="text-[11px] uppercase tracking-wider text-gray-500">
                             {categoryLabel(point.type)}
                           </p>
                         </button>
@@ -288,10 +288,10 @@ const HomeMap: React.FC<Props> = ({
           );
         })}
       </MapContainer>
-      <div className="absolute inset-x-4 top-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm">
+      <div className="absolute inset-x-4 top-4 z-20 bg-white rounded-xl p-3 border border-gray-100 shadow-sm">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-navy">
+            <p className="micro-label text-navy">
               {mapScope === 'bonamoussadi'
                 ? t('Bonamoussadi Geofence', 'Geofence Bonamoussadi')
                 : mapScope === 'cameroon'
@@ -316,14 +316,14 @@ const HomeMap: React.FC<Props> = ({
         <Layers size={18} />
       </button>
       {nearbyEnrichCount > 0 && (
-        <div className="absolute bottom-4 inset-x-4 z-20 bg-white/95 backdrop-blur rounded-xl p-3 border border-gray-100 shadow-sm flex items-center justify-between">
+        <div className="absolute bottom-4 inset-x-4 z-20 bg-white rounded-xl p-3 border border-gray-100 shadow-sm flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Navigation size={14} className="text-terra" />
             <span className="text-xs font-bold text-gray-900">
               {nearbyEnrichCount} {t('points nearby to enrich', 'points a enrichir a proximite')}
             </span>
           </div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-terra">
+          <span className="micro-label text-terra">
             {'<200m'}
           </span>
         </div>

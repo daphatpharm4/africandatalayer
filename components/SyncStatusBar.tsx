@@ -39,7 +39,7 @@ const SyncStatusBar: React.FC<Props> = ({
       ? {
           bgClass: 'bg-amber-500',
           textClass: 'text-white',
-          label: t(`OFFLINE — ${pending} pending`, `HORS LIGNE — ${pending} en attente`),
+          label: t(`Offline — ${pending} pending`, `Hors ligne — ${pending} en attente`),
           icon: <WifiOff size={12} className="text-white flex-shrink-0" />,
         }
       : isSyncing

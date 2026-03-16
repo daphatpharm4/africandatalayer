@@ -501,17 +501,17 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               <BrandLogo size={18} className="shrink-0" />
               <h2 className="text-lg font-bold text-ink leading-tight">{t('African Data Layer', 'African Data Layer')}</h2>
               {isAdmin && (
-                <span className="px-2 py-0.5 rounded-full bg-navy-light text-navy text-[10px] font-bold uppercase tracking-widest">
+                <span className="px-2 py-0.5 rounded-full bg-navy-light text-navy micro-label">
                   {t('Admin', 'Admin')}
                 </span>
               )}
               {userRole === 'client' && (
-                <span className="px-2 py-0.5 rounded-full bg-terra-wash text-terra text-[10px] font-bold uppercase tracking-widest">
+                <span className="px-2 py-0.5 rounded-full bg-terra-wash text-terra micro-label">
                   {t('Client', 'Client')}
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+            <span className="micro-label text-gray-400">
               {mapLockLabel} • {selectedCityLabel}
             </span>
           </div>
@@ -591,7 +591,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                 <span>{activeAssignment.pointsSubmitted}/{activeAssignment.pointsExpected}</span>
               </div>
               <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-navy to-forest" style={{ width: `${Math.min(100, activeAssignment.completionRate)}%` }} />
+                <div className="h-full rounded-full bg-navy" style={{ width: `${Math.min(100, activeAssignment.completionRate)}%` }} />
               </div>
             </div>
             <div className="text-xs text-gray-500">
@@ -661,7 +661,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                   className="w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4 active:scale-[0.98] transition-transform"
                 >
                   {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
-                    <div className="p-3 rounded-xl" style={{ backgroundColor: v?.bgColor ?? '#f3f4f6', color: v?.color ?? '#374151' }}>
+                    <div className="p-3 rounded-xl" style={{ backgroundColor: v?.bgColor ?? '#f9fafb', color: v?.color ?? '#1f2933' }}>
                       <VerticalIcon name={v?.icon ?? 'pill'} size={20} />
                     </div>
                   ); })()}
@@ -672,12 +672,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                     </div>
                     <p className="text-xs text-gray-500 truncate mt-1">{formatExplorerPrimaryMeta(point)}</p>
                     {point.type === Category.PHARMACY && (
-                      <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-wider">{formatPharmacyOpenStatus(point)}</p>
+                      <p className="micro-label text-gray-500 mt-1">{formatPharmacyOpenStatus(point)}</p>
                     )}
                     <div className="flex items-center space-x-2 mt-2">
-                      <span className="text-[10px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis à jour')} {point.lastUpdated}</span>
+                      <span className="text-[11px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis à jour')} {point.lastUpdated}</span>
                       {point.verified && (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-forest-wash text-forest rounded-full font-bold uppercase tracking-wider">{t('Verified', 'Vérifié')}</span>
+                        <span className="micro-label px-1.5 py-0.5 bg-forest-wash text-forest rounded-full">{t('Verified', 'Vérifié')}</span>
                       )}
                     </div>
                   </div>
@@ -735,7 +735,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         {!isAuthenticated && (
           <button
             onClick={onAuth}
-            className="absolute top-20 left-4 right-4 bg-white/95 backdrop-blur p-3 rounded-xl shadow-xl border border-gray-100 z-20 flex items-center justify-between"
+            className="absolute top-20 left-4 right-4 bg-white p-3 rounded-xl shadow-xl border border-gray-100 z-20 flex items-center justify-between"
           >
             <span className="text-sm font-bold text-gray-900">{t('Sign in to contribute', 'Connectez-vous pour contribuer')}</span>
             <span className="px-3 py-1.5 bg-navy text-white micro-label rounded-lg">{t('Sign In', 'Connexion')}</span>

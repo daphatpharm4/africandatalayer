@@ -221,7 +221,7 @@ const DetailMetadataBlock: React.FC<{
         <span className="text-gray-500">{t('Submission GPS Match', 'Correspondance GPS soumission')}</span>
         <span className={statusClass}>{statusText}</span>
       </div>
-      <div className="text-[10px] text-gray-400 uppercase font-bold tracking-widest">
+      <div className="micro-label text-gray-400">
         {t('Threshold', 'Seuil')}: {thresholdKm} km
       </div>
     </div>
@@ -1176,15 +1176,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 <div key={assignment.id} className="rounded-xl border border-gray-100 p-3 bg-white">
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-xs font-bold text-gray-900">{assignment.zoneLabel}</div>
-                    <span className="text-[10px] uppercase tracking-widest text-gray-500">{assignment.status}</span>
+                    <span className="micro-label text-gray-500">{assignment.status}</span>
                   </div>
                   <div className="text-[11px] text-gray-600">
                     {assignment.agentUserId} · {assignment.pointsSubmitted}/{assignment.pointsExpected} ({assignment.completionRate}%)
                   </div>
-                  <div className="text-[10px] text-gray-500">
+                  <div className="text-[11px] text-gray-500">
                     {t('Due', 'Échéance')}: {assignment.dueDate}
                   </div>
-                  <div className="text-[10px] text-gray-500">
+                  <div className="text-[11px] text-gray-500">
                     {assignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}
                   </div>
                 </div>
@@ -1305,7 +1305,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="text-xs font-bold text-gray-900">{getAutomationLeadName(lead, language)}</div>
-                            <div className="text-[10px] uppercase tracking-widest text-gray-400">
+                            <div className="micro-label text-gray-400">
                               {getCategoryLabel(lead.category, language)} • {lead.sourceSystem}
                             </div>
                           </div>
@@ -1430,7 +1430,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     </div>
                     <div className="flex-1 p-2 space-y-1">
                       <h4 className="text-xs font-bold text-gray-900 leading-tight truncate">{group.siteName}</h4>
-                      <p className="text-[10px] uppercase tracking-widest text-gray-400">
+                      <p className="micro-label text-gray-400">
                         {categoryLabelLocal(group.category, language)} • {riskScore} • {reviewStatus}
                       </p>
                     </div>
@@ -1463,7 +1463,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
             </div>
 
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+              <p className="micro-label text-gray-400">
                 {selectedGroup.events.length} {t('event(s)', 'événement(s)')}
               </p>
               <div className="flex flex-wrap justify-end gap-2">
@@ -1560,7 +1560,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         <span className="micro-label text-navy">
                           {ev.event.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : t('Enrich', 'Enrichissement')}
                         </span>
-                        <span className="text-[10px] text-gray-500">{formatDate(ev.event.createdAt, unavailableLabel)}</span>
+                        <span className="text-[11px] text-gray-500">{formatDate(ev.event.createdAt, unavailableLabel)}</span>
                       </div>
                       <div className="text-gray-600 mt-1">{t('By', 'Par')}: {ev.user.name}</div>
                       {device && <div className="text-gray-500">{t('Device', 'Appareil')}: {device.platform ?? 'Unknown'}</div>}
@@ -1593,7 +1593,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 <div className="grid grid-cols-2 gap-3">
                   {selectedGroup.allPhotos.length === 0 && (
                     <div className="col-span-2 rounded-2xl border border-gray-100 bg-gray-50 h-28 flex items-center justify-center">
-                      <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest text-center px-2">
+                      <div className="micro-label text-gray-400 text-center px-2">
                         {t('No photos available', 'Aucune photo disponible')}
                       </div>
                     </div>
@@ -1603,7 +1603,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
                         <img src={photo.url} alt={`${t('Photo', 'Photo')} ${idx + 1}`} className="h-full w-full object-cover" loading="lazy" />
                       </div>
-                      <div className="text-[10px] text-gray-500 text-center">
+                      <div className="text-[11px] text-gray-500 text-center">
                         {photo.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}
                       </div>
                     </div>
@@ -1628,7 +1628,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     language={language}
                   />
                 ))}
-                <div className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                <div className="micro-label text-gray-400">
                   {t('IP Match Threshold', 'Seuil correspondance IP')}: {latestFraudCheck?.ipMatchThresholdKm ?? 50} km
                 </div>
               </div>
@@ -1692,7 +1692,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         <Camera size={18} className="text-gray-300" />
                       )}
                       {group.allPhotos.length > 1 && (
-                        <div className="absolute top-1 right-1 bg-navy text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        <div className="absolute top-1 right-1 bg-navy text-white text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                           {group.allPhotos.length}
                         </div>
                       )}
@@ -1701,7 +1701,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h4 className="text-sm font-bold text-gray-900 leading-tight">{group.siteName}</h4>
-                          <p className="text-[10px] uppercase tracking-widest text-gray-400">
+                          <p className="micro-label text-gray-400">
                             {categoryLabelLocal(group.category, language)}
                             {group.events.length > 1 && ` · ${group.events.length} ${t('events', 'événements')}`}
                           </p>

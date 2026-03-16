@@ -70,8 +70,8 @@ const RewardsCatalog: React.FC<Props> = ({ onBack, language }) => {
                   </div>
                   <div className="flex flex-col">
                     <span className="text-sm font-bold text-gray-900">{item.name}</span>
-                    <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{item.category}</span>
-                    <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                    <span className="text-[11px] text-gray-400 font-medium uppercase tracking-wider">{item.category}</span>
+                    <span className={`micro-label ${
                       item.stock === t('In Stock', 'En stock') ? 'text-forest' : item.stock === t('Low Stock', 'Stock faible') ? 'text-terra' : 'text-gray-400'
                     }`}>
                       {item.stock}
@@ -125,7 +125,7 @@ const RewardsCatalog: React.FC<Props> = ({ onBack, language }) => {
                 </div>
                 <div className="bg-page border border-gray-100 rounded-2xl p-4">
                   <p className="text-xs font-bold text-gray-900">{activeReward?.name}</p>
-                  <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">{t('Cost', 'Coût')}: {activeReward?.cost}</p>
+                  <p className="text-[11px] text-gray-400 uppercase tracking-widest mt-1">{t('Cost', 'Coût')}: {activeReward?.cost}</p>
                 </div>
                 <button
                   onClick={() => setRedeemed(true)}
