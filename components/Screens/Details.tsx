@@ -98,8 +98,9 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
   // Staleness detection: per-vertical threshold
   const stalenessThreshold = vertical?.stalenessThresholdDays ?? 7;
   const staleDays = (() => {
-    if (!point.lastUpdated) return 0;
-    const updated = new Date(point.lastUpdated);
+    const raw = point.updatedAtIso ?? point.lastUpdated;
+    if (!raw) return 0;
+    const updated = new Date(raw);
     if (isNaN(updated.getTime())) return 0;
     const diff = Date.now() - updated.getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24));

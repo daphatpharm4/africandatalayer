@@ -43,6 +43,7 @@ export interface DataPoint {
   currency?: string;
   quality?: string;
   lastUpdated: string;
+  updatedAtIso?: string;
   availability: 'High' | 'Low' | 'Out';
   queueLength?: string;
   trustScore: number;

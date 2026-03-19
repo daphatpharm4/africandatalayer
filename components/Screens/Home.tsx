@@ -216,6 +216,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       quality: typeof details.quality === 'string' ? details.quality : undefined,
       currency: 'XAF',
       lastUpdated: formatTimeAgo(point.updatedAt),
+      updatedAtIso: point.updatedAt,
       availability: inferAvailability(point.category, details),
       queueLength: typeof details.queueLength === 'string' ? details.queueLength : undefined,
       trustScore: 85,
