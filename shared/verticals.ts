@@ -14,6 +14,8 @@ export interface VerticalConfig {
   enrichableFields: readonly string[];
   createRequiredFields: readonly string[];
   normalizeDetails: (d: SubmissionDetails) => SubmissionDetails;
+  /** Days after which a point is considered stale and agents are prompted to refresh */
+  stalenessThresholdDays: number;
 }
 
 // Shared normalization helpers
@@ -244,6 +246,7 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     enrichableFields: ["openingHours", "isOpenNow", "isOnDuty", "isLicensed", "hasPrescriptionService", "medicineCategories"],
     createRequiredFields: ["name", "isOpenNow"],
     normalizeDetails: normalizePharmacy,
+    stalenessThresholdDays: 5,
   },
   mobile_money: {
     id: "mobile_money",
@@ -257,6 +260,7 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     enrichableFields: ["merchantIdByProvider", "paymentMethods", "openingHours", "providers", "isActive", "hasFloat", "agentType"],
     createRequiredFields: ["providers"],
     normalizeDetails: normalizeMobileMoney,
+    stalenessThresholdDays: 3,
   },
   fuel_station: {
     id: "fuel_station",
@@ -270,6 +274,7 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     enrichableFields: ["fuelTypes", "pricesByFuel", "quality", "paymentMethods", "openingHours", "hasFuelAvailable", "queueLength", "hasConvenienceStore", "hasCarWash", "hasATM"],
     createRequiredFields: ["name", "hasFuelAvailable"],
     normalizeDetails: normalizeFuelStation,
+    stalenessThresholdDays: 3,
   },
   alcohol_outlet: {
     id: "alcohol_outlet",
@@ -283,6 +288,7 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     enrichableFields: ["brand", "openingHours", "paymentMethods", "outletType", "isFormal", "servesFood", "brandsAvailable", "priceRange"],
     createRequiredFields: ["name"],
     normalizeDetails: identityNormalize,
+    stalenessThresholdDays: 7,
   },
   billboard: {
     id: "billboard",
@@ -296,6 +302,7 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     enrichableFields: ["brand", "billboardType", "isOccupied", "advertiserBrand", "advertiserCategory", "condition", "size", "isLit"],
     createRequiredFields: ["name"],
     normalizeDetails: identityNormalize,
+    stalenessThresholdDays: 14,
   },
   transport_road: {
     id: "transport_road",
@@ -309,6 +316,7 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     enrichableFields: ["condition", "isBlocked", "blockageType", "surfaceType", "passableBy", "trafficLevel", "hasStreetLight"],
     createRequiredFields: ["roadName", "condition"],
     normalizeDetails: normalizeTransportRoad,
+    stalenessThresholdDays: 14,
   },
   census_proxy: {
     id: "census_proxy",
@@ -322,6 +330,7 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     enrichableFields: ["occupancyStatus", "storeyCount", "estimatedUnits", "hasElectricity", "constructionMaterial", "hasCommercialGround"],
     createRequiredFields: ["buildingType", "occupancyStatus"],
     normalizeDetails: normalizeCensusProxy,
+    stalenessThresholdDays: 30,
   },
 };
 

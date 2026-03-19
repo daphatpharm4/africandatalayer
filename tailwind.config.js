@@ -28,6 +28,11 @@ const config = {
         },
         gold: {
           DEFAULT: '#f4c317',
+          wash: '#fef9e7',
+        },
+        amber: {
+          DEFAULT: '#d97706',
+          wash: '#fef3c7',
         },
         streak: {
           DEFAULT: '#6b46c1',

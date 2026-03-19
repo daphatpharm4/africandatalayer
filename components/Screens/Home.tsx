@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Category } from '../../types';
 import type { DataPoint } from '../../types';
 import type { CollectionAssignment, MapScope, PointEvent, ProjectedPoint, UserRole } from '../../shared/types';

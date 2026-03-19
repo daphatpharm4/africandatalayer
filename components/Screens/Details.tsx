@@ -7,6 +7,7 @@ import {
   MapPin,
   Navigation2,
   PlusCircle,
+  RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
@@ -94,7 +95,8 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
   const visibleKnownFields = knownFields.filter((field) => field.value !== undefined && field.value !== '');
   const gaps = point.gaps ?? [];
 
-  // Staleness detection: parse lastUpdated and check if > 7 days old
+  // Staleness detection: per-vertical threshold
+  const stalenessThreshold = vertical?.stalenessThresholdDays ?? 7;
   const staleDays = (() => {
     if (!point.lastUpdated) return 0;
     const updated = new Date(point.lastUpdated);
@@ -102,7 +104,13 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
     const diff = Date.now() - updated.getTime();
     return Math.floor(diff / (1000 * 60 * 60 * 24));
   })();
-  const isStale = staleDays >= 7;
+  const isStale = staleDays >= stalenessThreshold;
+  const staleTier: 'fresh' | 'stale' | 'warning' | 'critical' = !isStale
+    ? 'fresh'
+    : staleDays >= stalenessThreshold * 4 ? 'critical'
+    : staleDays >= stalenessThreshold * 2 ? 'warning'
+    : 'stale';
+  const staleXP = staleTier === 'critical' ? 25 : staleTier === 'warning' ? 15 : 10;
 
   return (
     <div className="flex flex-col h-full bg-page overflow-y-auto no-scrollbar">
@@ -151,36 +159,59 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
               <span className="text-[11px] text-gray-500 font-medium">{t('Community confidence', 'Confiance de la communauté')}</span>
             </div>
           </div>
-          <div className="card p-4">
-            <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
-              <Clock size={10} className="mr-1" />
-              {t('Updated', 'Mis à jour')}
-            </span>
-            <div className="flex flex-col">
-              <span className="text-xl font-bold text-gray-900 tracking-tight">{point.lastUpdated}</span>
-              <span className="text-[11px] text-gray-500 font-medium">{t('Live sync state', 'État sync live')}</span>
+
+          {isStale ? (
+            <button
+              onClick={isAuthenticated ? onEnrich : onAuth}
+              className={`card p-4 text-left border-2 active:scale-[0.97] transition-transform stale-enter ${
+                staleTier === 'critical'
+                  ? 'border-danger/50 bg-red-50'
+                  : staleTier === 'warning'
+                    ? 'border-amber/50 bg-amber-wash'
+                    : 'border-gold/60 bg-gold-wash'
+              }`}
+            >
+              <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+                <RefreshCw size={10} className="mr-1" />
+                {t('Stale', 'Ancien')}
+              </span>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold text-navy tracking-tight">
+                  {t(`${staleDays}d old`, `${staleDays}j`)}
+                </span>
+                <span className="text-[11px] font-bold text-terra">
+                  {t('Tap to refresh', 'Actualise')} +{staleXP} XP
+                </span>
+              </div>
+            </button>
+          ) : (
+            <div className="card p-4">
+              <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+                <Clock size={10} className="mr-1" />
+                {t('Updated', 'Mis à jour')}
+              </span>
+              <div className="flex flex-col">
+                <span className="text-xl font-bold text-gray-900 tracking-tight">{point.lastUpdated}</span>
+                <span className="text-[11px] text-gray-500 font-medium">{t('Live sync state', 'État sync live')}</span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {isStale && (
-          <div className="bg-gold/10 p-4 rounded-2xl border border-gold/30 flex items-start space-x-3">
-            <AlertTriangle size={18} className="text-gold mt-0.5 shrink-0" />
-            <div>
-              <p className="text-sm font-bold text-gray-900">
-                {t(
-                  `Data is ${staleDays} days old`,
-                  `Données datant de ${staleDays} jours`,
-                )}
-              </p>
-              <p className="text-xs text-gray-600 mt-0.5">
-                {t(
-                  'Update this point to earn bonus XP and keep the data fresh.',
-                  'Mettez ce point à jour pour gagner des XP bonus et garder les données à jour.',
-                )}
-              </p>
-            </div>
-          </div>
+        {staleTier === 'critical' && (
+          <button
+            onClick={isAuthenticated ? onEnrich : onAuth}
+            className="w-full min-h-[48px] px-4 py-3 rounded-xl bg-red-50 border-2 border-danger/50 flex items-center space-x-3 text-left active:scale-[0.98] transition-transform stale-enter"
+          >
+            <AlertTriangle size={18} className="text-danger shrink-0" />
+            <span className="flex-1 text-sm font-bold text-danger">
+              {t(
+                'Critical: this data may be inaccurate',
+                'Critique : ces données sont peut-être inexactes',
+              )}
+            </span>
+            <span className="text-xs font-bold text-danger/70">+{staleXP} XP</span>
+          </button>
         )}
 
         <div className="card p-4 space-y-2">
