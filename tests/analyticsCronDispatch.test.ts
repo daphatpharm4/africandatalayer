@@ -28,9 +28,20 @@ test("getCronDispatchSchedule enables monthly rollup on day 1 at daily cron time
   });
 });
 
-test("getCronDispatchSchedule enables daily road snapshot only at 06:00 UTC", () => {
-  const schedule = getCronDispatchSchedule(utc("2026-03-17T06:00:00.000Z"));
-  assert.deepEqual(schedule, {
+test("getCronDispatchSchedule enables daily jobs anywhere in the 06:XX hour", () => {
+  // Exact minute 0
+  const atZero = getCronDispatchSchedule(utc("2026-03-17T06:00:00.000Z"));
+  assert.deepEqual(atZero, {
+    weeklySnapshot: false,
+    monthlyRollup: false,
+    dailyRoadSnapshot: true,
+    dailyTrustDecay: true,
+    dailyGpsAnomaly: true,
+  });
+
+  // Vercel cron jitter: a few minutes late
+  const atThree = getCronDispatchSchedule(utc("2026-03-17T06:03:00.000Z"));
+  assert.deepEqual(atThree, {
     weeklySnapshot: false,
     monthlyRollup: false,
     dailyRoadSnapshot: true,
@@ -59,8 +70,8 @@ test("getCronDispatchSchedule handles non-matching hours", () => {
   });
 });
 
-test("getCronDispatchSchedule does not trigger outside minute zero", () => {
-  const schedule = getCronDispatchSchedule(utc("2026-03-17T06:30:00.000Z"));
+test("getCronDispatchSchedule does not trigger outside the 06:XX hour", () => {
+  const schedule = getCronDispatchSchedule(utc("2026-03-17T07:00:00.000Z"));
   assert.deepEqual(schedule, {
     weeklySnapshot: false,
     monthlyRollup: false,

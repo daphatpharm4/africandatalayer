@@ -62,10 +62,10 @@ function asErrorMessage(error: unknown): string {
 
 export function getCronDispatchSchedule(now: Date): CronDispatchSchedule {
   const hour = now.getUTCHours();
-  const minute = now.getUTCMinutes();
   const dayOfWeek = now.getUTCDay();
   const dayOfMonth = now.getUTCDate();
-  const isDailyCronWindow = hour === 6 && minute === 0;
+  // Vercel cron has up to ~5 min jitter; accept the entire 6:XX hour
+  const isDailyCronWindow = hour === 6;
 
   return {
     weeklySnapshot: isDailyCronWindow && dayOfWeek === 1,

@@ -1,6 +1,7 @@
 import React from 'react';
 import type { DataPoint } from '../../types';
 import {
+  AlertTriangle,
   ArrowLeft,
   Clock,
   MapPin,
@@ -10,7 +11,7 @@ import {
 } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
-import { getEnrichFieldLabel } from '../../shared/enrichFieldCatalog';
+import { ENRICH_FIELD_CATALOG, getEnrichFieldLabel } from '../../shared/enrichFieldCatalog';
 
 interface Props {
   point: DataPoint | null;
@@ -32,21 +33,76 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
 
   const translatedGap = (gap: string) => getEnrichFieldLabel(gap, language);
 
-  const knownFields: Array<{ label: string; value?: string | number | boolean }> = [
+  // Resolve a field value from typed DataPoint properties or the generic details bag
+  const resolveFieldValue = (fieldKey: string): unknown => {
+    const typed = point[fieldKey as keyof DataPoint];
+    if (typed !== undefined && typed !== null) return typed;
+    return (point.details as Record<string, unknown> | undefined)?.[fieldKey];
+  };
+
+  // Format a raw value for display based on field kind
+  const formatFieldValue = (raw: unknown, fieldKey: string): string | undefined => {
+    if (raw === undefined || raw === null || raw === '') return undefined;
+    const spec = ENRICH_FIELD_CATALOG[fieldKey];
+
+    if (typeof raw === 'boolean') return raw ? t('Yes', 'Oui') : t('No', 'Non');
+    if (Array.isArray(raw)) {
+      const joined = raw.filter(Boolean).join(', ');
+      return joined || undefined;
+    }
+    if (typeof raw === 'object' && !Array.isArray(raw)) {
+      // map_value fields like pricesByFuel, merchantIdByProvider
+      const entries = Object.entries(raw as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined && v !== null)
+        .map(([k, v]) => `${k}: ${v}`);
+      return entries.length ? entries.join(', ') : undefined;
+    }
+    if (typeof raw === 'number' && spec) {
+      // Add unit hints for specific fields
+      if (fieldKey === 'price' || fieldKey === 'fuelPrice') return `${raw} XAF/L`;
+      return String(raw);
+    }
+
+    // single_select: try to find the option label
+    if (spec?.kind === 'single_select' && spec.options && typeof raw === 'string') {
+      const opt = spec.options.find((o) => o.value === raw);
+      if (opt) return language === 'fr' ? opt.labelFr : opt.labelEn;
+    }
+
+    return String(raw);
+  };
+
+  // Build dynamic known fields from the vertical's enrichable fields
+  const knownFields: Array<{ label: string; value?: string }> = [
     { label: t('Category', 'Catégorie'), value: categoryLabelText },
     { label: t('Address', 'Adresse'), value: point.location },
-    { label: t('Opening Hours', 'Heures d\'ouverture'), value: point.openingHours || point.hours },
-    { label: t('Fuel Price', 'Prix carburant'), value: typeof point.price === 'number' ? `${point.price} XAF/L` : undefined },
-    { label: t('Fuel Type', 'Type de carburant'), value: point.fuelType },
-    { label: t('Providers', 'Opérateurs'), value: point.providers?.join(', ') },
-    { label: t('Payments', 'Paiements'), value: point.paymentMethods?.join(', ') },
-    { label: t('Fuel Available', 'Carburant disponible'), value: typeof point.hasFuelAvailable === 'boolean' ? (point.hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
-    { label: t('Open Now', 'Ouvert maintenant'), value: typeof point.isOpenNow === 'boolean' ? (point.isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')) : undefined },
-    { label: t('On-call Pharmacy', 'Pharmacie de garde'), value: typeof point.isOnDuty === 'boolean' ? (point.isOnDuty ? t('Yes', 'Oui') : t('No', 'Non')) : undefined }
   ];
+
+  if (vertical) {
+    for (const fieldKey of vertical.enrichableFields) {
+      const raw = resolveFieldValue(fieldKey);
+      const formatted = formatFieldValue(raw, fieldKey);
+      if (formatted) {
+        knownFields.push({
+          label: getEnrichFieldLabel(fieldKey, language),
+          value: formatted,
+        });
+      }
+    }
+  }
 
   const visibleKnownFields = knownFields.filter((field) => field.value !== undefined && field.value !== '');
   const gaps = point.gaps ?? [];
+
+  // Staleness detection: parse lastUpdated and check if > 7 days old
+  const staleDays = (() => {
+    if (!point.lastUpdated) return 0;
+    const updated = new Date(point.lastUpdated);
+    if (isNaN(updated.getTime())) return 0;
+    const diff = Date.now() - updated.getTime();
+    return Math.floor(diff / (1000 * 60 * 60 * 24));
+  })();
+  const isStale = staleDays >= 7;
 
   return (
     <div className="flex flex-col h-full bg-page overflow-y-auto no-scrollbar">
@@ -106,6 +162,26 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
             </div>
           </div>
         </div>
+
+        {isStale && (
+          <div className="bg-gold/10 p-4 rounded-2xl border border-gold/30 flex items-start space-x-3">
+            <AlertTriangle size={18} className="text-gold mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-bold text-gray-900">
+                {t(
+                  `Data is ${staleDays} days old`,
+                  `Données datant de ${staleDays} jours`,
+                )}
+              </p>
+              <p className="text-xs text-gray-600 mt-0.5">
+                {t(
+                  'Update this point to earn bonus XP and keep the data fresh.',
+                  'Mettez ce point à jour pour gagner des XP bonus et garder les données à jour.',
+                )}
+              </p>
+            </div>
+          </div>
+        )}
 
         <div className="card p-4 space-y-2">
           <h4 className="text-sm font-bold text-gray-900">{t('Known Fields', 'Champs connus')}</h4>
