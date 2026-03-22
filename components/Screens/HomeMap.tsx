@@ -223,8 +223,9 @@ const HomeMap: React.FC<Props> = ({
         ))}
         {showHeatmap && heatPoints.length > 0 && <HeatmapLayer points={heatPoints} />}
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          subdomains="abcd"
         />
         {mapPointGroups.map((group) => {
           const singlePoint = group.points.length === 1 ? group.points[0] : null;
