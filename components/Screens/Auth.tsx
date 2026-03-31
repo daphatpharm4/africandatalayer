@@ -30,8 +30,14 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
           return t('Invalid phone/email or password.', 'Téléphone/email ou mot de passe invalide.');
         case 'registration_conflict':
           return t('An account already exists for this phone/email.', 'Un compte existe déjà pour ce téléphone/email.');
-        case 'validation_error':
+        case 'validation_error': {
+          const msg = isAuthClientError(error) ? error.message : '';
+          if (/uppercase/i.test(msg)) return t('Password must include an uppercase letter.', 'Le mot de passe doit contenir une majuscule.');
+          if (/lowercase/i.test(msg)) return t('Password must include a lowercase letter.', 'Le mot de passe doit contenir une minuscule.');
+          if (/number/i.test(msg)) return t('Password must include a number.', 'Le mot de passe doit contenir un chiffre.');
+          if (/10 char/i.test(msg) || /at least 10/i.test(msg)) return t('Password must be at least 10 characters.', 'Le mot de passe doit contenir au moins 10 caractères.');
           return t('Please check your details and try again.', 'Vérifiez vos informations et réessayez.');
+        }
         case 'storage_unavailable':
           return t('Registration storage is temporarily unavailable. Please retry shortly.', 'Le stockage des inscriptions est temporairement indisponible. Réessayez bientôt.');
         case 'configuration_error':
@@ -143,7 +149,7 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
               <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-navy transition-colors" />
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder={t('Min. 8 characters', 'Min. 8 caractères')}
+                placeholder={mode === 'signup' ? t('Min. 10 chars, A–Z, a–z, 0–9', 'Min. 10 car., A–Z, a–z, 0–9') : t('Your password', 'Votre mot de passe')}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="w-full h-14 bg-white border border-gray-100 rounded-xl pl-12 pr-12 text-sm focus:border-navy focus:outline-none transition-all shadow-sm"
@@ -156,6 +162,11 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
                 <Eye size={18} />
               </button>
             </div>
+            {mode === 'signup' && (
+              <p className="text-[10px] text-gray-400 px-1 leading-relaxed">
+                {t('10 characters minimum · uppercase · lowercase · number', '10 caractères minimum · majuscule · minuscule · chiffre')}
+              </p>
+            )}
           </div>
 
           <button
@@ -176,6 +187,14 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
                   className="text-[11px] font-bold text-navy uppercase tracking-widest hover:underline"
                 >
                   {t("No account yet? Register here →", "Pas encore de compte ? Inscrivez-vous →")}
+                </button>
+              )}
+              {mode === 'signup' && errorCode === 'registration_conflict' && (
+                <button
+                  onClick={() => { setMode('signin'); setErrorMessage(''); setErrorCode(''); }}
+                  className="text-[11px] font-bold text-navy uppercase tracking-widest hover:underline"
+                >
+                  {t("Already registered? Sign in →", "Déjà inscrit ? Connectez-vous →")}
                 </button>
               )}
             </div>

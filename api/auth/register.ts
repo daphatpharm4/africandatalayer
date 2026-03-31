@@ -14,14 +14,35 @@ export async function POST(request: Request): Promise<Response> {
     return errorResponse("Invalid JSON body", 400);
   }
 
+  // Extract and normalize identifier first, before password validation,
+  // so we can return a 409 conflict if the account already exists rather
+  // than a misleading validation error.
+  const rawBody = parsedBody as Record<string, unknown> | null;
+  const rawIdentifier =
+    typeof rawBody?.identifier === "string" ? rawBody.identifier :
+    typeof rawBody?.email === "string" ? rawBody.email : "";
+  const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
+
+  if (normalizedIdentifier) {
+    try {
+      const existing = await getUserProfile(normalizedIdentifier.value);
+      if (existing) {
+        return errorResponse("An account already exists for this phone/email", 409);
+      }
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
+  }
+
   const validation = registerBodySchema.safeParse(parsedBody);
   if (!validation.success) {
     return errorResponse(validation.error.issues[0]?.message ?? "Invalid registration payload", 400);
   }
 
   const body = validation.data;
-  const rawIdentifier = body?.identifier ?? body?.email;
-  const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
   const password = body?.password;
   const name = body?.name?.trim() ?? "";
 
@@ -31,11 +52,6 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const identifier = normalizedIdentifier.value;
-    const existing = await getUserProfile(identifier);
-    if (existing) {
-      return jsonResponse({ ok: true }, { status: 201 });
-    }
-
     const profile: UserProfile = {
       id: identifier,
       name: name || inferDefaultDisplayName(identifier),
