@@ -178,6 +178,14 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
                   {t("No account yet? Register here →", "Pas encore de compte ? Inscrivez-vous →")}
                 </button>
               )}
+              {mode === 'signup' && errorCode === 'registration_conflict' && (
+                <button
+                  onClick={() => { setMode('signin'); setErrorMessage(''); setErrorCode(''); }}
+                  className="text-[11px] font-bold text-navy uppercase tracking-widest hover:underline"
+                >
+                  {t("Already registered? Sign in →", "Déjà inscrit ? Connectez-vous →")}
+                </button>
+              )}
             </div>
           )}
         </div>
