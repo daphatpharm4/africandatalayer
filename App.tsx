@@ -281,11 +281,13 @@ const App: React.FC = () => {
             language={language}
           />
         );
-      case Screen.AUTH:
+      case Screen.AUTH: {
+        const hasAuthenticated = (() => { try { return localStorage.getItem('adl_has_authenticated') === 'true'; } catch { return false; } })();
         return (
           <Auth
             language={language}
             onBack={goBack}
+            initialMode={hasAuthenticated ? 'signin' : 'signup'}
             onComplete={async () => {
               await refreshSession();
               const session = await getSession();
@@ -294,6 +296,7 @@ const App: React.FC = () => {
             }}
           />
         );
+      }
       case Screen.CONTRIBUTE:
         return (
           <ContributionFlow

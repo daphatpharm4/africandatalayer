@@ -8,14 +8,16 @@ interface Props {
   onBack: () => void;
   onComplete: () => void;
   language: 'en' | 'fr';
+  initialMode?: 'signin' | 'signup';
 }
 
-const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'signin' }) => {
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const isAuthClientError = (value: unknown): value is AuthClientError =>
@@ -76,12 +78,15 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
       if (!session?.user) {
         throw new AuthClientError('unknown_error', t('Unable to start a session.', 'Impossible de démarrer la session.'), { retryable: true });
       }
+      try { localStorage.setItem('adl_has_authenticated', 'true'); } catch { /* private browsing */ }
       onComplete();
     } catch (error) {
       if (mode === 'signup' && accountCreated) {
         setMode('signin');
+        setErrorCode('');
         setErrorMessage(t('Account created. Automatic sign in took too long. Please sign in in a few seconds.', 'Compte créé. La connexion automatique a pris trop de temps. Connectez-vous dans quelques secondes.'));
       } else {
+        setErrorCode(isAuthClientError(error) ? error.code : '');
         setErrorMessage(mapAuthErrorMessage(error));
       }
     } finally {
@@ -163,8 +168,16 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
           </button>
 
           {errorMessage && (
-            <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-[11px] font-semibold uppercase tracking-widest text-red-600 text-center">
-              {errorMessage}
+            <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-center space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-red-600">{errorMessage}</p>
+              {mode === 'signin' && ['invalid_credentials', 'auth_unavailable', 'unknown_error', 'request_error'].includes(errorCode) && (
+                <button
+                  onClick={() => { setMode('signup'); setErrorMessage(''); setErrorCode(''); }}
+                  className="text-[11px] font-bold text-navy uppercase tracking-widest hover:underline"
+                >
+                  {t("No account yet? Register here →", "Pas encore de compte ? Inscrivez-vous →")}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -181,6 +194,7 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language }) => {
               onClick={() => {
                 setMode(mode === 'signin' ? 'signup' : 'signin');
                 setErrorMessage('');
+                setErrorCode('');
               }}
               className="text-navy font-bold hover:underline"
             >
