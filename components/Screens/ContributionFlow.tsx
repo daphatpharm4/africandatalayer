@@ -814,7 +814,7 @@ const ContributionFlow: React.FC<Props> = ({
         name: siteName.trim(),
         hasFuelAvailable,
         fuelTypes: fuelTypes.length ? fuelTypes : undefined,
-        pricesByFuel: Number.isFinite(parsedPrice) ? { [priceFuelType]: parsedPrice } : undefined,
+        pricesByFuel: Number.isFinite(parsedPrice) && parsedPrice > 0 ? { [priceFuelType]: parsedPrice } : undefined,
         quality,
         openingHours: openingHours.trim() || undefined,
         paymentMethods: paymentMethods.length ? paymentMethods : undefined,
@@ -1501,6 +1501,27 @@ const ContributionFlow: React.FC<Props> = ({
             >
               {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
+          </div>
+          <div className="space-y-1">
+            <span className="micro-label text-gray-400">{t('Fuel price', 'Prix carburant')}</span>
+            <div className="grid grid-cols-2 gap-3">
+              <select
+                value={priceFuelType}
+                onChange={(event) => setPriceFuelType(event.target.value)}
+                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+              >
+                {fuelTypeOptions.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={priceValue}
+                onChange={(event) => setPriceValue(event.target.value)}
+                placeholder={t('Price (XAF)', 'Prix (XAF)')}
+                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+              />
+            </div>
           </div>
         </div>
       );
