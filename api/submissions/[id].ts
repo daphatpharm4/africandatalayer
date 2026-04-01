@@ -17,7 +17,6 @@ import { reviewBodySchema } from "../../lib/server/validation.js";
 import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
 import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
 import { reconcileUserProfileXp } from "../../lib/server/xp.js";
-import { BASE_EVENT_XP } from "../../shared/xp.js";
 
 type ReviewDecision = "approved" | "rejected" | "flagged";
 
@@ -48,7 +47,11 @@ async function applyReviewDecision(params: {
   }
 
   const details = row.details && typeof row.details === "object" ? ({ ...row.details } as Record<string, unknown>) : {};
-  const nextXpAwarded = params.decision === "approved" ? BASE_EVENT_XP : 0;
+  const plannedXpAwarded =
+    typeof details.plannedXpAwarded === "number" && Number.isFinite(details.plannedXpAwarded)
+      ? Math.max(0, Math.round(details.plannedXpAwarded))
+      : 0;
+  const nextXpAwarded = params.decision === "approved" ? plannedXpAwarded : 0;
   const reviewStatus = params.decision === "approved" ? "auto_approved" : "pending_review";
 
   details.reviewStatus = reviewStatus;

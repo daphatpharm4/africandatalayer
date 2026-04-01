@@ -219,7 +219,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       updatedAtIso: point.updatedAt,
       availability: inferAvailability(point.category, details),
       queueLength: typeof details.queueLength === 'string' ? details.queueLength : undefined,
-      trustScore: 85,
+      trustScore: typeof details.confidenceScore === 'number' ? details.confidenceScore : 85,
       contributorTrust: 'Silver',
       provider,
       providers,

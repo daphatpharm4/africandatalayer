@@ -7,7 +7,12 @@ import {
   Signal
 } from 'lucide-react';
 import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
-import { BASE_EVENT_XP } from '../../shared/xp';
+import {
+  calculateSubmissionRewardBreakdown,
+  computeCompletionSummary,
+  hasMeaningfulValue,
+  prioritizeMissingFields,
+} from '../../shared/submissionRewards';
 import VerticalIcon from '../shared/VerticalIcon';
 import {
   enqueueSubmission,
@@ -356,6 +361,79 @@ const pointTypeToVertical = (type: Category): Vertical => {
   return 'pharmacy';
 };
 
+const verticalToPointType = (vertical: Vertical): Category => {
+  if (vertical === 'pharmacy') return Category.PHARMACY;
+  if (vertical === 'fuel_station') return Category.FUEL;
+  if (vertical === 'mobile_money') return Category.MOBILE_MONEY;
+  if (vertical === 'alcohol_outlet') return Category.ALCOHOL_OUTLET;
+  if (vertical === 'billboard') return Category.BILLBOARD;
+  if (vertical === 'transport_road') return Category.TRANSPORT_ROAD;
+  if (vertical === 'census_proxy') return Category.CENSUS_PROXY;
+  return Category.PHARMACY;
+};
+
+function buildClientPointId(category: SubmissionCategory): string {
+  return `${category}-${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+function estimatePointTrustScore(
+  category: SubmissionCategory,
+  details: Record<string, unknown>,
+  options: { hasPhoto: boolean; hasLocation: boolean; hasExif?: boolean; eventsCount?: number },
+): number {
+  const completion = computeCompletionSummary(category, details);
+  const recencyScore = 25;
+  const sourceCountScore = (options.eventsCount ?? 1) >= 2 ? 10 : 5;
+  const photoEvidenceScore = options.hasPhoto ? (options.hasExif ? 20 : 15) : 0;
+  const gpsScore = options.hasLocation ? 10 : 0;
+  const fieldScore = Math.round((completion.filled / Math.max(1, completion.total)) * 10);
+  const total = recencyScore + sourceCountScore + photoEvidenceScore + gpsScore + fieldScore;
+  return Math.min(100, Math.max(0, total));
+}
+
+function buildCompletionPreviewDetails(category: SubmissionCategory, details: Record<string, unknown>): Record<string, unknown> {
+  const projected = { ...details };
+  const missing = computeCompletionSummary(category, details).missing;
+  for (const field of missing) {
+    if (hasMeaningfulValue(projected[field])) continue;
+    const config = ENRICH_FIELD_CATALOG[field];
+    if (!config) {
+      projected[field] = 'set';
+      continue;
+    }
+    if (config.kind === 'boolean') {
+      projected[field] = true;
+      continue;
+    }
+    if (config.kind === 'number') {
+      projected[field] = 1;
+      continue;
+    }
+    if (config.kind === 'multi_select') {
+      projected[field] = config.options?.[0]?.value ? [config.options[0].value] : ['set'];
+      continue;
+    }
+    if (config.kind === 'single_select') {
+      projected[field] = config.options?.[0]?.value ?? 'set';
+      continue;
+    }
+    if (config.kind === 'map_value') {
+      projected[field] = { value: 'set' };
+      continue;
+    }
+    projected[field] = 'set';
+  }
+  return projected;
+}
+
+function buildPointName(category: SubmissionCategory, details: Record<string, unknown>, language: 'en' | 'fr'): string {
+  const rawName =
+    (typeof details.name === 'string' && details.name.trim()) ||
+    (typeof details.siteName === 'string' && details.siteName.trim()) ||
+    (typeof details.roadName === 'string' && details.roadName.trim());
+  return rawName || getCategoryLabel(category, language);
+}
+
 const ContributionFlow: React.FC<Props> = ({
   onBack,
   onComplete,
@@ -386,12 +464,23 @@ const ContributionFlow: React.FC<Props> = ({
   const [syncMessage, setSyncMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [postCreateSeedPoint, setPostCreateSeedPoint] = useState<DataPoint | null>(null);
   const [dedupCheck, setDedupCheck] = useState<DedupCheckResult | null>(null);
   const [pendingPayload, setPendingPayload] = useState<SubmissionInput | null>(null);
   const [selectedDedupPointId, setSelectedDedupPointId] = useState('');
   const [isResolvingDedup, setIsResolvingDedup] = useState(false);
   const [batchCapturedCount, setBatchCapturedCount] = useState(0);
-  const [xpBreakdown, setXpBreakdown] = useState({ baseXp: 5, qualityBonus: 0, streakBonus: 0, totalXp: 5 });
+  const [xpBreakdown, setXpBreakdown] = useState({
+    baseXp: 5,
+    fieldBonus: 0,
+    comboBonus: 0,
+    verificationBonus: 0,
+    thresholdBonus: 0,
+    totalXp: 5,
+    filledMissingCount: 0,
+    thresholdsCrossed: [] as number[],
+    becameComplete: false,
+  });
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [consentStatus, setConsentStatus] = useState<ConsentStatus>('not_required');
   const [consentAcknowledged, setConsentAcknowledged] = useState(false);
@@ -431,26 +520,36 @@ const ContributionFlow: React.FC<Props> = ({
   const [enrichTouched, setEnrichTouched] = useState<Record<string, boolean>>({});
   const [enrichMultiRaw, setEnrichMultiRaw] = useState<Record<string, string>>({});
   const [isLowEndDevice] = useState<boolean>(() => detectLowEndDevice());
+  const effectiveSeedPoint = postCreateSeedPoint ?? seedPoint;
+  const isQuickEnrichSession = Boolean(postCreateSeedPoint);
+  const activeMode: ContributionMode = isQuickEnrichSession ? 'ENRICH' : mode;
 
   const draftGapKeys = useMemo(() => {
     const details = (queuedDraft?.payload.details ?? {}) as Record<string, unknown>;
     return Object.keys(details).filter((field) => field !== 'clientDevice');
   }, [queuedDraft?.id, queuedDraft?.payload.details]);
   const seedPointDetails = useMemo(
-    () => (seedPoint?.details && typeof seedPoint.details === 'object' ? seedPoint.details : {}) as Record<string, unknown>,
-    [seedPoint?.id, seedPoint?.details],
+    () => (effectiveSeedPoint?.details && typeof effectiveSeedPoint.details === 'object' ? effectiveSeedPoint.details : {}) as Record<string, unknown>,
+    [effectiveSeedPoint?.id, effectiveSeedPoint?.details],
   );
-  const missingFields = useMemo(() => (seedPoint?.gaps && seedPoint.gaps.length > 0 ? seedPoint.gaps : draftGapKeys), [draftGapKeys, seedPoint]);
+  const missingFields = useMemo(
+    () => (effectiveSeedPoint?.gaps && effectiveSeedPoint.gaps.length > 0 ? effectiveSeedPoint.gaps : draftGapKeys),
+    [draftGapKeys, effectiveSeedPoint],
+  );
   const enrichableFields = useMemo(() => [...VERTICALS[vertical].enrichableFields], [vertical]);
   const editableEnrichFields = useMemo(() => {
-    if (seedPoint) return enrichableFields;
+    if (isQuickEnrichSession) {
+      const prioritized = prioritizeMissingFields(vertical, missingFields, 3);
+      return prioritized.length > 0 ? prioritized : enrichableFields.slice(0, 3);
+    }
+    if (effectiveSeedPoint) return enrichableFields;
     if (draftGapKeys.length === 0) return enrichableFields;
     const allowedFields = new Set(enrichableFields);
     const draftFields = draftGapKeys.filter((field) => allowedFields.has(field));
     return draftFields.length > 0 ? draftFields : enrichableFields;
-  }, [draftGapKeys, enrichableFields, seedPoint]);
+  }, [draftGapKeys, effectiveSeedPoint, enrichableFields, isQuickEnrichSession, missingFields, vertical]);
   const missingFieldSet = useMemo(() => new Set(missingFields), [missingFields]);
-  const isEnrichMode = mode === 'ENRICH' && (Boolean(seedPoint) || Boolean(queuedDraft?.payload.pointId));
+  const isEnrichMode = activeMode === 'ENRICH' && (Boolean(effectiveSeedPoint) || Boolean(queuedDraft?.payload.pointId));
 
   const markEnrichTouched = (field: string) => {
     setEnrichTouched((prev) => ({ ...prev, [field]: true }));
@@ -469,7 +568,7 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const renderEnrichFieldHint = (field: string) => {
-    if (!seedPoint) return null;
+    if (!effectiveSeedPoint) return null;
     if (missingFieldSet.has(field)) {
       return <p className="text-[11px] font-medium text-terra-dark">{t('Currently missing', 'Actuellement manquant')}</p>;
     }
@@ -485,10 +584,10 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   useEffect(() => {
-    if (seedPoint) {
-      setVertical(pointTypeToVertical(seedPoint.type));
+    if (effectiveSeedPoint) {
+      setVertical(pointTypeToVertical(effectiveSeedPoint.type));
     }
-  }, [seedPoint]);
+  }, [effectiveSeedPoint]);
 
   useEffect(() => {
     if (queuedDraft) return;
@@ -502,23 +601,31 @@ const ContributionFlow: React.FC<Props> = ({
     setEnrichTouched({});
     setEnrichMultiRaw({});
     const merchantEntry = firstStringRecordEntry(seedPointDetails.merchantIdByProvider);
-    setMerchantId(merchantEntry?.[1] ?? seedPoint?.merchantId ?? '');
-    setMerchantProvider(merchantEntry?.[0] ?? seedPoint?.providers?.[0] ?? providerOptions[0]);
+    setMerchantId(merchantEntry?.[1] ?? effectiveSeedPoint?.merchantId ?? '');
+    setMerchantProvider(merchantEntry?.[0] ?? effectiveSeedPoint?.providers?.[0] ?? providerOptions[0]);
     const seedPrices: Record<string, string> = {};
     if (seedPointDetails.pricesByFuel && typeof seedPointDetails.pricesByFuel === 'object') {
       for (const [fuel, val] of Object.entries(seedPointDetails.pricesByFuel as Record<string, unknown>)) {
         if (typeof val === 'number' && Number.isFinite(val)) seedPrices[fuel] = String(val);
       }
-    } else if (seedPoint?.price && seedPoint?.fuelType) {
-      seedPrices[seedPoint.fuelType] = String(seedPoint.price);
+    } else if (effectiveSeedPoint?.price && effectiveSeedPoint?.fuelType) {
+      seedPrices[effectiveSeedPoint.fuelType] = String(effectiveSeedPoint.price);
     }
     setFuelPrices(seedPrices);
-  }, [isEnrichMode, seedPoint?.id, seedPoint?.merchantId, seedPoint?.price, seedPoint?.providers, seedPoint?.fuelType, seedPointDetails]);
+  }, [
+    effectiveSeedPoint?.fuelType,
+    effectiveSeedPoint?.id,
+    effectiveSeedPoint?.merchantId,
+    effectiveSeedPoint?.price,
+    effectiveSeedPoint?.providers,
+    isEnrichMode,
+    seedPointDetails,
+  ]);
 
   useEffect(() => {
     if (!isEnrichMode) return;
     clearDedupPrompt();
-  }, [isEnrichMode, seedPoint?.id]);
+  }, [effectiveSeedPoint?.id, isEnrichMode]);
 
   // 1A: GPS with accuracy tracking via watchPosition
   useEffect(() => {
@@ -537,19 +644,19 @@ const ContributionFlow: React.FC<Props> = ({
 
   // 1C: Smart defaults - read last vertical from localStorage
   useEffect(() => {
-    if (seedPoint || queuedDraft || isEnrichMode) return;
+    if (effectiveSeedPoint || queuedDraft || isEnrichMode) return;
     const lastVertical = localStorage.getItem('adl_last_vertical');
     if (lastVertical && lastVertical in VERTICALS) {
       setVertical(lastVertical as Vertical);
     }
-  }, []);
+  }, [effectiveSeedPoint, isEnrichMode, queuedDraft]);
 
   // 1C: Default isOpenNow based on time of day
   useEffect(() => {
-    if (seedPoint || queuedDraft) return;
+    if (effectiveSeedPoint || queuedDraft) return;
     const hour = new Date().getHours();
     setIsOpenNow(hour >= 8 && hour < 18);
-  }, []);
+  }, [effectiveSeedPoint, queuedDraft]);
 
   useEffect(() => {
     return () => {
@@ -1004,20 +1111,85 @@ const ContributionFlow: React.FC<Props> = ({
     return true;
   };
 
-  const calculateXp = (payload: SubmissionInput) => {
-    const baseXp = 5;
-    const qualityBonus = payload.location ? 2 : 0;
-    const detailsCount = Object.keys((payload.details ?? {}) as Record<string, unknown>).filter((field) => field !== 'clientDevice').length;
-    const streakBonus = isBatchMode || detailsCount >= 3 ? 1 : 0;
+  const buildPreviewPointFromPayload = (payload: SubmissionInput): DataPoint | null => {
+    const pointId = typeof payload.pointId === 'string' && payload.pointId.trim() ? payload.pointId.trim() : null;
+    const resolvedLocation = payload.location ?? location ?? parseManualLocation();
+    if (!pointId || !resolvedLocation) return null;
+
+    const incomingDetails = ((payload.details ?? {}) as Record<string, unknown>);
+    const mergedDetails = isEnrichMode
+      ? { ...seedPointDetails, ...incomingDetails }
+      : { ...incomingDetails };
+    const completion = computeCompletionSummary(payload.category, mergedDetails);
+    const hasPhotoEvidence = Boolean(payload.imageBase64 || draftImageBase64 || photoPreview || effectiveSeedPoint?.photoUrl);
+    const hasExifEvidence = Boolean(
+      payload.clientExif?.capturedAt
+      || payload.clientExif?.latitude
+      || payload.clientExif?.longitude
+      || draftClientExif?.capturedAt
+      || draftClientExif?.latitude
+      || draftClientExif?.longitude,
+    );
+    const trustScore = estimatePointTrustScore(payload.category, mergedDetails, {
+      hasPhoto: hasPhotoEvidence,
+      hasLocation: Boolean(resolvedLocation),
+      hasExif: hasExifEvidence,
+      eventsCount: isEnrichMode ? 2 : 1,
+    });
+
+    const availability: DataPoint['availability'] =
+      payload.category === 'pharmacy'
+        ? (mergedDetails.isOpenNow === false ? 'Out' : 'High')
+        : payload.category === 'fuel_station'
+          ? (mergedDetails.hasFuelAvailable === false ? 'Out' : 'High')
+          : mergedDetails.isActive === false
+            ? 'Out'
+            : 'High';
+
     return {
-      baseXp,
-      qualityBonus,
-      streakBonus,
-      totalXp: baseXp + qualityBonus + streakBonus,
+      id: pointId,
+      name: buildPointName(payload.category, mergedDetails, language),
+      type: verticalToPointType(payload.category),
+      location: `GPS: ${resolvedLocation.latitude.toFixed(4)}°, ${resolvedLocation.longitude.toFixed(4)}°`,
+      coordinates: resolvedLocation,
+      availability,
+      lastUpdated: t('Just now', 'À l’instant'),
+      updatedAtIso: new Date().toISOString(),
+      trustScore,
+      photoUrl: typeof payload.imageBase64 === 'string' ? payload.imageBase64 : (photoPreview ?? effectiveSeedPoint?.photoUrl),
+      openingHours: typeof mergedDetails.openingHours === 'string' ? mergedDetails.openingHours : undefined,
+      isOpenNow: typeof mergedDetails.isOpenNow === 'boolean' ? mergedDetails.isOpenNow : undefined,
+      isOnDuty: typeof mergedDetails.isOnDuty === 'boolean' ? mergedDetails.isOnDuty : undefined,
+      provider: typeof mergedDetails.provider === 'string' ? mergedDetails.provider : undefined,
+      providers: Array.isArray(mergedDetails.providers) ? mergedDetails.providers.filter((value): value is string => typeof value === 'string') : undefined,
+      paymentMethods: Array.isArray(mergedDetails.paymentMethods) ? mergedDetails.paymentMethods.filter((value): value is string => typeof value === 'string') : undefined,
+      fuelTypes: Array.isArray(mergedDetails.fuelTypes) ? mergedDetails.fuelTypes.filter((value): value is string => typeof value === 'string') : undefined,
+      pricesByFuel: mergedDetails.pricesByFuel && typeof mergedDetails.pricesByFuel === 'object'
+        ? mergedDetails.pricesByFuel as Record<string, number>
+        : undefined,
+      quality: typeof mergedDetails.quality === 'string' ? mergedDetails.quality : undefined,
+      details: mergedDetails,
+      gaps: completion.missing,
+      verified: completion.missing.length === 0,
     };
   };
 
+  const calculateXp = (payload: SubmissionInput, nextPreviewPoint: DataPoint | null) => {
+    const previousScore =
+      typeof seedPointDetails.confidenceScore === 'number'
+        ? seedPointDetails.confidenceScore
+        : (effectiveSeedPoint?.trustScore ?? 0);
+    return calculateSubmissionRewardBreakdown({
+      eventType: payload.eventType ?? (isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT'),
+      previousGaps: effectiveSeedPoint?.gaps ?? [],
+      nextGaps: nextPreviewPoint?.gaps ?? [],
+      previousScore,
+      nextScore: nextPreviewPoint?.trustScore ?? previousScore,
+    });
+  };
+
   const submitPayload = async (payload: SubmissionInput): Promise<boolean> => {
+    const nextPreviewPoint = buildPreviewPointFromPayload(payload);
     const queuedItem = queuedDraft
       ? await updateQueueItemPayload(queuedDraft.id, payload)
       : await enqueueSubmission(payload);
@@ -1039,8 +1211,16 @@ const ContributionFlow: React.FC<Props> = ({
       return false;
     }
 
-    const xp = calculateXp(payload);
+    const xp = calculateXp(payload, nextPreviewPoint);
     setXpBreakdown(xp);
+    const shouldOfferQuickEnrich = Boolean(
+      payload.eventType === 'CREATE_EVENT'
+      && payload.dedupDecision !== 'use_existing'
+      && nextPreviewPoint
+      && Array.isArray(nextPreviewPoint.gaps)
+      && nextPreviewPoint.gaps.length > 0,
+    );
+    setPostCreateSeedPoint(shouldOfferQuickEnrich ? nextPreviewPoint : null);
 
     // 1C: Save last vertical to localStorage
     localStorage.setItem('adl_last_vertical', vertical);
@@ -1133,10 +1313,13 @@ const ContributionFlow: React.FC<Props> = ({
       const photoEvidenceSha256 = imageBase64
         ? await hashDataUrl(imageBase64)
         : null;
+      const pointId = isEnrichMode
+        ? (effectiveSeedPoint?.id ?? queuedDraft?.payload.pointId)
+        : (queuedDraft?.payload.pointId ?? buildClientPointId(vertical));
       const payload: SubmissionInput = {
         eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
         category: vertical,
-        pointId: isEnrichMode ? (seedPoint?.id ?? queuedDraft?.payload.pointId) : undefined,
+        pointId,
         location: location ?? manual ?? undefined,
         details,
         imageBase64: imageBase64 ?? undefined,
@@ -1203,14 +1386,21 @@ const ContributionFlow: React.FC<Props> = ({
   const renderQualityPreview = () => {
     const gpsScore = gpsAccuracy === null ? 0 : gpsAccuracy <= 10 ? 100 : gpsAccuracy <= 25 ? 80 : gpsAccuracy <= 50 ? 60 : gpsAccuracy <= 100 ? 40 : 20;
     const photoScore = (photoPreview || draftImageBase64) ? 100 : 0;
-    const requiredFields = VERTICALS[vertical]?.createRequiredFields ?? [];
-    const details = isEnrichMode ? buildEnrichDetails() : buildCreateDetails();
-    const filledCount = requiredFields.filter((f) => {
-      const v = (details as Record<string, unknown>)[f];
-      return v !== undefined && v !== null && v !== '';
-    }).length;
-    const completeness = requiredFields.length > 0 ? Math.round((filledCount / requiredFields.length) * 100) : 100;
-    const estimatedXp = BASE_EVENT_XP + (gpsScore >= 60 ? 2 : 0) + (completeness >= 100 ? 1 : 0);
+    const details = isEnrichMode
+      ? { ...seedPointDetails, ...(buildEnrichDetails() as Record<string, unknown>) }
+      : buildCreateDetails();
+    const completionSummary = computeCompletionSummary(vertical, details);
+    const previewPayload: SubmissionInput = {
+      eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
+      category: vertical,
+      pointId: isEnrichMode ? (effectiveSeedPoint?.id ?? 'preview-point') : 'preview-point',
+      location: location ?? parseManualLocation() ?? effectiveSeedPoint?.coordinates,
+      details,
+      imageBase64: draftImageBase64 ?? undefined,
+      clientExif: draftClientExif,
+    };
+    const previewPoint = buildPreviewPointFromPayload(previewPayload);
+    const estimatedXp = calculateXp(previewPayload, previewPoint).totalXp;
     const colorFor = (score: number) => score >= 80 ? 'text-forest' : score >= 50 ? 'text-gold' : 'text-terra';
 
     return (
@@ -1228,7 +1418,7 @@ const ContributionFlow: React.FC<Props> = ({
             <div className="micro-label text-gray-400">{t('Photo', 'Photo')}</div>
           </div>
           <div className="rounded-xl bg-gray-50 p-3 text-center">
-            <div className={`text-lg font-bold ${colorFor(completeness)}`}>{completeness}%</div>
+            <div className={`text-lg font-bold ${colorFor(completionSummary.percentage)}`}>{completionSummary.percentage}%</div>
             <div className="micro-label text-gray-400">{t('Fields', 'Champs')}</div>
           </div>
           <div className="rounded-xl bg-forest-wash p-3 text-center">
@@ -1940,12 +2130,19 @@ const ContributionFlow: React.FC<Props> = ({
   const renderEnrichFields = () => (
     <div className="card p-4 space-y-4">
       <div className="space-y-1">
-        <h4 className="text-sm font-bold text-gray-900">{t('Update Point Fields', 'Mettre à jour les champs du point')}</h4>
+        <h4 className="text-sm font-bold text-gray-900">
+          {isQuickEnrichSession ? t('Finish This Point', 'Finaliser ce point') : t('Update Point Fields', 'Mettre à jour les champs du point')}
+        </h4>
         <p className="text-xs text-gray-500">
-          {t(
-            'Missing fields are highlighted. Filled fields can still be updated when something changes.',
-            'Les champs manquants sont mis en avant. Les champs déjà remplis peuvent aussi être mis à jour si quelque chose change.',
-          )}
+          {isQuickEnrichSession
+            ? t(
+                'These quick details raise trust immediately. Finish the missing fields to unlock the full bonus.',
+                'Ces détails rapides augmentent immédiatement la confiance. Complétez les champs manquants pour débloquer le bonus complet.',
+              )
+            : t(
+                'Missing fields are highlighted. Filled fields can still be updated when something changes.',
+                'Les champs manquants sont mis en avant. Les champs déjà remplis peuvent aussi être mis à jour si quelque chose change.',
+              )}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
@@ -1977,6 +2174,7 @@ const ContributionFlow: React.FC<Props> = ({
       URL.revokeObjectURL(photoPreview);
     }
     setSubmitted(false);
+    setPostCreateSeedPoint(null);
     setPhotoPreview(null);
     setPhotoFile(null);
     setDraftImageBase64(null);
@@ -2010,6 +2208,11 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const handleBackPress = () => {
+    if (isQuickEnrichSession) {
+      setPostCreateSeedPoint(null);
+      setSubmitted(false);
+      return;
+    }
     if (isBatchMode) {
       onBatchExit?.();
     }
@@ -2017,6 +2220,28 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const verticalIcon = <VerticalIcon name={VERTICALS[vertical]?.icon ?? 'pill'} size={18} />;
+  const quickEnrichPrompt = useMemo(() => {
+    if (!postCreateSeedPoint) return null;
+    const currentDetails = (postCreateSeedPoint.details ?? {}) as Record<string, unknown>;
+    const currentCompletion = computeCompletionSummary(vertical, currentDetails);
+    const completedDetails = buildCompletionPreviewDetails(vertical, currentDetails);
+    const currentScore = typeof currentDetails.confidenceScore === 'number'
+      ? currentDetails.confidenceScore
+      : postCreateSeedPoint.trustScore;
+    const projectedScore = estimatePointTrustScore(vertical, completedDetails, {
+      hasPhoto: Boolean(postCreateSeedPoint.photoUrl),
+      hasLocation: Boolean(postCreateSeedPoint.coordinates),
+      hasExif: Boolean(draftClientExif?.capturedAt || draftClientExif?.latitude || draftClientExif?.longitude),
+      eventsCount: 2,
+    });
+    return {
+      completionPercent: currentCompletion.percentage,
+      currentScore,
+      projectedScore,
+      missingFields: prioritizeMissingFields(vertical, currentCompletion.missing, 3),
+      totalMissing: currentCompletion.missing.length,
+    };
+  }, [draftClientExif?.capturedAt, draftClientExif?.latitude, draftClientExif?.longitude, postCreateSeedPoint, vertical]);
 
   if (submitted) {
     if (showLevelUp) {
@@ -2031,19 +2256,34 @@ const ContributionFlow: React.FC<Props> = ({
     return (
       <XPPopup
         language={language}
-        totalXp={xpBreakdown.totalXp}
-        baseXp={xpBreakdown.baseXp}
-        qualityBonus={xpBreakdown.qualityBonus}
-        streakBonus={xpBreakdown.streakBonus}
+        xpBreakdown={xpBreakdown}
         syncMessage={syncMessage}
         isBatchMode={isBatchMode}
-        onPrimary={resetForAnotherCapture}
-        onSecondary={() => {
-          if (isBatchMode) {
-            onBatchExit?.();
+        quickEnrichPrompt={quickEnrichPrompt ?? undefined}
+        onPrimary={() => {
+          if (quickEnrichPrompt) {
+            setSubmitted(false);
+            return;
           }
-          onComplete();
+          resetForAnotherCapture();
         }}
+        onSecondary={quickEnrichPrompt
+          ? resetForAnotherCapture
+          : () => {
+              if (isBatchMode) {
+                onBatchExit?.();
+              }
+              onComplete();
+            }}
+        onTertiary={quickEnrichPrompt
+          ? () => {
+              setPostCreateSeedPoint(null);
+              if (isBatchMode) {
+                onBatchExit?.();
+              }
+              onComplete();
+            }
+          : undefined}
       />
     );
   }
@@ -2097,9 +2337,9 @@ const ContributionFlow: React.FC<Props> = ({
               {getCategoryLabel(vertical, language)}
             </span>
           </div>
-          {isEnrichMode && seedPoint && (
+          {isEnrichMode && effectiveSeedPoint && (
             <span className="micro-label text-gray-400 truncate max-w-[140px]">
-              {seedPoint.name}
+              {effectiveSeedPoint.name}
             </span>
           )}
         </div>

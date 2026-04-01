@@ -72,7 +72,7 @@ import type {
   SubmissionLocation,
 } from "../../shared/types.js";
 import { VERTICAL_IDS, isValidCategory, normalizeCategoryAlias } from "../../shared/verticals.js";
-import { BASE_EVENT_XP } from "../../shared/xp.js";
+import { calculateSubmissionRewardBreakdown } from "../../shared/submissionRewards.js";
 import { generatePointId } from "../../lib/shared/pointId.js";
 const allowedEventTypes: PointEventType[] = ["CREATE_EVENT", "ENRICH_EVENT"];
 const IP_PHOTO_MATCH_KM = Number(process.env.IP_PHOTO_MATCH_KM ?? "50") || 50;
@@ -921,6 +921,7 @@ export async function POST(request: Request): Promise<Response> {
       : generatePointId(category, finalLocation.latitude, finalLocation.longitude);
     let effectiveEventType: PointEventType = eventType;
     let allowGaplessEnrich = false;
+    let previousProjectedPoint = projectedExisting.find((point) => point.pointId === pointId) ?? null;
     const dedupResult = eventType === "CREATE_EVENT"
       ? buildDedupCandidates(category, finalLocation, details, projectedExisting)
       : null;
@@ -940,6 +941,7 @@ export async function POST(request: Request): Promise<Response> {
       pointId = chosenPointId;
       effectiveEventType = "ENRICH_EVENT";
       allowGaplessEnrich = true;
+      previousProjectedPoint = target;
       details.dedupResolution = "use_existing";
       details.dedupMatchScore = candidate.matchScore;
       details.dedupDistanceMeters = candidate.distanceMeters;
@@ -974,6 +976,7 @@ export async function POST(request: Request): Promise<Response> {
       const target = projectedExisting.find((point) => point.pointId === pointId);
       if (!target) return errorResponse("Target point not found", 404);
       if (target.category !== category) return errorResponse("Category mismatch for target point", 400);
+      previousProjectedPoint = target;
 
       const filteredDetails = filterEnrichDetails(category, details);
       if (!Object.keys(filteredDetails).length && !allowGaplessEnrich) {
@@ -1237,14 +1240,6 @@ export async function POST(request: Request): Promise<Response> {
       };
     }
 
-    // 6E: XP escrow mechanism
-    const xpAwarded = riskEvaluation.xpAction === "award" ? BASE_EVENT_XP : 0;
-    details.xpAwarded = xpAwarded;
-    details.xpAction = riskEvaluation.xpAction;
-    if (riskEvaluation.xpAction === "escrow") {
-      details.xpEscrow = true;
-    }
-
     const now = new Date().toISOString();
     const newEvent: PointEvent = {
       id: eventId,
@@ -1264,9 +1259,52 @@ export async function POST(request: Request): Promise<Response> {
 
     const projectedWithNewEvent = projectPointsFromEvents([...existingEvents, newEvent]);
     const projectedPoint = projectedWithNewEvent.find((point) => point.pointId === pointId);
+    const rewardBreakdown = calculateSubmissionRewardBreakdown({
+      eventType: effectiveEventType,
+      previousGaps: previousProjectedPoint?.gaps,
+      nextGaps: projectedPoint?.gaps,
+      previousScore:
+        typeof previousProjectedPoint?.details?.confidenceScore === "number"
+          ? previousProjectedPoint.details.confidenceScore
+          : 0,
+      nextScore:
+        typeof projectedPoint?.details?.confidenceScore === "number"
+          ? projectedPoint.details.confidenceScore
+          : 0,
+    });
+    const xpAwarded = riskEvaluation.xpAction === "award" ? rewardBreakdown.totalXp : 0;
     if (projectedPoint) {
       const confidenceScore = computeConfidenceScore(projectedPoint, new Date(now));
-      newEvent.details = { ...newEvent.details, confidenceScore, lastSeenAt: now };
+      const confidenceAwareBreakdown = calculateSubmissionRewardBreakdown({
+        eventType: effectiveEventType,
+        previousGaps: previousProjectedPoint?.gaps,
+        nextGaps: projectedPoint.gaps,
+        previousScore:
+          typeof previousProjectedPoint?.details?.confidenceScore === "number"
+            ? previousProjectedPoint.details.confidenceScore
+            : 0,
+        nextScore: confidenceScore,
+      });
+      const finalXpAwarded = riskEvaluation.xpAction === "award" ? confidenceAwareBreakdown.totalXp : 0;
+      newEvent.details = {
+        ...newEvent.details,
+        confidenceScore,
+        lastSeenAt: now,
+        plannedXpAwarded: confidenceAwareBreakdown.totalXp,
+        xpAwarded: finalXpAwarded,
+        xpAction: riskEvaluation.xpAction,
+        xpBreakdown: confidenceAwareBreakdown,
+        xpEscrow: riskEvaluation.xpAction === "escrow" ? true : undefined,
+      };
+    } else {
+      newEvent.details = {
+        ...newEvent.details,
+        plannedXpAwarded: rewardBreakdown.totalXp,
+        xpAwarded,
+        xpAction: riskEvaluation.xpAction,
+        xpBreakdown: rewardBreakdown,
+        xpEscrow: riskEvaluation.xpAction === "escrow" ? true : undefined,
+      };
     }
 
     await insertPointEvent(newEvent);

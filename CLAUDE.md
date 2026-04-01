@@ -52,8 +52,24 @@
 ### Accessibility Standards
 
 - **Target**: WCAG 2.1 AA compliance
-- **Priority accommodations**: High contrast mode (exists), reduced motion support (needed), sunlight-readable contrast ratios, minimum 44x44px touch targets, bilingual EN/FR support
+- **Priority accommodations**: High contrast mode (exists via `.high-contrast` class), reduced motion support (implemented via `prefers-reduced-motion`), sunlight-readable contrast ratios, minimum 44x44px touch targets, bilingual EN/FR support
 - **Known gaps**: See `issues/audit-2026-03-14.md` for current findings
+
+### Design System Implementation
+
+**Typography**: Inter (400/500/600/700) via Google Fonts, fallback `system-ui, sans-serif`. Micro labels use `.micro-label` (11px bold uppercase tracking-widest) for sunlight readability.
+
+**Component patterns** (defined in `index.css` `@layer components`):
+- `.card` / `.card-pill` — standard containers (`rounded-2xl` / `rounded-[28px]`)
+- `.btn-primary` (navy), `.btn-cta` (terracotta), `.btn-ghost` — all `h-14 rounded-2xl` with `active:scale-95`
+- `.screen-shell` / `.screen-header` — page layout scaffolding
+- `.stat-tile` — colored background stat blocks
+
+**Spacing rhythm**: `p-3`/`p-4`/`p-6` padding, `gap-2`/`gap-3` flex gaps, `rounded-xl`/`rounded-2xl` borders.
+
+**Color tokens** (extended in `tailwind.config.js`): Each brand color has `DEFAULT`, `dark`, and `wash` variants (e.g. `navy-wash: #f2f6fa`, `terra-wash: #fff8f4`). Additional semantic colors: `ink` (text), `page` (bg), `danger`, `streak` (purple gamification), `amber` (warnings).
+
+**Animations**: XP count-up, confetti fall, level scale-in, stale-enter — all respect `prefers-reduced-motion`. Button press uses `active:scale-95 transition-all`.
 
 ### Tech Stack
 
