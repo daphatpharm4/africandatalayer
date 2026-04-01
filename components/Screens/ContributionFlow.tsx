@@ -1091,15 +1091,7 @@ const ContributionFlow: React.FC<Props> = ({
       return false;
     }
 
-    // Consent validation for PII-rich categories
-    const piiRichCategories: SubmissionCategory[] = ['pharmacy', 'mobile_money'];
-    if (piiRichCategories.includes(vertical) && consentStatus === 'not_required') {
-      setErrorMessage(t(
-        'This category involves personal data. Please select a consent status.',
-        'Cette catégorie implique des données personnelles. Veuillez sélectionner un statut de consentement.',
-      ));
-      return false;
-    }
+    // Consent validation: all three consent options are valid across verticals.
     if (consentStatus === 'obtained' && !consentAcknowledged) {
       setErrorMessage(t(
         'Please acknowledge that consent was properly obtained.',
