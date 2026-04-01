@@ -20,7 +20,7 @@ import {
 } from '../../lib/client/offlineQueue';
 import { detectLowEndDevice, getClientDeviceInfo } from '../../lib/client/deviceProfile';
 import { collectGpsIntegrity } from '../../lib/client/gpsIntegrity';
-import { hashDataUrl, hashPhoto } from '../../lib/client/photoIntegrity';
+import { hashDataUrl } from '../../lib/client/photoIntegrity';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
 import { apiJson } from '../../lib/client/api';
 import type { ClientExifData, CollectionAssignment, ConsentStatus, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
@@ -1127,11 +1127,9 @@ const ContributionFlow: React.FC<Props> = ({
       const imageBase64 = photoFile ? await fileToBase64(photoFile) : draftImageBase64;
       const clientExif = photoFile ? await extractClientExif(photoFile, location ?? manual ?? null) : draftClientExif;
       const gpsIntegrity = await collectGpsIntegrity(lastPosition);
-      const photoEvidenceSha256 = photoFile
-        ? await hashPhoto(photoFile)
-        : draftImageBase64
-          ? await hashDataUrl(draftImageBase64)
-          : null;
+      const photoEvidenceSha256 = imageBase64
+        ? await hashDataUrl(imageBase64)
+        : null;
       const payload: SubmissionInput = {
         eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
         category: vertical,
