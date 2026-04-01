@@ -416,8 +416,17 @@ const ContributionFlow: React.FC<Props> = ({
   const [paymentMethods, setPaymentMethods] = useState<string[]>(seedPoint?.paymentMethods ?? []);
   const [hasFuelAvailable, setHasFuelAvailable] = useState(seedPoint?.hasFuelAvailable ?? true);
   const [fuelTypes, setFuelTypes] = useState<string[]>(seedPoint?.fuelTypes ?? (seedPoint?.fuelType ? [seedPoint.fuelType] : []));
-  const [priceFuelType, setPriceFuelType] = useState(seedPoint?.fuelType ?? fuelTypeOptions[0]);
-  const [priceValue, setPriceValue] = useState(seedPoint?.price ? String(seedPoint.price) : '');
+  const [pricesByFuelDraft, setPricesByFuelDraft] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    if (seedPoint?.pricesByFuel && typeof seedPoint.pricesByFuel === 'object') {
+      for (const [k, v] of Object.entries(seedPoint.pricesByFuel as Record<string, unknown>)) {
+        if (Number.isFinite(v)) map[k] = String(v);
+      }
+    } else if (seedPoint?.fuelType && seedPoint?.price) {
+      map[seedPoint.fuelType] = String(seedPoint.price);
+    }
+    return map;
+  });
   const [quality, setQuality] = useState(seedPoint?.quality ?? 'Standard');
   const [outletType, setOutletType] = useState('bar');
   const [isFormal, setIsFormal] = useState(true);
@@ -508,17 +517,21 @@ const ContributionFlow: React.FC<Props> = ({
     setEnrichTouched({});
     setEnrichMultiRaw({});
     const merchantEntry = firstStringRecordEntry(seedPointDetails.merchantIdByProvider);
-    const priceEntry = firstNumberRecordEntry(seedPointDetails.pricesByFuel);
     setMerchantId(merchantEntry?.[1] ?? seedPoint?.merchantId ?? '');
     setMerchantProvider(merchantEntry?.[0] ?? seedPoint?.providers?.[0] ?? providerOptions[0]);
-    setPriceFuelType(priceEntry?.[0] ?? seedPoint?.fuelType ?? fuelTypeOptions[0]);
-    setPriceValue(
-      priceEntry
-        ? String(priceEntry[1])
-        : typeof seedPoint?.price === 'number'
-          ? String(seedPoint.price)
-          : '',
-    );
+    const rawPriceMap =
+      seedPointDetails.pricesByFuel && typeof seedPointDetails.pricesByFuel === 'object'
+        ? (seedPointDetails.pricesByFuel as Record<string, number>)
+        : null;
+    const nextDraft: Record<string, string> = {};
+    if (rawPriceMap) {
+      for (const [k, v] of Object.entries(rawPriceMap)) {
+        if (Number.isFinite(v)) nextDraft[k] = String(v);
+      }
+    } else if (seedPoint?.fuelType && typeof seedPoint?.price === 'number') {
+      nextDraft[seedPoint.fuelType] = String(seedPoint.price);
+    }
+    setPricesByFuelDraft(nextDraft);
   }, [isEnrichMode, seedPoint?.id, seedPoint?.merchantId, seedPoint?.price, seedPoint?.providers, seedPoint?.fuelType, seedPointDetails]);
 
   useEffect(() => {
@@ -576,9 +589,8 @@ const ContributionFlow: React.FC<Props> = ({
       : {};
     const firstMerchantProvider = Object.keys(merchantMap)[0];
     const priceMap = details.pricesByFuel && typeof details.pricesByFuel === 'object'
-      ? details.pricesByFuel as Record<string, number>
+      ? (details.pricesByFuel as Record<string, number>)
       : {};
-    const firstPriceFuel = Object.keys(priceMap)[0];
 
     setVertical(queuedDraft.payload.category as Vertical);
     setPhotoPreview(typeof queuedDraft.payload.imageBase64 === 'string' ? queuedDraft.payload.imageBase64 : null);
@@ -601,8 +613,11 @@ const ContributionFlow: React.FC<Props> = ({
     setPaymentMethods(Array.isArray(details.paymentMethods) ? details.paymentMethods.filter((value): value is string => typeof value === 'string') : []);
     setHasFuelAvailable(typeof details.hasFuelAvailable === 'boolean' ? details.hasFuelAvailable : true);
     setFuelTypes(Array.isArray(details.fuelTypes) ? details.fuelTypes.filter((value): value is string => typeof value === 'string') : []);
-    setPriceFuelType(firstPriceFuel ?? fuelTypeOptions[0]);
-    setPriceValue(firstPriceFuel && Number.isFinite(priceMap[firstPriceFuel]) ? String(priceMap[firstPriceFuel]) : '');
+    const draftPrices: Record<string, string> = {};
+    for (const [k, v] of Object.entries(priceMap)) {
+      if (Number.isFinite(v)) draftPrices[k] = String(v);
+    }
+    setPricesByFuelDraft(draftPrices);
     setQuality(typeof details.quality === 'string' ? details.quality : 'Standard');
     setOutletType(typeof details.outletType === 'string' ? details.outletType : 'bar');
     setIsFormal(typeof details.isFormal === 'boolean' ? details.isFormal : true);
@@ -809,12 +824,16 @@ const ContributionFlow: React.FC<Props> = ({
       };
     }
     if (vertical === 'fuel_station') {
-      const parsedPrice = Number(priceValue);
+      const builtPrices: Record<string, number> = {};
+      for (const [fuelType, raw] of Object.entries(pricesByFuelDraft)) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed) && parsed > 0) builtPrices[fuelType] = parsed;
+      }
       return {
         name: siteName.trim(),
         hasFuelAvailable,
         fuelTypes: fuelTypes.length ? fuelTypes : undefined,
-        pricesByFuel: Number.isFinite(parsedPrice) && parsedPrice > 0 ? { [priceFuelType]: parsedPrice } : undefined,
+        pricesByFuel: Object.keys(builtPrices).length > 0 ? builtPrices : undefined,
         quality,
         openingHours: openingHours.trim() || undefined,
         paymentMethods: paymentMethods.length ? paymentMethods : undefined,
@@ -880,8 +899,12 @@ const ContributionFlow: React.FC<Props> = ({
           continue;
         }
         if (gap === 'pricesByFuel') {
-          const parsedPrice = normalizeNumber(priceValue);
-          if (parsedPrice !== null) details.pricesByFuel = { [priceFuelType]: parsedPrice };
+          const builtPrices: Record<string, number> = {};
+          for (const [fuelType, raw] of Object.entries(pricesByFuelDraft)) {
+            const parsed = normalizeNumber(raw);
+            if (parsed !== null && parsed > 0) builtPrices[fuelType] = parsed;
+          }
+          if (Object.keys(builtPrices).length > 0) details.pricesByFuel = builtPrices;
           continue;
         }
         const rawMap = getEnrichFieldValue(gap);
@@ -1503,24 +1526,22 @@ const ContributionFlow: React.FC<Props> = ({
             </button>
           </div>
           <div className="space-y-1">
-            <span className="micro-label text-gray-400">{t('Fuel price', 'Prix carburant')}</span>
-            <div className="grid grid-cols-2 gap-3">
-              <select
-                value={priceFuelType}
-                onChange={(event) => setPriceFuelType(event.target.value)}
-                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-              >
-                {fuelTypeOptions.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={priceValue}
-                onChange={(event) => setPriceValue(event.target.value)}
-                placeholder={t('Price (XAF)', 'Prix (XAF)')}
-                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-              />
+            <span className="micro-label text-gray-400">{t('Fuel prices (XAF)', 'Prix carburants (XAF)')}</span>
+            <div className="space-y-2">
+              {fuelTypeOptions.map((fuelType) => (
+                <div key={fuelType} className="grid grid-cols-2 gap-3 items-center">
+                  <span className="text-xs font-semibold text-gray-600">{fuelType}</span>
+                  <input
+                    type="number"
+                    value={pricesByFuelDraft[fuelType] ?? ''}
+                    onChange={(event) =>
+                      setPricesByFuelDraft((prev) => ({ ...prev, [fuelType]: event.target.value }))
+                    }
+                    placeholder={t('Price (XAF)', 'Prix (XAF)')}
+                    className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+                  />
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -1776,29 +1797,22 @@ const ContributionFlow: React.FC<Props> = ({
           <div className="space-y-2" key={gap}>
             <label className="micro-label text-gray-400">{label}</label>
             {renderEnrichFieldHint(gap)}
-            <div className="grid grid-cols-2 gap-3">
-              <select
-                value={priceFuelType}
-                onChange={(event) => {
-                  markEnrichTouched(gap);
-                  setPriceFuelType(event.target.value);
-                }}
-                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-              >
-                {fuelTypeOptions.map((type) => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-              <input
-                type="number"
-                value={priceValue}
-                onChange={(event) => {
-                  markEnrichTouched(gap);
-                  setPriceValue(event.target.value);
-                }}
-                placeholder={t('Price (XAF)', 'Prix (XAF)')}
-                className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-              />
+            <div className="space-y-2">
+              {fuelTypeOptions.map((fuelType) => (
+                <div key={fuelType} className="grid grid-cols-2 gap-3 items-center">
+                  <span className="text-xs font-semibold text-gray-600">{fuelType}</span>
+                  <input
+                    type="number"
+                    value={pricesByFuelDraft[fuelType] ?? ''}
+                    onChange={(event) => {
+                      markEnrichTouched(gap);
+                      setPricesByFuelDraft((prev) => ({ ...prev, [fuelType]: event.target.value }));
+                    }}
+                    placeholder={t('Price (XAF)', 'Prix (XAF)')}
+                    className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+                  />
+                </div>
+              ))}
             </div>
           </div>
         );
@@ -2011,7 +2025,7 @@ const ContributionFlow: React.FC<Props> = ({
     setMerchantId('');
     setPaymentMethods([]);
     setFuelTypes([]);
-    setPriceValue('');
+    setPricesByFuelDraft({});
     setAdvertiserBrand('');
     setRoadName('');
     setStoreyCount('');
