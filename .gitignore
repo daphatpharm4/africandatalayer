@@ -17,3 +17,6 @@ Thumbs.db
 
 # Codex Code
 .codex/
+.agent/
+.agents/
+.skills-lock.json

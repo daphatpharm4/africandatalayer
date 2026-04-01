@@ -2,19 +2,18 @@ import { requireUser } from "../../lib/auth.js";
 import {
   deletePointEvent,
   getUserProfile,
-  insertPointEvent,
   isStorageUnavailableError,
 } from "../../lib/server/storage/index.js";
 import { query } from "../../lib/server/db.js";
 import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
-import { normalizeEnrichPayload, projectPointsFromEvents } from "../../lib/server/pointProjection.js";
+import { projectPointsFromEvents } from "../../lib/server/pointProjection.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { captureServerException } from "../../lib/server/sentry.js";
 import { canViewEventDetail, toSubmissionAuthContext } from "../../lib/server/submissionAccess.js";
 import { adjustTrustOnReview, updateUserTrust } from "../../lib/server/userTrust.js";
 import { reviewBodySchema } from "../../lib/server/validation.js";
-import type { PointEvent, SubmissionDetails } from "../../shared/types.js";
+import type { PointEvent } from "../../shared/types.js";
 import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
 import { reconcileUserProfileXp } from "../../lib/server/xp.js";
 
@@ -143,6 +142,8 @@ export async function GET(request: Request): Promise<Response> {
     return jsonResponse(event, { status: 200 });
   }
 
+  if (!viewer.isAdmin) return errorResponse("Forbidden", 403);
+
   const points = projectPointsFromEvents(events);
   const point = points.find((item) => item.pointId === id || item.id === id);
   if (point) return jsonResponse(point, { status: 200 });
@@ -154,50 +155,8 @@ export async function GET(request: Request): Promise<Response> {
 }
 
 export async function PUT(request: Request): Promise<Response> {
-  const auth = await requireUser(request);
-  if (!auth) return errorResponse("Unauthorized", 401);
-
-  const url = new URL(request.url);
-  const id = url.pathname.split("/").pop();
-  if (!id) return errorResponse("Missing submission id", 400);
-
-  let body: any;
-  try {
-    body = await request.json();
-  } catch {
-    return errorResponse("Invalid JSON body", 400);
-  }
-
-  const details = body?.details && typeof body.details === "object" ? ({ ...(body.details as SubmissionDetails) } as SubmissionDetails) : null;
-  if (!details) return errorResponse("Missing details payload", 400);
-
-  try {
-    const combinedEvents = await buildReadableEvents();
-    const points = projectPointsFromEvents(combinedEvents);
-    const targetPoint = points.find((point) => point.pointId === id || point.id === id);
-    if (!targetPoint) return errorResponse("Submission not found", 404);
-
-    const newEvent: PointEvent = {
-      id: crypto.randomUUID(),
-      pointId: targetPoint.pointId,
-      eventType: "ENRICH_EVENT",
-      userId: auth.id,
-      category: targetPoint.category,
-      location: targetPoint.location,
-      details: normalizeEnrichPayload(targetPoint.category, details),
-      photoUrl: typeof body?.photoUrl === "string" ? body.photoUrl : undefined,
-      createdAt: new Date().toISOString(),
-      source: "compat_put",
-    };
-
-    await insertPointEvent(newEvent);
-    return jsonResponse(newEvent, { status: 200 });
-  } catch (error) {
-    if (isStorageUnavailableError(error)) {
-      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
-    }
-    throw error;
-  }
+  void request;
+  return errorResponse("Method not allowed", 405);
 }
 
 export async function PATCH(request: Request): Promise<Response> {

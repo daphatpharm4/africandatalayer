@@ -18,7 +18,7 @@ import { query } from "../../lib/server/db.js";
 import { diffCategorySets, parseConstraintCategories } from "../../lib/server/schemaGuard.js";
 import { incrementAssignmentsForEvent } from "../../lib/server/collectionAssignments.js";
 import { completeIdempotencyKey, hashIdempotencyPayload, reserveIdempotencyKey } from "../../lib/server/idempotency.js";
-import { stripPiiDetails } from "../../lib/server/privacy.js";
+import { stripPiiDetails, toPublicProjectedPoint } from "../../lib/server/privacy.js";
 import { consumeRateLimit } from "../../lib/server/rateLimit.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { captureServerException } from "../../lib/server/sentry.js";
@@ -33,7 +33,6 @@ import {
 } from "../../lib/server/submissionRisk.js";
 import {
   filterEventsForViewer,
-  redactEventUserIds,
   resolveAdminViewAccess,
   toSubmissionAuthContext,
   normalizeActorId,
@@ -630,14 +629,7 @@ export async function GET(request: Request): Promise<Response> {
     });
 
     if (view === "events") {
-      if (!authContext) {
-        return jsonResponse(redactEventUserIds(scopedEvents), {
-          status: 200,
-          headers: {
-            "cache-control": PUBLIC_READ_CACHE_CONTROL,
-          },
-        });
-      }
+      if (!authContext) return errorResponse("Unauthorized", 401);
       const responseEvents = filterEventsForViewer(scopedEvents, authContext);
       return jsonResponse(responseEvents, { status: 200 });
     }
@@ -693,6 +685,10 @@ export async function GET(request: Request): Promise<Response> {
       if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(radiusKm)) {
         projected = projected.filter((point) => haversineKm(point.location, { latitude, longitude }) <= radiusKm);
       }
+    }
+
+    if (!authContext) {
+      projected = projected.map(toPublicProjectedPoint);
     }
 
     return jsonResponse(projected, {

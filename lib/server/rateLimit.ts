@@ -11,6 +11,16 @@ function windowStartIso(windowSeconds: number, now = Date.now()): string {
   return new Date(bucket).toISOString();
 }
 
+export function extractRateLimitIp(request: Request | null | undefined): string | null {
+  if (!request) return null;
+  const rawIp =
+    request.headers.get("x-vercel-forwarded-for") ??
+    request.headers.get("x-forwarded-for") ??
+    request.headers.get("x-real-ip");
+  const ip = rawIp?.split(",")[0]?.trim();
+  return ip || null;
+}
+
 export async function consumeRateLimit(input: {
   route: string;
   key: string;

@@ -3,6 +3,13 @@ import test from "node:test";
 import { createAiSearchHandler, validateSearchBody } from "../api/ai/search.js";
 import { GeminiConfigError, GeminiUpstreamError } from "../lib/server/geminiSearch.js";
 
+const allowRateLimit = async () => ({
+  allowed: true,
+  remaining: 99,
+  retryAfterSeconds: 60,
+  count: 1,
+});
+
 function makeJsonRequest(body: unknown): Request {
   return new Request("http://localhost/api/ai/search", {
     method: "POST",
@@ -49,6 +56,7 @@ test("POST /api/ai/search returns 401 for unauthenticated requests", async () =>
 test("POST /api/ai/search returns 400 for invalid JSON", async () => {
   const handler = createAiSearchHandler({
     requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
+    consumeRateLimitFn: allowRateLimit,
   });
 
   const request = new Request("http://localhost/api/ai/search", {
@@ -63,6 +71,7 @@ test("POST /api/ai/search returns 400 for invalid JSON", async () => {
 test("POST /api/ai/search returns 400 for invalid query payload", async () => {
   const handler = createAiSearchHandler({
     requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
+    consumeRateLimitFn: allowRateLimit,
   });
 
   const response = await handler(makeJsonRequest({ query: "   " }));
@@ -72,6 +81,7 @@ test("POST /api/ai/search returns 400 for invalid query payload", async () => {
 test("POST /api/ai/search maps Gemini config errors to 503", async () => {
   const handler = createAiSearchHandler({
     requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
+    consumeRateLimitFn: allowRateLimit,
     searchFn: async () => {
       throw new GeminiConfigError("missing key");
     },
@@ -86,6 +96,7 @@ test("POST /api/ai/search maps Gemini config errors to 503", async () => {
 test("POST /api/ai/search maps Gemini upstream errors to 503", async () => {
   const handler = createAiSearchHandler({
     requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
+    consumeRateLimitFn: allowRateLimit,
     searchFn: async () => {
       throw new GeminiUpstreamError("upstream");
     },
@@ -101,6 +112,7 @@ test("POST /api/ai/search returns 200 and response payload for valid requests", 
   let captured: { query?: string; lat?: number; lng?: number } | null = null;
   const handler = createAiSearchHandler({
     requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
+    consumeRateLimitFn: allowRateLimit,
     searchFn: async (query, lat, lng) => {
       captured = { query, lat, lng };
       return { text: "ok", grounding: [{ source: "maps" }] };
@@ -114,4 +126,22 @@ test("POST /api/ai/search returns 200 and response payload for valid requests", 
   const body = (await response.json()) as { text: string; grounding: unknown[] };
   assert.equal(body.text, "ok");
   assert.ok(Array.isArray(body.grounding));
+});
+
+test("POST /api/ai/search returns 429 when rate limited", async () => {
+  const handler = createAiSearchHandler({
+    requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
+    consumeRateLimitFn: async ({ route }) => ({
+      allowed: route.endsWith(":user") ? false : true,
+      remaining: 0,
+      retryAfterSeconds: 120,
+      count: 51,
+    }),
+  });
+
+  const response = await handler(makeJsonRequest({ query: "pharmacy" }));
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("retry-after"), "120");
+  const body = (await response.json()) as { code?: string };
+  assert.equal(body.code, "rate_limited");
 });
