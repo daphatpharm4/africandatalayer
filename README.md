@@ -64,17 +64,29 @@ Set these environment variables:
 
 Endpoints:
 - `GET/POST /api/submissions` (default returns projected points; add `?view=events` for raw append-only events)
-- `GET/PUT /api/submissions/:id`
+- `GET/PATCH/DELETE /api/submissions/:id`
 - `GET/PUT /api/user`
 - `GET/POST /api/intake/leads`
 - `PATCH /api/intake/leads/:id`
 - `GET/POST /api/auth/*` (Auth.js)
 
+Security note:
+- `PUT /api/submissions/:id` is intentionally disabled.
+- Public submission reads are sanitized; raw event access requires authorization.
+
 ## 🗄️ Database Schema
 
-Apply the SQL migration in Supabase SQL Editor:
+Run the repo migration runner against the target database:
 
-- `supabase/migrations/20260219_init_adl.sql`
+```bash
+npm run migrate:dry
+npm run migrate
+```
+
+Notes:
+- Vercel deploys app code, but it does not automatically run database migrations.
+- Supabase RLS is enabled through `supabase/migrations/20260401_enable_public_rls.sql`.
+- Use the migration runner instead of pasting SQL manually into the Supabase console whenever possible.
 
 ## 🔁 Data Migration (Edge Config -> Postgres)
 
@@ -102,3 +114,11 @@ Local dev (recommended):
 - Release flow: `docs/ops/pilot-release-flow.md`
 - Backup and restore: `docs/ops/backup-restore-runbook.md`
 - Compliance pack: `docs/compliance/`
+
+## 📚 Current Strategy Docs
+
+- `docs/MULTI-AGENT-MODERNIZATION-MASTER-PROMPT.md`
+- `docs/APP-MODERNIZATION-AND-GAMIFICATION-PROGRAM.md`
+- `research/11-multi-agent-app-modernization-and-gamification.md`
+- `design/GAMIFICATION-AND-MODERNIZATION-EXECUTION-PLAN.md`
+- `gptdesign/pages/field-agent-gamification-modernization.md`

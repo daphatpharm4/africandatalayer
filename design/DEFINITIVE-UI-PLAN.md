@@ -3,8 +3,20 @@
 ## Merging /design, /gptdesign, and /research into Ground Truth
 
 **Supersedes:** `design/REDESIGN-PLAN.md`, `gptdesign/MASTER.md`, `gptdesign/pages/*.md`
-**Sources:** All 10 research deliverables (01-10), existing codebase audit (March 2026)
+**Sources:** All 11 research deliverables (01-11), existing codebase audit (March-April 2026), `docs/APP-MODERNIZATION-AND-GAMIFICATION-PROGRAM.md`
 **Date:** March 8, 2026
+
+---
+
+## April 2026 Update
+
+This document remains the canonical UI redesign baseline, but it is now extended by:
+
+- `design/GAMIFICATION-AND-MODERNIZATION-EXECUTION-PLAN.md`
+- `gptdesign/pages/field-agent-gamification-modernization.md`
+- `docs/MULTI-AGENT-MODERNIZATION-MASTER-PROMPT.md`
+
+Use this file for the broad UI system, and the new companion docs for mission design, progression, and orchestrated implementation.
 
 ---
 

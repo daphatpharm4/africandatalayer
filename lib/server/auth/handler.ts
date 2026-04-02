@@ -34,9 +34,38 @@ function isBcryptHash(value: string): boolean {
   return /^\$2[aby]\$/.test(value);
 }
 
-async function persistLoginFailure(profile: UserProfile | null, request: Request | undefined, userId: string): Promise<void> {
+type GetUserProfileFn = typeof getUserProfile;
+type UpsertUserProfileFn = typeof upsertUserProfile;
+type ConsumeRateLimitFn = typeof consumeRateLimit;
+type ComparePasswordFn = typeof bcrypt.compare;
+type LogSecurityEventFn = typeof logSecurityEvent;
+type LogWarnFn = typeof logWarn;
+
+type CredentialsAuthorizeDeps = {
+  getUserProfileFn?: GetUserProfileFn;
+  upsertUserProfileFn?: UpsertUserProfileFn;
+  consumeRateLimitFn?: ConsumeRateLimitFn;
+  comparePasswordFn?: ComparePasswordFn;
+  logSecurityEventFn?: LogSecurityEventFn;
+  logWarnFn?: LogWarnFn;
+};
+
+type JwtRoleClaimsToken = {
+  email?: string | null;
+  uid?: string;
+  sub?: string | null;
+  isAdmin?: boolean;
+  role?: string;
+};
+
+async function persistLoginFailure(
+  profile: UserProfile | null,
+  request: Request | undefined,
+  userId: string,
+  deps: { upsertUserProfileFn: UpsertUserProfileFn; logSecurityEventFn: LogSecurityEventFn },
+): Promise<void> {
   if (!profile) {
-    await logSecurityEvent({
+    await deps.logSecurityEventFn({
       eventType: "login_failure",
       userId,
       request,
@@ -50,8 +79,8 @@ async function persistLoginFailure(profile: UserProfile | null, request: Request
   if (nextCount >= LOCKOUT_MAX_ATTEMPTS) {
     profile.lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MINUTES * 60 * 1000).toISOString();
   }
-  await upsertUserProfile(profile.id, profile);
-  await logSecurityEvent({
+  await deps.upsertUserProfileFn(profile.id, profile);
+  await deps.logSecurityEventFn({
     eventType: nextCount >= LOCKOUT_MAX_ATTEMPTS ? "account_locked" : "login_failure",
     userId: profile.id,
     request,
@@ -62,11 +91,191 @@ async function persistLoginFailure(profile: UserProfile | null, request: Request
   });
 }
 
-async function clearLoginFailure(profile: UserProfile): Promise<void> {
+async function clearLoginFailure(
+  profile: UserProfile,
+  deps: { upsertUserProfileFn: UpsertUserProfileFn },
+): Promise<void> {
   if (!profile.failedLoginCount && !profile.lockedUntil) return;
   profile.failedLoginCount = 0;
   profile.lockedUntil = null;
-  await upsertUserProfile(profile.id, profile);
+  await deps.upsertUserProfileFn(profile.id, profile);
+}
+
+export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) {
+  const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
+  const upsertUserProfileFn = deps.upsertUserProfileFn ?? upsertUserProfile;
+  const consumeRateLimitFn = deps.consumeRateLimitFn ?? consumeRateLimit;
+  const comparePasswordFn = deps.comparePasswordFn ?? bcrypt.compare;
+  const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
+  const logWarnFn = deps.logWarnFn ?? logWarn;
+
+  return async function authorize(credentials: Record<string, unknown> | undefined, request: Request | undefined) {
+    const rawIdentifier =
+      typeof credentials?.identifier === "string"
+        ? credentials.identifier
+        : typeof credentials?.email === "string"
+          ? credentials.email
+          : "";
+    const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
+    const password = typeof credentials?.password === "string" ? credentials.password : "";
+
+    if (!normalizedIdentifier || !password) return null;
+    const identifier = normalizedIdentifier.value;
+    const ip = extractRequestIp(request);
+    if (ip) {
+      const authRate = await consumeRateLimitFn({
+        route: "POST /api/auth/callback/credentials",
+        key: `${ip}:${identifier}`,
+        windowSeconds: 15 * 60,
+        max: 10,
+        request,
+        userId: identifier,
+      });
+      if (!authRate.allowed) {
+        return null;
+      }
+    }
+
+    const profile = await getUserProfileFn(identifier);
+    if (profile?.role === "admin") {
+      if (profile.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
+        await logSecurityEventFn({
+          eventType: "login_failure",
+          userId: profile.id,
+          request,
+          details: { reason: "account_locked", lockedUntil: profile.lockedUntil },
+        });
+        return null;
+      }
+      if (!profile.passwordHash) {
+        await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
+        return null;
+      }
+      const adminMatch = await comparePasswordFn(password, profile.passwordHash);
+      if (adminMatch) {
+        await clearLoginFailure(profile, { upsertUserProfileFn });
+        await logSecurityEventFn({
+          eventType: "login_success",
+          userId: profile.id,
+          request,
+          details: { method: "credentials_admin_db" },
+        });
+        return {
+          id: profile.id,
+          name: profile.name || inferDefaultDisplayName(profile.email ?? profile.phone ?? profile.id),
+          email: profile.email ?? undefined,
+        };
+      }
+      await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
+      return null;
+    }
+
+    // Env-var bootstrap fallback: only fires when no DB admin matched above.
+    // This emergency path is intentionally rate-limited but not tied to any
+    // per-profile lockout state because it is configured at the server level.
+    const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
+    const adminPassword = process.env.ADMIN_PASSWORD ?? "";
+    if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail) {
+      if (!isBcryptHash(adminPassword)) {
+        logWarnFn("auth.admin_password_invalid_format", { userId: identifier });
+        return null;
+      }
+      const adminMatch = await comparePasswordFn(password, adminPassword);
+      if (adminMatch) {
+        await logSecurityEventFn({
+          eventType: "login_success",
+          userId: identifier,
+          request,
+          details: { method: "credentials_admin_env_bootstrap" },
+        });
+        return { id: identifier, name: "Admin", email: identifier };
+      }
+      await logSecurityEventFn({
+        eventType: "login_failure",
+        userId: identifier,
+        request,
+        details: { reason: "invalid_admin_credentials" },
+      });
+      return null;
+    }
+
+    if (profile?.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
+      await logSecurityEventFn({
+        eventType: "login_failure",
+        userId: profile.id,
+        request,
+        details: { reason: "account_locked", lockedUntil: profile.lockedUntil },
+      });
+      return null;
+    }
+    if (!profile?.passwordHash) {
+      await persistLoginFailure(profile ?? null, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
+      return null;
+    }
+
+    const valid = await comparePasswordFn(password, profile.passwordHash);
+    if (!valid) {
+      await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
+      return null;
+    }
+
+    await clearLoginFailure(profile, { upsertUserProfileFn });
+    await logSecurityEventFn({
+      eventType: "login_success",
+      userId: profile.id,
+      request,
+      details: { method: "credentials" },
+    });
+
+    const fallbackName = inferDefaultDisplayName(profile.email ?? profile.phone ?? profile.id);
+    return { id: profile.id, name: profile.name || fallbackName, email: profile.email ?? undefined };
+  };
+}
+
+export async function applyRoleClaimsToToken(
+  token: JwtRoleClaimsToken,
+  user: { email?: string | null; id?: string | null } | null | undefined,
+  deps: { getUserProfileFn?: GetUserProfileFn } = {},
+): Promise<JwtRoleClaimsToken> {
+  const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
+  // Env-var admin email gets admin claims unconditionally. This takes precedence
+  // over the DB profile lookup below, so the bootstrap email cannot be demoted
+  // by a conflicting stored role in user_profiles.
+  const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
+  const email = normalizeEmail(user?.email ?? token.email);
+  if (adminEmail && email && adminEmail === email) {
+    token.isAdmin = true;
+    token.role = "admin";
+  }
+  if (email) {
+    token.uid = email.trim();
+  } else if (user?.id) {
+    token.uid = user.id.trim();
+  } else if (typeof token.sub === "string" && token.sub.trim()) {
+    token.uid = token.sub.trim();
+  }
+  if (!token.role) {
+    const uid = typeof token.uid === "string" ? token.uid.trim() : "";
+    if (uid) {
+      try {
+        const profile = await getUserProfileFn(uid);
+        token.role = profile?.role ?? (profile?.isAdmin ? "admin" : "agent");
+        if (profile?.role === "admin" || profile?.isAdmin === true) {
+          token.isAdmin = true;
+        }
+      } catch {
+        token.role = "agent";
+      }
+    } else {
+      token.role = "agent";
+    }
+  }
+  if (token.role === "admin") {
+    token.isAdmin = true;
+  } else if (token.isAdmin !== true) {
+    token.isAdmin = false;
+  }
+  return token;
 }
 
 const providers: AppProviders = [
@@ -77,91 +286,7 @@ const providers: AppProviders = [
       email: { label: "Email", type: "text" },
       password: { label: "Password", type: "password" },
     },
-    async authorize(credentials, request) {
-      const rawIdentifier =
-        typeof credentials?.identifier === "string"
-          ? credentials.identifier
-          : typeof credentials?.email === "string"
-            ? credentials.email
-            : "";
-      const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
-      const password = typeof credentials?.password === "string" ? credentials.password : "";
-
-      if (!normalizedIdentifier || !password) return null;
-      const identifier = normalizedIdentifier.value;
-      const ip = extractRequestIp(request);
-      if (ip) {
-        const authRate = await consumeRateLimit({
-          route: "POST /api/auth/callback/credentials",
-          key: `${ip}:${identifier}`,
-          windowSeconds: 15 * 60,
-          max: 10,
-          request,
-          userId: identifier,
-        });
-        if (!authRate.allowed) {
-          return null;
-        }
-      }
-
-      const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
-      const adminPassword = process.env.ADMIN_PASSWORD ?? "";
-      if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail) {
-        if (!isBcryptHash(adminPassword)) {
-          logWarn("auth.admin_password_invalid_format", { userId: identifier });
-          return null;
-        }
-        const adminMatch = await bcrypt.compare(password, adminPassword);
-        if (adminMatch) {
-          await logSecurityEvent({
-            eventType: "login_success",
-            userId: identifier,
-            request,
-            details: { method: "credentials_admin" },
-          });
-          return { id: identifier, name: "Admin", email: identifier };
-        }
-        await logSecurityEvent({
-          eventType: "login_failure",
-          userId: identifier,
-          request,
-          details: { reason: "invalid_admin_credentials" },
-        });
-        return null;
-      }
-
-      const profile = await getUserProfile(identifier);
-      if (profile?.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
-        await logSecurityEvent({
-          eventType: "login_failure",
-          userId: profile.id,
-          request,
-          details: { reason: "account_locked", lockedUntil: profile.lockedUntil },
-        });
-        return null;
-      }
-      if (!profile?.passwordHash) {
-        await persistLoginFailure(profile ?? null, request, identifier);
-        return null;
-      }
-
-      const valid = await bcrypt.compare(password, profile.passwordHash);
-      if (!valid) {
-        await persistLoginFailure(profile, request, identifier);
-        return null;
-      }
-
-      await clearLoginFailure(profile);
-      await logSecurityEvent({
-        eventType: "login_success",
-        userId: profile.id,
-        request,
-        details: { method: "credentials" },
-      });
-
-      const fallbackName = inferDefaultDisplayName(profile.email ?? profile.phone ?? profile.id);
-      return { id: profile.id, name: profile.name || fallbackName, email: profile.email ?? undefined };
-    },
+    authorize: createCredentialsAuthorize(),
   }),
 ];
 
@@ -202,17 +327,16 @@ if (googleClientId && googleClientSecret) {
   );
 }
 
-const authSecret = getAuthSecret();
-if (!authSecret) {
-  throw new Error("AUTH_SECRET (or NEXTAUTH_SECRET) is required for Auth.js");
-}
-const authBaseUrl = getAuthBaseUrl();
-if (!authBaseUrl) {
-  throw new Error("AUTH_URL (or NEXTAUTH_URL) is required for Auth.js");
-}
-
 export default async function handler(request: Request): Promise<Response> {
   try {
+    const authSecret = getAuthSecret();
+    if (!authSecret) {
+      throw new Error("AUTH_SECRET (or NEXTAUTH_SECRET) is required for Auth.js");
+    }
+    const authBaseUrl = getAuthBaseUrl();
+    if (!authBaseUrl) {
+      throw new Error("AUTH_URL (or NEXTAUTH_URL) is required for Auth.js");
+    }
     const normalizedRequest = await withAbsoluteUrl(request, authBaseUrl);
     return await Auth(normalizedRequest, {
       providers,
@@ -345,33 +469,10 @@ export default async function handler(request: Request): Promise<Response> {
           }
         },
         async jwt({ token, user }) {
-          const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
-          const email = normalizeEmail(user?.email ?? token?.email);
-          if (adminEmail && email && adminEmail === email) {
-            (token as { isAdmin?: boolean }).isAdmin = true;
-            (token as { role?: string }).role = "admin";
-          } else {
-            (token as { isAdmin?: boolean }).isAdmin = false;
-          }
-          if (email) {
-            (token as { uid?: string }).uid = email.trim();
-          } else if (user) {
-            const id = (user as { id?: string }).id ?? user.email;
-            if (id) (token as { uid?: string }).uid = id;
-          }
-          // Load role from DB if not already set (non-admin users)
-          if (!(token as { role?: string }).role) {
-            const uid = (token as { uid?: string }).uid;
-            if (uid) {
-              try {
-                const profile = await getUserProfile(uid);
-                (token as { role?: string }).role = profile?.role ?? "agent";
-              } catch {
-                (token as { role?: string }).role = "agent";
-              }
-            }
-          }
-          return token;
+          return await applyRoleClaimsToToken(
+            token as JwtRoleClaimsToken,
+            user ? { email: user.email, id: (user as { id?: string }).id ?? null } : null,
+          );
         },
         async session({ session, token }) {
           if (session.user && token?.uid) {

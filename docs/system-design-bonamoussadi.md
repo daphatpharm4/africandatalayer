@@ -7,6 +7,17 @@
 
 ---
 
+## April 2026 Operational Note
+
+This system-design document remains the structural baseline for the Bonamoussadi data model. Execution and modernization are now governed in parallel by:
+
+- `docs/APP-MODERNIZATION-AND-GAMIFICATION-PROGRAM.md`
+- `docs/MULTI-AGENT-MODERNIZATION-MASTER-PROMPT.md`
+
+Use this document for architecture and data-shape decisions, and the newer docs for rollout sequencing, gamification integration, and cross-agent delivery.
+
+---
+
 ## Table of Contents
 
 1. [Universal Data Model](#1-universal-data-model)

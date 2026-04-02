@@ -7,6 +7,18 @@
 
 ---
 
+## April 2026 Extension
+
+This strategy synthesis is now complemented by:
+
+- `research/11-multi-agent-app-modernization-and-gamification.md`
+- `docs/APP-MODERNIZATION-AND-GAMIFICATION-PROGRAM.md`
+- `docs/MULTI-AGENT-MODERNIZATION-MASTER-PROMPT.md`
+
+Document 10 remains the market and pilot strategy baseline. Document 11 extends it into product modernization, gamification, security hardening, and multi-agent execution.
+
+---
+
 ## Table of Contents
 
 1. [Vertical-by-Vertical Matrix](#1-vertical-by-vertical-matrix)

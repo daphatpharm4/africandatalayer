@@ -2,7 +2,17 @@
 
 > **Override Logic:** Check `gptdesign/pages/[page-name].md` before implementing a surface. If a page file defines a different rule, the page file overrides this master.
 >
-> **Source Precedence:** `research/08-ui-ux-design-research.md` is the product truth for ADL. UI UX Pro Max is used for workflow, accessibility, layout, and stack heuristics. If they conflict, the research doc wins.
+> **Source Precedence:** `research/08-ui-ux-design-research.md` is the product truth for ADL. `research/11-multi-agent-app-modernization-and-gamification.md` extends that truth for progression and gamification. UI UX Pro Max is used for workflow, accessibility, layout, and stack heuristics. If they conflict, the ADL research docs win.
+
+---
+
+## April 2026 Companion Docs
+
+- `docs/APP-MODERNIZATION-AND-GAMIFICATION-PROGRAM.md`
+- `docs/MULTI-AGENT-MODERNIZATION-MASTER-PROMPT.md`
+- `gptdesign/pages/field-agent-gamification-modernization.md`
+
+Use the field-agent gamification override whenever the work touches contributor progression, mission framing, trust communication, rewards, or leaderboard logic.
 
 ---
 
