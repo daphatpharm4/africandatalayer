@@ -137,7 +137,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
     }
 
     const profile = await getUserProfileFn(identifier);
-    if (profile?.role === "admin") {
+    if (profile?.role === "admin" && profile.passwordHash) {
       if (profile.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
         await logSecurityEventFn({
           eventType: "login_failure",
@@ -145,10 +145,6 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
           request,
           details: { reason: "account_locked", lockedUntil: profile.lockedUntil },
         });
-        return null;
-      }
-      if (!profile.passwordHash) {
-        await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
         return null;
       }
       const adminMatch = await comparePasswordFn(password, profile.passwordHash);
