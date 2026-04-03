@@ -1,7 +1,7 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Category } from '../../types';
 import type { DataPoint } from '../../types';
-import type { CollectionAssignment, MapScope, PointEvent, ProjectedPoint, UserRole } from '../../shared/types';
+import type { CollectionAssignment, MapScope, ProjectedPoint, UserRole } from '../../shared/types';
 import {
   BONAMOUSSADI_CENTER,
   CAMEROON_CENTER,
@@ -21,16 +21,7 @@ import VerticalIcon from '../shared/VerticalIcon';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
-import { getSession } from '../../lib/client/auth';
-import { listQueueItems, subscribeQueueSnapshot, type QueueItem } from '../../lib/client/offlineQueue';
-import {
-  computeAverageQualityForToday,
-  computeContributionSummary,
-  mapQueuedItemsToContributionActivities,
-} from '../../lib/shared/contributionMetrics';
 import BrandLogo from '../BrandLogo';
-import DailyProgressWidget from '../DailyProgressWidget';
-import StreakTracker from '../StreakTracker';
 
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
@@ -94,8 +85,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
-  const [agentEvents, setAgentEvents] = useState<PointEvent[]>([]);
-  const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? 'global' : 'bonamoussadi'));
   const contributePressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
@@ -309,67 +298,27 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
   useEffect(() => {
     let cancelled = false;
-    const loadAgentData = async () => {
+    const loadAssignments = async () => {
       if (!isAuthenticated || userRole === 'client') {
         setAssignments([]);
-        setAgentEvents([]);
         return;
       }
 
       try {
-        const eventsParams = new URLSearchParams({ view: 'events' });
-        if (isAdmin) eventsParams.set('scope', 'global');
-        const [session, assignmentData, eventData] = await Promise.all([
-          getSession(),
-          apiJson<CollectionAssignment[]>('/api/user?view=assignments'),
-          apiJson<PointEvent[]>(`/api/submissions?${eventsParams.toString()}`),
-        ]);
-        const userId = session?.user?.id?.toLowerCase().trim() ?? '';
+        const assignmentData = await apiJson<CollectionAssignment[]>('/api/user?view=assignments');
         if (cancelled) return;
         setAssignments(Array.isArray(assignmentData) ? assignmentData : []);
-        const ownEvents = Array.isArray(eventData)
-          ? eventData.filter((event) => (typeof event.userId === 'string' ? event.userId.toLowerCase().trim() : '') === userId)
-          : [];
-        setAgentEvents(ownEvents);
       } catch {
         if (cancelled) return;
         setAssignments([]);
-        setAgentEvents([]);
       }
     };
 
-    void loadAgentData();
+    void loadAssignments();
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, isAdmin, userRole]); // language removed: API data is language-independent
-
-  useEffect(() => {
-    if (!showAgentWidgets) {
-      setQueuedItems([]);
-      return;
-    }
-
-    let cancelled = false;
-    const loadQueuedItems = async () => {
-      try {
-        const items = await listQueueItems();
-        if (!cancelled) setQueuedItems(items);
-      } catch {
-        if (!cancelled) setQueuedItems([]);
-      }
-    };
-
-    void loadQueuedItems();
-    const unsubscribe = subscribeQueueSnapshot(() => {
-      void loadQueuedItems();
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [showAgentWidgets]);
+  }, [isAuthenticated, userRole]);
 
   useEffect(() => {
     return () => {
@@ -410,26 +359,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     return active[0] ?? null;
   }, [assignments]);
-  const syncedActivities = useMemo(
-    () => agentEvents.map((event) => ({
-      createdAt: event.createdAt,
-      eventType: event.eventType,
-      details: event.details,
-    })),
-    [agentEvents],
-  );
-  const queuedActivities = useMemo(() => mapQueuedItemsToContributionActivities(queuedItems), [queuedItems]);
-  const contributionSummary = useMemo(
-    () => computeContributionSummary([...syncedActivities, ...queuedActivities]),
-    [queuedActivities, syncedActivities],
-  );
-  const averageQuality = useMemo(() => computeAverageQualityForToday(syncedActivities), [syncedActivities]);
-  const submissionsToday = contributionSummary.submissionsToday;
-  const enrichmentsToday = contributionSummary.enrichmentsToday;
-  const streakDays = contributionSummary.streakDays;
-  const streakActiveDays = contributionSummary.activeWeekdays;
-  const dailyTarget = activeAssignment?.pointsExpected && activeAssignment.pointsExpected > 0 ? activeAssignment.pointsExpected : 10;
-
   const [agentLocation, setAgentLocation] = useState<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
     if (!navigator.geolocation) return;
@@ -601,19 +530,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </div>
         )}
 
-        {showAgentWidgets && (
-          <div className="mb-3 grid grid-cols-1 gap-3">
-            <DailyProgressWidget
-              language={language}
-              submissionsToday={submissionsToday}
-              enrichmentsToday={enrichmentsToday}
-              averageQuality={averageQuality}
-              streakDays={streakDays}
-              dailyTarget={dailyTarget}
-            />
-            <StreakTracker language={language} streakDays={streakDays} activeDays={streakActiveDays} />
-          </div>
-        )}
       </header>
 
       <div className="relative flex flex-1 flex-col overflow-hidden min-h-[26rem]">

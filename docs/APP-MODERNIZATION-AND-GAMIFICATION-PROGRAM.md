@@ -40,8 +40,8 @@ This program adds the missing gamification layer explicitly. The app already con
 
 ### What is already in the app
 
-- `components/DailyProgressWidget.tsx` gives contributors daily volume, enrichment, quality, and streak status.
-- `components/StreakTracker.tsx` already visualizes streak continuity.
+- `components/DailyProgressWidget.tsx` gives contributors daily volume, enrichment, quality, and streak status. Rendered on the Profile screen.
+- `components/StreakTracker.tsx` visualizes streak continuity with a 7-day heatmap. Rendered on the Profile screen.
 - `components/BadgeSystem.tsx` and `components/Screens/Profile.tsx` already compute and display badges.
 - `shared/submissionRewards.ts` and `shared/xp.ts` already define a reward model and XP logic.
 - `components/XPPopup.tsx` and `components/Screens/ContributionFlow.tsx` already support reward feedback after submission.
@@ -137,7 +137,7 @@ That ordering matters because ADL is already feature-rich enough that the main r
   - badges
   - mission progress
   - reward unlocks
-- move visible progression to Home and Capture, not only Profile
+- consolidate daily progress, daily target, and streak tracker on Profile as a gaming dashboard; keep Home focused on the map and active assignment
 - clarify pending-review vs verified-reward states
 
 ### Phase 2: Gamification That Supports Operations
@@ -217,10 +217,14 @@ That ordering matters because ADL is already feature-rich enough that the main r
 
 - Home:
   - next mission
-  - daily progress
-  - streak
   - queue health
   - assignment progress
+- Profile (gaming dashboard):
+  - daily progress (DailyProgressWidget)
+  - streak tracker (StreakTracker)
+  - daily target
+  - weekly target
+  - trust score, badges, history, rewards, and redemption
 - Contribution Flow:
   - estimated reward
   - quality hints
@@ -231,8 +235,6 @@ That ordering matters because ADL is already feature-rich enough that the main r
   - rank movement
   - season score
   - team/community challenge state
-- Profile:
-  - depth view for trust, badges, history, rewards, and redemption
 
 ### Anti-gaming rules
 

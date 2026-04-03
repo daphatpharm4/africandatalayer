@@ -12,13 +12,21 @@ import {
   Wallet
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
-import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
+import { clearSyncErrorRecords, listQueueItems, listSyncErrorRecords, subscribeQueueSnapshot, type QueueItem, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import { AVATAR_PRESETS, coerceAvatarPreset, encodeAvatarPresetImage, type AvatarPreset } from '../../shared/avatarPresets';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 import { getEffectiveEventXp } from '../../shared/xp';
-import { countActivitiesInCurrentWeek, formatContributionHistoryDate } from '../../lib/shared/contributionMetrics';
+import {
+  computeAverageQualityForToday,
+  computeContributionSummary,
+  countActivitiesInCurrentWeek,
+  formatContributionHistoryDate,
+  mapQueuedItemsToContributionActivities,
+} from '../../lib/shared/contributionMetrics';
 import BadgeGrid, { computeBadges } from '../BadgeSystem';
+import DailyProgressWidget from '../DailyProgressWidget';
+import StreakTracker from '../StreakTracker';
 import ProfileAvatar from '../shared/ProfileAvatar';
 import ScreenHeader from '../shared/ScreenHeader';
 
@@ -50,6 +58,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   const [isUpdatingAssignmentId, setIsUpdatingAssignmentId] = useState<string | null>(null);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [avatarSaveError, setAvatarSaveError] = useState('');
+  const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
   const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
     if (isAdminMode) return 'global';
     if (value === 'cameroon' || value === 'global') return value;
@@ -133,6 +142,50 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   }, []); // language removed: API data is language-independent; translations handled in render
 
   const badges = useMemo(() => computeBadges(ownEvents), [ownEvents]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadQueuedItems = async () => {
+      try {
+        const items = await listQueueItems();
+        if (!cancelled) setQueuedItems(items);
+      } catch {
+        if (!cancelled) setQueuedItems([]);
+      }
+    };
+
+    void loadQueuedItems();
+    const unsubscribe = subscribeQueueSnapshot(() => {
+      void loadQueuedItems();
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  const syncedActivities = useMemo(
+    () => ownEvents.map((event) => ({
+      createdAt: event.createdAt,
+      eventType: event.eventType,
+      details: event.details,
+    })),
+    [ownEvents],
+  );
+  const queuedActivities = useMemo(() => mapQueuedItemsToContributionActivities(queuedItems), [queuedItems]);
+  const contributionSummary = useMemo(
+    () => computeContributionSummary([...syncedActivities, ...queuedActivities]),
+    [queuedActivities, syncedActivities],
+  );
+  const averageQuality = useMemo(() => computeAverageQualityForToday(syncedActivities), [syncedActivities]);
+  const activeAssignment = useMemo(() => {
+    const active = assignments
+      .filter((a) => a.status === 'in_progress' || a.status === 'pending')
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+    return active[0] ?? null;
+  }, [assignments]);
+  const dailyTarget = activeAssignment?.pointsExpected && activeAssignment.pointsExpected > 0 ? activeAssignment.pointsExpected : 10;
 
   const avatarOptions = useMemo(
     () =>
@@ -372,6 +425,20 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
             </div>
           </div>
         </div>
+
+        <DailyProgressWidget
+          language={language}
+          submissionsToday={contributionSummary.submissionsToday}
+          enrichmentsToday={contributionSummary.enrichmentsToday}
+          averageQuality={averageQuality}
+          streakDays={contributionSummary.streakDays}
+          dailyTarget={dailyTarget}
+        />
+        <StreakTracker
+          language={language}
+          streakDays={contributionSummary.streakDays}
+          activeDays={contributionSummary.activeWeekdays}
+        />
 
         {profile?.isAdmin && (
           <div className="card p-5 space-y-3">

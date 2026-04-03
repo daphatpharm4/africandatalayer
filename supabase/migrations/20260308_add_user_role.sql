@@ -7,3 +7,4 @@ alter table public.user_profiles
 
 -- Sync existing admins: if is_admin is true, set role to 'admin'
 update public.user_profiles set role = 'admin' where is_admin = true;
+

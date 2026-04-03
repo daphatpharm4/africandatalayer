@@ -149,21 +149,18 @@ what is formal and informal what makes the diffrences
 
 
 
-use cases :
->> retail 
+updating verticals :
 >> pharmacie >> where are they located >> are they formal or informal pharmacies >> what do they sell >> how fast are new products appearing >> what is the delta ( supply chain )
->> alcholl >> where are they located b( bar , retail spaces etc )  >> what do they sell >> how fast are new products appearing >> what is the delta >> 
->> kiosque >> where are they located
+>> alcholl >> where are they located ( bar , retail spaces etc )  >> what do they sell >> how fast are new products appearing >> what is the delta >> 
+>> kiosque >> where are they located ( bar , retail spaces etc )  >> what do they sell >> how fast are new products appearing >> what is the delta >> 
 >> station >>
 >> billboards >> where are they located >> what do they advitiss >> traffic to that billboard > how often the advertisment on the billboard is changed what brand is the delta on that billbiad>> what is the delta
 >> census data : delta of the snapshots >> high resolution satelite image then validate on the ground >> pictures >> delta >> 
 >> fuel and fleet >> ngos >>
 >> first consumer moving goods >> assisting public goods 
-
 >> ask other competitors > if we have the date >> we should check them >>
 >> data collectiuon strategies >> supply chain ??? the questions 
-where do they products come from ? how are they aggregated >> how are they sold 
-
+>>where do they products come from ? how are they aggregated >> how are they sold 
 
 list each verticals 
 list what data they need 
@@ -173,3 +170,104 @@ list their products
 list the problem they face 
 list the data lack they have 
 list how to find the deltas 
+>> africans are very transactional 
+>> you need consistent deltas to be able to sell thta , and that conistency matters 
+>> when launch good quality stuff >> 80-20 >> what is their user profile >> incentives >> this should be very clear and very defined 
+>> defining >> 80-20 rules >> what is the profile of the 20% >> take these and start valiadyting this pices 
+>> data acquisition strategy >> define ur process of validation 
+
+
+Paste-ready prompts below. Replace `today`, `Bonamoussadi`, `Cameroon douala`, `[PREVIOUS_SNAPSHOT]`, `[EMAIL_RECIPIENTS]`, `[WHATSAPP_RECIPIENTS]`.
+
+1. **Pharmacies**
+```text
+Create an agent team to produce the daily pharmacies delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps all pharmacy locations (GPS + zone). Teammate 2 classifies each as formal or informal. Teammate 3 lists products sold and price bands. Teammate 4 measures new product appearance speed (last 7/30 days). Teammate 5 maps supply chain (source, aggregator, distributor, retailer). Teammate 6 calculates delta vs [PREVIOUS_SNAPSHOT] (openings/closures, assortment change, stock shifts, supplier shifts). Teammate 7 validates data quality with photo/time/location evidence and confidence scoring. Teammate 8 lists target companies to contact, actors from source to consumer, key problems, and data gaps. Teammate 9 sends concise email and WhatsApp alerts to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead delivers final output in: snapshot table, delta table, top insights, risks, next actions. Each teammate waits for the previous one to finish.
+```
+
+2. **Alcohol (bars, retail, outlets)**
+```text
+Create an agent team to produce the daily alcohol vertical delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps alcohol points of sale (bars, shops, kiosks, wholesalers). Teammate 2 catalogs products/brands/SKUs and pricing. Teammate 3 tracks new product introduction speed and availability changes. Teammate 4 maps supply chain and aggregation points. Teammate 5 computes delta vs [PREVIOUS_SNAPSHOT] (new outlets, removed outlets, assortment and brand shifts, price and stock changes). Teammate 6 identifies key actors, companies to contact, and consumer flow. Teammate 7 flags operational problems and missing data. Teammate 8 sends email and WhatsApp notifications to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead provides final dashboard-ready output with evidence and confidence. Each teammate waits for the previous one to finish.
+```
+
+3. **Kiosks**
+```text
+Create an agent team to produce the daily kiosks delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps kiosk locations and type (street kiosk, attached retail, transport node). Teammate 2 lists products sold, stock depth, and turnover indicators. Teammate 3 tracks how fast new products appear and disappear. Teammate 4 maps supplier and aggregation chain. Teammate 5 computes delta vs [PREVIOUS_SNAPSHOT] (location, product mix, stockouts, supplier changes). Teammate 6 identifies companies to contact, actor map to consumer, and market pain points. Teammate 7 defines data gaps and how to close them in next collection cycle. Teammate 8 sends email and WhatsApp updates to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead outputs snapshot, delta, priority actions, and confidence score. Each teammate waits for the previous one to finish.
+```
+
+4. **Stations (transport hubs)**
+```text
+Create an agent team to produce the daily station vertical delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps station locations (bus/taxi/transport hubs) and footfall proxies. Teammate 2 maps commercial activity around stations (vendors, kiosks, services). Teammate 3 tracks product/service mix and new offers. Teammate 4 computes delta vs [PREVIOUS_SNAPSHOT] (traffic change, vendor mix, new/removed services). Teammate 5 identifies actor chain, companies to contact, and operational bottlenecks. Teammate 6 defines missing data and field validation tasks. Teammate 7 sends email and WhatsApp summary to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead produces a concise decision report with evidence and risks. Each teammate waits for the previous one to finish.
+```
+
+5. **Billboards**
+```text
+Create an agent team to produce the daily billboards delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps billboard locations and orientation. Teammate 2 records current advertiser, brand, and campaign message. Teammate 3 estimates traffic exposure for each billboard. Teammate 4 tracks ad-change frequency and historical campaign sequence. Teammate 5 computes brand/campaign delta vs [PREVIOUS_SNAPSHOT]. Teammate 6 identifies top brands active, companies to contact, and competitive moves. Teammate 7 validates with photo timestamp and geo evidence. Teammate 8 sends email and WhatsApp alert digest to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead outputs ranked billboard opportunities, deltas, and confidence levels. Each teammate waits for the previous one to finish.
+```
+
+6. **Census + satellite + ground validation**
+```text
+Create an agent team to produce the daily census-snapshot delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 ingests high-resolution satellite imagery and identifies candidate changes. Teammate 2 plans ground-truth routes and photo evidence collection. Teammate 3 validates on the ground and confirms true changes. Teammate 4 computes census delta vs [PREVIOUS_SNAPSHOT] (new structures, removed structures, activity density shifts). Teammate 5 quantifies confidence and uncertainty. Teammate 6 lists data gaps, validation backlog, and next-pass priorities. Teammate 7 sends email and WhatsApp status and alert summary to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead produces final snapshot, delta register, and action plan. Each teammate waits for the previous one to finish.
+```
+
+7. **Fuel and fleet**
+```text
+Create an agent team to produce the daily fuel and fleet delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps fuel stations, depots, and high-volume routes. Teammate 2 maps fleet actors (transporters, delivery fleets, bus/taxi operators). Teammate 3 captures product/price/availability and service changes. Teammate 4 tracks supply chain origin, aggregation, and distribution paths. Teammate 5 computes delta vs [PREVIOUS_SNAPSHOT] (price, stock, route pressure, operator behavior). Teammate 6 identifies companies to contact, actor-to-consumer chain, and market constraints. Teammate 7 flags fraud/anomaly signals and missing data. Teammate 8 sends email and WhatsApp updates to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead delivers final operational intelligence brief. Each teammate waits for the previous one to finish.
+```
+
+8. **NGOs + assisting public goods**
+```text
+Create an agent team to produce the daily NGO and public-goods delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps NGOs, programs, and service points. Teammate 2 tracks goods/services delivered, beneficiary flow, and coverage zones. Teammate 3 maps distribution chain and local partners. Teammate 4 computes delta vs [PREVIOUS_SNAPSHOT] (coverage expansion/reduction, service gaps, stock and demand changes). Teammate 5 identifies contactable organizations, actor map, and funding/operations bottlenecks. Teammate 6 defines missing data and priority validation checks. Teammate 7 sends email and WhatsApp summary to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead outputs decisions, risks, and next actions. Each teammate waits for the previous one to finish.
+```
+
+9. **FMCG (first consumer moving goods)**
+```text
+Create an agent team to produce the daily FMCG delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 maps channels (wholesale, retail, kiosk, informal). Teammate 2 catalogs products, pack sizes, and price tiers. Teammate 3 measures new SKU appearance speed and stockout patterns. Teammate 4 maps source-to-consumer chain and aggregation nodes. Teammate 5 computes delta vs [PREVIOUS_SNAPSHOT] (SKU entry/exit, pricing, distribution shifts). Teammate 6 lists companies to contact, key actors, problems, and data gaps. Teammate 7 proposes monetizable insights requiring consistent deltas. Teammate 8 sends email and WhatsApp updates to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead provides final market intelligence report. Each teammate waits for the previous one to finish.
+```
+
+10. **Competitor tracking**
+```text
+Create an agent team to produce the daily competitor intelligence delta report for Bonamoussadi, Cameroon douala on today. Teammate 1 identifies direct and indirect competitors by vertical. Teammate 2 checks what data they publish/sell, coverage, freshness, and format. Teammate 3 compares their data quality and update cadence to ours. Teammate 4 computes competitor delta vs [PREVIOUS_SNAPSHOT] (new offers, pricing, partnerships, market moves). Teammate 5 identifies gaps we can win on with consistent high-quality deltas. Teammate 6 lists specific companies and decision-makers to contact. Teammate 7 sends email and WhatsApp briefing to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead outputs tactical counter-moves and priorities. Each teammate waits for the previous one to finish.
+```
+
+11. **Cross-vertical strategy + 80/20 + validation process**
+```text
+Create an agent team to produce the daily cross-vertical strategy report for Bonamoussadi, Cameroon douala on today. Teammate 1 lists each active vertical and required data fields. Teammate 2 lists companies to contact per vertical and all actors from source to consumer. Teammate 3 lists products, core problems, and data gaps per vertical. Teammate 4 defines delta detection rules per vertical and minimum consistency standard for monetization. Teammate 5 applies 80/20 analysis to define the top 20% user/agent profiles that generate 80% of value. Teammate 6 defines incentive model and validation workflow (capture, verify, confidence score, exception handling). Teammate 7 outputs the data acquisition strategy and weekly governance cadence. Teammate 8 sends email and WhatsApp summary to [EMAIL_RECIPIENTS] and [WHATSAPP_RECIPIENTS]. The lead delivers a single execution plan with priorities and next experiments. Each teammate waits for the previous one to finish.
+```
+
+
+
+
+>>> multi agent prompt 
+>>Create an agent team  to ....  Teammate 1 (Cloud Architect) defines the target cloud architecture, environments, networking, governance, and cost/reliability tradeoffs. Teammate 2 (System Design Expert) turns that into concrete service boundaries, APIs, data models, performance targets, and failure-handling strategy. Teammate 3 (Cloud Engineer) implements the plan with IaC, CI/CD, observability, backup/DR, and deployment runbooks. Teammate 4 (Cybersecurity Expert) performs threat modeling, identifies vulnerabilities, validates controls, and defines incident response. Teammate 5 (Fraud Specialist) designs fraud scenarios, detection rules/signals, risk scoring, and response playbooks while minimizing false positives. Teammate 6 (Data Analyst) defines KPIs, data quality checks, dashboards, and analysis queries for decision-making. Teammate 7 (Marketing Genius) creates ICP/personas, positioning, messaging, channel experiments, and growth metrics. Teammate 8 (Service Delivery Manager / Project Leader) owns scope, milestones, owners, dependencies, RAID log, and stakeholder cadence. 
+
+>>> new verticals 
+
+
+Create an agent team to research and propose the best data acquisition strategy automated workflow for Cameroon (Bonamoussadi) for these verticals: billboards, alcohol, census, fuel, mobile money, pharmacy, and transport roads (including blocked roads).Final output must include:
+1) Vertical-by-vertical matrix: data needed, actors, products/services, likely problems, data gaps, and delta method
+2) Recommended collection mix per vertical (field ops, satellite, partner data, public data, competitor tracking)
+3) 6-week pilot plan for Bonamoussadi with budget, team roles, and KPIs
+4) Priority company/org contact list (local + international) per vertical
+5) Risk register and mitigation plan
+6) 80/20 focus: define the top 20% of data points that produce 80% of client value
+7) Clear validation SOP: capture -> verify -> score confidence -> publish deltacreate a dedicated folder called workflow and put all delivarbles inside
+
+Teammate 1 (Data Analyst) researches the local context: existing data sources, field realities, update frequency, and data quality risks by vertical.
+Teammate 2 (System Design Expert) designs the end-to-end collection workflow: data model, entity IDs, baseline vs snapshot logic, and delta computation rules.
+Teammate 3 (Cloud Architect) proposes the target technical architecture (offline-first mobile capture, storage, sync, APIs, cost/reliability tradeoffs).
+Teammate 4 (Cloud Engineer) translates architecture into practical implementation steps: tooling, deployment approach, observability, and runbooks.
+Teammate 5 (Cybersecurity Expert) defines security/privacy controls, consent and compliance requirements, and incident response for field data operations.
+Teammate 6 (Fraud Specialist) designs anti-fraud controls (GPS spoofing checks, duplicate detection, timestamp/photo validation, confidence scoring).
+Teammate 7 (Marketing Genius) identifies target paying customers per vertical, strongest use cases, and how consistent deltas convert into commercial value.
+Teammate 8 ( UI UX designer ) research the best UI layout for the app to make it at the same time simple to use and eye catching
+Teammate 9 (Service Delivery Manager / Project Leader) creates the execution plan: owners, milestones, dependencies, RAID log, and governance cadence.
+The lead synthesizes all outputs into one final strategy. Each teammate waits for the previous one to finish.
+Final output must include:
+1) Vertical-by-vertical matrix: data needed, actors, products/services, likely problems, data gaps, and delta method
+2) Recommended collection mix per vertical (field ops, satellite, partner data, public data, competitor tracking)
+3) 6-week pilot plan for Bonamoussadi with budget, team roles, and KPIs
+4) Priority company/org contact list (local + international) per vertical
+5) Risk register and mitigation plan
+6) 80/20 focus: define the top 20% of data points that produce 80% of client value
+7) Clear validation SOP: capture -> verify -> score confidence -> publish delta
+create a dedicated folder called research and put all delivarbles inside 
