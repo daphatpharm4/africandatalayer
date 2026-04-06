@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { Screen } from './types';
+import { Category, Screen } from './types';
 import type { ContributionMode, DataPoint } from './types';
 import { getSession, signOut } from './lib/client/auth';
 import { apiJson } from './lib/client/api';
@@ -72,6 +72,7 @@ const App: React.FC = () => {
   const [contributionDraft, setContributionDraft] = useState<QueueItem | null>(null);
   const [contributionAssignment, setContributionAssignment] = useState<CollectionAssignment | null>(null);
   const [batchCaptureMode, setBatchCaptureMode] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshot>(defaultQueueSnapshot);
 
   const isClient = userRole === 'client';
@@ -266,6 +267,8 @@ const App: React.FC = () => {
                   })
             }
             onProfile={() => switchTab(Screen.PROFILE)}
+            activeCategory={activeCategory}
+            onCategoryChange={setActiveCategory}
             language={language}
           />
         );

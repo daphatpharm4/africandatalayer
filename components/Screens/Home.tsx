@@ -31,6 +31,8 @@ interface Props {
   onAuth: () => void;
   onContribute?: (options?: { batch?: boolean; assignment?: CollectionAssignment | null }) => void;
   onProfile: () => void;
+  activeCategory: Category;
+  onCategoryChange: (category: Category) => void;
   language: 'en' | 'fr';
 }
 
@@ -77,10 +79,9 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRole = 'agent', onAuth, onContribute, onProfile, language }) => {
+const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRole = 'agent', onAuth, onContribute, onProfile, activeCategory, onCategoryChange, language }) => {
   const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
   const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
-  const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [isVerticalPickerOpen, setIsVerticalPickerOpen] = useState(false);
   const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
@@ -482,7 +483,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                       key={category}
                       type="button"
                       onClick={() => {
-                        setActiveCategory(category);
+                        onCategoryChange(category);
                         setIsVerticalPickerOpen(false);
                       }}
                       className={`h-10 rounded-xl border micro-label flex items-center justify-center gap-1 ${
