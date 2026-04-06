@@ -44,7 +44,7 @@ test("filterPublicSubmissionDetails keeps display metadata and strips sensitive 
   });
 });
 
-test("toPublicProjectedPoint removes traversal metadata and photo access", () => {
+test("toPublicProjectedPoint removes traversal metadata but preserves photo access", () => {
   const point: ProjectedPoint = {
     id: "point-1",
     pointId: "point-1",
@@ -67,7 +67,7 @@ test("toPublicProjectedPoint removes traversal metadata and photo access", () =>
   };
 
   const sanitized = toPublicProjectedPoint(point);
-  assert.equal(sanitized.photoUrl, undefined);
+  assert.equal(sanitized.photoUrl, "https://example.com/photo.jpg");
   assert.equal(sanitized.source, undefined);
   assert.equal(sanitized.externalId, undefined);
   assert.deepEqual(sanitized.eventIds, []);

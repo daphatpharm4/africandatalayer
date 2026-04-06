@@ -108,7 +108,6 @@ export function toPublicProjectedPoint(point: ProjectedPoint): ProjectedPoint {
   return {
     ...point,
     details: filterPublicSubmissionDetails(point.details),
-    photoUrl: undefined,
     source: undefined,
     externalId: undefined,
     eventIds: [],
