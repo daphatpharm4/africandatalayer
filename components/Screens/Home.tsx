@@ -512,9 +512,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     <div
       className="relative h-full min-h-0 bg-page"
     >
-      <header className="route-grid absolute top-0 left-0 right-0 z-20 overflow-hidden px-4 pt-4 pb-3 bg-white/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(15,43,70,0.08)]">
-        <div className="ambient-orb right-[-2rem] top-[-1.5rem] h-20 w-20 bg-gold/20" />
-        <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
+      <header className="route-grid absolute top-0 left-0 right-0 z-20 px-4 pt-4 pb-3 bg-white/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(15,43,70,0.08)]">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          <div className="ambient-orb right-[-2rem] top-[-1.5rem] h-20 w-20 bg-gold/20" />
+          <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
+        </div>
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
             <div className="flex items-center space-x-2">
