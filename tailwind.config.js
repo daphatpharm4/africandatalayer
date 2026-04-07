@@ -24,6 +24,7 @@ const config = {
         },
         forest: {
           DEFAULT: '#4c7c59',
+          dark: '#3a6145',
           wash: '#eaf3ee',
         },
         gold: {
