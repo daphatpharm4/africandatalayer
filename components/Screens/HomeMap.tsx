@@ -68,6 +68,7 @@ interface Props {
   isLowEndDevice: boolean;
   nearbyEnrichCount?: number;
   assignmentZones?: AssignmentZone[];
+  sheetSnap?: string;
 }
 
 const createMarkerIcon = (color: string) =>
@@ -144,7 +145,7 @@ const AgentLocationMarker: React.FC = () => {
   );
 };
 
-const MapSizeSync: React.FC<{ active: boolean }> = ({ active }) => {
+const MapSizeSync: React.FC<{ active: boolean; sheetSnap?: string }> = ({ active, sheetSnap }) => {
   const map = useMap();
 
   useEffect(() => {
@@ -161,6 +162,15 @@ const MapSizeSync: React.FC<{ active: boolean }> = ({ active }) => {
       window.clearTimeout(timeoutId);
     };
   }, [active, map]);
+
+  // Re-sync map size after bottom sheet snap transitions (320ms = --duration-base)
+  useEffect(() => {
+    if (!sheetSnap) return;
+    const timeoutId = window.setTimeout(() => {
+      map.invalidateSize({ animate: false });
+    }, 320);
+    return () => window.clearTimeout(timeoutId);
+  }, [sheetSnap, map]);
 
   return null;
 };
@@ -182,6 +192,7 @@ const HomeMap: React.FC<Props> = ({
   isLowEndDevice,
   nearbyEnrichCount = 0,
   assignmentZones = [],
+  sheetSnap,
 }) => {
   const [showHeatmap, setShowHeatmap] = useState(false);
 
@@ -211,7 +222,7 @@ const HomeMap: React.FC<Props> = ({
           subdomains="abcd"
           maxZoom={20}
         />
-        <MapSizeSync active />
+        <MapSizeSync active sheetSnap={sheetSnap} />
         <AgentLocationMarker />
         {assignmentZones.map((zone) => (
           <Rectangle

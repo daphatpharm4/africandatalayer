@@ -292,6 +292,30 @@
   animation: stale-enter 200ms ease-out both;
 }
 
+/* Bottom sheet */
+.bottom-sheet {
+  touch-action: none;
+}
+
+.bottom-sheet-content {
+  touch-action: pan-y;
+}
+
+@keyframes sheet-enter {
+  from {
+    transform: translateY(100%);
+    opacity: 0.8;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.sheet-enter {
+  animation: sheet-enter var(--duration-base) var(--ease-out-expo) both;
+}
+
 @keyframes surface-reveal {
   from {
     opacity: 0;

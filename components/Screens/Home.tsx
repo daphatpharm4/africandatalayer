@@ -24,6 +24,10 @@ import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
 import BrandLogo from '../BrandLogo';
 import { runViewTransition } from '../../lib/client/motion';
+import BottomSheet from '../shared/BottomSheet';
+import type { SnapPoint } from '../shared/BottomSheet';
+import MissionCards from '../MissionCards';
+import type { MissionCard } from '../MissionCards';
 
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
@@ -89,6 +93,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
   const [mapScope, setMapScope] = useState<MapScope>('bonamoussadi');
+  const [sheetSnap, setSheetSnap] = useState<SnapPoint>('peek');
   const contributePressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
   const verticalPickerRef = useRef<HTMLDivElement>(null);
@@ -507,7 +512,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     <div
       className="relative h-full min-h-0 bg-page"
     >
-      <header className="route-grid absolute top-0 left-0 right-0 z-20 overflow-hidden px-4 pt-4 pb-5 bg-white/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(15,43,70,0.08)]">
+      <header className="route-grid absolute top-0 left-0 right-0 z-20 overflow-hidden px-4 pt-4 pb-3 bg-white/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(15,43,70,0.08)]">
         <div className="ambient-orb right-[-2rem] top-[-1.5rem] h-20 w-20 bg-gold/20" />
         <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
         <div className="flex items-center justify-between mb-4">
@@ -584,83 +589,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           )}
         </div>
 
-        {showAgentWidgets && activeAssignment && (
-          <div className="mission-card surface-reveal mb-3 rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="micro-label-wide text-gray-400">
-                  {t('Active Assignment', 'Affectation active')}
-                </div>
-                <h4 className="mt-1 text-base font-bold text-gray-900">{activeAssignment.zoneLabel}</h4>
-                <p className="mt-1 text-xs text-gray-500">
-                  {activeAssignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}
-                </p>
-              </div>
-              <div className="rounded-full bg-navy-wash px-3 py-1 micro-label text-navy">
-                {activeAssignment.status}
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between micro-label text-gray-400">
-                <span>{t('Progress', 'Progression')}</span>
-                <span>{activeAssignment.pointsSubmitted}/{activeAssignment.pointsExpected}</span>
-              </div>
-              <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden shimmer-line">
-                <div className="h-full rounded-full bg-navy" style={{ width: `${Math.min(100, activeAssignment.completionRate)}%` }} />
-              </div>
-            </div>
-            <div className="text-xs text-gray-500">
-              {t('Due', 'Échéance')}: {activeAssignment.dueDate}
-            </div>
-          </div>
-        )}
-
-        <div className="surface-reveal-delayed -mx-1 flex gap-3 overflow-x-auto no-scrollbar px-1 pt-1">
-          {missionCards.map((card, index) => {
-            const Icon = card.icon;
-            return (
-              <button
-                key={card.id}
-                type="button"
-                onClick={card.action}
-                className={`motion-pressable mission-card min-w-[16rem] flex-1 rounded-[1.6rem] px-5 py-5 text-left border-l-[4px] ${card.tone} ${
-                  card.id === 'primary' ? 'border-l-gold' : card.id === 'nearby' ? 'border-l-terra' : 'border-l-forest'
-                }`}
-                style={{
-                  animationDelay: `${90 + index * 60}ms`,
-                  boxShadow: '0 4px 20px rgba(15,43,70,0.15), 0 1px 4px rgba(15,43,70,0.1)',
-                }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className={`micro-label-wide ${
-                        card.tone.includes('text-white') ? 'text-white/75'
-                        : card.tone.includes('forest') ? 'text-forest/70'
-                        : card.tone.includes('terra') ? 'text-terra/70'
-                        : 'text-navy/60'
-                      }`}>{card.label}</div>
-                      {'xpReward' in card && card.xpReward && (
-                        <span className="micro-label rounded-full bg-gold px-2 py-0.5 text-navy font-bold">{card.xpReward}</span>
-                      )}
-                    </div>
-                    <div className={`mt-2 text-[15px] font-bold leading-snug ${card.tone.includes('text-white') ? 'text-white' : 'text-gray-900'}`}>{card.title}</div>
-                    <div className={`mt-1.5 text-xs leading-relaxed ${card.tone.includes('text-white') ? 'text-white/80' : 'text-gray-600'}`}>{card.meta}</div>
-                  </div>
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-                    card.tone.includes('text-white') ? 'bg-white/15 text-white'
-                    : card.tone.includes('forest') ? 'bg-forest/10 text-forest'
-                    : card.tone.includes('terra') ? 'bg-terra/10 text-terra'
-                    : 'bg-navy/10 text-navy'
-                  }`}>
-                    <Icon size={20} />
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
       </header>
 
       <div className="absolute inset-0 flex flex-col overflow-hidden">
@@ -691,6 +619,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               isLowEndDevice={isLowEndDevice}
               nearbyEnrichCount={nearbyEnrichCount}
               assignmentZones={assignmentZones}
+              sheetSnap={sheetSnap}
             />
           </Suspense>
         )}
@@ -736,6 +665,23 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </div>
         )}
 
+        {viewMode === 'map' && (
+          <BottomSheet
+            peekHeight={80}
+            onSnapChange={setSheetSnap}
+            hidden={false}
+            isLowEndDevice={isLowEndDevice}
+          >
+            <MissionCards
+              cards={missionCards as MissionCard[]}
+              sheetSnap={sheetSnap}
+              activeAssignment={activeAssignment}
+              showAgentWidgets={showAgentWidgets}
+              language={language}
+            />
+          </BottomSheet>
+        )}
+
         {onContribute && (
           <button
             type="button"
@@ -761,8 +707,13 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               }
             }}
             onContextMenu={(event) => event.preventDefault()}
-            className="motion-pressable button-breathe fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-16 h-16 bg-terra text-white rounded-full flex items-center justify-center z-40"
-            style={{ boxShadow: '0 6px 28px rgba(200,107,74,0.4), 0 2px 8px rgba(200,107,74,0.2)' }}
+            className={`motion-pressable button-breathe fixed right-4 w-16 h-16 bg-terra text-white rounded-full flex items-center justify-center z-40 transition-all duration-200 ${
+              sheetSnap !== 'peek' ? 'opacity-0 pointer-events-none' : ''
+            }`}
+            style={{
+              bottom: 'calc(6rem + var(--safe-bottom) + 80px)',
+              boxShadow: '0 6px 28px rgba(200,107,74,0.4), 0 2px 8px rgba(200,107,74,0.2)',
+            }}
             aria-label={
               isAuthenticated
                 ? t('Contribute', 'Contribuer')
@@ -774,8 +725,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </button>
         )}
 
-        {onContribute && (
-          <div className="surface-reveal fixed bottom-[calc(10.25rem+var(--safe-bottom))] right-4 z-40">
+        {onContribute && sheetSnap === 'peek' && (
+          <div
+            className="surface-reveal fixed right-4 z-40"
+            style={{ bottom: 'calc(10.25rem + var(--safe-bottom) + 80px)' }}
+          >
             <div className="rounded-full bg-white/96 px-3 py-2 micro-label text-gray-500 shadow-lg">
               {t('Tap to add one • Hold for multiple', 'Appuyez pour ajouter • Maintenez pour plusieurs')}
             </div>
