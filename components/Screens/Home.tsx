@@ -15,6 +15,9 @@ import {
   Map as MapIcon,
   MapPin,
   Plus,
+  Route,
+  Sparkles,
+  Target,
   User
 } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
@@ -22,6 +25,7 @@ import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } fro
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
 import BrandLogo from '../BrandLogo';
+import { runViewTransition } from '../../lib/client/motion';
 
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
@@ -386,6 +390,89 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       .map((a) => ({ id: a.id, zoneLabel: a.zoneLabel, zoneBounds: a.zoneBounds }));
   }, [assignments]);
 
+  const missionCards = useMemo(() => {
+    const cards = [];
+
+    if (!isAuthenticated) {
+      return [
+        {
+          id: 'join',
+          icon: Target,
+          label: t('Start contributing', 'Commencer a contribuer'),
+          title: t('Sign in to unlock field missions', 'Connectez-vous pour debloquer les missions'),
+          meta: t('Live capture, GPS proof, instant progress', 'Capture live, preuve GPS, progression immediate'),
+          tone: 'bg-navy text-white',
+          action: onAuth,
+        },
+        {
+          id: 'explore',
+          icon: Route,
+          label: t('Explore coverage', 'Explorer la couverture'),
+          title: t(`${filteredPoints.length} mapped points in this vertical`, `${filteredPoints.length} points cartographies dans cette verticale`),
+          meta: t('Use the map to spot high-signal zones', 'Utilisez la carte pour reperer les zones a fort signal'),
+          tone: 'bg-white text-gray-900 border border-gray-200',
+          action: () => {
+            if (viewMode !== 'map') {
+              void runViewTransition(() => setViewMode('map'));
+            }
+          },
+        },
+      ];
+    }
+
+    cards.push({
+      id: 'primary',
+      icon: Target,
+      label: activeAssignment ? t('Next assignment move', 'Prochaine action de mission') : t('Next high-value capture', 'Prochaine capture a forte valeur'),
+      title: activeAssignment ? activeAssignment.zoneLabel : t(`Capture a fresh ${categoryLabel(activeCategory).toLowerCase()}`, `Capturez un nouveau ${categoryLabel(activeCategory).toLowerCase()}`),
+      meta: activeAssignment
+        ? t(`${activeAssignment.pointsSubmitted}/${activeAssignment.pointsExpected} complete`, `${activeAssignment.pointsSubmitted}/${activeAssignment.pointsExpected} termines`)
+        : t('Build verified coverage in this area', 'Construisez une couverture verifiee dans cette zone'),
+      tone: 'bg-navy text-white',
+      action: () => {
+        if (isAuthenticated && onContribute) {
+          onContribute({ assignment: activeAssignment });
+          return;
+        }
+        onAuth();
+      },
+    });
+
+    cards.push({
+      id: 'nearby',
+      icon: Sparkles,
+      label: t('Nearby opportunities', 'Opportunites proches'),
+      title: nearbyEnrichCount > 0
+        ? t(`${nearbyEnrichCount} refreshes within 200m`, `${nearbyEnrichCount} rafraichissements a moins de 200 m`)
+        : t('No nearby refreshes yet', 'Aucun rafraichissement proche'),
+      meta: nearbyEnrichCount > 0
+        ? t('Open list view to scan them fast', 'Ouvrez la liste pour les scanner vite')
+        : t('Move through the zone to discover gaps', 'Deplacez-vous dans la zone pour trouver des manques'),
+      tone: nearbyEnrichCount > 0 ? 'bg-terra text-white' : 'bg-terra-wash text-terra-dark border border-terra/20',
+      action: () => {
+        if (nearbyEnrichCount > 0 && viewMode !== 'list') {
+          void runViewTransition(() => setViewMode('list'));
+        }
+      },
+    });
+
+    cards.push({
+      id: 'coverage',
+      icon: Route,
+      label: viewMode === 'map' ? t('Scan the feed', 'Scanner le flux') : t('Return to the map', 'Retour a la carte'),
+      title: t(`${filteredPoints.length} visible points`, `${filteredPoints.length} points visibles`),
+      meta: viewMode === 'map'
+        ? t('Switch to list view for rapid triage', 'Passez en liste pour un triage rapide')
+        : t('Switch back to map for spatial context', 'Revenez a la carte pour le contexte spatial'),
+      tone: 'bg-white text-gray-900 border border-gray-200',
+      action: () => {
+        void runViewTransition(() => setViewMode((current) => (current === 'map' ? 'list' : 'map')));
+      },
+    });
+
+    return cards;
+  }, [activeAssignment, activeCategory, filteredPoints.length, isAuthenticated, nearbyEnrichCount, onAuth, onContribute, t, viewMode]);
+
   const launchSingleCapture = () => {
     if (isAuthenticated && onContribute) {
       onContribute({ assignment: activeAssignment });
@@ -420,12 +507,18 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     launchSingleCapture();
   };
 
+  const handleViewModeToggle = () => {
+    void runViewTransition(() => setViewMode((current) => (current === 'map' ? 'list' : 'map')));
+  };
+
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-y-auto bg-page no-scrollbar"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
-      <header className="px-4 pt-4 pb-3 bg-white border-b border-gray-100 shrink-0">
+      <header className="route-grid relative overflow-hidden px-4 pt-4 pb-4 bg-white border-b border-gray-100 shrink-0">
+        <div className="ambient-orb right-[-2rem] top-[-1.5rem] h-20 w-20 bg-gold/20" />
+        <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
             <div className="flex items-center space-x-2">
@@ -448,7 +541,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </div>
           <button
             onClick={isAuthenticated ? onProfile : onAuth}
-            className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 border border-gray-100"
+            className="motion-pressable w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 border border-gray-100"
             aria-label={isAuthenticated ? t('Profile', 'Profil') : t('Sign in', 'Connexion')}
           >
             <User size={18} />
@@ -464,7 +557,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         <div ref={verticalPickerRef} className="relative mb-2">
           <button
             onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
-            className="w-full h-11 px-3 bg-gray-100 rounded-xl text-xs font-semibold text-navy flex items-center justify-between"
+            className="motion-pressable w-full h-11 px-3 bg-gray-100 rounded-xl text-xs font-semibold text-navy flex items-center justify-between"
           >
             <span>
               {t('Category', 'Catégorie')} : {categoryLabel(activeCategory)}
@@ -486,7 +579,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                         onCategoryChange(category);
                         setIsVerticalPickerOpen(false);
                       }}
-                      className={`h-10 rounded-xl border micro-label flex items-center justify-center gap-1 ${
+                      className={`motion-pressable h-10 rounded-xl border micro-label flex items-center justify-center gap-1 ${
                         isActive ? 'bg-navy text-white border-navy' : 'bg-gray-50 text-gray-600 border-gray-100'
                       }`}
                     >
@@ -501,7 +594,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         </div>
 
         {showAgentWidgets && activeAssignment && (
-          <div className="mb-3 rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+          <div className="mission-card surface-reveal mb-3 rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="micro-label-wide text-gray-400">
@@ -521,7 +614,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                 <span>{t('Progress', 'Progression')}</span>
                 <span>{activeAssignment.pointsSubmitted}/{activeAssignment.pointsExpected}</span>
               </div>
-              <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div className="mt-2 h-2 rounded-full bg-gray-100 overflow-hidden shimmer-line">
                 <div className="h-full rounded-full bg-navy" style={{ width: `${Math.min(100, activeAssignment.completionRate)}%` }} />
               </div>
             </div>
@@ -530,6 +623,35 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
             </div>
           </div>
         )}
+
+        <div className="surface-reveal-delayed -mx-1 flex gap-3 overflow-x-auto no-scrollbar px-1 pt-1">
+          {missionCards.map((card, index) => {
+            const Icon = card.icon;
+            return (
+              <button
+                key={card.id}
+                type="button"
+                onClick={card.action}
+                className={`motion-pressable mission-card min-w-[15rem] flex-1 rounded-[1.6rem] px-4 py-4 text-left shadow-sm ${card.tone}`}
+                style={{
+                  animationDelay: `${90 + index * 60}ms`,
+                  boxShadow: card.tone.includes('bg-navy') || card.tone.includes('bg-terra') ? 'var(--shadow-lift)' : undefined,
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className={`micro-label-wide ${card.tone.includes('text-white') ? 'text-white/75' : 'text-gray-400'}`}>{card.label}</div>
+                    <div className={`mt-2 text-sm font-bold ${card.tone.includes('text-white') ? 'text-white' : 'text-gray-900'}`}>{card.title}</div>
+                    <div className={`mt-2 text-xs leading-relaxed ${card.tone.includes('text-white') ? 'text-white/80' : 'text-gray-500'}`}>{card.meta}</div>
+                  </div>
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${card.tone.includes('text-white') ? 'bg-white/12 text-white' : 'bg-navy-wash text-navy'}`}>
+                    <Icon size={18} />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
 
       </header>
 
@@ -565,7 +687,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </Suspense>
         )}
         {viewMode === 'list' && (
-          <div className="flex-1 relative z-30 bg-page overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="surface-reveal flex-1 relative z-30 bg-page overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
             <div className="p-4 space-y-3 pb-24">
               {isLoadingPoints && (
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
@@ -576,7 +698,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                 <button
                   key={point.id}
                   onClick={() => onSelectPoint(point)}
-                  className="w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4 active:scale-[0.98] transition-transform"
+                  className="motion-pressable w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4"
                 >
                   {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
                     <div className="p-3 rounded-xl" style={{ backgroundColor: v?.bgColor ?? '#f9fafb', color: v?.color ?? '#1f2933' }}>
@@ -607,8 +729,9 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         )}
 
         <button
-          onClick={() => setViewMode((v) => (v === 'map' ? 'list' : 'map'))}
-          className="fixed bottom-[calc(6rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 px-5 py-2.5 bg-ink text-white rounded-full shadow-2xl flex items-center space-x-2 z-40 hover:bg-black active:scale-95 transition-all"
+          onClick={handleViewModeToggle}
+          className="motion-pressable fixed bottom-[calc(6rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 px-5 py-3 bg-ink text-white rounded-full shadow-2xl flex items-center space-x-2 z-40"
+          style={{ boxShadow: 'var(--shadow-lift)' }}
         >
           {viewMode === 'map' ? <List size={16} /> : <MapIcon size={16} />}
           <span className="text-xs font-bold uppercase tracking-wider">{viewMode === 'map' ? t('List View', 'Vue liste') : t('Map View', 'Vue carte')}</span>
@@ -639,21 +762,31 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               }
             }}
             onContextMenu={(event) => event.preventDefault()}
-            className="fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-terra text-white rounded-full shadow-2xl flex items-center justify-center z-40 hover:bg-terra-dark active:scale-95 transition-all"
+            className="motion-pressable button-breathe fixed bottom-[calc(6rem+var(--safe-bottom))] right-4 w-14 h-14 bg-terra text-white rounded-full shadow-2xl flex items-center justify-center z-40"
+            style={{ boxShadow: 'var(--shadow-terra)' }}
             aria-label={
               isAuthenticated
                 ? t('Contribute', 'Contribuer')
                 : t('Sign in to contribute', 'Connectez-vous pour contribuer')
             }
           >
+            <span className="ring-pulse absolute inset-0 rounded-full border border-terra/30" aria-hidden="true" />
             <Plus size={22} />
           </button>
+        )}
+
+        {onContribute && (
+          <div className="surface-reveal fixed bottom-[calc(10.25rem+var(--safe-bottom))] right-4 z-40">
+            <div className="rounded-full bg-white/96 px-3 py-2 micro-label text-gray-500 shadow-lg">
+              {t('Tap once: capture • Hold: batch', 'Touchez: capture • Maintenez: lot')}
+            </div>
+          </div>
         )}
 
         {!isAuthenticated && (
           <button
             onClick={onAuth}
-            className="absolute top-20 left-4 right-4 bg-white p-3 rounded-xl shadow-xl border border-gray-100 z-20 flex items-center justify-between"
+            className="motion-pressable absolute top-20 left-4 right-4 bg-white p-3 rounded-xl shadow-xl border border-gray-100 z-20 flex items-center justify-between"
           >
             <span className="text-sm font-bold text-gray-900">{t('Sign in to contribute', 'Connectez-vous pour contribuer')}</span>
             <span className="px-3 py-1.5 bg-navy text-white micro-label rounded-lg">{t('Sign In', 'Connexion')}</span>

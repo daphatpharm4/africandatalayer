@@ -73,10 +73,17 @@ const XPPopup: React.FC<Props> = ({
   ].filter((item) => item.value > 0);
 
   return (
-    <div className="flex flex-col h-full bg-page">
-      <div className="flex-1 px-6 py-8 flex flex-col items-center justify-center text-center space-y-5">
-        <div className="w-16 h-16 rounded-2xl bg-forest-wash text-forest flex items-center justify-center">
-          <CheckCircle size={30} />
+    <div className="route-grid-soft relative flex flex-col h-full bg-page overflow-hidden">
+      <div className="ambient-orb left-[-2rem] top-[14%] h-28 w-28 bg-gold/20" />
+      <div className="ambient-orb right-[-2rem] top-[20%] h-24 w-24 bg-terra/20" style={{ animationDelay: '-2s' }} />
+      <div className="ambient-orb bottom-[18%] right-[12%] h-24 w-24 bg-navy/10" style={{ animationDelay: '-4s' }} />
+
+      <div className="flex-1 px-6 py-8 flex flex-col items-center justify-center text-center space-y-5 relative z-10">
+        <div className="relative">
+          <div className="ring-pulse absolute inset-[-10px] rounded-[2rem] border border-forest/20" />
+          <div className="reward-float relative z-10 w-16 h-16 rounded-2xl bg-forest-wash text-forest flex items-center justify-center shadow-sm">
+            <CheckCircle size={30} />
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -95,13 +102,27 @@ const XPPopup: React.FC<Props> = ({
           </p>
         </div>
 
-        <div className="w-full max-w-sm rounded-3xl border border-gray-100 bg-white p-5 shadow-sm space-y-4">
+        <div className="mission-card w-full max-w-sm rounded-3xl border border-gray-100 bg-white/95 p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="text-left">
+              <div className="micro-label-wide text-gray-400">{t('Contribution result', 'Resultat contribution')}</div>
+              <div className="mt-1 text-sm font-bold text-gray-900">
+                {quickEnrichPrompt
+                  ? t('You created a partial point with clear next value.', 'Vous avez cree un point partiel avec une prochaine etape claire.')
+                  : t('Your evidence is now in the trust loop.', 'Votre preuve entre maintenant dans la boucle de confiance.')}
+              </div>
+            </div>
+            <div className="rounded-2xl bg-navy-wash p-3 text-navy">
+              <Award size={18} />
+            </div>
+          </div>
+
           {rewardItems.length > 0 && (
             <div className="grid grid-cols-2 gap-3 text-left">
               {rewardItems.map((item, index) => (
                 <div
                   key={item.id}
-                  className={`stat-tile ${item.tileClass}`}
+                  className={`stat-tile ${item.tileClass} rounded-2xl shadow-sm`}
                   style={{ animation: `xp-slide-in 0.4s ease-out ${0.1 + index * 0.1}s both` }}
                 >
                   <div className="inline-flex items-center gap-1 micro-label">
@@ -115,7 +136,7 @@ const XPPopup: React.FC<Props> = ({
           )}
 
           {quickEnrichPrompt && (
-            <div className="rounded-3xl border border-terra-wash bg-terra-wash/60 p-4 text-left space-y-3">
+            <div className="mission-card rounded-3xl border border-terra-wash bg-terra-wash/60 p-4 text-left space-y-3">
               <div className="flex items-center gap-4">
                 <div
                   className="relative h-16 w-16 rounded-full"
@@ -158,16 +179,16 @@ const XPPopup: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="p-6 pt-0 space-y-3">
+      <div className="relative z-10 p-6 pt-0 space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <button type="button" onClick={onPrimary} className="btn-cta">
+          <button type="button" onClick={onPrimary} className="btn-cta motion-pressable button-breathe" style={{ boxShadow: 'var(--shadow-terra)' }}>
             {quickEnrichPrompt
               ? t('Complete This Point', 'Compléter ce point')
               : isBatchMode
                 ? t('Capture Next', 'Capture suivante')
                 : t('Add Another', 'Ajouter encore')}
           </button>
-          <button type="button" onClick={onSecondary} className="btn-ghost">
+          <button type="button" onClick={onSecondary} className="btn-ghost motion-pressable">
             <span className="inline-flex items-center gap-2">
               <Map size={14} />
               {quickEnrichPrompt
@@ -179,7 +200,7 @@ const XPPopup: React.FC<Props> = ({
           </button>
         </div>
         {quickEnrichPrompt && onTertiary && (
-          <button type="button" onClick={onTertiary} className="w-full text-center micro-label text-gray-500">
+          <button type="button" onClick={onTertiary} className="motion-pressable w-full text-center micro-label text-gray-500">
             {t('Later', 'Plus tard')}
           </button>
         )}

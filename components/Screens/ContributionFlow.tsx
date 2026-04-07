@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
+  Award,
   Camera,
   MapPin,
+  Route,
   ShieldCheck,
-  Signal
+  Signal,
+  Target,
+  Zap,
 } from 'lucide-react';
 import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
 import {
@@ -1394,28 +1398,130 @@ const ContributionFlow: React.FC<Props> = ({
     const previewPoint = buildPreviewPointFromPayload(previewPayload);
     const estimatedXp = calculateXp(previewPayload, previewPoint).totalXp;
     const colorFor = (score: number) => score >= 80 ? 'text-forest' : score >= 50 ? 'text-gold' : 'text-terra';
+    const trustNarrative = completionSummary.percentage >= 80
+      ? t('High-signal evidence. This should review cleanly.', 'Preuve a fort signal. Cela devrait etre valide facilement.')
+      : completionSummary.percentage >= 50
+        ? t('Good start. Fill a few more details for a stronger trust score.', 'Bon debut. Ajoutez encore quelques details pour renforcer la confiance.')
+        : t('The point needs stronger proof before it feels reliable.', 'Le point a besoin de preuves plus solides avant d etre fiable.');
 
     return (
-      <div className="card p-4 space-y-3">
-        <h4 className="micro-label text-gray-400">{t('Quality Preview', 'Aperçu qualité')}</h4>
+      <div className="mission-card route-grid-soft card p-4 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="micro-label text-gray-400">{t('Quality Preview', 'Aperçu qualité')}</h4>
+            <p className="mt-2 text-sm font-bold text-gray-900">{trustNarrative}</p>
+          </div>
+          <div className="rounded-2xl bg-forest-wash px-3 py-2 text-right">
+            <div className="micro-label text-forest">{t('Est. reward', 'Recompense est.')}</div>
+            <div className="text-lg font-extrabold text-forest">+{estimatedXp} XP</div>
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-gray-50 p-3 text-center">
+          <div className="rounded-2xl bg-white/90 p-3 text-center shadow-sm">
             <Signal size={16} className={`mx-auto ${colorFor(gpsScore)}`} />
             <div className={`text-lg font-bold ${colorFor(gpsScore)}`}>{gpsScore}%</div>
             <div className="micro-label text-gray-400">{t('GPS', 'GPS')}</div>
           </div>
-          <div className="rounded-xl bg-gray-50 p-3 text-center">
+          <div className="rounded-2xl bg-white/90 p-3 text-center shadow-sm">
             <Camera size={16} className={`mx-auto ${colorFor(photoScore)}`} />
             <div className={`text-lg font-bold ${colorFor(photoScore)}`}>{photoScore}%</div>
             <div className="micro-label text-gray-400">{t('Photo', 'Photo')}</div>
           </div>
-          <div className="rounded-xl bg-gray-50 p-3 text-center">
+          <div className="rounded-2xl bg-white/90 p-3 text-center shadow-sm">
             <div className={`text-lg font-bold ${colorFor(completionSummary.percentage)}`}>{completionSummary.percentage}%</div>
             <div className="micro-label text-gray-400">{t('Fields', 'Champs')}</div>
           </div>
-          <div className="rounded-xl bg-forest-wash p-3 text-center">
-            <div className="text-lg font-bold text-forest">+{estimatedXp}</div>
-            <div className="micro-label text-gray-400">{t('Est. XP', 'XP est.')}</div>
+          <div className="rounded-2xl bg-navy text-center p-3 shadow-sm text-white">
+            <div className="inline-flex items-center gap-1 micro-label text-white/70">
+              <Zap size={12} />
+              {t('Impact', 'Impact')}
+            </div>
+            <div className="mt-1 text-lg font-bold text-white">{completionSummary.missing.length === 0 ? t('Verified-ready', 'Pret a verifier') : t('More proof', 'Plus de preuves')}</div>
+            <div className="micro-label text-white/70">{t('Mission value', 'Valeur mission')}</div>
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between micro-label text-gray-400">
+            <span>{t('Completion', 'Completion')}</span>
+            <span>{completionSummary.percentage}%</span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/80">
+            <div className="h-full rounded-full bg-terra shimmer-line" style={{ width: `${completionSummary.percentage}%` }} />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderMissionImpactPreview = () => {
+    const title = isQuickEnrichSession
+      ? t('Finish this point while the context is fresh', 'Finalisez ce point tant que le contexte est frais')
+      : assignment
+        ? t('This capture advances your active assignment', 'Cette capture fait avancer votre affectation active')
+        : isBatchMode
+          ? t('Chain multiple captures while you are already in zone', 'Enchainez plusieurs captures tant que vous etes deja sur zone')
+          : t('Turn a real-world visit into trusted coverage', 'Transformez une visite terrain en couverture fiable');
+
+    const meta = isQuickEnrichSession
+      ? t('Missing fields now convert a partial point into a trusted asset.', 'Les champs manquants transforment maintenant un point partiel en actif fiable.')
+      : assignment
+        ? t('Verified work in the assigned zone should pay better than generic volume.', 'Le travail verifie dans la zone affectee doit payer mieux qu un simple volume.')
+        : isBatchMode
+          ? t('Batch mode is best when signal is strong and the next captures are nearby.', 'Le mode lot est ideal quand le signal est stable et que les prochaines captures sont proches.')
+          : t('Clear proof, GPS, and detail depth will raise both reward and trust.', 'Preuve claire, GPS, et richesse des details augmenteront recompense et confiance.');
+
+    const primaryMetric = assignment
+      ? `${assignment.pointsSubmitted}/${assignment.pointsExpected}`
+      : isBatchMode
+        ? `${batchCapturedCount}`
+        : dedupCheck?.candidates.length
+          ? `${dedupCheck.candidates.length}`
+          : `${editableEnrichFields.length}`;
+    const primaryLabel = assignment
+      ? t('Assignment progress', 'Progression mission')
+      : isBatchMode
+        ? t('Captures banked', 'Captures enregistrees')
+        : dedupCheck?.candidates.length
+          ? t('Nearby lookalikes', 'Doublons proches')
+          : t('Editable fields', 'Champs modifiables');
+
+    return (
+      <div className="mission-card route-grid-soft card p-4 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="micro-label-wide text-gray-400">{t('Mission Impact', 'Impact mission')}</div>
+            <h4 className="mt-2 text-base font-bold text-gray-900">{title}</h4>
+            <p className="mt-2 text-xs leading-relaxed text-gray-600">{meta}</p>
+          </div>
+          <div className="reward-float rounded-2xl bg-white/90 p-3 shadow-sm">
+            <Target size={18} className="text-terra" />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-2xl bg-white/90 p-3 shadow-sm">
+            <div className="inline-flex items-center gap-1 micro-label text-gray-400">
+              <Route size={12} />
+              {primaryLabel}
+            </div>
+            <div className="mt-2 text-lg font-bold text-gray-900">{primaryMetric}</div>
+          </div>
+          <div className="rounded-2xl bg-white/90 p-3 shadow-sm">
+            <div className="inline-flex items-center gap-1 micro-label text-gray-400">
+              <Award size={12} />
+              {t('Trust lane', 'Niveau confiance')}
+            </div>
+            <div className="mt-2 text-lg font-bold text-navy">
+              {isQuickEnrichSession ? t('Upgrade', 'Montee') : t('Visible', 'Visible')}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white/90 p-3 shadow-sm">
+            <div className="inline-flex items-center gap-1 micro-label text-gray-400">
+              <Zap size={12} />
+              {t('Outcome', 'Resultat')}
+            </div>
+            <div className="mt-2 text-lg font-bold text-terra">
+              {isBatchMode ? t('Fast', 'Rapide') : t('Weighted', 'Pondere')}
+            </div>
           </div>
         </div>
       </div>
@@ -1433,7 +1539,7 @@ const ContributionFlow: React.FC<Props> = ({
             <button
               key={v.id}
               onClick={() => setVertical(v.id as Vertical)}
-              className={`h-11 rounded-xl border micro-label flex items-center justify-center gap-1 ${vertical === v.id ? `border-current` : 'border-gray-100 text-gray-500'}`}
+              className={`motion-pressable h-11 rounded-xl border micro-label flex items-center justify-center gap-1 ${vertical === v.id ? `border-current` : 'border-gray-100 text-gray-500'}`}
               style={vertical === v.id ? { backgroundColor: v.bgColor, color: v.color, borderColor: v.color } : undefined}
             >
               <VerticalIcon name={v.icon} size={12} />
@@ -1447,12 +1553,12 @@ const ContributionFlow: React.FC<Props> = ({
 
   const renderCommonLocationBlock = () => (
     <div className="card p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <MapPin size={16} className="text-navy" />
-          <span className="text-xs font-bold text-gray-900">{t('GPS Location', 'Localisation GPS')}</span>
-        </div>
-        <button onClick={retryLocation} className="micro-label text-navy">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <MapPin size={16} className="text-navy" />
+            <span className="text-xs font-bold text-gray-900">{t('GPS Location', 'Localisation GPS')}</span>
+          </div>
+        <button onClick={retryLocation} className="motion-pressable micro-label text-navy">
           {t('Retry', 'Réessayer')}
         </button>
       </div>
@@ -2282,9 +2388,11 @@ const ContributionFlow: React.FC<Props> = ({
 
   return (
     <div className="flex flex-col h-full bg-page">
-      <div className="pt-6 px-6">
+      <div className="route-grid relative overflow-hidden pt-6 px-6 pb-2">
+        <div className="ambient-orb right-[-2rem] top-[-1rem] h-20 w-20 bg-gold/20" />
+        <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
         <div className="flex items-center justify-between mb-3">
-          <button onClick={handleBackPress} className="p-1 -ml-1 text-gray-500">
+          <button onClick={handleBackPress} className="motion-pressable p-1 -ml-1 text-gray-500">
             <ArrowLeft size={24} />
           </button>
           <span className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em]">
@@ -2322,7 +2430,7 @@ const ContributionFlow: React.FC<Props> = ({
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-5">
-        <div className="card p-4 flex items-center justify-between">
+        <div className="surface-reveal card p-4 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-navy">
             {verticalIcon}
             <span className="text-sm font-bold">
@@ -2337,7 +2445,7 @@ const ContributionFlow: React.FC<Props> = ({
         </div>
 
         {assignment && (
-          <div className="card p-4">
+          <div className="surface-reveal card p-4">
             <div className="micro-label-wide text-gray-400">{t('Assignment Context', 'Contexte affectation')}</div>
             <div className="mt-2 flex items-center justify-between gap-3">
               <div>
@@ -2357,7 +2465,7 @@ const ContributionFlow: React.FC<Props> = ({
         )}
 
         {isBatchMode && (
-          <div className="bg-navy text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
+          <div className="surface-reveal bg-navy text-white p-4 rounded-2xl shadow-sm flex items-center justify-between">
             <div>
               <div className="micro-label-wide text-white/70">{t('Batch Capture', 'Capture en lot')}</div>
               <div className="mt-1 text-sm font-bold">{t('Captured', 'Captures')}: {batchCapturedCount}</div>
@@ -2375,6 +2483,7 @@ const ContributionFlow: React.FC<Props> = ({
           </div>
         )}
 
+        {renderMissionImpactPreview()}
         {renderVerticalSelector()}
         {renderPhotoBlock()}
         {renderCommonLocationBlock()}
@@ -2467,10 +2576,18 @@ const ContributionFlow: React.FC<Props> = ({
       </div>
 
       <div className="sticky bottom-0 z-20 p-6 pt-2 bg-page border-t border-gray-100">
+        <div className="mb-3 px-1">
+          <div className="rounded-2xl border border-terra/10 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm">
+            {isBatchMode
+              ? t('Batch mode trades navigation for throughput. Keep proof quality high.', 'Le mode lot reduit la navigation pour augmenter le debit. Gardez une preuve de qualite.')
+              : t('Strong evidence now means less review friction later.', 'Une preuve solide maintenant signifie moins de friction pendant la revue.')}
+          </div>
+        </div>
         <button
           onClick={handleSubmit}
           disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
-          className="w-full h-14 bg-navy text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-navy-dark active:scale-95 transition-all disabled:opacity-70"
+          className="motion-pressable button-breathe w-full h-14 bg-navy text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 disabled:opacity-70"
+          style={{ boxShadow: 'var(--shadow-lift)' }}
         >
           {isSubmitting ? (
             <>
