@@ -11,6 +11,7 @@ import {
 } from '../../shared/geofence';
 import {
   ChevronDown,
+  Map,
   MapPin,
   Plus,
   Route,
@@ -627,6 +628,19 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         )}
         {viewMode === 'list' && (
           <div className="surface-reveal flex-1 relative z-10 bg-page overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+            <div className="sticky top-0 z-20 bg-page border-b border-gray-100 px-4 py-2 flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-700">
+                {filteredPoints.length} {t('points', 'points')}
+              </span>
+              <button
+                type="button"
+                onClick={() => void runViewTransition(() => setViewMode('map'))}
+                className="motion-pressable flex items-center gap-1.5 text-xs font-semibold text-forest bg-forest-wash px-3 py-2 rounded-xl border border-forest/20"
+              >
+                <Map size={14} />
+                {t('Back to Map', 'Retour à la carte')}
+              </button>
+            </div>
             <div className="p-4 space-y-3 pb-24 pt-4">
               {isLoadingPoints && (
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">

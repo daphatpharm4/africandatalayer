@@ -78,7 +78,7 @@ const XPPopup: React.FC<Props> = ({
       <div className="ambient-orb right-[-2rem] top-[20%] h-24 w-24 bg-terra/20" style={{ animationDelay: '-2s' }} />
       <div className="ambient-orb bottom-[18%] right-[12%] h-24 w-24 bg-navy/10" style={{ animationDelay: '-4s' }} />
 
-      <div className="flex-1 px-6 py-8 flex flex-col items-center justify-center text-center space-y-5 relative z-10">
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 py-8 flex flex-col items-center text-center space-y-5 relative z-10">
         <div className="relative">
           <div className="ring-pulse absolute inset-[-10px] rounded-[2rem] border border-forest/20" />
           <div className="reward-float relative z-10 w-16 h-16 rounded-2xl bg-forest-wash text-forest flex items-center justify-center shadow-sm">
