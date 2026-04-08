@@ -11,7 +11,7 @@ import {
 } from '../../shared/geofence';
 import {
   ChevronDown,
-  Map,
+  Map as MapIcon,
   MapPin,
   Plus,
   Route,
@@ -637,7 +637,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                 onClick={() => void runViewTransition(() => setViewMode('map'))}
                 className="motion-pressable flex items-center gap-1.5 text-xs font-semibold text-forest bg-forest-wash px-3 py-2 rounded-xl border border-forest/20"
               >
-                <Map size={14} />
+                <MapIcon size={14} />
                 {t('Back to Map', 'Retour à la carte')}
               </button>
             </div>
