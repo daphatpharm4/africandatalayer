@@ -23,6 +23,18 @@ import { consumeRateLimit } from "../../lib/server/rateLimit.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { captureServerException } from "../../lib/server/sentry.js";
 import {
+  buildAdminReviewStatsFromPoints,
+  buildAdminSubmissionGroups,
+  compareAdminReviewSort,
+  getAdminReviewStatusFromDetails,
+  getAdminRiskBucket,
+  getAdminRiskScoreFromDetails,
+  getAdminSiteNameFromDetails,
+  parseAdminReviewLimit,
+  parseAdminReviewPage,
+  type AdminReviewerOption,
+} from "../../lib/shared/adminReviewQueue.js";
+import {
   blockStatusFromCode,
   computeEventContentHash,
   computeImageSha256,
@@ -410,26 +422,6 @@ function getSecondaryPhotoUrl(event: PointEvent): string | null {
   return normalized || null;
 }
 
-function getReviewStatus(event: PointEvent): string {
-  const details = event.details as Record<string, unknown> | undefined;
-  const status = typeof details?.reviewStatus === "string" ? details.reviewStatus.trim().toLowerCase() : "";
-  return status || "auto_approved";
-}
-
-function getReviewFlags(event: PointEvent): string[] {
-  const details = event.details as Record<string, unknown> | undefined;
-  const raw = details?.reviewFlags;
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((value) => (typeof value === "string" ? value.trim() : ""))
-    .filter((value) => value.length > 0);
-}
-
-function isPendingReview(event: PointEvent): boolean {
-  if (getReviewStatus(event) === "pending_review") return true;
-  return getReviewFlags(event).length > 0;
-}
-
 function shouldRunFallbackFraudCheck(event: PointEvent, fraudCheck: SubmissionFraudCheck | null): boolean {
   const primaryUrl = typeof event.photoUrl === "string" ? event.photoUrl.trim() : "";
   const secondaryUrl = getSecondaryPhotoUrl(event);
@@ -546,6 +538,30 @@ async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSu
   return output;
 }
 
+async function buildAdminReviewerOptions(events: PointEvent[]): Promise<AdminReviewerOption[]> {
+  const userIds = Array.from(
+    new Set(
+      events
+        .map((event) => normalizeActorId(event.userId))
+        .filter((value) => value.length > 0),
+    ),
+  );
+
+  const entries = await Promise.all(
+    userIds.map(async (userId) => {
+      const profile = await getUserProfile(userId);
+      const emailFromProfile = typeof profile?.email === "string" ? profile.email.trim().toLowerCase() : "";
+      const email = emailFromProfile || (userId.includes("@") ? userId : null);
+      return {
+        id: userId,
+        name: getUserDisplayName(userId, profile?.name ?? null, email),
+      } satisfies AdminReviewerOption;
+    }),
+  );
+
+  return entries.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 type SchemaGuardView = {
   ok: boolean | null;
   expected: string[];
@@ -646,9 +662,99 @@ export async function GET(request: Request): Promise<Response> {
       const adminAccess = resolveAdminViewAccess(authContext);
       if (adminAccess === "unauthorized") return errorResponse("Unauthorized", 401);
       if (adminAccess === "forbidden") return errorResponse("Forbidden", 403);
-      const pending = scopedEvents.filter((event) => isPendingReview(event));
-      const adminEvents = await buildAdminSubmissionEvents(pending);
-      return jsonResponse(adminEvents, { status: 200 });
+      const riskFilter = url.searchParams.get("risk");
+      const userFilter = normalizeActorId(url.searchParams.get("userId") ?? "");
+      const page = parseAdminReviewPage(url.searchParams.get("page"));
+      const limit = parseAdminReviewLimit(url.searchParams.get("limit"));
+
+      const grouped = new Map<string, PointEvent[]>();
+      for (const event of scopedEvents) {
+        const existing = grouped.get(event.pointId);
+        if (existing) {
+          existing.push(event);
+        } else {
+          grouped.set(event.pointId, [event]);
+        }
+      }
+
+      const pointSummaries = Array.from(grouped.entries()).map(([pointId, events]) => {
+        const sorted = [...events].sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        );
+        const latestEvent = sorted[sorted.length - 1]!;
+        const createdEvent = sorted.find((event) => event.eventType === "CREATE_EVENT") ?? latestEvent;
+        const reviewStatus = getAdminReviewStatusFromDetails(latestEvent.details);
+        const riskScore = getAdminRiskScoreFromDetails(latestEvent.details);
+
+        return {
+          pointId,
+          events: sorted,
+          latestEvent,
+          reviewStatus,
+          riskScore,
+          riskBucket: getAdminRiskBucket(riskScore, reviewStatus),
+          siteName: getAdminSiteNameFromDetails(createdEvent.details),
+          contributorIds: new Set(sorted.map((event) => normalizeActorId(event.userId)).filter((value) => value.length > 0)),
+        };
+      });
+
+      const stats = buildAdminReviewStatsFromPoints(
+        pointSummaries.map((summary) => ({
+          riskScore: summary.riskScore,
+          reviewStatus: summary.reviewStatus,
+        })),
+      );
+
+      const filtered = pointSummaries
+        .filter((summary) => {
+          if (riskFilter && riskFilter !== "all" && summary.riskBucket !== riskFilter) return false;
+          if (userFilter && !summary.contributorIds.has(userFilter)) return false;
+          return true;
+        })
+        .sort((a, b) =>
+          compareAdminReviewSort(
+            {
+              pointId: a.pointId,
+              latestCreatedAt: a.latestEvent.createdAt,
+              reviewStatus: a.reviewStatus,
+              riskScore: a.riskScore,
+            },
+            {
+              pointId: b.pointId,
+              latestCreatedAt: b.latestEvent.createdAt,
+              reviewStatus: b.reviewStatus,
+              riskScore: b.riskScore,
+            },
+          ),
+        );
+
+      const totalGroups = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(totalGroups / limit));
+      const safePage = Math.min(page, totalPages);
+      const startIndex = (safePage - 1) * limit;
+      const pageGroups = filtered.slice(startIndex, startIndex + limit);
+      const pagePointIds = new Set(pageGroups.map((group) => group.pointId));
+      const pageEvents = scopedEvents.filter((event) => pagePointIds.has(event.pointId));
+      const adminEvents = await buildAdminSubmissionEvents(pageEvents);
+      const builtGroups = buildAdminSubmissionGroups(adminEvents);
+      const groupByPointId = new Map(builtGroups.map((group) => [group.pointId, group] as const));
+      const orderedGroups = pageGroups
+        .map((group) => groupByPointId.get(group.pointId) ?? null)
+        .filter((group): group is NonNullable<typeof group> => group !== null);
+      const reviewers = await buildAdminReviewerOptions(scopedEvents);
+
+      return jsonResponse(
+        {
+          groups: orderedGroups,
+          reviewers,
+          stats,
+          page: safePage,
+          totalPages,
+          totalGroups,
+          limit,
+        },
+        { status: 200 },
+      );
     }
 
     let projected = projectPointsFromEvents(scopedEvents);

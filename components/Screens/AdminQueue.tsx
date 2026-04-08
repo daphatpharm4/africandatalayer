@@ -1,22 +1,40 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Camera, MapPin, ShieldCheck, Trash2, X } from 'lucide-react';
+import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Camera,
+  ChevronLeft,
+  ChevronRight,
+  Clock3,
+  MapPin,
+  ShieldCheck,
+  Trash2,
+  Users,
+  X,
+} from 'lucide-react';
 import ProfileAvatar from '../shared/ProfileAvatar';
 import { coerceAvatarPreset } from '../../shared/avatarPresets';
 import { apiFetch, apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
+import {
+  buildAdminSubmissionGroups,
+  createEmptyAdminReviewStats,
+  type AdminReviewQueueResponse,
+  type AdminRiskFilter,
+  type AdminSubmissionGroup,
+} from '../../lib/shared/adminReviewQueue';
 import type {
-  AdminSubmissionEvent,
+  AssignmentPlannerContext,
   AutomationLeadPriority,
   AutomationLeadStatus,
-  AssignmentPlannerContext,
   ClientDeviceInfo,
   CollectionAssignment,
   LeadCandidate,
+  SubmissionCategory,
   SubmissionDetails,
   SubmissionFraudCheck,
   SubmissionLocation,
   SubmissionPhotoMetadata,
-  SubmissionCategory,
 } from '../../shared/types';
 import { categoryLabel as getCategoryLabel, VERTICAL_IDS } from '../../shared/verticals';
 
@@ -25,14 +43,36 @@ interface Props {
   language: 'en' | 'fr';
 }
 
-type MatchState = 'match' | 'mismatch' | 'unavailable';
-type RiskFilter = 'all' | 'flagged' | 'pending' | 'low_risk';
 type ReviewDecision = 'approved' | 'rejected' | 'flagged';
 type AutomationStatusFilter = '' | AutomationLeadStatus;
 type AutomationPriorityFilter = '' | AutomationLeadPriority;
+type AdminMode = 'review' | 'assignments' | 'automation';
+type MatchState = 'match' | 'mismatch' | 'unavailable';
+
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (callback: () => void) => void;
+};
+
+const DEFAULT_ASSIGNMENT_STATUS: CollectionAssignment['status'] = 'pending';
+const ASSIGNMENT_STATUSES: CollectionAssignment['status'][] = ['pending', 'in_progress', 'completed', 'expired'];
+const ASSIGNABLE_VERTICALS = VERTICAL_IDS as SubmissionCategory[];
+const AUTOMATION_LEAD_STATUSES: AutomationLeadStatus[] = [
+  'ready_for_assignment',
+  'needs_field_verify',
+  'matched_existing',
+  'assignment_created',
+  'verified',
+  'import_candidate',
+  'rejected_manual',
+  'rejected_out_of_zone',
+];
+const AUTOMATION_PRIORITIES: AutomationLeadPriority[] = ['high', 'medium', 'low'];
+const REVIEW_PAGE_LIMIT = 24;
+const focusRingClass =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy focus-visible:ring-offset-2 focus-visible:ring-offset-page';
 
 function exifStatusLabel(status: SubmissionPhotoMetadata['exifStatus'] | null | undefined, language: 'en' | 'fr'): string {
-  if (status === 'ok') return language === 'fr' ? 'EXIF present' : 'EXIF present';
+  if (status === 'ok') return language === 'fr' ? 'EXIF présent' : 'EXIF present';
   if (status === 'fallback_recovered') return language === 'fr' ? 'Récupéré via fallback' : 'Recovered via fallback';
   if (status === 'missing') return language === 'fr' ? 'EXIF absent' : 'EXIF missing';
   if (status === 'unsupported_format') return language === 'fr' ? 'Format non supporté' : 'Unsupported format';
@@ -55,29 +95,123 @@ function formatLocation(location: SubmissionLocation | null | undefined, unavail
 
 function formatDistance(distanceKm: number | null | undefined, unavailable: string): string {
   if (typeof distanceKm !== 'number' || !Number.isFinite(distanceKm)) return unavailable;
-  return `${distanceKm.toFixed(3)} km`;
+  return `${distanceKm.toFixed(2)} km`;
 }
 
-function formatDate(iso: string | null | undefined, unavailable: string): string {
+function formatDate(iso: string | null | undefined, unavailable: string, language: 'en' | 'fr'): string {
   if (!iso) return unavailable;
   const parsed = new Date(iso);
   if (Number.isNaN(parsed.getTime())) return unavailable;
-  return parsed.toLocaleString();
+  return parsed.toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  });
 }
 
-function categoryLabelLocal(category: AdminSubmissionEvent['event']['category'], language: 'en' | 'fr'): string {
+function formatAgeFromHours(hours: number, language: 'en' | 'fr'): string {
+  if (hours < 1) return language === 'fr' ? 'à l’instant' : 'just now';
+  if (hours < 24) return language === 'fr' ? `${hours} h` : `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return language === 'fr' ? `${days} j` : `${days}d`;
+}
+
+function categoryLabelLocal(category: SubmissionCategory, language: 'en' | 'fr'): string {
   return getCategoryLabel(category, language);
 }
 
-function getSiteName(item: AdminSubmissionEvent, language: 'en' | 'fr'): string {
-  const details = item.event.details as SubmissionDetails;
-  if (typeof details.siteName === 'string' && details.siteName.trim()) return details.siteName.trim();
-  if (typeof details.name === 'string' && details.name.trim()) return details.name.trim();
-  return language === 'fr' ? 'Soumission sans nom' : 'Unnamed submission';
+function reviewStatusLabel(status: string, language: 'en' | 'fr'): string {
+  switch (status) {
+    case 'pending_review':
+      return language === 'fr' ? 'À revoir' : 'Needs review';
+    case 'approved':
+    case 'auto_approved':
+      return language === 'fr' ? 'Approuvé' : 'Approved';
+    case 'flagged':
+      return language === 'fr' ? 'En attente' : 'On hold';
+    case 'rejected':
+      return language === 'fr' ? 'Rejeté' : 'Rejected';
+    default:
+      return status.replace(/_/g, ' ');
+  }
 }
 
-function getClientDevice(item: AdminSubmissionEvent): ClientDeviceInfo | null {
-  const details = item.event.details as SubmissionDetails;
+function assignmentStatusLabel(status: CollectionAssignment['status'], language: 'en' | 'fr'): string {
+  switch (status) {
+    case 'pending':
+      return language === 'fr' ? 'Planifiée' : 'Queued';
+    case 'in_progress':
+      return language === 'fr' ? 'En cours terrain' : 'In field';
+    case 'completed':
+      return language === 'fr' ? 'Terminée' : 'Completed';
+    case 'expired':
+      return language === 'fr' ? 'Expirée' : 'Expired';
+    default:
+      return status;
+  }
+}
+
+function trustTierLabel(tier: AdminSubmissionGroup['summary']['trustTier'], language: 'en' | 'fr'): string {
+  switch (tier) {
+    case 'new':
+      return language === 'fr' ? 'Nouveau' : 'New';
+    case 'standard':
+      return language === 'fr' ? 'Standard' : 'Standard';
+    case 'trusted':
+      return language === 'fr' ? 'Fiable' : 'Trusted';
+    case 'elite':
+      return language === 'fr' ? 'Élite' : 'Elite';
+    case 'restricted':
+      return language === 'fr' ? 'Restreint' : 'Restricted';
+    default:
+      return language === 'fr' ? 'Indisponible' : 'Unavailable';
+  }
+}
+
+function trustTierClass(tier: AdminSubmissionGroup['summary']['trustTier']): string {
+  if (tier === 'elite' || tier === 'trusted') return 'bg-forest-wash text-forest border-forest-wash';
+  if (tier === 'restricted') return 'bg-red-50 text-red-600 border-red-100';
+  if (tier === 'new') return 'bg-gold-wash text-amber-700 border-gold-wash';
+  return 'bg-gray-100 text-gray-600 border-gray-200';
+}
+
+function automationStatusLabel(status: AutomationLeadStatus, language: 'en' | 'fr'): string {
+  switch (status) {
+    case 'ready_for_assignment':
+      return language === 'fr' ? 'Prêt à affecter' : 'Ready to assign';
+    case 'needs_field_verify':
+      return language === 'fr' ? 'Vérification terrain' : 'Needs field verify';
+    case 'matched_existing':
+      return language === 'fr' ? 'Correspondance existante' : 'Matched existing';
+    case 'assignment_created':
+      return language === 'fr' ? 'Affectation créée' : 'Assignment created';
+    case 'verified':
+      return language === 'fr' ? 'Vérifié' : 'Verified';
+    case 'import_candidate':
+      return language === 'fr' ? 'Candidat import' : 'Import candidate';
+    case 'rejected_manual':
+      return language === 'fr' ? 'Rejet manuel' : 'Rejected manually';
+    case 'rejected_out_of_zone':
+      return language === 'fr' ? 'Hors zone' : 'Out of zone';
+    default:
+      return status;
+  }
+}
+
+function automationPriorityLabel(priority: AutomationLeadPriority, language: 'en' | 'fr'): string {
+  switch (priority) {
+    case 'high':
+      return language === 'fr' ? 'Haute' : 'High';
+    case 'medium':
+      return language === 'fr' ? 'Moyenne' : 'Medium';
+    case 'low':
+      return language === 'fr' ? 'Basse' : 'Low';
+    default:
+      return priority;
+  }
+}
+
+function getClientDevice(item: AdminSubmissionEventLike): ClientDeviceInfo | null {
+  const details = item.details;
   if (!details.clientDevice || typeof details.clientDevice !== 'object') return null;
   const raw = details.clientDevice;
   if (typeof raw.deviceId !== 'string' || !raw.deviceId.trim()) return null;
@@ -88,15 +222,36 @@ function getClientDevice(item: AdminSubmissionEvent): ClientDeviceInfo | null {
     deviceMemoryGb: typeof raw.deviceMemoryGb === 'number' && Number.isFinite(raw.deviceMemoryGb) ? raw.deviceMemoryGb : null,
     hardwareConcurrency:
       typeof raw.hardwareConcurrency === 'number' && Number.isFinite(raw.hardwareConcurrency) ? raw.hardwareConcurrency : null,
-    isLowEnd: raw.isLowEnd === true
+    isLowEnd: raw.isLowEnd === true,
   };
 }
 
-function isReadOnlySubmission(item: AdminSubmissionEvent): boolean {
+interface AdminSubmissionEventLike {
+  details: SubmissionDetails;
+}
+
+function isReadOnlySubmission(item: AdminSubmissionGroup['events'][number]): boolean {
   const source = typeof item.event.source === 'string' ? item.event.source.trim().toLowerCase() : '';
   if (source === 'legacy_submission' || source === 'osm_overpass') return true;
   if (item.event.id.startsWith('legacy-event-')) return true;
   return false;
+}
+
+function getAutomationLeadName(lead: LeadCandidate, language: 'en' | 'fr'): string {
+  const details = lead.normalizedDetails as SubmissionDetails;
+  const direct =
+    (typeof details.siteName === 'string' && details.siteName.trim()) ||
+    (typeof details.name === 'string' && details.name.trim()) ||
+    (typeof details.roadName === 'string' && details.roadName.trim()) ||
+    (typeof details.brand === 'string' && details.brand.trim());
+  return direct || (language === 'fr' ? 'Lead automatisé' : 'Automated lead');
+}
+
+function getAutomationEvidenceUrl(lead: LeadCandidate): string | null {
+  if (Array.isArray(lead.evidenceUrls) && lead.evidenceUrls.length > 0) {
+    return lead.evidenceUrls[0] ?? null;
+  }
+  return lead.sourceUrl ?? null;
 }
 
 function getMatchState(fraudCheck: SubmissionFraudCheck | null): MatchState {
@@ -118,42 +273,6 @@ function matchStateClass(state: MatchState): string {
   return 'text-gray-500 bg-gray-100 border-gray-200';
 }
 
-function getRiskScore(item: AdminSubmissionEvent): number {
-  const details = item.event.details as SubmissionDetails;
-  const riskScore = details.riskScore;
-  return typeof riskScore === 'number' && Number.isFinite(riskScore) ? riskScore : 0;
-}
-
-function getReviewStatus(item: AdminSubmissionEvent): string {
-  const details = item.event.details as SubmissionDetails;
-  return typeof details.reviewStatus === 'string' ? details.reviewStatus : 'auto_approved';
-}
-
-function getRiskBucket(item: AdminSubmissionEvent): Exclude<RiskFilter, 'all'> {
-  const riskScore = getRiskScore(item);
-  const reviewStatus = getReviewStatus(item);
-  if (riskScore >= 60) return 'flagged';
-  if (reviewStatus === 'pending_review') return 'pending';
-  return 'low_risk';
-}
-
-function getAutomationLeadName(lead: LeadCandidate, language: 'en' | 'fr'): string {
-  const details = lead.normalizedDetails as SubmissionDetails;
-  const direct =
-    (typeof details.siteName === 'string' && details.siteName.trim()) ||
-    (typeof details.name === 'string' && details.name.trim()) ||
-    (typeof details.roadName === 'string' && details.roadName.trim()) ||
-    (typeof details.brand === 'string' && details.brand.trim());
-  return direct || (language === 'fr' ? 'Lead automatisé' : 'Automated lead');
-}
-
-function getAutomationEvidenceUrl(lead: LeadCandidate): string | null {
-  if (Array.isArray(lead.evidenceUrls) && lead.evidenceUrls.length > 0) {
-    return lead.evidenceUrls[0] ?? null;
-  }
-  return lead.sourceUrl ?? null;
-}
-
 function automationStatusClass(status: AutomationLeadStatus): string {
   if (status === 'ready_for_assignment') return 'bg-forest-wash border-forest-wash text-forest';
   if (status === 'matched_existing' || status === 'assignment_created' || status === 'verified') {
@@ -161,6 +280,40 @@ function automationStatusClass(status: AutomationLeadStatus): string {
   }
   if (status.startsWith('rejected')) return 'bg-red-50 border-red-100 text-red-600';
   return 'bg-terra-wash border-terra-wash text-terra';
+}
+
+function runViewTransition(callback: () => void) {
+  if (typeof document === 'undefined') {
+    startTransition(callback);
+    return;
+  }
+
+  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    startTransition(callback);
+    return;
+  }
+
+  const doc = document as ViewTransitionDocument;
+  if (typeof doc.startViewTransition === 'function') {
+    doc.startViewTransition(() => {
+      startTransition(callback);
+    });
+    return;
+  }
+
+  startTransition(callback);
+}
+
+function addDaysDateOnly(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function queueAccentClass(group: AdminSubmissionGroup): string {
+  if (group.summary.riskBucket === 'flagged') return 'border-l-terra';
+  if (group.summary.riskBucket === 'pending') return 'border-l-gold';
+  return 'border-l-forest';
 }
 
 const DetailMetadataBlock: React.FC<{
@@ -174,8 +327,7 @@ const DetailMetadataBlock: React.FC<{
   const status = metadata?.submissionGpsMatch;
   const statusText =
     status === true ? t('Match', 'OK') : status === false ? t('Mismatch', 'Écart') : t('Unavailable', 'Indisponible');
-  const statusClass =
-    status === true ? 'text-forest' : status === false ? 'text-terra' : 'text-gray-500';
+  const statusClass = status === true ? 'text-forest' : status === false ? 'text-terra' : 'text-gray-500';
   const exifStatusText = metadata ? exifStatusLabel(metadata.exifStatus, language) : unavailable;
   const exifReasonText = metadata?.exifReason ?? unavailable;
   const exifSourceText = metadata ? exifSourceLabel(metadata.exifSource, language) : unavailable;
@@ -201,7 +353,7 @@ const DetailMetadataBlock: React.FC<{
       </div>
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-gray-500">{t('Capture Time', 'Heure de capture')}</span>
-        <span className="text-gray-800">{formatDate(metadata?.capturedAt, unavailable)}</span>
+        <span className="text-gray-800">{formatDate(metadata?.capturedAt, unavailable, language)}</span>
       </div>
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-gray-500">{t('Device', 'Appareil')}</span>
@@ -228,121 +380,38 @@ const DetailMetadataBlock: React.FC<{
   );
 };
 
-interface GroupedPoint {
-  pointId: string;
-  events: AdminSubmissionEvent[];
-  category: AdminSubmissionEvent['event']['category'];
-  siteName: string;
-  latestEvent: AdminSubmissionEvent;
-  createdEvent: AdminSubmissionEvent | null;
-  enrichEvents: AdminSubmissionEvent[];
-  allPhotos: { url: string; eventType: string; createdAt: string; metadata: SubmissionPhotoMetadata | null }[];
-}
-
-interface SchemaGuardStatus {
-  ok: boolean | null;
-  expected: string[];
-  actual: string[];
-  missing: string[];
-  extra: string[];
-  reason?: string;
-}
-
-function groupEventsByPoint(items: AdminSubmissionEvent[], language: 'en' | 'fr'): GroupedPoint[] {
-  const groups = new Map<string, AdminSubmissionEvent[]>();
-  for (const item of items) {
-    const pid = item.event.pointId;
-    const existing = groups.get(pid);
-    if (existing) {
-      existing.push(item);
-    } else {
-      groups.set(pid, [item]);
-    }
-  }
-  const result: GroupedPoint[] = [];
-  for (const [pointId, events] of groups) {
-    const sorted = [...events].sort((a, b) => new Date(a.event.createdAt).getTime() - new Date(b.event.createdAt).getTime());
-    const latestEvent = sorted[sorted.length - 1]!;
-    const createdEvent = sorted.find((e) => e.event.eventType === 'CREATE_EVENT') ?? null;
-    const enrichEvents = sorted.filter((e) => e.event.eventType === 'ENRICH_EVENT');
-    const allPhotos: GroupedPoint['allPhotos'] = [];
-    for (const ev of sorted) {
-      const photoUrl = ev.event.photoUrl;
-      if (photoUrl && typeof photoUrl === 'string' && photoUrl.trim()) {
-        allPhotos.push({
-          url: photoUrl,
-          eventType: ev.event.eventType,
-          createdAt: ev.event.createdAt,
-          metadata: ev.fraudCheck?.primaryPhoto ?? null,
-        });
-      }
-      const details = ev.event.details as SubmissionDetails;
-      const secondUrl = typeof details.secondPhotoUrl === 'string' && details.secondPhotoUrl.trim() ? details.secondPhotoUrl : null;
-      if (secondUrl) {
-        allPhotos.push({
-          url: secondUrl,
-          eventType: ev.event.eventType + ' (secondary)',
-          createdAt: ev.event.createdAt,
-          metadata: ev.fraudCheck?.secondaryPhoto ?? null,
-        });
-      }
-    }
-    result.push({
-      pointId,
-      events: sorted,
-      category: latestEvent.event.category,
-      siteName: getSiteName(createdEvent ?? latestEvent, language),
-      latestEvent,
-      createdEvent,
-      enrichEvents,
-      allPhotos,
-    });
-  }
-  return result.sort((a, b) => new Date(b.latestEvent.event.createdAt).getTime() - new Date(a.latestEvent.event.createdAt).getTime());
-}
-
-function addDaysDateOnly(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
-const DEFAULT_ASSIGNMENT_STATUS: CollectionAssignment['status'] = 'pending';
-const ASSIGNMENT_STATUSES: CollectionAssignment['status'][] = ['pending', 'in_progress', 'completed', 'expired'];
-const ASSIGNABLE_VERTICALS = VERTICAL_IDS as SubmissionCategory[];
-const AUTOMATION_LEAD_STATUSES: AutomationLeadStatus[] = [
-  'ready_for_assignment',
-  'needs_field_verify',
-  'matched_existing',
-  'assignment_created',
-  'verified',
-  'import_candidate',
-  'rejected_manual',
-  'rejected_out_of_zone',
-];
-const AUTOMATION_PRIORITIES: AutomationLeadPriority[] = ['high', 'medium', 'low'];
-
 const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [actionMessage, setActionMessage] = useState('');
-  const [deleteError, setDeleteError] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [items, setItems] = useState<AdminSubmissionEvent[]>([]);
+  const unavailableLabel = t('Unavailable', 'Indisponible');
+  const unnamedLabel = t('Unnamed submission', 'Soumission sans nom');
+  const reviewCacheRef = useRef(new Map<string, AdminReviewQueueResponse>());
+
+  const [activeMode, setActiveMode] = useState<AdminMode>('review');
+  const [reviewData, setReviewData] = useState<AdminReviewQueueResponse>({
+    groups: [],
+    reviewers: [],
+    stats: createEmptyAdminReviewStats(),
+    page: 1,
+    totalPages: 1,
+    totalGroups: 0,
+    limit: REVIEW_PAGE_LIMIT,
+  });
+  const [isLoadingReview, setIsLoadingReview] = useState(true);
+  const [reviewError, setReviewError] = useState('');
+  const [reviewPage, setReviewPage] = useState(1);
   const [schemaGuard, setSchemaGuard] = useState<SchemaGuardStatus | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
   const [isClearingSyncErrors, setIsClearingSyncErrors] = useState(false);
   const [assignmentContext, setAssignmentContext] = useState<AssignmentPlannerContext | null>(null);
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
-  const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
   const [assignmentError, setAssignmentError] = useState('');
   const [assignmentActionMessage, setAssignmentActionMessage] = useState('');
   const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<CollectionAssignment['status'] | ''>(DEFAULT_ASSIGNMENT_STATUS);
   const [assignmentAgentFilter, setAssignmentAgentFilter] = useState('');
   const [automationLeads, setAutomationLeads] = useState<LeadCandidate[]>([]);
-  const [isLoadingAutomationLeads, setIsLoadingAutomationLeads] = useState(true);
+  const [isLoadingAutomationLeads, setIsLoadingAutomationLeads] = useState(false);
   const [automationLeadError, setAutomationLeadError] = useState('');
   const [automationLeadMessage, setAutomationLeadMessage] = useState('');
   const [automationStatusFilter, setAutomationStatusFilter] = useState<AutomationStatusFilter>('ready_for_assignment');
@@ -357,44 +426,114 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [plannerNotes, setPlannerNotes] = useState('');
   const [plannerVerticals, setPlannerVerticals] = useState<SubmissionCategory[]>(['pharmacy', 'mobile_money']);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
-  const [riskFilter, setRiskFilter] = useState<RiskFilter>('all');
+  const [riskFilter, setRiskFilter] = useState<AdminRiskFilter>('all');
   const [userFilter, setUserFilter] = useState('');
+  const [actionMessage, setActionMessage] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isApplyingDecision, setIsApplyingDecision] = useState(false);
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
 
+  const assignmentAgentNameById = useMemo(
+    () => new Map((assignmentContext?.agents ?? []).map((agent) => [agent.id, agent.name] as const)),
+    [assignmentContext],
+  );
+
+  const selectedAutomationLeads = useMemo(
+    () => automationLeads.filter((lead) => selectedAutomationLeadIds.has(lead.id)),
+    [automationLeads, selectedAutomationLeadIds],
+  );
+  const selectedGroup = useMemo(
+    () => reviewData.groups.find((group) => group.pointId === selectedPointId) ?? null,
+    [reviewData.groups, selectedPointId],
+  );
+  const eligibleGroups = useMemo(
+    () =>
+      reviewData.groups.filter(
+        (group) =>
+          (group.summary.riskBucket === 'pending' || group.summary.riskBucket === 'low_risk')
+          && group.summary.reviewStatus === 'pending_review',
+      ),
+    [reviewData.groups],
+  );
+  const selectedPageLabel = useMemo(() => {
+    if (reviewData.totalGroups === 0) return t('No groups', 'Aucun groupe');
+    const start = (reviewData.page - 1) * reviewData.limit + 1;
+    const end = Math.min(reviewData.totalGroups, start + reviewData.groups.length - 1);
+    return `${start}-${end} / ${reviewData.totalGroups}`;
+  }, [reviewData.groups.length, reviewData.limit, reviewData.page, reviewData.totalGroups, t]);
+
+  const makeQueueCacheKey = (page: number) => `${riskFilter}:${userFilter || 'all'}:${page}`;
+
+  const fetchReviewQueue = async (page: number, options: { force?: boolean; background?: boolean } = {}) => {
+    const key = makeQueueCacheKey(page);
+    if (!options.force) {
+      const cached = reviewCacheRef.current.get(key);
+      if (cached) {
+        if (!options.background) {
+          setReviewData(cached);
+          setIsLoadingReview(false);
+          setReviewError('');
+        }
+        return cached;
+      }
+    }
+
+    if (!options.background) {
+      setIsLoadingReview(true);
+      setReviewError('');
+    }
+
+    const params = new URLSearchParams({
+      view: 'review_queue',
+      scope: 'global',
+      page: String(page),
+      limit: String(REVIEW_PAGE_LIMIT),
+    });
+    if (riskFilter !== 'all') params.set('risk', riskFilter);
+    if (userFilter) params.set('userId', userFilter);
+
+    const data = await apiJson<AdminReviewQueueResponse>(`/api/submissions?${params.toString()}`);
+    reviewCacheRef.current.set(key, data);
+
+    if (!options.background) {
+      setReviewData(data);
+      setIsLoadingReview(false);
+      setReviewError('');
+    }
+
+    return data;
+  };
+
   useEffect(() => {
     let cancelled = false;
+
     const load = async () => {
       try {
-        setIsLoading(true);
-        setError('');
-        setDeleteError('');
-        setActionMessage('');
-        const data = await apiJson<AdminSubmissionEvent[]>('/api/submissions?view=admin_events&scope=global');
+        const data = await fetchReviewQueue(reviewPage);
         if (cancelled) return;
-        const safeItems = Array.isArray(data) ? data : [];
-        setItems(safeItems);
-        setSelectedPointId((prev) => {
-          if (!prev) return safeItems[0]?.event.pointId ?? null;
-          if (safeItems.some((item) => item.event.pointId === prev)) return prev;
-          return safeItems[0]?.event.pointId ?? null;
-        });
-      } catch (loadError) {
+        setReviewData(data);
+      } catch (error) {
         if (cancelled) return;
-        const message = loadError instanceof Error ? loadError.message : t('Unable to load submissions.', 'Impossible de charger les soumissions.');
-        setError(message);
-        setItems([]);
-        setSelectedPointId(null);
-      } finally {
-        if (!cancelled) setIsLoading(false);
+        const message =
+          error instanceof Error ? error.message : t('Unable to load submissions.', 'Impossible de charger les soumissions.');
+        setReviewError(message);
+        setReviewData((prev) => ({ ...prev, groups: [], totalGroups: 0, totalPages: 1, page: 1 }));
+        setIsLoadingReview(false);
       }
     };
 
     void load();
+
     return () => {
       cancelled = true;
     };
-  }, [language]);
+  }, [reviewPage, riskFilter, userFilter]);
+
+  useEffect(() => {
+    if (reviewData.page >= reviewData.totalPages) return;
+    void fetchReviewQueue(reviewData.page + 1, { background: true });
+  }, [reviewData.page, reviewData.totalPages, riskFilter, userFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -415,45 +554,6 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   useEffect(() => {
     let cancelled = false;
 
-    const loadAssignments = async () => {
-      try {
-        setIsLoadingAssignments(true);
-        setAssignmentError('');
-        const params = new URLSearchParams();
-        params.set('view', 'assignment_planner_context');
-        if (assignmentStatusFilter) params.set('status', assignmentStatusFilter);
-        if (assignmentAgentFilter) params.set('agentUserId', assignmentAgentFilter);
-        const data = await apiJson<{ context: AssignmentPlannerContext; assignments: CollectionAssignment[] }>(
-          `/api/user?${params.toString()}`,
-        );
-        if (cancelled) return;
-        setAssignmentContext(data.context);
-        setAssignments(Array.isArray(data.assignments) ? data.assignments : []);
-        setPlannerAgent((prev) => prev || data.context?.agents?.[0]?.id || '');
-        setPlannerZone((prev) => prev || data.context?.zones?.[0]?.id || '');
-      } catch (assignmentLoadError) {
-        if (cancelled) return;
-        const message =
-          assignmentLoadError instanceof Error
-            ? assignmentLoadError.message
-            : t('Unable to load assignments.', 'Impossible de charger les affectations.');
-        setAssignmentError(message);
-        setAssignments([]);
-        setAssignmentContext(null);
-      } finally {
-        if (!cancelled) setIsLoadingAssignments(false);
-      }
-    };
-
-    void loadAssignments();
-    return () => {
-      cancelled = true;
-    };
-  }, [assignmentStatusFilter, assignmentAgentFilter, language]);
-
-  useEffect(() => {
-    let cancelled = false;
-
     const loadSyncErrors = async () => {
       try {
         const records = await listSyncErrorRecords();
@@ -470,6 +570,46 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, []);
 
   useEffect(() => {
+    if (activeMode !== 'assignments' && activeMode !== 'automation') return;
+
+    let cancelled = false;
+    const loadAssignments = async () => {
+      try {
+        setIsLoadingAssignments(true);
+        setAssignmentError('');
+        const params = new URLSearchParams();
+        params.set('view', 'assignment_planner_context');
+        if (assignmentStatusFilter) params.set('status', assignmentStatusFilter);
+        if (assignmentAgentFilter) params.set('agentUserId', assignmentAgentFilter);
+        const data = await apiJson<{ context: AssignmentPlannerContext; assignments: CollectionAssignment[] }>(
+          `/api/user?${params.toString()}`,
+        );
+        if (cancelled) return;
+        setAssignmentContext(data.context);
+        setAssignments(Array.isArray(data.assignments) ? data.assignments : []);
+        setPlannerAgent((prev) => prev || data.context?.agents?.[0]?.id || '');
+        setPlannerZone((prev) => prev || data.context?.zones?.[0]?.id || '');
+      } catch (error) {
+        if (cancelled) return;
+        const message =
+          error instanceof Error ? error.message : t('Unable to load assignments.', 'Impossible de charger les affectations.');
+        setAssignmentError(message);
+        setAssignments([]);
+        setAssignmentContext(null);
+      } finally {
+        if (!cancelled) setIsLoadingAssignments(false);
+      }
+    };
+
+    void loadAssignments();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMode, assignmentAgentFilter, assignmentStatusFilter]);
+
+  useEffect(() => {
+    if (activeMode !== 'automation') return;
+
     let cancelled = false;
 
     const loadAutomationLeads = async () => {
@@ -484,11 +624,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         const data = await apiJson<LeadCandidate[]>(`/api/intake/leads?${params.toString()}`);
         if (cancelled) return;
         setAutomationLeads(Array.isArray(data) ? data : []);
-      } catch (loadError) {
+      } catch (error) {
         if (cancelled) return;
         const message =
-          loadError instanceof Error
-            ? loadError.message
+          error instanceof Error
+            ? error.message
             : t('Unable to load automation leads.', 'Impossible de charger les leads automatisés.');
         setAutomationLeadError(message);
         setAutomationLeads([]);
@@ -501,7 +641,26 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     return () => {
       cancelled = true;
     };
-  }, [automationStatusFilter, automationPriorityFilter, automationCategoryFilter, language]);
+  }, [activeMode, automationStatusFilter, automationPriorityFilter, automationCategoryFilter]);
+
+  useEffect(() => {
+    setSelectedForBulk((prev) => new Set([...prev].filter((id) => reviewData.groups.some((group) => group.pointId === id))));
+  }, [reviewData.groups]);
+
+  useEffect(() => {
+    setSelectedAutomationLeadIds((prev) => new Set([...prev].filter((id) => automationLeads.some((lead) => lead.id === id))));
+  }, [automationLeads]);
+
+  useEffect(() => {
+    if (reviewData.groups.length === 0) {
+      if (selectedPointId !== null) setSelectedPointId(null);
+      return;
+    }
+
+    if (!selectedPointId || !reviewData.groups.some((group) => group.pointId === selectedPointId)) {
+      setSelectedPointId(reviewData.groups[0]?.pointId ?? null);
+    }
+  }, [reviewData.groups, selectedPointId]);
 
   useEffect(() => {
     setDeleteError('');
@@ -509,51 +668,112 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, [selectedPointId]);
 
   useEffect(() => {
-    setSelectedAutomationLeadIds((prev) => new Set([...prev].filter((id) => automationLeads.some((lead) => lead.id === id))));
-  }, [automationLeads]);
+    if (activeMode !== 'review' || reviewData.groups.length === 0) return;
 
-  const groupedPoints = useMemo(() => groupEventsByPoint(items, language), [items, language]);
-  const uniqueUsers = useMemo(() => {
-    const map = new Map<string, { id: string; name: string }>();
-    for (const item of items) {
-      if (!map.has(item.user.id)) {
-        map.set(item.user.id, { id: item.user.id, name: item.user.name });
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTypingTarget =
+        target?.tagName === 'INPUT'
+        || target?.tagName === 'TEXTAREA'
+        || target?.tagName === 'SELECT'
+        || target?.isContentEditable === true;
+
+      if (isTypingTarget) return;
+
+      const currentIndex = reviewData.groups.findIndex((group) => group.pointId === selectedPointId);
+      const selected = currentIndex >= 0 ? reviewData.groups[currentIndex] : null;
+      const key = event.key.toLowerCase();
+
+      if (key === 'j') {
+        event.preventDefault();
+        const next = reviewData.groups[Math.min(reviewData.groups.length - 1, Math.max(0, currentIndex + 1))];
+        if (next) {
+          runViewTransition(() => {
+            setSelectedPointId(next.pointId);
+          });
+        }
       }
-    }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [items]);
-  const filteredGroups = useMemo(() => {
-    const filtered = groupedPoints.filter((group) => {
-      if (riskFilter !== 'all' && getRiskBucket(group.latestEvent) !== riskFilter) return false;
-      if (userFilter && !group.events.some((e) => e.user.id === userFilter)) return false;
-      return true;
-    });
 
-    return filtered.sort((a, b) => {
-      const riskDelta = getRiskScore(b.latestEvent) - getRiskScore(a.latestEvent);
-      if (riskDelta !== 0) return riskDelta;
-      const reviewPriority = (value: string) => (value === 'pending_review' ? 1 : 0);
-      const reviewDelta = reviewPriority(getReviewStatus(b.latestEvent)) - reviewPriority(getReviewStatus(a.latestEvent));
-      if (reviewDelta !== 0) return reviewDelta;
-      return new Date(b.latestEvent.event.createdAt).getTime() - new Date(a.latestEvent.event.createdAt).getTime();
-    });
-  }, [groupedPoints, riskFilter, userFilter]);
-  const selectedGroup = useMemo(() => filteredGroups.find((g) => g.pointId === selectedPointId) ?? null, [filteredGroups, selectedPointId]);
-  const selectedAutomationLeads = useMemo(
-    () => automationLeads.filter((lead) => selectedAutomationLeadIds.has(lead.id)),
-    [automationLeads, selectedAutomationLeadIds],
-  );
-  const unavailableLabel = t('Unavailable', 'Indisponible');
+      if (key === 'k') {
+        event.preventDefault();
+        const previous = reviewData.groups[Math.max(0, currentIndex - 1)];
+        if (previous) {
+          runViewTransition(() => {
+            setSelectedPointId(previous.pointId);
+          });
+        }
+      }
 
-  useEffect(() => {
-    if (filteredGroups.length === 0) {
-      if (selectedPointId !== null) setSelectedPointId(null);
-      return;
-    }
-    if (!selectedPointId || !filteredGroups.some((group) => group.pointId === selectedPointId)) {
-      setSelectedPointId(filteredGroups[0]?.pointId ?? null);
-    }
-  }, [filteredGroups, selectedPointId]);
+      if (key === '[' && reviewData.page > 1) {
+        event.preventDefault();
+        runViewTransition(() => {
+          setReviewPage((prev) => Math.max(1, prev - 1));
+        });
+      }
+
+      if (key === ']' && reviewData.page < reviewData.totalPages) {
+        event.preventDefault();
+        runViewTransition(() => {
+          setReviewPage((prev) => Math.min(reviewData.totalPages, prev + 1));
+        });
+      }
+
+      if (!selected || isApplyingDecision) return;
+
+      if (key === 'a') {
+        event.preventDefault();
+        void handleReviewDecision(selected, 'approved');
+      }
+
+      if (key === 'r') {
+        event.preventDefault();
+        void handleReviewDecision(selected, 'rejected');
+      }
+
+      if (key === 'h') {
+        event.preventDefault();
+        void handleReviewDecision(selected, 'flagged');
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [activeMode, isApplyingDecision, reviewData.groups, reviewData.page, reviewData.totalPages, selectedPointId]);
+
+  const togglePlannerVertical = (vertical: SubmissionCategory) => {
+    setPlannerVerticals((prev) => {
+      if (prev.includes(vertical)) return prev.filter((item) => item !== vertical);
+      return [...prev, vertical];
+    });
+  };
+
+  const applyReviewToLocalState = (eventId: string, decision: ReviewDecision) => {
+    setReviewData((prev) => {
+      const updatedEvents = prev.groups.flatMap((group) =>
+        group.events.map((item) => {
+          if (item.event.id !== eventId) return item;
+          const nextReviewStatus = decision === 'approved' ? 'auto_approved' : 'pending_review';
+          return {
+            ...item,
+            event: {
+              ...item.event,
+              details: {
+                ...(item.event.details as SubmissionDetails),
+                reviewDecision: decision,
+                reviewStatus: nextReviewStatus,
+                reviewedAt: new Date().toISOString(),
+              },
+            },
+          };
+        }),
+      );
+
+      return {
+        ...prev,
+        groups: buildAdminSubmissionGroups(updatedEvents),
+      };
+    });
+  };
 
   const handleDeleteSelected = async () => {
     if (!selectedGroup) return;
@@ -563,11 +783,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       return;
     }
 
-    const evtCount = selectedGroup.events.length;
+    const eventCount = selectedGroup.events.length;
     const confirmed = window.confirm(
-      evtCount > 1
-        ? t(`Delete all ${evtCount} events for this point permanently?`, `Supprimer definitivement les ${evtCount} evenements de ce point ?`)
-        : t('Delete this submission event permanently?', 'Supprimer définitivement cet événement de soumission ?')
+      eventCount > 1
+        ? t(`Delete all ${eventCount} events for this point permanently?`, `Supprimer définitivement les ${eventCount} événements de ce point ?`)
+        : t('Delete this submission event permanently?', 'Supprimer définitivement cet événement de soumission ?'),
     );
     if (!confirmed) return;
 
@@ -575,8 +795,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     setDeleteError('');
     setActionMessage('');
     try {
-      for (const ev of selectedGroup.events) {
-        const response = await apiFetch(`/api/submissions/${encodeURIComponent(ev.event.id)}?view=event`, {
+      for (const event of selectedGroup.events) {
+        const response = await apiFetch(`/api/submissions/${encodeURIComponent(event.event.id)}?view=event`, {
           method: 'DELETE',
         });
         if (!response.ok) {
@@ -586,44 +806,19 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         }
       }
 
-      const deletedIds = new Set(selectedGroup.events.map((e) => e.event.id));
-      const nextItems = items.filter((item) => !deletedIds.has(item.event.id));
-      setItems(nextItems);
-      setSelectedPointId(nextItems[0]?.event.pointId ?? null);
+      reviewCacheRef.current.clear();
+      await fetchReviewQueue(reviewPage, { force: true });
       setActionMessage(t('Point deleted successfully.', 'Point supprimé avec succès.'));
-    } catch (deleteActionError) {
+    } catch (error) {
       const message =
-        deleteActionError instanceof Error
-          ? deleteActionError.message
-          : t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
+        error instanceof Error ? error.message : t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
       setDeleteError(message);
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const applyReviewToLocalState = (eventId: string, decision: ReviewDecision) => {
-    setItems((prev) =>
-      prev.map((item) => {
-        if (item.event.id !== eventId) return item;
-        const nextReviewStatus = decision === 'approved' ? 'auto_approved' : 'pending_review';
-        return {
-          ...item,
-          event: {
-            ...item.event,
-            details: {
-              ...(item.event.details as SubmissionDetails),
-              reviewDecision: decision,
-              reviewStatus: nextReviewStatus,
-              reviewedAt: new Date().toISOString(),
-            },
-          },
-        };
-      }),
-    );
-  };
-
-  const handleReviewDecision = async (group: GroupedPoint, decision: ReviewDecision) => {
+  const handleReviewDecision = async (group: AdminSubmissionGroup, decision: ReviewDecision) => {
     if (isApplyingDecision) return;
     setActionMessage('');
     setDeleteError('');
@@ -635,6 +830,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         body: JSON.stringify({ decision }),
       });
       applyReviewToLocalState(group.latestEvent.event.id, decision);
+      reviewCacheRef.current.clear();
+      void fetchReviewQueue(reviewPage, { force: true, background: true });
       setActionMessage(
         decision === 'approved'
           ? t('Latest event approved.', 'Dernier événement approuvé.')
@@ -642,11 +839,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
             ? t('Latest event rejected.', 'Dernier événement rejeté.')
             : t('Latest event put on hold.', 'Dernier événement mis en attente.'),
       );
-    } catch (reviewError) {
+    } catch (error) {
       const message =
-        reviewError instanceof Error
-          ? reviewError.message
-          : t('Unable to apply review decision.', 'Impossible d\'appliquer la décision.');
+        error instanceof Error ? error.message : t("Unable to apply review decision.", "Impossible d'appliquer la décision.");
       setDeleteError(message);
     } finally {
       setIsApplyingDecision(false);
@@ -663,12 +858,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   };
 
   const selectAllEligible = () => {
-    const eligibleIds = filteredGroups
-      .filter((g) => {
-        const bucket = getRiskBucket(g.latestEvent);
-        return (bucket === 'low_risk' || bucket === 'pending') && getReviewStatus(g.latestEvent) === 'pending_review';
-      })
-      .map((g) => g.pointId);
+    const eligibleIds = eligibleGroups.map((group) => group.pointId);
     setSelectedForBulk((prev) => {
       const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => prev.has(id));
       if (allSelected) return new Set();
@@ -681,18 +871,19 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
     const targetGroups =
       selectedForBulk.size > 0
-        ? filteredGroups.filter((g) => selectedForBulk.has(g.pointId) && getReviewStatus(g.latestEvent) === 'pending_review')
-        : filteredGroups.filter((group) => {
-            const bucket = getRiskBucket(group.latestEvent);
-            return (bucket === 'low_risk' || bucket === 'pending') && getReviewStatus(group.latestEvent) === 'pending_review';
-          });
+        ? reviewData.groups.filter(
+            (group) => selectedForBulk.has(group.pointId) && group.summary.reviewStatus === 'pending_review',
+          )
+        : eligibleGroups;
 
     if (targetGroups.length === 0) {
       setActionMessage(t('No pending groups to approve.', 'Aucun groupe en attente à approuver.'));
       return;
     }
 
-    const confirmed = window.confirm(t(`Approve ${targetGroups.length} submissions?`, `Approuver ${targetGroups.length} soumissions ?`));
+    const confirmed = window.confirm(
+      t(`Approve ${targetGroups.length} visible submissions?`, `Approuver ${targetGroups.length} soumissions visibles ?`),
+    );
     if (!confirmed) return;
 
     setActionMessage('');
@@ -708,9 +899,12 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         body: JSON.stringify({ eventIds, decision: 'approved' }),
       });
 
-      const groupNameByEventId = new Map(targetGroups.map((group) => [group.latestEvent.event.id, group.siteName] as const));
+      const groupNameByEventId = new Map(
+        targetGroups.map((group) => [group.latestEvent.event.id, group.siteName ?? unnamedLabel] as const),
+      );
       let okCount = 0;
       const failedNames: string[] = [];
+
       for (const result of response.results ?? []) {
         if (result.status === 'ok') {
           applyReviewToLocalState(result.eventId, 'approved');
@@ -720,14 +914,18 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         const siteName = groupNameByEventId.get(result.eventId);
         if (siteName) failedNames.push(siteName);
       }
+
+      reviewCacheRef.current.clear();
+      void fetchReviewQueue(reviewPage, { force: true, background: true });
       setSelectedForBulk(new Set());
+
       if (failedNames.length === 0) {
-        setActionMessage(t(`${okCount} group(s) approved.`, `${okCount} groupe(s) approuves.`));
+        setActionMessage(t(`${okCount} group(s) approved.`, `${okCount} groupe(s) approuvés.`));
       } else {
         setActionMessage(
           t(
             `${okCount} approved, ${failedNames.length} failed. Failed: ${failedNames.join(', ')}`,
-            `${okCount} approuves, ${failedNames.length} echoues. Echecs : ${failedNames.join(', ')}`,
+            `${okCount} approuvés, ${failedNames.length} échecs. Échecs : ${failedNames.join(', ')}`,
           ),
         );
       }
@@ -749,62 +947,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
-  useEffect(() => {
-    if (filteredGroups.length === 0) return;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      const isTypingTarget =
-        target?.tagName === 'INPUT'
-        || target?.tagName === 'TEXTAREA'
-        || target?.tagName === 'SELECT'
-        || target?.isContentEditable === true;
-      if (isTypingTarget) return;
-
-      const currentIndex = filteredGroups.findIndex((group) => group.pointId === selectedPointId);
-      const selected = currentIndex >= 0 ? filteredGroups[currentIndex] : null;
-      const key = event.key.toLowerCase();
-
-      if (key === 'j') {
-        event.preventDefault();
-        const next = filteredGroups[Math.min(filteredGroups.length - 1, Math.max(0, currentIndex + 1))];
-        if (next) setSelectedPointId(next.pointId);
-      }
-      if (key === 'k') {
-        event.preventDefault();
-        const prev = filteredGroups[Math.max(0, currentIndex - 1)];
-        if (prev) setSelectedPointId(prev.pointId);
-      }
-      if (!selected || isApplyingDecision) return;
-      if (key === 'a') {
-        event.preventDefault();
-        void handleReviewDecision(selected, 'approved');
-      }
-      if (key === 'r') {
-        event.preventDefault();
-        void handleReviewDecision(selected, 'rejected');
-      }
-      if (key === 'h') {
-        event.preventDefault();
-        void handleReviewDecision(selected, 'flagged');
-      }
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [filteredGroups, isApplyingDecision, selectedPointId]);
-
-  const togglePlannerVertical = (vertical: SubmissionCategory) => {
-    setPlannerVerticals((prev) => {
-      if (prev.includes(vertical)) return prev.filter((item) => item !== vertical);
-      return [...prev, vertical];
-    });
-  };
-
   const handleCreateAssignment = async () => {
     if (isCreatingAssignment) return;
     setAssignmentError('');
     setAssignmentActionMessage('');
+
     if (!plannerAgent) {
       setAssignmentError(t('Select an agent.', 'Sélectionnez un agent.'));
       return;
@@ -842,11 +989,9 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       setAssignments((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
       setPlannerNotes('');
       setAssignmentActionMessage(t('Assignment created.', 'Affectation créée.'));
-    } catch (createError) {
+    } catch (error) {
       const message =
-        createError instanceof Error
-          ? createError.message
-          : t('Unable to create assignment.', 'Impossible de créer l\'affectation.');
+        error instanceof Error ? error.message : t("Unable to create assignment.", "Impossible de créer l'affectation.");
       setAssignmentError(message);
     } finally {
       setIsCreatingAssignment(false);
@@ -883,12 +1028,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       }
       setSelectedAutomationLeadIds(new Set());
       setAutomationLeadMessage(
-        t(`${selectedAutomationLeads.length} automation lead(s) rejected.`, `${selectedAutomationLeads.length} lead(s) automatisés rejetés.`),
+        t(
+          `${selectedAutomationLeads.length} automation lead(s) rejected.`,
+          `${selectedAutomationLeads.length} lead(s) automatisés rejetés.`,
+        ),
       );
-    } catch (actionError) {
+    } catch (error) {
       const message =
-        actionError instanceof Error
-          ? actionError.message
+        error instanceof Error
+          ? error.message
           : t('Unable to reject automation leads.', 'Impossible de rejeter les leads automatisés.');
       setAutomationLeadError(message);
     } finally {
@@ -899,11 +1047,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const handleCreateAssignmentFromAutomationLeads = async () => {
     if (isApplyingAutomationAction || isCreatingAssignment) return;
     if (!plannerAgent) {
-      setAutomationLeadError(t('Select an agent first.', 'Sélectionnez d\'abord un agent.'));
+      setAutomationLeadError(t('Select an assignment owner first.', "Sélectionnez d'abord un responsable."));
       return;
     }
     if (!plannerDueDate) {
-      setAutomationLeadError(t('Select a due date first.', 'Sélectionnez d\'abord une date limite.'));
+      setAutomationLeadError(t('Select a due date first.', "Sélectionnez d'abord une date limite."));
       return;
     }
     if (selectedAutomationLeads.length === 0) {
@@ -914,25 +1062,24 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     const actionable = selectedAutomationLeads.filter((lead) => lead.zoneId);
     if (actionable.length !== selectedAutomationLeads.length) {
       setAutomationLeadError(
-        t('Selected leads must all be within a known collection zone.', 'Les leads sélectionnés doivent tous appartenir à une zone de collecte connue.'),
+        t(
+          'Selected leads must all be within a known collection zone.',
+          'Les leads sélectionnés doivent tous appartenir à une zone de collecte connue.',
+        ),
       );
       return;
     }
 
     const zoneIds = Array.from(new Set(actionable.map((lead) => lead.zoneId)));
     if (zoneIds.length !== 1 || !zoneIds[0]) {
-      setAutomationLeadError(t('Select leads from a single zone.', 'Sélectionnez des leads provenant d\'une seule zone.'));
+      setAutomationLeadError(t('Select leads from a single zone.', "Sélectionnez des leads provenant d'une seule zone."));
       return;
     }
 
     const assignedVerticals = Array.from(new Set(actionable.map((lead) => lead.category)));
     const sources = Array.from(new Set(actionable.map((lead) => lead.sourceSystem)));
     const leadIds = actionable.map((lead) => lead.id).join(', ');
-    const notes = [
-      `Automation leads: ${actionable.length}`,
-      `Sources: ${sources.join(', ')}`,
-      `Lead IDs: ${leadIds}`,
-    ]
+    const notes = [`Automation leads: ${actionable.length}`, `Sources: ${sources.join(', ')}`, `Lead IDs: ${leadIds}`]
       .join(' | ')
       .slice(0, 950);
 
@@ -953,6 +1100,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           notes,
         }),
       });
+
       const patchedIds = new Set<string>();
       for (const lead of actionable) {
         try {
@@ -964,21 +1112,25 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           patchedIds.add(updated.id);
           setAutomationLeads((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
         } catch {
-          // Keep the assignment creation successful even if one lead patch fails.
+          // Keep the assignment if lead patching partially fails.
         }
       }
+
       setAssignments((prev) => [created, ...prev.filter((item) => item.id !== created.id)]);
       setSelectedAutomationLeadIds(new Set());
       setAutomationLeadMessage(
         patchedIds.size === actionable.length
           ? t('Assignment created from automation leads.', 'Affectation créée à partir des leads automatisés.')
-          : t('Assignment created. Some lead statuses need a manual refresh.', 'Affectation créée. Certains statuts de lead doivent être rafraîchis manuellement.'),
+          : t(
+              'Assignment created. Some lead statuses need a manual refresh.',
+              'Affectation créée. Certains statuts de lead doivent être rafraîchis manuellement.',
+            ),
       );
-    } catch (createError) {
+    } catch (error) {
       const message =
-        createError instanceof Error
-          ? createError.message
-          : t('Unable to create assignment from leads.', 'Impossible de créer une affectation depuis les leads.');
+        error instanceof Error
+          ? error.message
+          : t("Unable to create assignment from leads.", "Impossible de créer une affectation depuis les leads.");
       setAutomationLeadError(message);
     } finally {
       setIsApplyingAutomationAction(false);
@@ -986,10 +1138,47 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
+  const openMode = (mode: AdminMode) => {
+    runViewTransition(() => {
+      setActiveMode(mode);
+    });
+  };
+
+  const changeRiskFilter = (nextFilter: AdminRiskFilter) => {
+    reviewCacheRef.current.clear();
+    runViewTransition(() => {
+      setRiskFilter(nextFilter);
+      setReviewPage(1);
+      setSelectedForBulk(new Set());
+    });
+  };
+
+  const changeUserFilter = (nextUserFilter: string) => {
+    reviewCacheRef.current.clear();
+    runViewTransition(() => {
+      setUserFilter(nextUserFilter);
+      setReviewPage(1);
+      setSelectedForBulk(new Set());
+    });
+  };
+
+  const goToPage = (page: number) => {
+    if (page < 1 || page > reviewData.totalPages || page === reviewPage) return;
+    runViewTransition(() => {
+      setReviewPage(page);
+    });
+  };
+
+  const selectPoint = (pointId: string) => {
+    runViewTransition(() => {
+      setSelectedPointId(pointId);
+    });
+  };
+
   return (
     <div className="flex flex-col h-full bg-page overflow-y-auto no-scrollbar">
       <div className="sticky top-0 z-30 bg-ink text-white px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 hover:text-terra transition-colors" aria-label={t('Go back', 'Retour')}>
+        <button onClick={onBack} className={`p-2 -ml-2 hover:text-terra transition-colors ${focusRingClass}`} aria-label={t('Go back', 'Retour')}>
           <ArrowLeft size={20} />
         </button>
         <h1 className="text-xs font-bold uppercase tracking-[0.2em]">{t('Submission Forensics', 'Analyse forensique')}</h1>
@@ -997,796 +1186,1001 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       </div>
 
       <div className="p-4 space-y-4">
-        <div className="bg-white border border-gray-100 rounded-xl p-3 micro-label text-gray-500 flex items-center justify-between">
-          <span>{t('All Submissions', 'Toutes les soumissions')}</span>
-          <span>{items.length} {t('items', 'éléments')}</span>
-        </div>
-
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-3 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="micro-label-wide text-gray-400">{t('Risk Queue', 'File de risque')}</div>
-              <div className="mt-1 text-sm font-bold text-gray-900">{filteredGroups.length} {t('visible groups', 'groupes visibles')}</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={selectAllEligible}
-                className="h-10 rounded-2xl px-3 micro-label bg-gray-50 text-gray-600 border border-gray-100"
-              >
-                {t('Select Eligible', 'Selectionner eligibles')}
-              </button>
-              <button
-                type="button"
-                onClick={handleBulkApprove}
-                disabled={isApplyingDecision}
-                className={`h-10 rounded-2xl px-4 micro-label ${
-                  isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
-                }`}
-              >
-                {isApplyingDecision
-                  ? t('Approving...', 'Approbation...')
-                  : selectedForBulk.size > 0
-                    ? `${t('Approve', 'Approuver')} (${selectedForBulk.size})`
-                    : t('Approve Eligible', 'Approuver eligibles')}
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+        <div className="card p-2">
+          <div className="grid grid-cols-3 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
             {([
-              ['all', t('All', 'Tous')],
-              ['flagged', t('Flagged', 'Signalés')],
-              ['pending', t('Pending', 'En attente')],
-              ['low_risk', t('Low Risk', 'Faible risque')],
-            ] as Array<[RiskFilter, string]>).map(([filter, label]) => (
+              ['review', t('Review cockpit', 'Cockpit revue')],
+              ['assignments', t('Assignments', 'Affectations')],
+              ['automation', t('Automation', 'Automatisation')],
+            ] as Array<[AdminMode, string]>).map(([mode, label]) => (
               <button
-                key={filter}
+                key={mode}
                 type="button"
-                onClick={() => setRiskFilter(filter)}
-                className={`h-10 rounded-xl border micro-label ${
-                  riskFilter === filter ? 'bg-navy text-white border-navy' : 'bg-page text-gray-600 border-gray-100'
+                role="tab"
+                aria-selected={activeMode === mode}
+                onClick={() => openMode(mode)}
+                className={`h-11 rounded-2xl px-3 text-xs font-bold uppercase tracking-widest transition-all ${focusRingClass} ${
+                  activeMode === mode ? 'bg-navy text-white shadow-sm' : 'bg-page text-gray-600 border border-gray-100'
                 }`}
               >
                 {label}
               </button>
             ))}
           </div>
-          {uniqueUsers.length > 1 && (
-            <select
-              value={userFilter}
-              onChange={(e) => setUserFilter(e.target.value)}
-              className="h-10 rounded-xl border micro-label bg-page text-gray-600 border-gray-100 px-3"
-            >
-              <option value="">{t('All agents', 'Tous les agents')}</option>
-              {uniqueUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <div className="micro-label text-gray-400">
-            {t('Keyboard', 'Clavier')}: J/K {t('navigate', 'naviguer')} • A {t('approve', 'approuver')} • R {t('reject', 'rejeter')} • H {t('hold', 'mettre en attente')}
-          </div>
         </div>
 
-        {schemaGuard?.ok === false && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
-            <div className="micro-label text-amber-700">
-              {t('Schema Guard Warning', 'Alerte garde schéma')}
+        {activeMode === 'review' && (
+          <>
+            <div className="card route-grid-soft p-4 space-y-4 overflow-hidden">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="space-y-1">
+                  <div className="micro-label-wide text-navy">{t('Review cockpit', 'Cockpit de revue')}</div>
+                  <div className="text-lg font-bold text-ink-dark">
+                    {reviewData.totalGroups} {t('groups in scope', 'groupes dans le périmètre')}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {t('Server-filtered risk queue with page-level forensics and keyboard review commands.', 'File de risque filtrée côté serveur avec forensics par page et commandes clavier.')}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => goToPage(reviewData.page - 1)}
+                    disabled={reviewData.page <= 1}
+                    className={`h-10 w-10 rounded-2xl border ${focusRingClass} ${
+                      reviewData.page <= 1 ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
+                    }`}
+                    aria-label={t('Previous review page', 'Page précédente')}
+                  >
+                    <ChevronLeft size={16} className="mx-auto" />
+                  </button>
+                  <div className="rounded-2xl bg-white/85 border border-white px-3 py-2 text-center min-w-[110px]">
+                    <div className="micro-label text-gray-400">{t('Page window', 'Fenêtre page')}</div>
+                    <div className="text-sm font-bold text-gray-900">{selectedPageLabel}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => goToPage(reviewData.page + 1)}
+                    disabled={reviewData.page >= reviewData.totalPages}
+                    className={`h-10 w-10 rounded-2xl border ${focusRingClass} ${
+                      reviewData.page >= reviewData.totalPages ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
+                    }`}
+                    aria-label={t('Next review page', 'Page suivante')}
+                  >
+                    <ChevronRight size={16} className="mx-auto" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
+                <div className="rounded-2xl bg-white/90 border border-white p-3">
+                  <div className="micro-label text-gray-400">{t('Flagged', 'Signalés')}</div>
+                  <div className="mt-1 text-xl font-bold text-terra">{reviewData.stats.flagged}</div>
+                </div>
+                <div className="rounded-2xl bg-white/90 border border-white p-3">
+                  <div className="micro-label text-gray-400">{t('Pending', 'En attente')}</div>
+                  <div className="mt-1 text-xl font-bold text-amber-700">{reviewData.stats.pending}</div>
+                </div>
+                <div className="rounded-2xl bg-white/90 border border-white p-3">
+                  <div className="micro-label text-gray-400">{t('Low risk', 'Faible risque')}</div>
+                  <div className="mt-1 text-xl font-bold text-forest">{reviewData.stats.lowRisk}</div>
+                </div>
+                <div className="rounded-2xl bg-white/90 border border-white p-3">
+                  <div className="micro-label text-gray-400">{t('Eligible now', 'Éligibles')}</div>
+                  <div className="mt-1 text-xl font-bold text-navy">{reviewData.stats.eligible}</div>
+                </div>
+                <div className="rounded-2xl bg-white/90 border border-white p-3">
+                  <div className="micro-label text-gray-400">{t('Visible page', 'Page visible')}</div>
+                  <div className="mt-1 text-xl font-bold text-gray-900">{reviewData.groups.length}</div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-2xl border border-white bg-white/90 p-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllEligible}
+                      className={`h-10 rounded-2xl px-3 micro-label bg-gray-50 text-gray-600 border border-gray-100 ${focusRingClass}`}
+                    >
+                      {t('Select eligible', 'Sélectionner éligibles')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkApprove}
+                      disabled={isApplyingDecision}
+                      className={`h-10 rounded-2xl px-4 micro-label ${focusRingClass} ${
+                        isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
+                      }`}
+                    >
+                      {isApplyingDecision
+                        ? t('Approving...', 'Approbation...')
+                        : selectedForBulk.size > 0
+                          ? `${t('Approve selected', 'Approuver sélection')} (${selectedForBulk.size})`
+                          : `${t('Approve eligible', 'Approuver éligibles')} (${eligibleGroups.length})`}
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-gray-500">
+                    {t('Keyboard', 'Clavier')}: J/K {t('move', 'parcourir')} • A {t('approve', 'approuver')} • R {t('reject', 'rejeter')} • H {t('hold', 'mettre en attente')} • [ ] {t('pages', 'pages')}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                  {([
+                    ['all', `${t('All', 'Tous')} (${reviewData.stats.all})`],
+                    ['flagged', `${t('Flagged', 'Signalés')} (${reviewData.stats.flagged})`],
+                    ['pending', `${t('Pending', 'En attente')} (${reviewData.stats.pending})`],
+                    ['low_risk', `${t('Low risk', 'Faible risque')} (${reviewData.stats.lowRisk})`],
+                  ] as Array<[AdminRiskFilter, string]>).map(([filter, label]) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => changeRiskFilter(filter)}
+                      className={`h-10 rounded-xl border micro-label ${focusRingClass} ${
+                        riskFilter === filter ? 'bg-navy text-white border-navy' : 'bg-page text-gray-600 border-gray-100'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr),220px] gap-2">
+                  <div className="rounded-2xl border border-gray-100 bg-page px-3 py-2 text-[11px] text-gray-600 flex items-center gap-2">
+                    <Clock3 size={14} className="text-gray-400 shrink-0" />
+                    <span>{t('Visible rows already include adjacent detail records, and the next page is prefetched in the background.', 'Les lignes visibles incluent déjà les détails adjacents, et la page suivante est préchargée en arrière-plan.')}</span>
+                  </div>
+                  <select
+                    value={userFilter}
+                    onChange={(event) => changeUserFilter(event.target.value)}
+                    className={`h-10 rounded-xl border micro-label bg-page text-gray-600 border-gray-100 px-3 ${focusRingClass}`}
+                    aria-label={t('Filter by reviewer', 'Filtrer par relecteur')}
+                  >
+                    <option value="">{t('All agents', 'Tous les agents')}</option>
+                    {reviewData.reviewers.map((user) => (
+                      <option key={user.id} value={user.id}>
+                        {user.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {selectedGroup && (
+                <div
+                  className="rounded-2xl border border-white bg-ink text-white p-4 space-y-3"
+                  style={{ viewTransitionName: `admin-review-point-${selectedGroup.pointId}` }}
+                >
+                  <div className="flex flex-col gap-1 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="micro-label-wide text-white/65">{t('Selected triage strip', 'Bandeau triage')}</div>
+                      <div className="text-lg font-bold">{selectedGroup.siteName ?? unnamedLabel}</div>
+                    </div>
+                    <div className="text-xs text-white/70">
+                      {categoryLabelLocal(selectedGroup.category, language)} • {reviewStatusLabel(selectedGroup.summary.reviewStatus, language)}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`rounded-full border px-3 py-1 micro-label ${trustTierClass(selectedGroup.summary.trustTier)}`}>
+                      {t('Trust', 'Confiance')}: {trustTierLabel(selectedGroup.summary.trustTier, language)}
+                    </span>
+                    <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 micro-label">
+                      {t('Evidence', 'Preuves')}: {selectedGroup.summary.evidenceCount}
+                    </span>
+                    <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 micro-label">
+                      {t('Age', 'Âge')}: {formatAgeFromHours(selectedGroup.summary.staleHours, language)}
+                    </span>
+                    <span className={`rounded-full border px-3 py-1 micro-label ${selectedGroup.summary.hasSubmissionMismatch ? 'border-terra/40 bg-terra/15 text-white' : 'border-white/15 bg-white/10 text-white'}`}>
+                      {t('Submission gap', 'Écart GPS')}: {formatDistance(selectedGroup.summary.submissionDistanceKm, unavailableLabel)}
+                    </span>
+                    <span className={`rounded-full border px-3 py-1 micro-label ${selectedGroup.summary.hasIpMismatch ? 'border-terra/40 bg-terra/15 text-white' : 'border-white/15 bg-white/10 text-white'}`}>
+                      {t('IP drift', 'Dérive IP')}: {formatDistance(selectedGroup.summary.ipDistanceKm, unavailableLabel)}
+                    </span>
+                    {selectedGroup.summary.isLowEndDevice && (
+                      <span className="rounded-full border border-gold/40 bg-gold/20 px-3 py-1 micro-label text-white">
+                        {t('Low-end device', 'Appareil entrée de gamme')}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
-            {schemaGuard.missing.length > 0 && (
-              <div className="text-xs text-amber-800">
-                {t('Missing categories:', 'Catégories manquantes :')} {schemaGuard.missing.map((value) => getCategoryLabel(value, language)).join(', ')}
+
+            {schemaGuard?.ok === false && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2">
+                <div className="micro-label text-amber-700">{t('Schema guard warning', 'Alerte garde schéma')}</div>
+                {schemaGuard.missing.length > 0 && (
+                  <div className="text-xs text-amber-800">
+                    {t('Missing categories:', 'Catégories manquantes :')} {schemaGuard.missing.map((value) => getCategoryLabel(value as SubmissionCategory, language)).join(', ')}
+                  </div>
+                )}
+                {schemaGuard.extra.length > 0 && (
+                  <div className="text-xs text-amber-800">
+                    {t('Unexpected categories:', 'Catégories inattendues :')} {schemaGuard.extra.join(', ')}
+                  </div>
+                )}
+                {schemaGuard.reason && <div className="text-[11px] text-amber-700">{schemaGuard.reason}</div>}
               </div>
             )}
-            {schemaGuard.extra.length > 0 && (
-              <div className="text-xs text-amber-800">
-                {t('Unexpected categories:', 'Catégories inattendues :')} {schemaGuard.extra.join(', ')}
+
+            {syncErrors.length > 0 && (
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center space-x-2 text-red-700">
+                    <AlertTriangle size={14} />
+                    <span className="micro-label">
+                      {t('Local sync errors', 'Erreurs locales de synchronisation')} ({syncErrors.length})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleClearSyncErrors}
+                    disabled={isClearingSyncErrors}
+                    className={`micro-label ${focusRingClass} ${isClearingSyncErrors ? 'text-red-300' : 'text-red-700'}`}
+                  >
+                    {isClearingSyncErrors ? t('Clearing...', 'Suppression...') : t('Clear', 'Effacer')}
+                  </button>
+                </div>
+                <div className="text-xs text-red-700">
+                  {syncErrors[0]?.message ?? t('Unknown sync error.', 'Erreur de synchronisation inconnue.')}
+                </div>
               </div>
             )}
-          </div>
+
+            {actionMessage && (
+              <div className="bg-forest-wash border border-forest-wash rounded-2xl p-4 text-xs text-forest" aria-live="polite">
+                {actionMessage}
+              </div>
+            )}
+
+            {deleteError && (
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-xs text-red-600" aria-live="assertive">
+                {deleteError}
+              </div>
+            )}
+
+            {reviewError && (
+              <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-xs text-red-600" aria-live="assertive">
+                {reviewError}
+              </div>
+            )}
+
+            <div className="space-y-4 lg:grid lg:grid-cols-[360px,minmax(0,1fr)] lg:gap-4 lg:space-y-0">
+              <div className="order-2 lg:order-1 space-y-3" role="listbox" aria-label={t('Review queue', 'File de revue')} aria-busy={isLoadingReview}>
+                {isLoadingReview && (
+                  <div className="card p-5 text-xs text-gray-500">{t('Loading review queue...', 'Chargement de la file de revue...')}</div>
+                )}
+
+                {!isLoadingReview && reviewData.groups.length === 0 && (
+                  <div className="card p-6 text-xs text-gray-500 text-center">
+                    {t('No submissions match the current filters.', 'Aucune soumission ne correspond aux filtres actuels.')}
+                  </div>
+                )}
+
+                {!isLoadingReview &&
+                  reviewData.groups.map((group) => {
+                    const isSelected = selectedPointId === group.pointId;
+                    const preview = group.allPhotos[0]?.url ?? null;
+                    const contributors = [...new Set(group.events.map((event) => event.user.name))];
+                    const gpsChipTone = group.summary.hasSubmissionMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200';
+                    const ipChipTone = group.summary.hasIpMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200';
+
+                    return (
+                      <div
+                        key={group.pointId}
+                        role="option"
+                        aria-selected={isSelected}
+                        className={`card border-l-4 ${queueAccentClass(group)} ${isSelected ? 'ring-2 ring-navy ring-offset-2 ring-offset-page' : ''}`}
+                      >
+                        <div className="flex gap-3 p-3">
+                          <div className="flex items-start pt-1">
+                            <input
+                              type="checkbox"
+                              checked={selectedForBulk.has(group.pointId)}
+                              onChange={() => toggleBulkItem(group.pointId)}
+                              className={`h-4 w-4 rounded border-gray-300 text-navy ${focusRingClass}`}
+                              aria-label={t('Select group for bulk approval', 'Sélectionner le groupe pour approbation en lot')}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => selectPoint(group.pointId)}
+                            className={`flex flex-1 gap-3 text-left ${focusRingClass}`}
+                            style={isSelected ? { viewTransitionName: `admin-review-point-${group.pointId}` } : undefined}
+                          >
+                            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+                              {preview ? (
+                                <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" loading="lazy" />
+                              ) : (
+                                <Camera size={18} className="text-gray-300" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1 space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-bold text-gray-900 truncate">{group.siteName ?? unnamedLabel}</div>
+                                  <div className="text-[11px] text-gray-500">
+                                    {categoryLabelLocal(group.category, language)} • {reviewStatusLabel(group.summary.reviewStatus, language)}
+                                  </div>
+                                </div>
+                                <span className={`micro-label px-2 py-1 rounded-lg border ${matchStateClass(getMatchState(group.latestEvent.fraudCheck))}`}>
+                                  {matchStateLabel(getMatchState(group.latestEvent.fraudCheck), language)}
+                                </span>
+                              </div>
+
+                              <div className="flex flex-wrap gap-2">
+                                <span className={`rounded-full border px-2 py-1 micro-label ${trustTierClass(group.summary.trustTier)}`}>
+                                  {trustTierLabel(group.summary.trustTier, language)}
+                                </span>
+                                <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-1 micro-label text-gray-600">
+                                  {t('Risk', 'Risque')} {group.summary.riskScore}
+                                </span>
+                                <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-1 micro-label text-gray-600">
+                                  {t('Evidence', 'Preuves')} {group.summary.evidenceCount}
+                                </span>
+                                <span className={`rounded-full border px-2 py-1 micro-label ${gpsChipTone}`}>
+                                  {t('GPS', 'GPS')} {formatDistance(group.summary.submissionDistanceKm, unavailableLabel)}
+                                </span>
+                                <span className={`rounded-full border px-2 py-1 micro-label ${ipChipTone}`}>
+                                  {t('IP', 'IP')} {formatDistance(group.summary.ipDistanceKm, unavailableLabel)}
+                                </span>
+                                <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-1 micro-label text-gray-600">
+                                  {t('Age', 'Âge')} {formatAgeFromHours(group.summary.staleHours, language)}
+                                </span>
+                                {group.summary.isLowEndDevice && (
+                                  <span className="rounded-full border border-gold-wash bg-gold-wash px-2 py-1 micro-label text-amber-700">
+                                    {t('Low-end', 'Entrée de gamme')}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3 text-[11px] text-gray-500">
+                                <div className="flex items-center gap-1 min-w-0">
+                                  <Users size={12} className="shrink-0" />
+                                  <span className="truncate">{contributors.join(', ')}</span>
+                                </div>
+                                <span className="shrink-0">{formatDate(group.latestEvent.event.createdAt, unavailableLabel, language)}</span>
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                {!isLoadingReview && reviewData.totalPages > 1 && (
+                  <div className="card p-3 flex items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => goToPage(reviewData.page - 1)}
+                      disabled={reviewData.page <= 1}
+                      className={`h-10 rounded-2xl px-3 micro-label border ${focusRingClass} ${
+                        reviewData.page <= 1 ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
+                      }`}
+                    >
+                      {t('Previous', 'Précédent')}
+                    </button>
+                    <div className="text-xs text-gray-500">
+                      {t('Page', 'Page')} {reviewData.page} / {reviewData.totalPages}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => goToPage(reviewData.page + 1)}
+                      disabled={reviewData.page >= reviewData.totalPages}
+                      className={`h-10 rounded-2xl px-3 micro-label border ${focusRingClass} ${
+                        reviewData.page >= reviewData.totalPages ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
+                      }`}
+                    >
+                      {t('Next', 'Suivant')}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="order-1 lg:order-2">
+                {!isLoadingReview && selectedGroup && (() => {
+                  const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
+                  const latestFraudCheck = selectedGroup.latestEvent.fraudCheck ?? null;
+                  const latestDevice = getClientDevice({ details: selectedGroup.latestEvent.event.details as SubmissionDetails });
+                  const contributors = [...new Map(selectedGroup.events.map((event) => [event.user.id, event.user])).values()];
+
+                  return (
+                    <div
+                      className="card p-4 space-y-4"
+                      style={{ viewTransitionName: `admin-review-point-${selectedGroup.pointId}` }}
+                    >
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                          <div className="micro-label-wide text-gray-400">{t('Point detail', 'Détail du point')}</div>
+                          <h2 id="admin-review-detail-title" className="mt-1 text-xl font-bold text-gray-900">
+                            {selectedGroup.siteName ?? unnamedLabel}
+                          </h2>
+                          <div className="mt-1 text-xs text-gray-500">
+                            {categoryLabelLocal(selectedGroup.category, language)} • {reviewStatusLabel(selectedGroup.summary.reviewStatus, language)} • {selectedGroup.pointId}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPointId(null)}
+                          className={`h-10 w-10 rounded-full border border-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center ${focusRingClass}`}
+                          aria-label={t('Clear selection', 'Annuler la sélection')}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <span className={`rounded-full border px-3 py-1 micro-label ${trustTierClass(selectedGroup.summary.trustTier)}`}>
+                          {t('Trust', 'Confiance')}: {trustTierLabel(selectedGroup.summary.trustTier, language)}
+                        </span>
+                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 micro-label text-gray-600">
+                          {t('Risk score', 'Score risque')}: {selectedGroup.summary.riskScore}
+                        </span>
+                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 micro-label text-gray-600">
+                          {t('Evidence', 'Preuves')}: {selectedGroup.summary.evidenceCount}
+                        </span>
+                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 micro-label text-gray-600">
+                          {t('Age', 'Âge')}: {formatAgeFromHours(selectedGroup.summary.staleHours, language)}
+                        </span>
+                        <span className={`rounded-full border px-3 py-1 micro-label ${selectedGroup.summary.hasSubmissionMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                          {t('Submission gap', 'Écart GPS')}: {formatDistance(selectedGroup.summary.submissionDistanceKm, unavailableLabel)}
+                        </span>
+                        <span className={`rounded-full border px-3 py-1 micro-label ${selectedGroup.summary.hasIpMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+                          {t('IP drift', 'Dérive IP')}: {formatDistance(selectedGroup.summary.ipDistanceKm, unavailableLabel)}
+                        </span>
+                        {selectedGroup.summary.isLowEndDevice && (
+                          <span className="rounded-full border border-gold-wash bg-gold-wash px-3 py-1 micro-label text-amber-700">
+                            {t('Low-end device', 'Appareil entrée de gamme')}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2" aria-label={t('Review actions', 'Actions de revue')}>
+                        <button
+                          type="button"
+                          onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
+                          disabled={isApplyingDecision}
+                          className={`h-10 px-3 rounded-xl micro-label ${focusRingClass} ${
+                            isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-forest-wash text-forest'
+                          }`}
+                        >
+                          {t('Approve', 'Approuver')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleReviewDecision(selectedGroup, 'flagged')}
+                          disabled={isApplyingDecision}
+                          className={`h-10 px-3 rounded-xl micro-label ${focusRingClass} ${
+                            isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-terra-wash text-terra'
+                          }`}
+                        >
+                          {t('Hold', 'Mettre en attente')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
+                          disabled={isApplyingDecision}
+                          className={`h-10 px-3 rounded-xl micro-label ${focusRingClass} ${
+                            isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600'
+                          }`}
+                        >
+                          {t('Reject', 'Rejeter')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleDeleteSelected}
+                          disabled={isDeleting || hasReadOnly}
+                          className={`h-10 px-3 rounded-xl micro-label flex items-center space-x-2 ${focusRingClass} ${
+                            isDeleting || hasReadOnly
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                              : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
+                          }`}
+                        >
+                          <Trash2 size={14} />
+                          <span>
+                            {isDeleting
+                              ? t('Deleting...', 'Suppression...')
+                              : hasReadOnly
+                                ? t('Cannot delete', 'Suppression impossible')
+                                : t('Delete point', 'Supprimer point')}
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 text-[11px]" aria-labelledby="admin-review-detail-title">
+                        <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
+                          <div className="micro-label text-gray-400">{t('Contributors', 'Contributeurs')}</div>
+                          {contributors.map((user) => (
+                            <div key={user.id} className="flex items-start gap-2">
+                              <ProfileAvatar preset={coerceAvatarPreset(user.avatarPreset)} alt={user.name} className="w-8 h-8 shrink-0" />
+                              <div className="space-y-0.5">
+                                <div className="text-gray-900 font-semibold">{user.name}</div>
+                                <div className="text-gray-600">{user.email ?? unavailableLabel}</div>
+                                <div className="text-[11px] text-gray-500">
+                                  {t('Trust', 'Confiance')}: {typeof user.trustScore === 'number' ? user.trustScore : '--'} • {trustTierLabel(user.trustTier ?? null, language)}
+                                </div>
+                                {user.suspendedUntil && (
+                                  <div className="text-[11px] text-terra-dark">
+                                    {t('Suspended until', 'Suspendu jusqu’au')}: {formatDate(user.suspendedUntil, unavailableLabel, language)}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                          <div className="micro-label text-gray-400">{t('Point metadata', 'Métadonnées du point')}</div>
+                          <div>{t('Category', 'Catégorie')}: {categoryLabelLocal(selectedGroup.category, language)}</div>
+                          <div>Point ID: {selectedGroup.pointId}</div>
+                          <div>{t('Events', 'Événements')}: {selectedGroup.events.length}</div>
+                          <div>{t('Contributors', 'Contributeurs')}: {selectedGroup.summary.contributorCount}</div>
+                          <div>{t('Review status', 'Statut revue')}: {reviewStatusLabel(selectedGroup.summary.reviewStatus, language)}</div>
+                        </div>
+
+                        <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
+                          <div className="micro-label text-gray-400">{t('Geo risk timeline', 'Chronologie géo-risque')}</div>
+                          {selectedGroup.events.map((event, index) => {
+                            const device = getClientDevice({ details: event.event.details as SubmissionDetails });
+                            return (
+                              <div
+                                key={event.event.id}
+                                className={`p-2 rounded-xl ${index === selectedGroup.events.length - 1 ? 'bg-forest-wash border border-forest-wash' : 'bg-gray-50 border border-gray-100'}`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="micro-label text-navy">
+                                    {event.event.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : t('Enrich', 'Enrichissement')}
+                                  </span>
+                                  <span className="text-[11px] text-gray-500">{formatDate(event.event.createdAt, unavailableLabel, language)}</span>
+                                </div>
+                                <div className="text-gray-600 mt-1">{t('By', 'Par')}: {event.user.name}</div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <span className={`rounded-full border px-2 py-1 micro-label ${matchStateClass(getMatchState(event.fraudCheck))}`}>
+                                    {matchStateLabel(getMatchState(event.fraudCheck), language)}
+                                  </span>
+                                  <span className="rounded-full border border-gray-200 bg-white px-2 py-1 micro-label text-gray-600">
+                                    {formatDistance(event.fraudCheck?.primaryPhoto?.submissionDistanceKm ?? null, unavailableLabel)}
+                                  </span>
+                                  {device && (
+                                    <span className="rounded-full border border-gray-200 bg-white px-2 py-1 micro-label text-gray-600">
+                                      {device.platform ?? t('Unknown device', 'Appareil inconnu')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                          <div className="micro-label text-gray-400">{t('Location', 'Localisation')}</div>
+                          <div>{t('Submission GPS', 'GPS soumis')}: {formatLocation(latestFraudCheck?.submissionLocation, unavailableLabel)}</div>
+                          <div>{t('Effective GPS', 'GPS effectif')}: {formatLocation(latestFraudCheck?.effectiveLocation, unavailableLabel)}</div>
+                          <div>{t('IP GPS', 'GPS IP')}: {formatLocation(latestFraudCheck?.ipLocation, unavailableLabel)}</div>
+                        </div>
+
+                        <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
+                          <div className="micro-label text-gray-400">{t('Client device', 'Appareil client')}</div>
+                          <div>{t('Device ID', 'Device ID')}: {latestDevice?.deviceId ?? unavailableLabel}</div>
+                          <div>{t('Platform', 'Plateforme')}: {latestDevice?.platform ?? unavailableLabel}</div>
+                          <div>
+                            {t('Low-end flag', 'Indicateur entrée de gamme')}:{' '}
+                            {latestDevice ? (latestDevice.isLowEnd === true ? t('Yes', 'Oui') : t('No', 'Non')) : unavailableLabel}
+                          </div>
+                        </div>
+
+                        <div className="xl:col-span-2 space-y-2">
+                          <div className="micro-label text-gray-400">
+                            {t('All photos', 'Toutes les photos')} ({selectedGroup.allPhotos.length})
+                          </div>
+                          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                            {selectedGroup.allPhotos.length === 0 && (
+                              <div className="col-span-full rounded-2xl border border-gray-100 bg-gray-50 h-28 flex items-center justify-center">
+                                <div className="micro-label text-gray-400 text-center px-2">
+                                  {t('No photos available', 'Aucune photo disponible')}
+                                </div>
+                              </div>
+                            )}
+                            {selectedGroup.allPhotos.map((photo, index) => (
+                              <div key={`${photo.url}-${index}`} className="space-y-1">
+                                <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
+                                  <img src={photo.url} alt={`${t('Photo', 'Photo')} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />
+                                </div>
+                                <div className="text-[11px] text-gray-500 text-center">{photo.eventType}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="xl:col-span-2 space-y-3">
+                          <div className="micro-label text-gray-400">{t('Photo EXIF metadata', 'Métadonnées EXIF des photos')}</div>
+                          {selectedGroup.allPhotos.length === 0 && <div className="text-[11px] text-gray-500">{unavailableLabel}</div>}
+                          {selectedGroup.allPhotos.map((photo, index) => (
+                            <DetailMetadataBlock
+                              key={`${photo.url}-${index}`}
+                              label={`${t('Photo', 'Photo')} ${index + 1} — ${photo.eventType}`}
+                              metadata={photo.metadata}
+                              thresholdKm={latestFraudCheck?.submissionMatchThresholdKm ?? 1}
+                              unavailable={unavailableLabel}
+                              language={language}
+                            />
+                          ))}
+                          <div className="micro-label text-gray-400">
+                            {t('IP match threshold', 'Seuil correspondance IP')}: {latestFraudCheck?.ipMatchThresholdKm ?? 50} km
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {!isLoadingReview && !selectedGroup && reviewData.groups.length > 0 && (
+                  <div className="card p-8 items-center justify-center text-xs text-gray-400 min-h-[220px] flex">
+                    {t('Select an item to view details', 'Sélectionnez un élément pour voir les détails')}
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
         )}
 
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-navy">
-              {t('Assignment Planner', 'Planification des affectations')}
-            </h4>
-            <span className="micro-label text-gray-400">
-              {assignments.length} {t('active rows', 'lignes')}
-            </span>
-          </div>
-
-          {assignmentActionMessage && (
-            <div className="rounded-xl border border-forest-wash bg-forest-wash p-3 text-[11px] text-forest">
-              {assignmentActionMessage}
+        {activeMode === 'assignments' && (
+          <div className="card p-4 space-y-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="micro-label-wide text-navy">{t('Assignment planner', 'Planification des affectations')}</div>
+                <div className="mt-1 text-sm text-gray-500">
+                  {t('Keep collection work out of the review queue. Plan owners, zones, and expected output here.', 'Gardez la planification hors de la file de revue. Planifiez responsables, zones, et volume ici.')}
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">{assignments.length} {t('active assignments', 'affectations actives')}</div>
             </div>
-          )}
 
-          {assignmentError && (
-            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
-              {assignmentError}
-            </div>
-          )}
+            {assignmentActionMessage && (
+              <div className="rounded-xl border border-forest-wash bg-forest-wash p-3 text-[11px] text-forest" aria-live="polite">
+                {assignmentActionMessage}
+              </div>
+            )}
 
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={assignmentStatusFilter}
-              onChange={(event) => setAssignmentStatusFilter((event.target.value as CollectionAssignment['status']) || '')}
-              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
-            >
-              <option value="">{t('All statuses', 'Tous les statuts')}</option>
-              {ASSIGNMENT_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-            <select
-              value={assignmentAgentFilter}
-              onChange={(event) => setAssignmentAgentFilter(event.target.value)}
-              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
-            >
-              <option value="">{t('All agents', 'Tous les agents')}</option>
-              {(assignmentContext?.agents ?? []).map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.name}
-                </option>
-              ))}
-            </select>
-          </div>
+            {assignmentError && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600" aria-live="assertive">
+                {assignmentError}
+              </div>
+            )}
 
-          <div className="rounded-xl border border-gray-100 p-3 space-y-3 bg-page">
-            <div className="micro-label text-gray-500">
-              {t('Add Assignment', 'Ajouter une affectation')}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 lg:grid-cols-[220px,220px,1fr] gap-2">
               <select
-                value={plannerAgent}
-                onChange={(event) => setPlannerAgent(event.target.value)}
-                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
+                value={assignmentStatusFilter}
+                onChange={(event) => setAssignmentStatusFilter((event.target.value as CollectionAssignment['status']) || '')}
+                className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
               >
-                <option value="">{t('Select agent', 'Choisir agent')}</option>
+                <option value="">{t('All statuses', 'Tous les statuts')}</option>
+                {ASSIGNMENT_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {assignmentStatusLabel(status, language)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={assignmentAgentFilter}
+                onChange={(event) => setAssignmentAgentFilter(event.target.value)}
+                className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
+              >
+                <option value="">{t('All agents', 'Tous les agents')}</option>
                 {(assignmentContext?.agents ?? []).map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
                   </option>
                 ))}
               </select>
-              <select
-                value={plannerZone}
-                onChange={(event) => setPlannerZone(event.target.value)}
-                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
+              <div className="rounded-xl border border-gray-100 bg-page px-3 py-2 text-[11px] text-gray-600">
+                {t('Assignments now load only when this mode is opened, keeping review load fast.', 'Les affectations se chargent seulement à l’ouverture de ce mode, pour garder la revue rapide.')}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-gray-100 p-4 bg-page space-y-3">
+              <div className="micro-label text-gray-500">{t('Create assignment', 'Créer une affectation')}</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <select
+                  value={plannerAgent}
+                  onChange={(event) => setPlannerAgent(event.target.value)}
+                  className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white ${focusRingClass}`}
+                >
+                  <option value="">{t('Select agent', 'Choisir agent')}</option>
+                  {(assignmentContext?.agents ?? []).map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={plannerZone}
+                  onChange={(event) => setPlannerZone(event.target.value)}
+                  className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white ${focusRingClass}`}
+                >
+                  <option value="">{t('Select zone', 'Choisir zone')}</option>
+                  {(assignmentContext?.zones ?? []).map((zone) => (
+                    <option key={zone.id} value={zone.id}>
+                      {zone.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <input
+                  type="date"
+                  value={plannerDueDate}
+                  onChange={(event) => setPlannerDueDate(event.target.value)}
+                  className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white ${focusRingClass}`}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  value={plannerExpected}
+                  onChange={(event) => setPlannerExpected(event.target.value)}
+                  placeholder={t('Expected points', 'Points attendus')}
+                  className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white ${focusRingClass}`}
+                />
+              </div>
+              <input
+                value={plannerNotes}
+                onChange={(event) => setPlannerNotes(event.target.value)}
+                placeholder={t('Optional notes', 'Notes optionnelles')}
+                className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white ${focusRingClass}`}
+              />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {ASSIGNABLE_VERTICALS.map((vertical) => {
+                  const active = plannerVerticals.includes(vertical);
+                  return (
+                    <button
+                      key={vertical}
+                      type="button"
+                      onClick={() => togglePlannerVertical(vertical)}
+                      className={`h-9 rounded-xl border micro-label ${focusRingClass} ${
+                        active ? 'bg-navy text-white border-navy' : 'bg-white text-gray-600 border-gray-100'
+                      }`}
+                    >
+                      {getCategoryLabel(vertical, language)}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={handleCreateAssignment}
+                disabled={isCreatingAssignment}
+                className={`h-10 rounded-xl micro-label ${focusRingClass} ${
+                  isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white hover:bg-navy-mid'
+                }`}
               >
-                <option value="">{t('Select zone', 'Choisir zone')}</option>
-                {(assignmentContext?.zones ?? []).map((zone) => (
-                  <option key={zone.id} value={zone.id}>
-                    {zone.label}
+                {isCreatingAssignment ? t('Creating...', 'Création...') : t('Create assignment', 'Créer affectation')}
+              </button>
+            </div>
+
+            {isLoadingAssignments ? (
+              <div className="text-xs text-gray-500">{t('Loading assignments...', 'Chargement des affectations...')}</div>
+            ) : (
+              <div className="space-y-2">
+                {assignments.length === 0 && (
+                  <div className="rounded-xl border border-gray-100 bg-page p-3 text-xs text-gray-500">
+                    {t('No assignments found.', 'Aucune affectation trouvée.')}
+                  </div>
+                )}
+                {assignments.map((assignment) => (
+                  <div key={assignment.id} className="rounded-2xl border border-gray-100 p-3 bg-white">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{assignment.zoneLabel}</div>
+                        <div className="text-[11px] text-gray-500">
+                          {assignmentAgentNameById.get(assignment.agentUserId) ?? assignment.agentUserId}
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-1 micro-label text-gray-600">
+                        {assignmentStatusLabel(assignment.status, language)}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-gray-600">
+                      <div>{t('Progress', 'Progression')}: {assignment.pointsSubmitted}/{assignment.pointsExpected} ({assignment.completionRate}%)</div>
+                      <div>{t('Due', 'Échéance')}: {formatDate(assignment.dueDate, unavailableLabel, language)}</div>
+                      <div>{t('Verticals', 'Verticales')}: {assignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeMode === 'automation' && (
+          <div className="card p-4 space-y-4">
+            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="micro-label-wide text-navy">{t('Automation intake', 'Intake automatisé')}</div>
+                <div className="mt-1 text-sm text-gray-500">
+                  {t('Triage incoming machine-sourced leads, then hand off only the verified work to field owners.', 'Triez les leads automatiques, puis transmettez uniquement le travail vérifié aux agents terrain.')}
+                </div>
+              </div>
+              <div className="text-xs text-gray-500">{automationLeads.length} {t('leads loaded', 'leads chargés')}</div>
+            </div>
+
+            {automationLeadMessage && (
+              <div className="rounded-xl border border-forest-wash bg-forest-wash p-3 text-[11px] text-forest" aria-live="polite">
+                {automationLeadMessage}
+              </div>
+            )}
+
+            {automationLeadError && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600" aria-live="assertive">
+                {automationLeadError}
+              </div>
+            )}
+
+            <div className="rounded-2xl border border-gray-100 bg-page p-4 space-y-3">
+              <div className="micro-label text-gray-500">{t('Automation handoff rail', 'Rail de transfert')}</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <select
+                  value={plannerAgent}
+                  onChange={(event) => setPlannerAgent(event.target.value)}
+                  className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white ${focusRingClass}`}
+                >
+                  <option value="">{t('Select owner', 'Choisir responsable')}</option>
+                  {(assignmentContext?.agents ?? []).map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  value={plannerDueDate}
+                  onChange={(event) => setPlannerDueDate(event.target.value)}
+                  className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white ${focusRingClass}`}
+                />
+                <div className="rounded-xl border border-gray-100 bg-white px-3 py-2 text-[11px] text-gray-600">
+                  {t('Selected leads: ', 'Leads sélectionnés : ')}{selectedAutomationLeadIds.size}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <select
+                value={automationStatusFilter}
+                onChange={(event) => setAutomationStatusFilter(event.target.value as AutomationStatusFilter)}
+                className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
+              >
+                <option value="">{t('All statuses', 'Tous les statuts')}</option>
+                {AUTOMATION_LEAD_STATUSES.map((status) => (
+                  <option key={status} value={status}>
+                    {automationStatusLabel(status, language)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={automationCategoryFilter}
+                onChange={(event) => setAutomationCategoryFilter((event.target.value as SubmissionCategory) || '')}
+                className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
+              >
+                <option value="">{t('All verticals', 'Toutes les verticales')}</option>
+                {ASSIGNABLE_VERTICALS.map((vertical) => (
+                  <option key={vertical} value={vertical}>
+                    {getCategoryLabel(vertical, language)}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={automationPriorityFilter}
+                onChange={(event) => setAutomationPriorityFilter((event.target.value as AutomationPriorityFilter) || '')}
+                className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
+              >
+                <option value="">{t('All priorities', 'Toutes les priorités')}</option>
+                {AUTOMATION_PRIORITIES.map((priority) => (
+                  <option key={priority} value={priority}>
+                    {automationPriorityLabel(priority, language)}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={plannerDueDate}
-                onChange={(event) => setPlannerDueDate(event.target.value)}
-                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
-              />
-              <input
-                type="number"
-                min={0}
-                value={plannerExpected}
-                onChange={(event) => setPlannerExpected(event.target.value)}
-                placeholder={t('Expected points', 'Points attendus')}
-                className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
-              />
-            </div>
-            <input
-              value={plannerNotes}
-              onChange={(event) => setPlannerNotes(event.target.value)}
-              placeholder={t('Optional notes', 'Notes optionnelles')}
-              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-white"
-            />
-            <div className="grid grid-cols-2 gap-2">
-              {ASSIGNABLE_VERTICALS.map((vertical) => {
-                const active = plannerVerticals.includes(vertical);
-                return (
-                  <button
-                    key={vertical}
-                    type="button"
-                    onClick={() => togglePlannerVertical(vertical)}
-                    className={`h-9 rounded-xl border micro-label ${
-                      active ? 'bg-navy text-white border-navy' : 'bg-white text-gray-600 border-gray-100'
-                    }`}
-                  >
-                    {getCategoryLabel(vertical, language)}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              type="button"
-              onClick={handleCreateAssignment}
-              disabled={isCreatingAssignment}
-              className={`h-10 rounded-xl micro-label ${
-                isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white hover:bg-navy-mid'
-              }`}
-            >
-              {isCreatingAssignment ? t('Creating...', 'Création...') : t('Create Assignment', 'Créer affectation')}
-            </button>
-          </div>
 
-          {isLoadingAssignments ? (
-            <div className="text-xs text-gray-500">{t('Loading assignments...', 'Chargement des affectations...')}</div>
-          ) : (
-            <div className="space-y-2">
-              {assignments.length === 0 && (
-                <div className="rounded-xl border border-gray-100 bg-page p-3 text-xs text-gray-500">
-                  {t('No assignments found.', 'Aucune affectation trouvée.')}
-                </div>
-              )}
-              {assignments.map((assignment) => (
-                <div key={assignment.id} className="rounded-xl border border-gray-100 p-3 bg-white">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-bold text-gray-900">{assignment.zoneLabel}</div>
-                    <span className="micro-label text-gray-500">{assignment.status}</span>
-                  </div>
-                  <div className="text-[11px] text-gray-600">
-                    {assignment.agentUserId} · {assignment.pointsSubmitted}/{assignment.pointsExpected} ({assignment.completionRate}%)
-                  </div>
-                  <div className="text-[11px] text-gray-500">
-                    {t('Due', 'Échéance')}: {assignment.dueDate}
-                  </div>
-                  <div className="text-[11px] text-gray-500">
-                    {assignment.assignedVerticals.map((vertical) => getCategoryLabel(vertical, language)).join(', ')}
-                  </div>
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={handleCreateAssignmentFromAutomationLeads}
+                disabled={isApplyingAutomationAction || isCreatingAssignment}
+                className={`h-10 rounded-xl px-4 micro-label ${focusRingClass} ${
+                  isApplyingAutomationAction || isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
+                }`}
+              >
+                {t('Create assignment from selection', 'Créer affectation depuis la sélection')}
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectAutomationLeads}
+                disabled={isApplyingAutomationAction}
+                className={`h-10 rounded-xl px-4 micro-label ${focusRingClass} ${
+                  isApplyingAutomationAction ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600 border border-red-100'
+                }`}
+              >
+                {t('Reject selection', 'Rejeter la sélection')}
+              </button>
             </div>
-          )}
-        </div>
 
-        <div className="bg-white border border-gray-100 rounded-2xl p-4 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h4 className="text-xs font-bold uppercase tracking-widest text-navy">
-                {t('Automation Intake', 'Intake automatisé')}
-              </h4>
-              <div className="mt-1 text-[11px] text-gray-500">
-                {automationLeads.length} {t('lead(s) loaded', 'lead(s) chargés')}
+            {isLoadingAutomationLeads ? (
+              <div className="text-xs text-gray-500">{t('Loading automation leads...', 'Chargement des leads automatisés...')}</div>
+            ) : automationLeads.length === 0 ? (
+              <div className="rounded-xl border border-gray-100 bg-page p-3 text-xs text-gray-500">
+                {t('No automation leads found.', 'Aucun lead automatisé trouvé.')}
               </div>
-            </div>
-            <div className="micro-label text-gray-400">
-              {selectedAutomationLeadIds.size} {t('selected', 'sélectionnés')}
-            </div>
-          </div>
-
-          {automationLeadMessage && (
-            <div className="rounded-xl border border-forest-wash bg-forest-wash p-3 text-[11px] text-forest">
-              {automationLeadMessage}
-            </div>
-          )}
-
-          {automationLeadError && (
-            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
-              {automationLeadError}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <select
-              value={automationStatusFilter}
-              onChange={(event) => setAutomationStatusFilter(event.target.value as AutomationStatusFilter)}
-              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
-            >
-              <option value="">{t('All statuses', 'Tous les statuts')}</option>
-              {AUTOMATION_LEAD_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-            <select
-              value={automationCategoryFilter}
-              onChange={(event) => setAutomationCategoryFilter((event.target.value as SubmissionCategory) || '')}
-              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
-            >
-              <option value="">{t('All verticals', 'Toutes les verticales')}</option>
-              {ASSIGNABLE_VERTICALS.map((vertical) => (
-                <option key={vertical} value={vertical}>
-                  {getCategoryLabel(vertical, language)}
-                </option>
-              ))}
-            </select>
-            <select
-              value={automationPriorityFilter}
-              onChange={(event) => setAutomationPriorityFilter((event.target.value as AutomationPriorityFilter) || '')}
-              className="h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50"
-            >
-              <option value="">{t('All priorities', 'Toutes les priorités')}</option>
-              {AUTOMATION_PRIORITIES.map((priority) => (
-                <option key={priority} value={priority}>
-                  {priority}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={handleCreateAssignmentFromAutomationLeads}
-              disabled={isApplyingAutomationAction || isCreatingAssignment}
-              className={`h-10 rounded-xl px-4 micro-label ${
-                isApplyingAutomationAction || isCreatingAssignment ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
-              }`}
-            >
-              {t('Create Assignment from Selection', 'Créer affectation depuis la sélection')}
-            </button>
-            <button
-              type="button"
-              onClick={handleRejectAutomationLeads}
-              disabled={isApplyingAutomationAction}
-              className={`h-10 rounded-xl px-4 micro-label ${
-                isApplyingAutomationAction ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600 border border-red-100'
-              }`}
-            >
-              {t('Reject Selection', 'Rejeter la sélection')}
-            </button>
-          </div>
-
-          {isLoadingAutomationLeads ? (
-            <div className="text-xs text-gray-500">{t('Loading automation leads...', 'Chargement des leads automatisés...')}</div>
-          ) : automationLeads.length === 0 ? (
-            <div className="rounded-xl border border-gray-100 bg-page p-3 text-xs text-gray-500">
-              {t('No automation leads found.', 'Aucun lead automatisé trouvé.')}
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-              {automationLeads.map((lead) => {
-                const evidenceUrl = getAutomationEvidenceUrl(lead);
-                return (
-                  <div key={lead.id} className="rounded-xl border border-gray-100 p-3 bg-page">
-                    <div className="flex items-start gap-3">
-                      <input
-                        type="checkbox"
-                        checked={selectedAutomationLeadIds.has(lead.id)}
-                        onChange={() => toggleAutomationLead(lead.id)}
-                        className="mt-1 h-4 w-4 rounded border-gray-300 text-navy"
-                      />
-                      <div className="flex-1 space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="text-xs font-bold text-gray-900">{getAutomationLeadName(lead, language)}</div>
-                            <div className="micro-label text-gray-400">
-                              {getCategoryLabel(lead.category, language)} • {lead.sourceSystem}
+            ) : (
+              <div className="space-y-2 max-h-[620px] overflow-y-auto pr-1">
+                {automationLeads.map((lead) => {
+                  const evidenceUrl = getAutomationEvidenceUrl(lead);
+                  return (
+                    <div key={lead.id} className="rounded-2xl border border-gray-100 p-3 bg-page">
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selectedAutomationLeadIds.has(lead.id)}
+                          onChange={() => toggleAutomationLead(lead.id)}
+                          className={`mt-1 h-4 w-4 rounded border-gray-300 text-navy ${focusRingClass}`}
+                          aria-label={t('Select automation lead', 'Sélectionner le lead automatisé')}
+                        />
+                        <div className="flex-1 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-bold text-gray-900">{getAutomationLeadName(lead, language)}</div>
+                              <div className="micro-label text-gray-400">
+                                {getCategoryLabel(lead.category, language)} • {lead.sourceSystem}
+                              </div>
+                            </div>
+                            <span className={`rounded-lg border px-2 py-1 micro-label ${automationStatusClass(lead.status)}`}>
+                              {automationStatusLabel(lead.status, language)}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-gray-600">
+                            <div>{t('Zone', 'Zone')}: {lead.zoneId ?? unavailableLabel}</div>
+                            <div>{t('Priority', 'Priorité')}: {automationPriorityLabel(lead.priority, language)}</div>
+                            <div>
+                              {t('Match', 'Correspondance')}:{' '}
+                              {lead.matchPointId
+                                ? `${lead.matchPointId} (${typeof lead.matchConfidence === 'number' ? lead.matchConfidence.toFixed(2) : '--'})`
+                                : unavailableLabel}
                             </div>
                           </div>
-                          <span className={`rounded-lg border px-2 py-1 micro-label ${automationStatusClass(lead.status)}`}>
-                            {lead.status}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-gray-600">
-                          <div>{t('Zone', 'Zone')}: {lead.zoneId ?? unavailableLabel}</div>
-                          <div>{t('Priority', 'Priorité')}: {lead.priority}</div>
-                          <div>
-                            {t('Match', 'Correspondance')}: {lead.matchPointId ? `${lead.matchPointId} (${typeof lead.matchConfidence === 'number' ? lead.matchConfidence.toFixed(2) : '--'})` : unavailableLabel}
+                          <div className="text-[11px] text-gray-600">
+                            {t('Source record', 'Enregistrement source')}: {lead.sourceRecordId}
                           </div>
+                          {evidenceUrl && (
+                            <a
+                              href={evidenceUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`inline-flex items-center gap-1 text-[11px] text-navy underline break-all ${focusRingClass}`}
+                            >
+                              <MapPin size={12} />
+                              {t('Evidence', 'Preuve')}: {evidenceUrl}
+                            </a>
+                          )}
                         </div>
-                        <div className="text-[11px] text-gray-600">
-                          {t('Source record', 'Enregistrement source')}: {lead.sourceRecordId}
-                        </div>
-                        {evidenceUrl && (
-                          <a
-                            href={evidenceUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] text-navy underline break-all"
-                          >
-                            <MapPin size={12} />
-                            {t('Evidence', 'Preuve')}: {evidenceUrl}
-                          </a>
-                        )}
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {syncErrors.length > 0 && (
-          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center space-x-2 text-red-700">
-                <AlertTriangle size={14} />
-                <span className="micro-label">
-                  {t('Local Sync Errors', 'Erreurs locales de synchronisation')} ({syncErrors.length})
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleClearSyncErrors}
-                disabled={isClearingSyncErrors}
-                className={`micro-label ${isClearingSyncErrors ? 'text-red-300' : 'text-red-700'}`}
-              >
-                {isClearingSyncErrors ? t('Clearing...', 'Suppression...') : t('Clear', 'Effacer')}
-              </button>
-            </div>
-            <div className="text-xs text-red-700">
-              {syncErrors[0]?.message ?? t('Unknown sync error.', 'Erreur de synchronisation inconnue.')}
-            </div>
-          </div>
-        )}
-
-        {isLoading && (
-          <div className="bg-white border border-gray-100 rounded-2xl p-5 text-xs text-gray-500">
-            {t('Loading submissions...', 'Chargement des soumissions...')}
-          </div>
-        )}
-
-        {!isLoading && error && (
-          <div className="bg-red-50 border border-red-100 rounded-2xl p-5 text-xs text-red-600">
-            {error}
-          </div>
-        )}
-
-        {!isLoading && !error && actionMessage && (
-          <div className="bg-forest-wash border border-forest-wash rounded-2xl p-4 text-xs text-forest">
-            {actionMessage}
-          </div>
-        )}
-
-        {!isLoading && !error && deleteError && (
-          <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-xs text-red-600">
-            {deleteError}
-          </div>
-        )}
-
-        <div className="lg:flex lg:gap-4">
-        <div className="lg:w-[380px] lg:shrink-0 lg:overflow-y-auto lg:max-h-[calc(100vh-200px)]">
-        {!isLoading && !error && filteredGroups.length > 0 && (
-          <div className="space-y-3">
-            {filteredGroups.map((group) => {
-              const isSelected = selectedPointId === group.pointId;
-              const preview = group.allPhotos[0]?.url ?? null;
-              const riskScore = getRiskScore(group.latestEvent);
-              const reviewStatus = getReviewStatus(group.latestEvent);
-              return (
-                <div
-                  key={`desktop-${group.pointId}`}
-                  className={`hidden lg:block w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
-                    isSelected ? 'border-navy' : 'border-gray-100 hover:border-navy-border'
-                  }`}
-                >
-                  <div className="flex">
-                    <div className="flex items-center pl-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedForBulk.has(group.pointId)}
-                        onChange={() => toggleBulkItem(group.pointId)}
-                        className="w-4 h-4 rounded border-gray-300 text-navy shrink-0"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPointId(group.pointId)}
-                      className="flex flex-1 text-left"
-                    >
-                    <div className="w-16 h-16 bg-gray-100 shrink-0 flex items-center justify-center relative">
-                      {preview ? (
-                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" loading="lazy" />
-                      ) : (
-                        <Camera size={14} className="text-gray-300" />
-                      )}
-                    </div>
-                    <div className="flex-1 p-2 space-y-1">
-                      <h4 className="text-xs font-bold text-gray-900 leading-tight truncate">{group.siteName}</h4>
-                      <p className="micro-label text-gray-400">
-                        {categoryLabelLocal(group.category, language)} • {riskScore} • {reviewStatus}
-                      </p>
-                    </div>
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-        </div>
-        <div className="lg:flex-1 lg:overflow-y-auto lg:max-h-[calc(100vh-200px)]">
-
-        {!isLoading && !error && selectedGroup && (() => {
-          const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
-          const latestFraudCheck = selectedGroup.latestEvent.fraudCheck ?? null;
-          const latestDevice = getClientDevice(selectedGroup.latestEvent);
-          const contributors = [...new Map<string, AdminSubmissionEvent['user']>(selectedGroup.events.map((e) => [e.user.id, e.user])).values()];
-          return (
-          <div className="card p-4 space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold text-gray-900">{t('Point Detail', 'Détail du point')}</h4>
-              <button
-                type="button"
-                onClick={() => setSelectedPointId(null)}
-                className="h-8 w-8 rounded-full border border-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between gap-3">
-              <p className="micro-label text-gray-400">
-                {selectedGroup.events.length} {t('event(s)', 'événement(s)')}
-              </p>
-              <div className="flex flex-wrap justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
-                  disabled={isApplyingDecision}
-                  className={`h-10 px-3 rounded-xl micro-label ${
-                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-forest-wash text-forest'
-                  }`}
-                >
-                  {t('Approve', 'Approuver')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleReviewDecision(selectedGroup, 'flagged')}
-                  disabled={isApplyingDecision}
-                  className={`h-10 px-3 rounded-xl micro-label ${
-                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-terra-wash text-terra'
-                  }`}
-                >
-                  {t('Hold', 'Mettre en attente')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
-                  disabled={isApplyingDecision}
-                  className={`h-10 px-3 rounded-xl micro-label ${
-                    isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600'
-                  }`}
-                >
-                  {t('Reject', 'Rejeter')}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDeleteSelected}
-                  disabled={isDeleting || hasReadOnly}
-                  className={`h-10 px-3 rounded-xl micro-label flex items-center space-x-2 ${
-                    isDeleting || hasReadOnly
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
-                  }`}
-                >
-                  <Trash2 size={14} />
-                  <span>
-                    {isDeleting
-                      ? t('Deleting...', 'Suppression...')
-                      : hasReadOnly
-                        ? t('Cannot delete', 'Suppression impossible')
-                        : t('Delete point', 'Supprimer point')}
-                  </span>
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 text-[11px]">
-              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="micro-label text-gray-400">{t('Contributors', 'Contributeurs')}</div>
-                {contributors.map((user) => (
-                  <div key={user.id} className="flex items-start gap-2">
-                    <ProfileAvatar preset={coerceAvatarPreset(user.avatarPreset)} alt={user.name} className="w-8 h-8 shrink-0" />
-                    <div className="space-y-0.5">
-                    <div className="text-gray-900 font-semibold">{user.name}</div>
-                    <div className="text-gray-600">{user.email ?? unavailableLabel}</div>
-                    <div className="text-[11px] text-gray-500">
-                      {t('Trust', 'Confiance')}: {typeof user.trustScore === 'number' ? user.trustScore : '--'} • {user.trustTier ?? unavailableLabel}
-                    </div>
-                    {user.suspendedUntil && (
-                      <div className="text-[11px] text-terra-dark">
-                        {t("Suspended until", "Suspendu jusqu’au")}: {formatDate(user.suspendedUntil, unavailableLabel)}
-                      </div>
-                    )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="micro-label text-gray-400">{t('Point Metadata', 'Métadonnées du point')}</div>
-                <div>{t('Category', 'Catégorie')}: {categoryLabelLocal(selectedGroup.category, language)}</div>
-                <div>Point ID: {selectedGroup.pointId}</div>
-                <div>{t('Events', 'Événements')}: {selectedGroup.events.length}</div>
-                <div>{t('Risk Score', 'Score de risque')}: {getRiskScore(selectedGroup.latestEvent)}</div>
-                <div>{t('Review Status', 'Statut revue')}: {getReviewStatus(selectedGroup.latestEvent)}</div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
-                <div className="micro-label text-gray-400">{t('Event Timeline', 'Historique des événements')}</div>
-                {selectedGroup.events.map((ev, idx) => {
-                  const device = getClientDevice(ev);
-                  return (
-                    <div key={ev.event.id} className={`p-2 rounded-xl ${idx === 0 ? 'bg-forest-wash border border-forest-wash' : 'bg-gray-50 border border-gray-100'}`}>
-                      <div className="flex items-center justify-between">
-                        <span className="micro-label text-navy">
-                          {ev.event.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : t('Enrich', 'Enrichissement')}
-                        </span>
-                        <span className="text-[11px] text-gray-500">{formatDate(ev.event.createdAt, unavailableLabel)}</span>
-                      </div>
-                      <div className="text-gray-600 mt-1">{t('By', 'Par')}: {ev.user.name}</div>
-                      {device && <div className="text-gray-500">{t('Device', 'Appareil')}: {device.platform ?? 'Unknown'}</div>}
                     </div>
                   );
                 })}
               </div>
-
-              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="micro-label text-gray-400">{t('Location', 'Localisation')}</div>
-                <div>{t('Submission GPS', 'GPS soumis')}: {formatLocation(latestFraudCheck?.submissionLocation, unavailableLabel)}</div>
-                <div>{t('Effective GPS', 'GPS effectif')}: {formatLocation(latestFraudCheck?.effectiveLocation, unavailableLabel)}</div>
-                <div>{t('IP GPS', 'GPS IP')}: {formatLocation(latestFraudCheck?.ipLocation, unavailableLabel)}</div>
-              </div>
-
-              <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                <div className="micro-label text-gray-400">{t('Client Device', 'Appareil client')}</div>
-                <div>{t('Device ID', 'Device ID')}: {latestDevice?.deviceId ?? unavailableLabel}</div>
-                <div>{t('Platform', 'Plateforme')}: {latestDevice?.platform ?? unavailableLabel}</div>
-                <div>
-                  {t('Low-end flag', 'Indicateur entrée de gamme')}:{' '}
-                  {latestDevice ? (latestDevice.isLowEnd === true ? t('Yes', 'Oui') : t('No', 'Non')) : unavailableLabel}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="micro-label text-gray-400">
-                  {t('All Photos', 'Toutes les photos')} ({selectedGroup.allPhotos.length})
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {selectedGroup.allPhotos.length === 0 && (
-                    <div className="col-span-2 rounded-2xl border border-gray-100 bg-gray-50 h-28 flex items-center justify-center">
-                      <div className="micro-label text-gray-400 text-center px-2">
-                        {t('No photos available', 'Aucune photo disponible')}
-                      </div>
-                    </div>
-                  )}
-                  {selectedGroup.allPhotos.map((photo, idx) => (
-                    <div key={idx} className="space-y-1">
-                      <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
-                        <img src={photo.url} alt={`${t('Photo', 'Photo')} ${idx + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                      </div>
-                      <div className="text-[11px] text-gray-500 text-center">
-                        {photo.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <div className="micro-label text-gray-400">
-                  {t('Photo EXIF Metadata', 'Métadonnées EXIF des photos')}
-                </div>
-                {selectedGroup.allPhotos.length === 0 && (
-                  <div className="text-[11px] text-gray-500">{unavailableLabel}</div>
-                )}
-                {selectedGroup.allPhotos.map((photo, idx) => (
-                  <DetailMetadataBlock
-                    key={idx}
-                    label={`${t('Photo', 'Photo')} ${idx + 1} — ${photo.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : photo.eventType === 'ENRICH_EVENT' ? t('Enrich', 'Enrichissement') : photo.eventType}`}
-                    metadata={photo.metadata}
-                    thresholdKm={latestFraudCheck?.submissionMatchThresholdKm ?? 1}
-                    unavailable={unavailableLabel}
-                    language={language}
-                  />
-                ))}
-                <div className="micro-label text-gray-400">
-                  {t('IP Match Threshold', 'Seuil correspondance IP')}: {latestFraudCheck?.ipMatchThresholdKm ?? 50} km
-                </div>
-              </div>
-            </div>
-          </div>
-          );
-        })()}
-
-        {!isLoading && !error && !selectedGroup && filteredGroups.length > 0 && (
-          <div className="hidden lg:flex bg-white border border-gray-100 rounded-2xl p-8 items-center justify-center text-xs text-gray-400 min-h-[200px]">
-            {t('Select an item to view details', 'Sélectionnez un élément pour voir les détails')}
-          </div>
-        )}
-
-        </div>
-        </div>
-
-        {!isLoading && !error && filteredGroups.length === 0 && (
-          <div className="bg-white border border-gray-100 rounded-2xl p-6 text-xs text-gray-500 text-center">
-            {t('No submissions found.', 'Aucune soumission trouvée.')}
-          </div>
-        )}
-
-        {!isLoading && !error && filteredGroups.length > 0 && (
-          <div className="space-y-3 lg:hidden">
-            {filteredGroups.map((group) => {
-              const isSelected = selectedPointId === group.pointId;
-              const state = getMatchState(group.latestEvent.fraudCheck);
-              const preview = group.allPhotos[0]?.url ?? null;
-              const contributors = [...new Set(group.events.map((e) => e.user.name))];
-              const riskScore = getRiskScore(group.latestEvent);
-              const reviewStatus = getReviewStatus(group.latestEvent);
-              return (
-                <div
-                  key={group.pointId}
-                  className={`w-full text-left bg-white border rounded-2xl overflow-hidden shadow-sm transition-colors ${
-                    isSelected ? 'border-navy' : 'border-gray-100 hover:border-navy-border'
-                  }`}
-                >
-                  <div className="flex">
-                    <div className="flex items-center pl-2">
-                      <input
-                        type="checkbox"
-                        checked={selectedForBulk.has(group.pointId)}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          toggleBulkItem(group.pointId);
-                        }}
-                        className="w-4 h-4 rounded border-gray-300 text-navy shrink-0"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedPointId(group.pointId)}
-                      className="flex flex-1 text-left"
-                    >
-                    <div className="w-24 h-24 bg-gray-100 shrink-0 flex items-center justify-center relative">
-                      {preview ? (
-                        <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" loading="lazy" />
-                      ) : (
-                        <Camera size={18} className="text-gray-300" />
-                      )}
-                      {group.allPhotos.length > 1 && (
-                        <div className="absolute top-1 right-1 bg-navy text-white text-[11px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                          {group.allPhotos.length}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 p-3 space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h4 className="text-sm font-bold text-gray-900 leading-tight">{group.siteName}</h4>
-                          <p className="micro-label text-gray-400">
-                            {categoryLabelLocal(group.category, language)}
-                            {group.events.length > 1 && ` · ${group.events.length} ${t('events', 'événements')}`}
-                          </p>
-                        </div>
-                        <span className={`micro-label px-2 py-1 rounded-lg border ${matchStateClass(state)}`}>
-                          {matchStateLabel(state, language)}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-gray-600 flex items-center gap-1">
-                        <ProfileAvatar preset={coerceAvatarPreset(group.events[0]?.user.avatarPreset)} alt="" className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{contributors.join(', ')}</span>
-                      </div>
-                      <div className="text-[11px] text-gray-500 flex items-center gap-1">
-                        <MapPin size={12} />
-                        <span>{formatDate(group.latestEvent.event.createdAt, unavailableLabel)}</span>
-                      </div>
-                      <div className="micro-label text-gray-400">
-                        {t('Risk', 'Risque')}: {riskScore} • {reviewStatus}
-                      </div>
-                    </div>
-                  </button>
-                  </div>
-                </div>
-              );
-            })}
+            )}
           </div>
         )}
       </div>
     </div>
   );
 };
+
+interface SchemaGuardStatus {
+  ok: boolean | null;
+  expected: string[];
+  actual: string[];
+  missing: string[];
+  extra: string[];
+  reason?: string;
+}
 
 export default AdminQueue;
