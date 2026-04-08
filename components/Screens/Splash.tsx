@@ -71,7 +71,7 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
       <div className="ambient-orb right-[-3rem] top-[18%] h-28 w-28 bg-terra/20" style={{ animationDelay: '-2.2s' }} />
       <div className="ambient-orb bottom-[22%] right-[8%] h-24 w-24 bg-navy/10" style={{ animationDelay: '-4.2s' }} />
 
-      <div className="relative z-10 flex flex-1 flex-col px-6 pt-8 pb-6">
+      <div className="relative z-10 flex flex-1 flex-col px-6 pt-8 pb-6 min-h-0 overflow-y-auto">
         <div className="flex items-center justify-between">
           <div className="inline-flex items-center gap-2 rounded-full border border-navy/10 bg-white/90 px-3 py-2 shadow-sm">
             <BrandLogo size={18} className="shrink-0" />
