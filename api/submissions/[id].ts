@@ -13,7 +13,7 @@ import { reviewBodySchema } from "../../lib/server/validation.js";
 import type { PointEvent } from "../../shared/types.js";
 import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
 import { reconcileUserProfileXp } from "../../lib/server/xp.js";
-import { applyReviewDecision, type ReviewDecision } from "../../lib/server/reviewDecision.js";
+import { applyReviewDecision } from "../../lib/server/reviewDecision.js";
 
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);

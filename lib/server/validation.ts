@@ -101,6 +101,14 @@ export const reviewBodySchema = z
   })
   .strict();
 
+export const batchReviewBodySchema = z
+  .object({
+    eventIds: z.array(z.string().trim().min(1)).min(1).max(100),
+    decision: z.enum(["approved", "rejected", "flagged"]),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
 export const automationLeadInputSchema = z
   .object({
     sourceRecordId: z.string().trim().min(1).max(200),

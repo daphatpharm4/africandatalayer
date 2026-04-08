@@ -358,6 +358,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [plannerVerticals, setPlannerVerticals] = useState<SubmissionCategory[]>(['pharmacy', 'mobile_money']);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
   const [riskFilter, setRiskFilter] = useState<RiskFilter>('all');
+  const [userFilter, setUserFilter] = useState('');
   const [isApplyingDecision, setIsApplyingDecision] = useState(false);
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
 
@@ -512,10 +513,20 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, [automationLeads]);
 
   const groupedPoints = useMemo(() => groupEventsByPoint(items, language), [items, language]);
+  const uniqueUsers = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const item of items) {
+      if (!map.has(item.user.id)) {
+        map.set(item.user.id, { id: item.user.id, name: item.user.name });
+      }
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [items]);
   const filteredGroups = useMemo(() => {
     const filtered = groupedPoints.filter((group) => {
-      if (riskFilter === 'all') return true;
-      return getRiskBucket(group.latestEvent) === riskFilter;
+      if (riskFilter !== 'all' && getRiskBucket(group.latestEvent) !== riskFilter) return false;
+      if (userFilter && !group.events.some((e) => e.user.id === userFilter)) return false;
+      return true;
     });
 
     return filtered.sort((a, b) => {
@@ -526,7 +537,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       if (reviewDelta !== 0) return reviewDelta;
       return new Date(b.latestEvent.event.createdAt).getTime() - new Date(a.latestEvent.event.createdAt).getTime();
     });
-  }, [groupedPoints, riskFilter]);
+  }, [groupedPoints, riskFilter, userFilter]);
   const selectedGroup = useMemo(() => filteredGroups.find((g) => g.pointId === selectedPointId) ?? null, [filteredGroups, selectedPointId]);
   const selectedAutomationLeads = useMemo(
     () => automationLeads.filter((lead) => selectedAutomationLeadIds.has(lead.id)),
@@ -651,47 +662,75 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     });
   };
 
-  const selectAllLowRisk = () => {
-    const lowRiskIds = filteredGroups
-      .filter((g) => getRiskBucket(g.latestEvent) === 'low_risk')
+  const selectAllEligible = () => {
+    const eligibleIds = filteredGroups
+      .filter((g) => {
+        const bucket = getRiskBucket(g.latestEvent);
+        return (bucket === 'low_risk' || bucket === 'pending') && getReviewStatus(g.latestEvent) === 'pending_review';
+      })
       .map((g) => g.pointId);
     setSelectedForBulk((prev) => {
-      const allSelected = lowRiskIds.every((id) => prev.has(id));
+      const allSelected = eligibleIds.length > 0 && eligibleIds.every((id) => prev.has(id));
       if (allSelected) return new Set();
-      return new Set(lowRiskIds);
+      return new Set(eligibleIds);
     });
   };
 
-  const handleBulkApproveLowRisk = async () => {
+  const handleBulkApprove = async () => {
     if (isApplyingDecision) return;
 
-    const targetGroups = selectedForBulk.size > 0
-      ? filteredGroups.filter((g) => selectedForBulk.has(g.pointId) && getReviewStatus(g.latestEvent) === 'pending_review')
-      : filteredGroups.filter(
-          (group) => getRiskBucket(group.latestEvent) === 'low_risk' && getReviewStatus(group.latestEvent) === 'pending_review',
-        );
+    const targetGroups =
+      selectedForBulk.size > 0
+        ? filteredGroups.filter((g) => selectedForBulk.has(g.pointId) && getReviewStatus(g.latestEvent) === 'pending_review')
+        : filteredGroups.filter((group) => {
+            const bucket = getRiskBucket(group.latestEvent);
+            return (bucket === 'low_risk' || bucket === 'pending') && getReviewStatus(group.latestEvent) === 'pending_review';
+          });
 
     if (targetGroups.length === 0) {
       setActionMessage(t('No pending groups to approve.', 'Aucun groupe en attente à approuver.'));
       return;
     }
 
+    const confirmed = window.confirm(t(`Approve ${targetGroups.length} submissions?`, `Approuver ${targetGroups.length} soumissions ?`));
+    if (!confirmed) return;
+
     setActionMessage('');
     setDeleteError('');
     try {
       setIsApplyingDecision(true);
-      for (const group of targetGroups) {
-        await apiJson(`/api/submissions/${encodeURIComponent(group.latestEvent.event.id)}?view=review`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ decision: 'approved' }),
-        });
-        applyReviewToLocalState(group.latestEvent.event.id, 'approved');
+      const eventIds = targetGroups.map((group) => group.latestEvent.event.id);
+      const response = await apiJson<{
+        results: Array<{ eventId: string; decision: ReviewDecision; status: 'ok' | 'error'; error?: string }>;
+      }>('/api/submissions/batch-review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventIds, decision: 'approved' }),
+      });
+
+      const groupNameByEventId = new Map(targetGroups.map((group) => [group.latestEvent.event.id, group.siteName] as const));
+      let okCount = 0;
+      const failedNames: string[] = [];
+      for (const result of response.results ?? []) {
+        if (result.status === 'ok') {
+          applyReviewToLocalState(result.eventId, 'approved');
+          okCount += 1;
+          continue;
+        }
+        const siteName = groupNameByEventId.get(result.eventId);
+        if (siteName) failedNames.push(siteName);
       }
       setSelectedForBulk(new Set());
-      setActionMessage(
-        t(`${targetGroups.length} group(s) approved.`, `${targetGroups.length} groupe(s) approuves.`),
-      );
+      if (failedNames.length === 0) {
+        setActionMessage(t(`${okCount} group(s) approved.`, `${okCount} groupe(s) approuves.`));
+      } else {
+        setActionMessage(
+          t(
+            `${okCount} approved, ${failedNames.length} failed. Failed: ${failedNames.join(', ')}`,
+            `${okCount} approuves, ${failedNames.length} echoues. Echecs : ${failedNames.join(', ')}`,
+          ),
+        );
+      }
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : t('Bulk approve failed.', 'Approbation en lot impossible.'));
     } finally {
@@ -972,22 +1011,24 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={selectAllLowRisk}
+                onClick={selectAllEligible}
                 className="h-10 rounded-2xl px-3 micro-label bg-gray-50 text-gray-600 border border-gray-100"
               >
-                {t('Select Low-Risk', 'Sélectionner faible risque')}
+                {t('Select Eligible', 'Selectionner eligibles')}
               </button>
               <button
                 type="button"
-                onClick={handleBulkApproveLowRisk}
+                onClick={handleBulkApprove}
                 disabled={isApplyingDecision}
                 className={`h-10 rounded-2xl px-4 micro-label ${
                   isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
                 }`}
               >
-                {selectedForBulk.size > 0
-                  ? `${t('Approve', 'Approuver')} (${selectedForBulk.size})`
-                  : t('Approve Low-Risk', 'Approuver faible risque')}
+                {isApplyingDecision
+                  ? t('Approving...', 'Approbation...')
+                  : selectedForBulk.size > 0
+                    ? `${t('Approve', 'Approuver')} (${selectedForBulk.size})`
+                    : t('Approve Eligible', 'Approuver eligibles')}
               </button>
             </div>
           </div>
@@ -1010,6 +1051,20 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </button>
             ))}
           </div>
+          {uniqueUsers.length > 1 && (
+            <select
+              value={userFilter}
+              onChange={(e) => setUserFilter(e.target.value)}
+              className="h-10 rounded-xl border micro-label bg-page text-gray-600 border-gray-100 px-3"
+            >
+              <option value="">{t('All agents', 'Tous les agents')}</option>
+              {uniqueUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="micro-label text-gray-400">
             {t('Keyboard', 'Clavier')}: J/K {t('navigate', 'naviguer')} • A {t('approve', 'approuver')} • R {t('reject', 'rejeter')} • H {t('hold', 'mettre en attente')}
           </div>
