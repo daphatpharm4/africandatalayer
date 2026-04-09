@@ -513,16 +513,16 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     <div
       className="relative h-full min-h-0 bg-page"
     >
-      <header className="route-grid absolute top-0 left-0 right-0 z-20 px-4 pt-4 pb-3 bg-white/95 backdrop-blur-xl shadow-[0_4px_24px_rgba(15,43,70,0.08)]">
+      <header className="route-grid absolute top-0 left-0 right-0 z-20 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 shadow-[0_4px_24px_rgba(15,43,70,0.08)] backdrop-blur-xl">
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
           <div className="ambient-orb right-[-2rem] top-[-1.5rem] h-20 w-20 bg-gold/20" />
           <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
         </div>
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex flex-col">
-            <div className="flex items-center space-x-2">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0 flex flex-col">
+            <div className="flex items-center gap-2">
               <BrandLogo size={18} className="shrink-0" />
-              <h2 className="text-lg font-bold text-ink leading-tight">{t('African Data Layer', 'African Data Layer')}</h2>
+              <h2 className="min-w-0 text-base font-bold leading-tight text-ink sm:text-lg">{t('African Data Layer', 'African Data Layer')}</h2>
               {isAdmin && (
                 <span className="px-2 py-0.5 rounded-full bg-navy-light text-navy micro-label">
                   {t('Admin', 'Admin')}
@@ -534,13 +534,13 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                 </span>
               )}
             </div>
-            <span className="micro-label text-gray-400">
-              {mapLockLabel} • {selectedCityLabel}
+            <span className="mt-1 text-xs font-medium leading-4 text-gray-500">
+              {mapLockLabel} - {selectedCityLabel}
             </span>
           </div>
           <button
             onClick={isAuthenticated ? onProfile : onAuth}
-            className="motion-pressable w-10 h-10 rounded-full bg-navy-wash flex items-center justify-center text-navy border border-navy/10"
+            className="motion-pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-navy/10 bg-navy-wash text-navy"
             aria-label={isAuthenticated ? t('Profile', 'Profil') : t('Sign in', 'Connexion')}
           >
             <User size={18} />
@@ -548,24 +548,24 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         </div>
 
         {isLowEndDevice && (
-          <div className="mb-3 rounded-xl border border-navy-border bg-navy-wash px-3 py-2 micro-label text-navy">
-            {t('Lite Mode — Faster on your device', 'Mode Lite — Plus rapide sur votre appareil')}
+          <div className="mb-3 rounded-xl border border-navy-border bg-navy-wash px-3 py-2 text-[11px] font-semibold leading-4 text-navy">
+            {t('Lite mode is on to keep map movement smooth on this phone.', 'Le mode allégé est activé pour garder la carte fluide sur ce téléphone.')}
           </div>
         )}
 
         <div ref={verticalPickerRef} className="relative mb-2">
           <button
             onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
-            className="motion-pressable w-full h-11 px-3 bg-gray-100 rounded-xl text-xs font-semibold text-navy flex items-center justify-between"
+            className="motion-pressable flex h-12 w-full items-center justify-between rounded-2xl bg-gray-100 px-4 text-sm font-semibold text-navy"
           >
-            <span>
+            <span className="min-w-0 truncate text-left">
               {t('Category', 'Catégorie')} : {categoryLabel(activeCategory)}
             </span>
             <ChevronDown size={14} className={`transition-transform ${isVerticalPickerOpen ? 'rotate-180' : ''}`} />
           </button>
           {isVerticalPickerOpen && (
-            <div className="absolute left-0 right-0 mt-2 bg-white border border-gray-100 rounded-xl shadow-lg p-2 z-30">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {selectableCategories.map((category) => {
                   const verticalId = LEGACY_CATEGORY_MAP[category] ?? category;
                   const vertical = VERTICALS[verticalId];
@@ -578,7 +578,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                         onCategoryChange(category);
                         setIsVerticalPickerOpen(false);
                       }}
-                      className={`motion-pressable h-10 rounded-xl border micro-label flex items-center justify-center gap-1 ${
+                      className={`motion-pressable flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold ${
                         isActive ? 'bg-navy text-white border-navy' : 'bg-gray-50 text-gray-600 border-gray-100'
                       }`}
                     >
@@ -635,10 +635,10 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               <button
                 type="button"
                 onClick={() => void runViewTransition(() => setViewMode('map'))}
-                className="motion-pressable flex items-center gap-1.5 text-xs font-semibold text-forest bg-forest-wash px-3 py-2 rounded-xl border border-forest/20"
+                className="motion-pressable flex items-center gap-1.5 rounded-xl border border-forest/20 bg-forest-wash px-3 py-2 text-xs font-semibold text-forest"
               >
                 <MapIcon size={14} />
-                {t('Back to Map', 'Retour à la carte')}
+                {t('Map', 'Carte')}
               </button>
             </div>
             <div className="p-4 space-y-3 pb-24 pt-4">
@@ -651,24 +651,24 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                 <button
                   key={point.id}
                   onClick={() => onSelectPoint(point)}
-                  className="motion-pressable w-full text-left bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex items-center space-x-4"
+                  className="motion-pressable flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm"
                 >
                   {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
-                    <div className="p-3 rounded-xl" style={{ backgroundColor: v?.bgColor ?? '#f9fafb', color: v?.color ?? '#1f2933' }}>
+                    <div className="shrink-0 rounded-xl p-3" style={{ backgroundColor: v?.bgColor ?? '#f9fafb', color: v?.color ?? '#1f2933' }}>
                       <VerticalIcon name={v?.icon ?? 'pill'} size={20} />
                     </div>
                   ); })()}
-                  <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                      <h4 className="font-semibold text-gray-900 text-sm">{point.name}</h4>
-                      {typeof point.price === 'number' && <span className="font-bold text-gray-900 text-sm">{point.price} {point.currency}</span>}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <h4 className="min-w-0 text-sm font-semibold text-gray-900">{point.name}</h4>
+                      {typeof point.price === 'number' && <span className="shrink-0 text-sm font-bold text-gray-900">{point.price} {point.currency}</span>}
                     </div>
                     <p className="text-xs text-gray-500 truncate mt-1">{formatExplorerPrimaryMeta(point)}</p>
                     {point.type === Category.PHARMACY && (
                       <p className="micro-label text-gray-500 mt-1">{formatPharmacyOpenStatus(point)}</p>
                     )}
-                    <div className="flex items-center space-x-2 mt-2">
-                      <span className="text-[11px] font-medium text-gray-400 uppercase">{t('Updated', 'Mis à jour')} {point.lastUpdated}</span>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-medium text-gray-500">{t('Updated', 'Mis à jour')} {point.lastUpdated}</span>
                       {point.verified && (
                         <span className="micro-label px-1.5 py-0.5 bg-forest-wash text-forest rounded-full">{t('Verified', 'Vérifié')}</span>
                       )}
@@ -683,7 +683,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
         {viewMode === 'map' && (
           <BottomSheet
-            peekHeight={80}
+            peekHeight={88}
             onSnapChange={setSheetSnap}
             hidden={false}
             isLowEndDevice={isLowEndDevice}
@@ -727,7 +727,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               sheetSnap !== 'peek' ? 'opacity-0 pointer-events-none' : ''
             }`}
             style={{
-              bottom: 'calc(6rem + var(--safe-bottom) + 80px)',
+              bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 6rem)',
               boxShadow: '0 6px 28px rgba(200,107,74,0.4), 0 2px 8px rgba(200,107,74,0.2)',
             }}
             aria-label={
@@ -741,13 +741,13 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </button>
         )}
 
-        {onContribute && sheetSnap === 'peek' && (
+        {onContribute && isAuthenticated && sheetSnap === 'peek' && (
           <div
             className="surface-reveal fixed right-4 z-40"
-            style={{ bottom: 'calc(10.25rem + var(--safe-bottom) + 80px)' }}
+            style={{ bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 10rem)' }}
           >
-            <div className="rounded-full bg-white/96 px-3 py-2 micro-label text-gray-500 shadow-lg">
-              {t('Tap to add one • Hold for multiple', 'Appuyez pour ajouter • Maintenez pour plusieurs')}
+            <div className="max-w-[14rem] rounded-2xl bg-white/96 px-3 py-2 text-[11px] font-semibold leading-4 text-gray-600 shadow-lg">
+              {t('Tap for one point. Press and hold to start a batch.', 'Touchez pour un point. Maintenez pour lancer une série.')}
             </div>
           </div>
         )}
@@ -755,10 +755,10 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         {!isAuthenticated && (
           <button
             onClick={onAuth}
-            className="motion-pressable absolute top-20 left-4 right-4 bg-white p-3 rounded-xl shadow-xl border border-gray-100 z-20 flex items-center justify-between"
+            className="motion-pressable absolute left-4 right-4 top-[7.25rem] z-20 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-xl"
           >
-            <span className="text-sm font-bold text-gray-900">{t('Sign in to contribute', 'Connectez-vous pour contribuer')}</span>
-            <span className="px-3 py-1.5 bg-navy text-white micro-label rounded-lg">{t('Sign In', 'Connexion')}</span>
+            <span className="min-w-0 text-left text-sm font-bold text-gray-900">{t('Sign in to unlock field capture and assignment progress.', 'Connectez-vous pour débloquer la capture terrain et le suivi des missions.')}</span>
+            <span className="rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white">{t('Sign In', 'Connexion')}</span>
           </button>
         )}
       </div>

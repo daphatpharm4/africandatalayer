@@ -2,7 +2,6 @@ import React from 'react';
 import type { DataPoint } from '../../types';
 import {
   AlertTriangle,
-  ArrowLeft,
   Clock,
   MapPin,
   Navigation2,
@@ -13,6 +12,7 @@ import {
 import VerticalIcon from '../shared/VerticalIcon';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { ENRICH_FIELD_CATALOG, getEnrichFieldLabel } from '../../shared/enrichFieldCatalog';
+import ScreenHeader from '../shared/ScreenHeader';
 
 interface Props {
   point: DataPoint | null;
@@ -115,15 +115,14 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
 
   return (
     <div className="flex flex-col h-full bg-page overflow-y-auto no-scrollbar">
-      <div className="sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className="p-2 -ml-2 text-gray-700 hover:text-navy transition-colors" aria-label={t('Go back', 'Retour')}>
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="text-sm font-bold truncate max-w-[200px]">{point.name}</h1>
-        <span className="micro-label text-navy">{categoryLabelText}</span>
-      </div>
+      <ScreenHeader
+        title={point.name}
+        onBack={onBack}
+        language={language}
+        trailing={<span className="micro-label rounded-full bg-navy-wash px-2 py-1 text-navy">{categoryLabelText}</span>}
+      />
 
-      <div className="p-4 pb-24 space-y-4">
+      <div className="p-4 pb-36 space-y-4">
         <div className="h-44 rounded-2xl bg-gray-200 overflow-hidden relative shadow-sm border border-gray-100">
           {point.photoUrl ? (
             <img
@@ -149,15 +148,15 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="card p-4">
-            <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+            <span className="micro-label mb-2 flex items-center text-gray-500">
               <ShieldCheck size={10} className="mr-1" />
               {t('Trust Score', 'Score de confiance')}
             </span>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900 tracking-tight">{point.trustScore}%</span>
-              <span className="text-[11px] text-gray-500 font-medium">{t('Community confidence', 'Confiance de la communauté')}</span>
+              <span className="text-xs font-medium text-gray-500">{t('Community confidence', 'Confiance de la communauté')}</span>
             </div>
           </div>
 
@@ -172,7 +171,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
                     : 'border-gold/60 bg-gold-wash'
               }`}
             >
-              <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+              <span className="micro-label mb-2 flex items-center text-gray-500">
                 <RefreshCw size={10} className="mr-1" />
                 {t('Stale', 'Ancien')}
               </span>
@@ -180,20 +179,20 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
                 <span className="text-xl font-bold text-navy tracking-tight">
                   {t(`${staleDays}d old`, `${staleDays}j`)}
                 </span>
-                <span className="text-[11px] font-bold text-terra">
-                  {t('Tap to refresh', 'Actualise')} +{staleXP} XP
+                <span className="text-xs font-semibold text-terra">
+                  {t('Refresh this point to re-verify it', 'Actualisez ce point pour le revalider')} +{staleXP} XP
                 </span>
               </div>
             </button>
           ) : (
             <div className="card p-4">
-              <span className="text-[11px] font-bold text-gray-400 uppercase mb-2 flex items-center">
+              <span className="micro-label mb-2 flex items-center text-gray-500">
                 <Clock size={10} className="mr-1" />
                 {t('Updated', 'Mis à jour')}
               </span>
               <div className="flex flex-col">
                 <span className="text-xl font-bold text-gray-900 tracking-tight">{point.lastUpdated}</span>
-                <span className="text-[11px] text-gray-500 font-medium">{t('Live sync state', 'État sync live')}</span>
+                <span className="text-xs font-medium text-gray-500">{t('Live sync status', 'État de synchro en direct')}</span>
               </div>
             </div>
           )}
@@ -221,9 +220,9 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
             <p className="text-xs text-gray-500">{t('No known fields captured yet.', 'Aucun champ connu capturé pour le moment.')}</p>
           )}
           {visibleKnownFields.map((field) => (
-            <div key={field.label} className="flex items-start justify-between text-xs border-b border-gray-50 pb-2">
+            <div key={field.label} className="grid gap-1 border-b border-gray-50 pb-2 text-xs sm:grid-cols-[minmax(0,0.75fr),minmax(0,1fr)] sm:items-start">
               <span className="text-gray-500">{field.label}</span>
-              <span className="font-semibold text-gray-900 text-right max-w-[60%]">{String(field.value)}</span>
+              <span className="font-semibold text-gray-900 sm:text-right">{String(field.value)}</span>
             </div>
           ))}
         </div>
@@ -253,33 +252,33 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
             <MapPin size={18} />
           </div>
           <div className="flex flex-col">
-            <span className="text-xs font-bold text-gray-900">{t('Geo-anchored location', 'Localisation géo-ancrée')}</span>
+            <span className="text-sm font-bold text-gray-900">{t('Geo-anchored location', 'Localisation géo-ancrée')}</span>
             <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{point.location}</p>
           </div>
         </div>
 
       </div>
 
-      <div className="fixed bottom-[calc(5rem+var(--safe-bottom))] left-1/2 -translate-x-1/2 w-full max-w-[calc(28rem-2rem)] px-4 flex items-center space-x-2 z-40">
+      <div className="fixed bottom-[calc(var(--bottom-nav-height)+var(--safe-bottom)+0.75rem)] left-0 right-0 z-40 mx-auto flex w-full max-w-md flex-col gap-2 px-4 sm:flex-row">
         <button
           onClick={isAuthenticated ? onEnrich : onAuth}
-          className="flex-1 h-14 bg-navy text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-navy-dark active:scale-95 transition-all"
+          className="btn-primary flex w-full flex-1 items-center justify-center gap-2 rounded-2xl shadow-lg"
         >
           <ShieldCheck size={18} />
           <span>
             {isAuthenticated
               ? gaps.length === 0
-                ? t('Update Point', 'Mettre à jour le point')
-                : t('Enrich Point', 'Enrichir le point')
-              : t('Sign In to Enrich', 'Connectez-vous pour enrichir')}
+                ? t('Update this point', 'Mettre ce point à jour')
+                : t('Enrich this point', 'Enrichir ce point')
+              : t('Sign in to enrich', 'Connectez-vous pour enrichir')}
           </span>
         </button>
         <button
           onClick={isAuthenticated ? onAddNew : onAuth}
-          className="flex-1 h-14 bg-terra text-white rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center space-x-2 hover:bg-terra-dark active:scale-95 transition-all"
+          className="btn-cta flex w-full flex-1 items-center justify-center gap-2 rounded-2xl shadow-lg"
         >
           <PlusCircle size={18} />
-          <span>{t('Add New', 'Ajouter nouveau')}</span>
+          <span>{t('Add a new point', 'Ajouter un nouveau point')}</span>
         </button>
       </div>
     </div>

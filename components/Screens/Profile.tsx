@@ -544,15 +544,15 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <button
             onClick={onRedeem}
-            className="h-14 bg-white text-navy border border-navy-border rounded-xl micro-label shadow-sm hover:bg-gray-100 transition-all flex items-center justify-center space-x-2"
+            className="flex h-14 items-center justify-center gap-2 rounded-xl border border-navy-border bg-white px-4 text-sm font-semibold text-navy shadow-sm transition-all hover:bg-gray-100"
           >
             <Gift size={16} />
             <span>{t('Redeem XP', 'Échanger XP')}</span>
           </button>
-          <button className="h-14 bg-terra text-white rounded-xl micro-label shadow-lg hover:bg-terra-dark transition-all flex items-center justify-center space-x-2">
+          <button className="flex h-14 items-center justify-center gap-2 rounded-xl bg-terra px-4 text-sm font-semibold text-white shadow-lg transition-all hover:bg-terra-dark">
             <Wallet size={16} />
             <span>{t('Convert to Rewards', 'Convertir en recompenses')}</span>
           </button>
@@ -586,7 +586,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
           );
         })()}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="card p-5 space-y-3">
             <div className="flex items-center space-x-2 text-forest">
               <BadgeCheck size={16} />
@@ -606,7 +606,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
             </div>
             <div className="flex flex-col">
               <span className="text-2xl font-bold text-gray-900">{pointsThisWeek}</span>
-              <p className="text-[11px] text-gray-400 font-bold uppercase tracking-wider">{t('submissions', 'soumissions')}</p>
+              <p className="text-xs font-medium text-gray-500">{t('submissions', 'soumissions')}</p>
             </div>
           </div>
         </div>

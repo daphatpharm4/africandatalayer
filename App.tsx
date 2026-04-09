@@ -397,7 +397,9 @@ const App: React.FC = () => {
   return (
     <ErrorBoundary>
       <div
-        className={`app-shell flex flex-col w-full ${wideShell ? 'max-w-7xl' : 'max-w-md'} mx-auto bg-white shadow-2xl relative overflow-hidden border-x border-gray-100`}
+        className={`app-shell relative mx-auto flex w-full flex-col overflow-hidden bg-white ${
+          wideShell ? 'max-w-none xl:max-w-7xl' : 'max-w-none sm:max-w-md'
+        } border-x-0 border-gray-100 shadow-none sm:border-x sm:shadow-2xl`}
       >
         {showSyncBar && (
           <SyncStatusBar
@@ -412,12 +414,12 @@ const App: React.FC = () => {
           />
         )}
 
-        <main className="flex-1 overflow-hidden relative">
+        <main className="relative flex-1 min-h-0 overflow-hidden">
           <Suspense
             fallback={
               <div className="h-full w-full bg-page p-4">
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
-                  {language === 'fr' ? 'Chargement de l ecran...' : 'Loading screen...'}
+                  {language === 'fr' ? 'Préparation de l\'écran...' : 'Preparing the next screen...'}
                 </div>
               </div>
             }

@@ -38,7 +38,7 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
 
   return (
     <nav
-      className="min-h-16 bg-white border-t border-gray-200 flex items-center justify-around px-2 pt-1 pb-[calc(0.25rem+var(--safe-bottom))] z-40"
+      className="z-40 flex min-h-[76px] items-end justify-around border-t border-gray-200 bg-white/98 px-1 pt-1 backdrop-blur-sm pb-[calc(0.5rem+var(--safe-bottom))]"
       aria-label={t('Main navigation', 'Navigation principale')}
     >
       {navItems.map((item) => {
@@ -49,12 +49,15 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
             key={item.id}
             onClick={() => onNavigate(item.id)}
             aria-current={isActive ? 'page' : undefined}
-            className={`flex flex-col items-center justify-center space-y-1 w-full transition-colors ${
-              isActive ? 'text-navy' : 'text-gray-400 hover:text-gray-600'
+            aria-label={item.label}
+            className={`flex min-h-[60px] w-full flex-col items-center justify-center gap-1 rounded-2xl px-1 transition-colors ${
+              isActive ? 'bg-navy-wash text-navy' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             <Icon size={20} aria-hidden="true" />
-            <span className="text-[11px] font-medium tracking-tight uppercase">{item.label}</span>
+            <span className="max-w-full truncate px-1 text-[0.72rem] font-semibold leading-none tracking-[0.01em]">
+              {item.label}
+            </span>
           </button>
         );
       })}

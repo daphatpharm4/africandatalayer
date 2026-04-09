@@ -7,6 +7,8 @@
     --safe-top: env(safe-area-inset-top);
     --safe-bottom: env(safe-area-inset-bottom);
     --app-height: 100vh;
+    --bottom-nav-height: 4.75rem;
+    --screen-gutter: clamp(1rem, 3vw, 1.25rem);
     --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
     --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
@@ -45,12 +47,26 @@
     overflow: hidden;
   }
 
+  html {
+    font-size: 16px;
+  }
+
   body {
     font-family: "Inter", system-ui, sans-serif;
     background-color: theme('colors.page.DEFAULT');
     color: theme('colors.ink.dark');
+    font-size: 0.9375rem;
+    line-height: 1.5;
     -webkit-tap-highlight-color: transparent;
+    font-feature-settings: "cv11" 1, "ss01" 1;
     text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
   }
 }
 
@@ -64,12 +80,12 @@
 @layer components {
   /* Micro label — sunlight-readable uppercase label (11px min for field use) */
   .micro-label {
-    @apply text-[11px] font-bold uppercase tracking-widest;
+    @apply text-xs font-semibold uppercase tracking-[0.14em] leading-4;
   }
 
   /* Wider micro label variant (used in section headers) */
   .micro-label-wide {
-    @apply text-[11px] font-bold uppercase tracking-[0.25em];
+    @apply text-[11px] font-semibold uppercase tracking-[0.2em] leading-4;
   }
 
   /* Card — the standard container */
@@ -85,31 +101,33 @@
   /* Screen shell — standard scrollable screen background */
   .screen-shell {
     @apply flex flex-col h-full bg-page overflow-y-auto no-scrollbar;
+    scroll-padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 1rem);
   }
 
   /* Screen header — sticky top bar */
   .screen-header {
-    @apply sticky top-0 z-30 bg-white border-b border-gray-100 px-4 h-14 flex items-center justify-between;
+    @apply sticky top-0 z-30 grid grid-cols-[auto,1fr,auto] items-center gap-2 border-b border-gray-100 bg-white/95 px-4 py-3 backdrop-blur-sm;
+    min-height: 4rem;
   }
 
   /* Back button */
   .btn-back {
-    @apply p-2 -ml-2 text-gray-700 hover:text-navy transition-colors;
+    @apply flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-navy-wash hover:text-navy;
   }
 
   /* Primary button */
   .btn-primary {
-    @apply h-14 rounded-2xl bg-navy text-white text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-navy-dark active:scale-95 transition-all;
+    @apply h-14 rounded-2xl bg-navy px-4 text-sm font-semibold tracking-[0.01em] text-white shadow-sm hover:bg-navy-dark active:scale-95 transition-all;
   }
 
   /* Secondary / CTA button */
   .btn-cta {
-    @apply h-14 rounded-2xl bg-terra text-white text-xs font-bold uppercase tracking-widest shadow-sm hover:bg-terra-dark active:scale-95 transition-all;
+    @apply h-14 rounded-2xl bg-terra px-4 text-sm font-semibold tracking-[0.01em] text-white shadow-sm hover:bg-terra-dark active:scale-95 transition-all;
   }
 
   /* Ghost button */
   .btn-ghost {
-    @apply h-14 rounded-2xl border border-gray-200 bg-white text-xs font-bold uppercase tracking-widest text-navy;
+    @apply h-14 rounded-2xl border border-gray-200 bg-white px-4 text-sm font-semibold tracking-[0.01em] text-navy;
   }
 
   /* Stat tile — colored background with micro label + large number */
@@ -123,6 +141,7 @@
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
   box-sizing: border-box;
+  width: 100%;
 }
 
 .no-scrollbar::-webkit-scrollbar {

@@ -32,33 +32,35 @@ const SyncStatusBar: React.FC<Props> = ({
     ? {
         bgClass: 'bg-danger',
         textClass: 'text-white',
-        label: t(`${failed} failed — Tap to view`, `${failed} échecs — Appuyez pour voir`),
+        label: t(`${failed} failed uploads. Tap to review.`, `${failed} envois ont échoué. Touchez pour vérifier.`),
         icon: <AlertCircle size={12} className="text-white flex-shrink-0" />,
       }
     : isOfflinePending
       ? {
           bgClass: 'bg-amber-500',
           textClass: 'text-white',
-          label: t(`Offline — ${pending} pending`, `Hors ligne — ${pending} en attente`),
+          label: t(`Offline. ${pending} uploads waiting to sync.`, `Hors ligne. ${pending} envois attendent la synchronisation.`),
           icon: <WifiOff size={12} className="text-white flex-shrink-0" />,
         }
       : isSyncing
         ? {
-            bgClass: 'bg-navy',
-            textClass: 'text-white',
-            label: t('Uploading...', 'Envoi en cours...'),
-            icon: <RefreshCw size={12} className="text-white animate-spin flex-shrink-0" />,
-          }
+          bgClass: 'bg-navy',
+          textClass: 'text-white',
+          label: t('Syncing your latest field updates...', 'Synchronisation des dernières mises à jour...'),
+          icon: <RefreshCw size={12} className="text-white animate-spin flex-shrink-0" />,
+        }
         : {
-            bgClass: 'bg-forest/10',
-            textClass: 'text-forest',
-            label: t(`${synced} uploaded`, `${synced} envoyés`),
-            icon: <CheckCircle size={12} className="text-forest flex-shrink-0" />,
-          };
+          bgClass: 'bg-forest/10',
+          textClass: 'text-forest',
+          label: synced > 0
+            ? t(`${synced} uploads synced. Queue is clear.`, `${synced} envois synchronisés. La file est vide.`)
+            : t('Ready to capture. No uploads waiting.', 'Prêt à capturer. Aucun envoi en attente.'),
+          icon: <CheckCircle size={12} className="text-forest flex-shrink-0" />,
+        };
 
   return (
     <div
-      className={`sticky top-0 z-30 h-7 flex items-center justify-between px-3 ${status.bgClass} transition-colors duration-300`}
+      className={`sticky top-0 z-30 flex min-h-9 items-center justify-between px-3 ${status.bgClass} transition-colors duration-300`}
     >
       <button
         type="button"
@@ -66,7 +68,7 @@ const SyncStatusBar: React.FC<Props> = ({
         className="flex items-center gap-1.5 min-w-0 flex-1"
       >
         {status.icon}
-        <span className={`micro-label truncate ${status.textClass}`}>
+        <span className={`truncate text-[11px] font-semibold leading-4 ${status.textClass}`}>
           {status.label}
         </span>
       </button>

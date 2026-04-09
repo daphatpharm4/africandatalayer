@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Mail, Lock, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck } from 'lucide-react';
 import { AuthClientError, getSession, registerWithCredentials, signInWithCredentials, signInWithGoogle } from '../../lib/client/auth';
 import { normalizeIdentifier } from '../../lib/shared/identifier';
 import BrandLogo from '../BrandLogo';
@@ -101,10 +101,16 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
   };
 
   return (
-    <div className="flex flex-col h-full bg-page p-8 overflow-y-auto no-scrollbar">
-      <button onClick={onBack} className="p-2 -ml-4 self-start text-gray-700" aria-label={t('Go back', 'Retour')}><ChevronLeft size={24} /></button>
+    <div className="flex h-full flex-col overflow-y-auto bg-page px-4 py-6 no-scrollbar sm:p-8">
+      <button
+        onClick={onBack}
+        className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-navy-wash hover:text-navy"
+        aria-label={t('Go back', 'Retour')}
+      >
+        <ChevronLeft size={24} />
+      </button>
 
-      <div className="flex-1 flex flex-col justify-center max-w-[320px] mx-auto w-full">
+      <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center">
         <div className="w-16 h-16 bg-white border border-navy-light rounded-2xl flex items-center justify-center mb-8 shadow-lg mx-auto">
           <BrandLogo size={40} />
         </div>
@@ -113,21 +119,21 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
           <h2 className="text-2xl font-bold text-gray-900 tracking-tight">{mode === 'signin' ? t('Welcome Back', 'Bon retour') : t('Join the Network', 'Rejoignez le réseau')}</h2>
           <p className="text-sm text-gray-500 mt-2 leading-relaxed">
             {mode === 'signin'
-              ? t('Access the African Data Layer portal for infrastructure and pricing.', 'Accédez au portail African Data Layer pour les données d\'infrastructure et de prix.')
-              : t('Create an account to contribute data and earn XP rewards.', 'Créez un compte pour contribuer et gagner des récompenses XP.')}
+              ? t('Pick up your assignments, sync your uploads, and keep field coverage moving.', 'Retrouvez vos missions, synchronisez vos envois et gardez la couverture terrain en mouvement.')
+              : t('Create a field account to capture locations, services, and infrastructure changes on the ground.', 'Créez un compte terrain pour capturer les lieux, services et changements d\'infrastructure sur le terrain.')}
           </p>
         </div>
 
         <div className="space-y-6">
           <button
             onClick={() => signInWithGoogle()}
-            className="w-full h-12 bg-white border border-gray-100 rounded-xl text-[11px] font-bold uppercase tracking-widest text-navy shadow-sm hover:bg-gray-50 transition-all"
+            className="h-14 w-full rounded-2xl border border-gray-100 bg-white px-4 text-sm font-semibold text-navy shadow-sm transition-all hover:bg-gray-50"
           >
-            {t('Continue with Google', 'Continuer avec Google')}
+            {t('Use Google to continue', 'Utiliser Google pour continuer')}
           </button>
 
           <div className="space-y-2">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-1">{t('Phone or email', 'Téléphone ou email')}</label>
+            <label className="px-1 text-xs font-semibold text-gray-500">{t('Phone number or email', 'Numéro de téléphone ou email')}</label>
             <div className="relative group">
               <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-navy transition-colors" />
               <input
@@ -142,14 +148,13 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
 
           <div className="space-y-2">
             <div className="flex justify-between items-center px-1">
-              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">{t('Password', 'Mot de passe')}</label>
-              {mode === 'signin' && <button className="text-[11px] font-bold text-navy uppercase">{t('Forgot?', 'Oublié ?')}</button>}
+              <label className="text-xs font-semibold text-gray-500">{t('Password', 'Mot de passe')}</label>
             </div>
             <div className="relative group">
               <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-navy transition-colors" />
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder={mode === 'signup' ? t('Min. 10 chars, A–Z, a–z, 0–9', 'Min. 10 car., A–Z, a–z, 0–9') : t('Your password', 'Votre mot de passe')}
+                placeholder={mode === 'signup' ? t('Min. 10 chars, A-Z, a-z, 0-9', 'Min. 10 car., A-Z, a-z, 0-9') : t('Your password', 'Votre mot de passe')}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 className="w-full h-14 bg-white border border-gray-100 rounded-xl pl-12 pr-12 text-sm focus:border-navy focus:outline-none transition-all shadow-sm"
@@ -158,13 +163,14 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
                 type="button"
                 onClick={() => setShowPassword((prev) => !prev)}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
+                aria-label={showPassword ? t('Hide password', 'Masquer le mot de passe') : t('Show password', 'Afficher le mot de passe')}
               >
-                <Eye size={18} />
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
             </div>
             {mode === 'signup' && (
-              <p className="text-[10px] text-gray-400 px-1 leading-relaxed">
-                {t('10 characters minimum · uppercase · lowercase · number', '10 caractères minimum · majuscule · minuscule · chiffre')}
+              <p className="px-1 text-xs leading-relaxed text-gray-500">
+                {t('Use at least 10 characters with an uppercase letter, a lowercase letter, and a number.', 'Utilisez au moins 10 caractères avec une majuscule, une minuscule et un chiffre.')}
               </p>
             )}
           </div>
@@ -172,7 +178,7 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
           <button
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="w-full h-14 bg-navy text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 hover:bg-navy-dark active:scale-95 transition-all disabled:opacity-70"
+            className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-navy px-4 text-sm font-semibold text-white shadow-lg transition-all hover:bg-navy-dark active:scale-95 disabled:opacity-70"
           >
             <span>{isSubmitting ? t('Working...', 'Traitement...') : mode === 'signin' ? t('Sign In', 'Connexion') : t('Create Account', 'Créer un compte')}</span>
             <ArrowRight size={18} />
@@ -180,21 +186,21 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
 
           {errorMessage && (
             <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-center space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-red-600">{errorMessage}</p>
+              <p className="text-sm font-semibold leading-5 text-red-700">{errorMessage}</p>
               {mode === 'signin' && ['invalid_credentials', 'auth_unavailable', 'unknown_error', 'request_error'].includes(errorCode) && (
                 <button
                   onClick={() => { setMode('signup'); setErrorMessage(''); setErrorCode(''); }}
-                  className="text-[11px] font-bold text-navy uppercase tracking-widest hover:underline"
+                  className="text-xs font-semibold text-navy hover:underline"
                 >
-                  {t("No account yet? Register here →", "Pas encore de compte ? Inscrivez-vous →")}
+                  {t("No account yet? Create one.", "Pas encore de compte ? Créez-en un.")}
                 </button>
               )}
               {mode === 'signup' && errorCode === 'registration_conflict' && (
                 <button
                   onClick={() => { setMode('signin'); setErrorMessage(''); setErrorCode(''); }}
-                  className="text-[11px] font-bold text-navy uppercase tracking-widest hover:underline"
+                  className="text-xs font-semibold text-navy hover:underline"
                 >
-                  {t("Already registered? Sign in →", "Déjà inscrit ? Connectez-vous →")}
+                  {t("Already registered? Sign in instead.", "Déjà inscrit ? Connectez-vous à la place.")}
                 </button>
               )}
             </div>
@@ -202,9 +208,9 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
         </div>
 
         <div className="mt-8 text-center flex flex-col space-y-6 items-center">
-          <div className="flex items-center space-x-2 text-gray-400">
+          <div className="flex items-center space-x-2 text-gray-500">
             <ShieldCheck size={12} />
-            <span className="text-[11px] font-bold uppercase tracking-widest">{t('Secure Encrypted Login', 'Connexion chiffrée sécurisée')}</span>
+            <span className="text-xs font-semibold">{t('Encrypted sign-in keeps your field account secure.', 'La connexion chiffrée protège votre compte terrain.')}</span>
           </div>
 
           <p className="text-xs text-gray-500">

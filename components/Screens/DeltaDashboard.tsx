@@ -357,7 +357,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="card p-3 text-center">
             <span className="micro-label text-gray-400 block">{t('Points', 'Points')}</span>
             <span className="text-lg font-bold text-gray-900">{summaryTotalPoints}</span>

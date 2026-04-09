@@ -15,7 +15,7 @@ const ScreenHeader: React.FC<Props> = ({ title, onBack, language, trailing, vari
   const backLabel = language === 'fr' ? 'Retour' : 'Go back';
 
   const wrapperClass = variant === 'dark'
-    ? 'sticky top-0 z-30 bg-ink text-white px-4 h-14 flex items-center justify-between'
+    ? 'sticky top-0 z-30 grid min-h-16 grid-cols-[auto,1fr,auto] items-center gap-2 bg-ink px-4 py-3 text-white'
     : 'screen-header';
 
   const backClass = variant === 'dark'
@@ -27,13 +27,17 @@ const ScreenHeader: React.FC<Props> = ({ title, onBack, language, trailing, vari
       <button onClick={onBack} className={backClass} aria-label={backLabel}>
         <ArrowLeft size={20} />
       </button>
-      <h1 className={`text-sm font-bold mx-auto ${variant === 'dark' ? 'text-xs uppercase tracking-[0.2em]' : ''}`}>
+      <h1
+        className={`min-w-0 px-1 text-center font-bold leading-tight ${
+          variant === 'dark' ? 'text-xs uppercase tracking-[0.16em]' : 'text-sm text-ink'
+        }`}
+      >
         {title}
       </h1>
       {trailing ? (
-        <div className="absolute right-2">{trailing}</div>
+        <div className="flex min-w-[40px] justify-end">{trailing}</div>
       ) : (
-        <div className="w-8" />
+        <div className="w-10" />
       )}
     </div>
   );

@@ -14,20 +14,24 @@ interface BottomSheetProps {
 
 const VELOCITY_THRESHOLD = 0.4; // px/ms — flick sensitivity
 
-function getMaxHeight() {
-  return typeof window !== 'undefined' ? window.innerHeight - 120 : 600;
+function getViewportHeight() {
+  return typeof window !== 'undefined' ? window.innerHeight : 720;
 }
 
-function getHalfHeight() {
-  return typeof window !== 'undefined' ? window.innerHeight * 0.5 : 300;
+function getMaxHeight(viewportHeight: number) {
+  return Math.max(320, viewportHeight - 112);
 }
 
-function snapOffsetFor(snap: SnapPoint, peekHeight: number): number {
+function getHalfHeight(viewportHeight: number) {
+  return Math.max(260, Math.min(getMaxHeight(viewportHeight) - 72, viewportHeight * 0.5));
+}
+
+function snapOffsetFor(snap: SnapPoint, peekHeight: number, viewportHeight: number): number {
   // offset = how far the sheet is pushed DOWN from its full-open position
   // 0 = fully open, maxHeight - peekHeight = only peek visible
-  const maxH = getMaxHeight();
+  const maxH = getMaxHeight(viewportHeight);
   if (snap === 'full') return 0;
-  if (snap === 'half') return maxH - getHalfHeight();
+  if (snap === 'half') return maxH - getHalfHeight(viewportHeight);
   return maxH - peekHeight; // peek
 }
 
@@ -39,8 +43,9 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   isLowEndDevice = false,
   className = '',
 }) => {
+  const [viewportHeight, setViewportHeight] = useState(() => getViewportHeight());
   const [currentSnap, setCurrentSnap] = useState<SnapPoint>('peek');
-  const [translateY, setTranslateY] = useState(() => snapOffsetFor('peek', peekHeight));
+  const [translateY, setTranslateY] = useState(() => snapOffsetFor('peek', peekHeight, getViewportHeight()));
   const [isDragging, setIsDragging] = useState(false);
   const [entered, setEntered] = useState(false);
 
@@ -53,30 +58,47 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
   const sheetRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    const syncViewport = () => setViewportHeight(getViewportHeight());
+    window.addEventListener('resize', syncViewport);
+    window.addEventListener('orientationchange', syncViewport);
+    return () => {
+      window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
+    };
+  }, []);
+
   // Entrance animation
   useEffect(() => {
     if (hidden) {
       setEntered(false);
       return;
     }
+    if (entered) return;
     // Start off-screen, then animate to peek
-    const maxH = getMaxHeight();
+    const maxH = getMaxHeight(viewportHeight);
     setTranslateY(maxH + peekHeight);
     const raf = requestAnimationFrame(() => {
-      setTranslateY(snapOffsetFor('peek', peekHeight));
+      setCurrentSnap('peek');
+      setTranslateY(snapOffsetFor('peek', peekHeight, viewportHeight));
       setEntered(true);
     });
     return () => cancelAnimationFrame(raf);
-  }, [hidden, peekHeight]);
+  }, [entered, hidden, peekHeight, viewportHeight]);
+
+  useEffect(() => {
+    if (hidden || isDragging) return;
+    setTranslateY(snapOffsetFor(currentSnap, peekHeight, viewportHeight));
+  }, [currentSnap, hidden, isDragging, peekHeight, viewportHeight]);
 
   const snapTo = useCallback(
     (snap: SnapPoint) => {
-      const offset = snapOffsetFor(snap, peekHeight);
+      const offset = snapOffsetFor(snap, peekHeight, viewportHeight);
       setTranslateY(offset);
       setCurrentSnap(snap);
       onSnapChange?.(snap);
     },
-    [peekHeight, onSnapChange],
+    [onSnapChange, peekHeight, viewportHeight],
   );
 
   const handlePointerDown = useCallback(
@@ -98,13 +120,13 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     (e: React.PointerEvent) => {
       if (!dragState.current) return;
       const dy = e.clientY - dragState.current.startY;
-      const maxH = getMaxHeight();
+      const maxH = getMaxHeight(viewportHeight);
       const newY = Math.max(0, Math.min(maxH, dragState.current.startTranslate + dy));
       setTranslateY(newY);
       dragState.current.lastY = e.clientY;
       dragState.current.lastTime = Date.now();
     },
-    [],
+    [viewportHeight],
   );
 
   const handlePointerUp = useCallback(
@@ -116,9 +138,9 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
       setIsDragging(false);
 
-      const peekOffset = snapOffsetFor('peek', peekHeight);
-      const halfOffset = snapOffsetFor('half', peekHeight);
-      const fullOffset = snapOffsetFor('full', peekHeight);
+      const peekOffset = snapOffsetFor('peek', peekHeight, viewportHeight);
+      const halfOffset = snapOffsetFor('half', peekHeight, viewportHeight);
+      const fullOffset = snapOffsetFor('full', peekHeight, viewportHeight);
 
       // If flick, snap in direction
       if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
@@ -143,12 +165,12 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
 
       dragState.current = null;
     },
-    [currentSnap, peekHeight, snapTo, translateY],
+    [currentSnap, peekHeight, snapTo, translateY, viewportHeight],
   );
 
   if (hidden) return null;
 
-  const maxH = getMaxHeight();
+  const maxH = getMaxHeight(viewportHeight);
   const reducedMotion = prefersReducedMotion();
   const transitionStyle = isDragging || !entered || reducedMotion
     ? 'none'
@@ -157,11 +179,11 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   return (
     <div
       ref={sheetRef}
-      className={`fixed inset-x-0 z-30 rounded-t-[28px] shadow-[0_-4px_24px_rgba(15,43,70,0.12)] border-t border-gray-100 ${
+      className={`fixed inset-x-0 z-30 mx-auto w-full max-w-md rounded-t-[28px] border-t border-gray-100 shadow-[0_-4px_24px_rgba(15,43,70,0.12)] ${
         isLowEndDevice ? 'bg-white' : 'bg-white/98 backdrop-blur-xl'
       } ${className}`}
       style={{
-        bottom: 'calc(4rem + var(--safe-bottom, 0px))',
+        bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom, 0px) + 0.25rem)',
         height: `${maxH}px`,
         transform: `translateY(${translateY}px)`,
         transition: transitionStyle,

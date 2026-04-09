@@ -264,21 +264,21 @@ const HomeMap: React.FC<Props> = ({
                       {categoryLabel(singlePoint.type)}
                     </span>
                     <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
-                    <p className="text-[11px] text-gray-600">{formatExplorerPrimaryMeta(singlePoint)}</p>
+                    <p className="text-xs leading-4 text-gray-600">{formatExplorerPrimaryMeta(singlePoint)}</p>
                     {singlePoint.type === Category.PHARMACY && (
-                      <p className="text-[11px] text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
+                      <p className="text-xs leading-4 text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                     )}
                     <button
-                      className="mt-2 w-full rounded-lg bg-navy px-2 py-1 micro-label text-white"
+                      className="mt-2 w-full rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white"
                       onClick={() => onSelectPoint(singlePoint)}
                     >
-                      {t('View Details', 'Voir details')}
+                      {t('View details', 'Voir les détails')}
                     </button>
                   </div>
                 ) : (
                   <div className="space-y-2 min-w-[220px]">
                     <p className="micro-label text-navy">
-                      {language === 'fr' ? `${group.points.length} points au meme endroit` : `${group.points.length} points at this location`}
+                      {language === 'fr' ? `${group.points.length} points au même endroit` : `${group.points.length} points at this location`}
                     </p>
                     <div className="space-y-1.5">
                       {group.points.map((point) => (
@@ -287,8 +287,8 @@ const HomeMap: React.FC<Props> = ({
                           className="w-full rounded-lg border border-gray-100 px-2 py-1.5 text-left hover:bg-gray-50"
                           onClick={() => onSelectPoint(point)}
                         >
-                          <p className="text-[11px] font-semibold text-gray-900 truncate">{point.name}</p>
-                          <p className="text-[11px] uppercase tracking-wider text-gray-500">
+                          <p className="text-xs font-semibold text-gray-900 truncate">{point.name}</p>
+                          <p className="text-[11px] tracking-[0.08em] text-gray-500">
                             {categoryLabel(point.type)}
                           </p>
                         </button>
@@ -301,9 +301,9 @@ const HomeMap: React.FC<Props> = ({
           );
         })}
       </MapContainer>
-      <div className="absolute inset-x-4 top-4 z-20 bg-white rounded-xl p-3 border border-gray-100 shadow-sm">
+      <div className="absolute inset-x-4 top-4 z-20 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="min-w-0 pr-3">
             <p className="micro-label text-navy">
               {mapScope === 'bonamoussadi'
                 ? t('Bonamoussadi Geofence', 'Geofence Bonamoussadi')
@@ -311,8 +311,8 @@ const HomeMap: React.FC<Props> = ({
                   ? t('Cameroon Coverage', 'Couverture Cameroun')
                   : t('Global Coverage', 'Couverture mondiale')}
             </p>
-            <p className="text-xs text-gray-500">
-              {mapScope === 'bonamoussadi' ? t('Map blocked to', 'Carte bloquee sur') : t('Map unlocked to', 'Carte debloquee sur')} {selectedCityLabel}
+            <p className="mt-1 text-xs leading-4 text-gray-500">
+              {mapScope === 'bonamoussadi' ? t('Map locked to', 'Carte limitée à') : t('Map unlocked to', 'Carte ouverte sur')} {selectedCityLabel}
             </p>
           </div>
           <div className="w-2 h-2 rounded-full bg-forest animate-pulse"></div>
@@ -324,16 +324,17 @@ const HomeMap: React.FC<Props> = ({
         className={`absolute top-20 right-4 z-20 w-10 h-10 rounded-xl border shadow-sm flex items-center justify-center transition-colors ${
           showHeatmap ? 'bg-navy text-white border-navy' : 'bg-white/95 text-gray-600 border-gray-100'
         }`}
-        title={t('Toggle heatmap', 'Basculer carte thermique')}
+        title={t('Toggle heatmap', 'Afficher ou masquer la carte thermique')}
+        aria-label={t('Toggle heatmap', 'Afficher ou masquer la carte thermique')}
       >
         <Layers size={18} />
       </button>
       {nearbyEnrichCount > 0 && (
-        <div className="absolute bottom-4 inset-x-4 z-20 bg-white rounded-xl p-3 border border-gray-100 shadow-sm flex items-center justify-between">
+        <div className="absolute inset-x-4 bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
           <div className="flex items-center space-x-2">
             <Navigation size={14} className="text-terra" />
-            <span className="text-xs font-bold text-gray-900">
-              {nearbyEnrichCount} {t('points nearby to enrich', 'points a enrichir a proximite')}
+            <span className="text-xs font-bold leading-4 text-gray-900">
+              {nearbyEnrichCount} {t('nearby points ready for enrichment', 'points proches prêts à enrichir')}
             </span>
           </div>
           <span className="micro-label text-terra">

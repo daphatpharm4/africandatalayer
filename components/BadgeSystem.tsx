@@ -238,7 +238,7 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
           </span>
         )}
       </div>
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
         {badges.map((badge) => {
           const Icon = badge.icon;
           return (
@@ -253,7 +253,7 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
               >
                 <Icon size={18} />
               </div>
-              <span className="text-[11px] font-bold text-gray-500 text-center leading-tight truncate w-full">
+              <span className="w-full text-[11px] font-bold leading-tight text-center text-gray-500">
                 {language === 'fr' ? badge.labelFr : badge.labelEn}
               </span>
               {!badge.earned && (
