@@ -114,7 +114,7 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
   const staleXP = staleTier === 'critical' ? 25 : staleTier === 'warning' ? 15 : 10;
 
   return (
-    <div className="flex flex-col h-full bg-page overflow-y-auto no-scrollbar">
+    <div className="flex flex-col h-full bg-page overflow-y-auto overflow-x-hidden no-scrollbar">
       <ScreenHeader
         title={point.name}
         onBack={onBack}

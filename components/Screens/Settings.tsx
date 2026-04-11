@@ -39,7 +39,7 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
     <div className="screen-shell">
       <ScreenHeader title={t('Settings & Profile', 'Param\u00e8tres et profil')} onBack={onBack} language={language} />
 
-      <div className="space-y-8 p-4 sm:p-6">
+      <div className="space-y-8 p-4 pb-24 sm:p-6 sm:pb-24">
         <div className="space-y-4">
           <h4 className="micro-label-wide px-1 text-gray-500">{t('Available now', 'Disponible maintenant')}</h4>
           <div className="card divide-y divide-gray-50">

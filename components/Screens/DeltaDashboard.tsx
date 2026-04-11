@@ -314,7 +314,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         }
       />
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 pb-24 space-y-4">
         <div className="rounded-[32px] bg-gradient-to-br from-navy via-navy-mid to-navy-mid text-white p-6 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>

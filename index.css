@@ -100,7 +100,7 @@
 
   /* Screen shell — standard scrollable screen background */
   .screen-shell {
-    @apply flex flex-col h-full bg-page overflow-y-auto no-scrollbar;
+    @apply flex flex-col h-full bg-page overflow-y-auto overflow-x-hidden no-scrollbar;
     scroll-padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + 1rem);
   }
 
@@ -142,6 +142,8 @@
   padding-bottom: var(--safe-bottom);
   box-sizing: border-box;
   width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 .no-scrollbar::-webkit-scrollbar {
@@ -195,28 +197,29 @@
   content: "";
   position: absolute;
   inset: 0;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0)),
-    radial-gradient(circle at top right, rgba(200, 107, 74, 0.12), transparent 42%);
-  opacity: 0.9;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.06),
+    transparent 60%
+  );
   pointer-events: none;
 }
 
 .route-grid {
   background-image:
-    radial-gradient(circle at top left, rgba(244, 195, 23, 0.14), transparent 32%),
-    radial-gradient(circle at right, rgba(200, 107, 74, 0.12), transparent 28%),
-    linear-gradient(rgba(15, 43, 70, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 43, 70, 0.06) 1px, transparent 1px);
-  background-size: auto, auto, 34px 34px, 34px 34px;
-  background-position: center, center, center, center;
+    linear-gradient(rgba(15, 43, 70, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 43, 70, 0.04) 1px, transparent 1px);
+  background-size: 34px 34px;
+  background-position: center;
 }
 
 .route-grid-soft {
-  background-image:
-    radial-gradient(circle at 15% 20%, rgba(244, 195, 23, 0.18), transparent 28%),
-    radial-gradient(circle at 85% 15%, rgba(200, 107, 74, 0.14), transparent 24%),
-    linear-gradient(135deg, rgba(15, 43, 70, 0.05), transparent 42%);
+  background-image: linear-gradient(
+    168deg,
+    rgba(15, 43, 70, 0.025) 0%,
+    transparent 50%,
+    rgba(200, 107, 74, 0.02) 100%
+  );
 }
 
 .ambient-orb {

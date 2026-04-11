@@ -186,7 +186,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
         }
       />
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 pb-24 space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <div className="card p-4">
             <div className="micro-label text-gray-400">{t('Pending', 'En attente')}</div>

@@ -511,7 +511,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
   return (
     <div
-      className="relative h-full min-h-0 bg-page"
+      className="relative h-full min-h-0 bg-page overflow-x-hidden"
     >
       <header className="route-grid absolute top-0 left-0 right-0 z-20 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 shadow-[0_4px_24px_rgba(15,43,70,0.08)] backdrop-blur-xl">
         <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">

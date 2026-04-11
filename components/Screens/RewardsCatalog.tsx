@@ -44,7 +44,7 @@ const RewardsCatalog: React.FC<Props> = ({ onBack, language }) => {
     <div className="screen-shell">
       <ScreenHeader title={t('Rewards', 'R\u00e9compenses')} onBack={onBack} language={language} />
 
-      <div className="p-4 space-y-6">
+      <div className="p-4 pb-24 space-y-6">
         <div className="bg-navy p-6 rounded-2xl text-white shadow-xl flex items-center justify-between">
           <div className="space-y-1">
             <span className="micro-label opacity-80">{t('Your Balance', 'Votre solde')}</span>

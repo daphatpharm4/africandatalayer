@@ -2387,7 +2387,7 @@ const ContributionFlow: React.FC<Props> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-page">
+    <div className="flex flex-col h-full bg-page overflow-x-hidden">
       <div className="route-grid relative overflow-hidden pt-6 px-6 pb-2">
         <div className="ambient-orb right-[-2rem] top-[-1rem] h-20 w-20 bg-gold/20" />
         <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />

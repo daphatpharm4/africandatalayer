@@ -1176,7 +1176,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-page overflow-y-auto no-scrollbar">
+    <div className="flex flex-col h-full bg-page overflow-y-auto overflow-x-hidden no-scrollbar" style={{ scrollPaddingBottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 1rem)' }}>
       <div className="sticky top-0 z-30 bg-ink text-white px-4 h-14 flex items-center justify-between">
         <button onClick={onBack} className={`p-2 -ml-2 hover:text-terra transition-colors ${focusRingClass}`} aria-label={t('Go back', 'Retour')}>
           <ArrowLeft size={20} />
@@ -1185,7 +1185,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         <ShieldCheck size={18} className="text-terra" />
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 pb-24 space-y-4">
         <div className="card p-2">
           <div className="grid grid-cols-3 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
             {([
@@ -1199,7 +1199,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 role="tab"
                 aria-selected={activeMode === mode}
                 onClick={() => openMode(mode)}
-                className={`h-11 rounded-2xl px-3 text-xs font-bold uppercase tracking-widest transition-all ${focusRingClass} ${
+                className={`h-11 rounded-2xl px-2 sm:px-3 text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${focusRingClass} ${
                   activeMode === mode ? 'bg-navy text-white shadow-sm' : 'bg-page text-gray-600 border border-gray-100'
                 }`}
               >
@@ -1234,7 +1234,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   >
                     <ChevronLeft size={16} className="mx-auto" />
                   </button>
-                  <div className="rounded-2xl bg-white/85 border border-white px-3 py-2 text-center min-w-[110px]">
+                  <div className="rounded-2xl bg-white/85 border border-white px-2 sm:px-3 py-2 text-center min-w-[80px] sm:min-w-[110px]">
                     <div className="micro-label text-gray-400">{t('Page window', 'Fenêtre page')}</div>
                     <div className="text-sm font-bold text-gray-900">{selectedPageLabel}</div>
                   </div>

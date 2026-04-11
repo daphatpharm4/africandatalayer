@@ -128,7 +128,7 @@ const AgentPerformance: React.FC<Props> = ({ onBack, language }) => {
     <div className="screen-shell">
       <ScreenHeader title={t('Agent Performance', 'Performance agents')} onBack={onBack} language={language} />
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 pb-24 space-y-4">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
             <div className="inline-flex items-center gap-2 micro-label text-gray-400">
