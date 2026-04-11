@@ -73,6 +73,39 @@ interface WeeklyRow {
 
 // ---------- Helpers ----------
 
+/** PostgreSQL NUMERIC/DECIMAL columns arrive as strings in JSON — coerce them. */
+function num(v: unknown): number {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string') { const n = Number(v); return Number.isFinite(n) ? n : 0; }
+  return 0;
+}
+
+function sanitizeSnapshot(row: SnapshotRow): SnapshotRow {
+  return {
+    ...row,
+    total_points: num(row.total_points),
+    completed_points: num(row.completed_points),
+    completion_rate: num(row.completion_rate),
+    new_count: num(row.new_count),
+    removed_count: num(row.removed_count),
+    changed_count: num(row.changed_count),
+    unchanged_count: num(row.unchanged_count),
+    week_over_week_growth: row.week_over_week_growth != null ? num(row.week_over_week_growth) : null,
+    moving_avg_4w: row.moving_avg_4w != null ? num(row.moving_avg_4w) : null,
+  };
+}
+
+function sanitizeWeekly(row: WeeklyRow): WeeklyRow {
+  return {
+    ...row,
+    total_events: num(row.total_events),
+    total_creates: num(row.total_creates),
+    total_enrichments: num(row.total_enrichments),
+    unique_users: num(row.unique_users),
+    unique_points: num(row.unique_points),
+  };
+}
+
 const CACHE_KEY = 'adl_investor_cache';
 
 function loadCache(): { kpi: KpiSummaryResponse; snapshots: SnapshotRow[]; weekly: WeeklyRow[]; leaderboard: LeaderboardEntry[] } | null {
@@ -113,8 +146,8 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
       const cached = loadCache();
       if (cached) {
         setKpi(cached.kpi);
-        setSnapshots(cached.snapshots);
-        setWeekly(cached.weekly);
+        setSnapshots(cached.snapshots.map(sanitizeSnapshot));
+        setWeekly(cached.weekly.map(sanitizeWeekly));
         setLeaderboard(cached.leaderboard);
         setFromCache(true);
         setLoading(false);
@@ -128,8 +161,8 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
           apiJson<LeaderboardEntry[]>('/api/leaderboard'),
         ]);
         if (cancelled) return;
-        const safeSnapshots = Array.isArray(snapshotData) ? snapshotData : [];
-        const safeWeekly = Array.isArray(weeklyData) ? weeklyData : [];
+        const safeSnapshots = (Array.isArray(snapshotData) ? snapshotData : []).map(sanitizeSnapshot);
+        const safeWeekly = (Array.isArray(weeklyData) ? weeklyData : []).map(sanitizeWeekly);
         const safeLeaderboard = Array.isArray(leaderboardData) ? leaderboardData : [];
         setKpi(kpiData);
         setSnapshots(safeSnapshots);
