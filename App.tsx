@@ -18,6 +18,7 @@ import Home from './components/Screens/Home';
 import Navigation from './components/Navigation';
 import ErrorBoundary from './components/ErrorBoundary';
 import SyncStatusBar from './components/SyncStatusBar';
+import HelpCenter from './components/docs/HelpCenter';
 
 const Details = lazy(() => import('./components/Screens/Details'));
 const Auth = lazy(() => import('./components/Screens/Auth'));
@@ -75,8 +76,32 @@ const App: React.FC = () => {
   const [batchCaptureMode, setBatchCaptureMode] = useState(false);
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshot>(defaultQueueSnapshot);
+  const [pathname, setPathname] = useState(() => (typeof window === 'undefined' ? '/' : window.location.pathname));
 
   const isClient = userRole === 'client';
+  const isDocsMode = pathname.startsWith('/docs');
+
+  const navigatePath = (path: string) => {
+    if (typeof window === 'undefined') {
+      setPathname(path);
+      return;
+    }
+    if (window.location.pathname === path) return;
+    window.history.pushState({}, '', path);
+    setPathname(path);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handlePopState = () => {
+      setPathname(window.location.pathname);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
 
   const navigateTo = (screen: Screen, point: DataPoint | null = null) => {
     if (currentScreen === Screen.SPLASH && screen !== Screen.SPLASH) {
@@ -185,12 +210,14 @@ const App: React.FC = () => {
   }, [language]);
 
   useEffect(() => {
+    if (isDocsMode) return undefined;
     void getQueueSnapshot().then(setQueueSnapshot).catch(() => undefined);
     const unsubscribe = subscribeQueueSnapshot(setQueueSnapshot);
     return unsubscribe;
-  }, []);
+  }, [isDocsMode]);
 
   useEffect(() => {
+    if (isDocsMode) return undefined;
     const handleStatus = async () => {
       const online = navigator.onLine;
       setIsOffline(!online);
@@ -214,7 +241,7 @@ const App: React.FC = () => {
       window.removeEventListener('online', handleStatus);
       window.removeEventListener('offline', handleStatus);
     };
-  }, []);
+  }, [isDocsMode]);
 
   const refreshSession = async () => {
     const session = await getSession();
@@ -346,6 +373,7 @@ const App: React.FC = () => {
           <Analytics
             onBack={goBack}
             isAdmin={isAdmin}
+            isClient={isClient}
             onAdmin={isAdmin ? () => navigateTo(Screen.ADMIN) : undefined}
             onAgentPerformance={isAdmin ? () => navigateTo(Screen.AGENT_PERFORMANCE) : undefined}
             onDeltaDashboard={isAdmin || isClient ? () => navigateTo(Screen.DELTA_DASHBOARD) : undefined}
@@ -398,6 +426,14 @@ const App: React.FC = () => {
     || (currentScreen === Screen.ANALYTICS && isAdmin)
     || (currentScreen === Screen.DELTA_DASHBOARD && (isAdmin || isClient))
     || currentScreen === Screen.INVESTOR_DASHBOARD;
+
+  if (isDocsMode) {
+    return (
+      <ErrorBoundary>
+        <HelpCenter pathname={pathname} onNavigate={navigatePath} />
+      </ErrorBoundary>
+    );
+  }
 
   return (
     <ErrorBoundary>

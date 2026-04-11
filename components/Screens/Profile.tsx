@@ -319,13 +319,18 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
   };
 
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-profile" className="screen-shell">
       <ScreenHeader
         title={t('Dashboard', 'Tableau de bord')}
         onBack={onBack}
         language={language}
         trailing={
-          <button onClick={onSettings} className="p-2 text-navy">
+          <button
+            type="button"
+            onClick={onSettings}
+            className="p-2 text-navy"
+            aria-label={t('Open settings', 'Ouvrir les paramètres')}
+          >
             <SettingsIcon size={20} />
           </button>
         }

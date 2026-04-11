@@ -125,7 +125,7 @@ const AgentPerformance: React.FC<Props> = ({ onBack, language }) => {
   const avgQuality = agentRows.length > 0 ? Math.round(agentRows.reduce((sum, row) => sum + row.averageQuality, 0) / agentRows.length) : 0;
 
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-agent-performance" className="screen-shell">
       <ScreenHeader title={t('Agent Performance', 'Performance agents')} onBack={onBack} language={language} />
 
       <div className="p-4 pb-24 space-y-4">

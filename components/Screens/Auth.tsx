@@ -101,7 +101,7 @@ const Auth: React.FC<Props> = ({ onBack, onComplete, language, initialMode = 'si
   };
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-page px-4 py-6 no-scrollbar sm:p-8">
+    <div data-testid="screen-auth" className="flex h-full flex-col overflow-y-auto bg-page px-4 py-6 no-scrollbar sm:p-8">
       <button
         onClick={onBack}
         className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-700 transition-colors hover:bg-navy-wash hover:text-navy"

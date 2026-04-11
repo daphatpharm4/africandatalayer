@@ -101,6 +101,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
+  const listContentTopInset = isLowEndDevice ? '12rem' : '8.75rem';
 
   useEffect(() => {
     if (!isVerticalPickerOpen) return;
@@ -511,6 +512,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
   return (
     <div
+      data-testid="screen-home"
       className="relative h-full min-h-0 bg-page overflow-x-hidden"
     >
       <header className="route-grid absolute top-0 left-0 right-0 z-20 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 shadow-[0_4px_24px_rgba(15,43,70,0.08)] backdrop-blur-xl">
@@ -594,7 +596,10 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
       </header>
 
-      <div className="absolute inset-0 flex flex-col overflow-hidden">
+      <div
+        className="absolute inset-x-0 bottom-0 flex flex-col overflow-hidden"
+        style={{ top: viewMode === 'list' ? listContentTopInset : '0px' }}
+      >
         {viewMode === 'map' && (
           <Suspense
             fallback={
@@ -627,7 +632,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </Suspense>
         )}
         {viewMode === 'list' && (
-          <div className="surface-reveal flex-1 relative z-10 bg-page overflow-y-auto no-scrollbar min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div
+            data-testid="home-list-view"
+            className="surface-reveal flex-1 relative z-10 bg-page overflow-y-auto no-scrollbar min-h-0"
+            style={{ WebkitOverflowScrolling: 'touch' }}
+          >
             <div className="sticky top-0 z-20 bg-page border-b border-gray-100 px-4 py-2 flex items-center justify-between">
               <span className="text-sm font-semibold text-gray-700">
                 {filteredPoints.length} {t('points', 'points')}

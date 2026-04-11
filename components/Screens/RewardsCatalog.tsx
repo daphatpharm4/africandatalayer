@@ -41,7 +41,7 @@ const RewardsCatalog: React.FC<Props> = ({ onBack, language }) => {
   }, []);
 
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-rewards" className="screen-shell">
       <ScreenHeader title={t('Rewards', 'R\u00e9compenses')} onBack={onBack} language={language} />
 
       <div className="p-4 pb-24 space-y-6">

@@ -21,3 +21,9 @@ Thumbs.db
 .agents/
 .skills-lock.json
 skills-lock.json
+
+# Playwright
+playwright-report/
+test-results/
+artifacts/playwright/docs/
+playwright/.auth/

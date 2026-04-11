@@ -10,7 +10,7 @@ interface Props {
 const QualityInfo: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-quality" className="screen-shell">
       <ScreenHeader title={t('Data Quality & Trust', 'Qualit\u00e9 et confiance des donn\u00e9es')} onBack={onBack} language={language} />
 
       <div className="p-6 pb-24 space-y-8">

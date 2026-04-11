@@ -434,7 +434,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   );
 
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-delta-dashboard" className="screen-shell">
       <ScreenHeader
         title={t('Delta Intelligence', 'Intelligence Delta')}
         onBack={onBack}
@@ -654,7 +654,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             )}
 
             {selectedVertical !== 'all' && (
-              <div className="card-pill p-5 space-y-4">
+              <div data-testid="delta-spatial-intelligence" className="card-pill p-5 space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <div className="micro-label-wide text-gray-400">
@@ -818,6 +818,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                                 key={cell.cellId}
                                 type="button"
                                 onClick={() => setFocusedCellId(cell.cellId)}
+                                data-testid={`spatial-cell-selector-${cell.cellId}`}
                                 className={`w-full rounded-[24px] border px-4 py-3 text-left transition-colors ${
                                   isFocused
                                     ? 'border-navy bg-navy-wash'

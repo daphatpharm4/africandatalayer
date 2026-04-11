@@ -36,7 +36,7 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
   }, [highContrast]);
 
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-settings" className="screen-shell">
       <ScreenHeader title={t('Settings & Profile', 'Param\u00e8tres et profil')} onBack={onBack} language={language} />
 
       <div className="space-y-8 p-4 pb-24 sm:p-6 sm:pb-24">

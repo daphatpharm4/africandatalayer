@@ -38,6 +38,7 @@ const Navigation: React.FC<Props> = ({ currentScreen, onNavigate, isAuthenticate
 
   return (
     <nav
+      data-testid="main-navigation"
       className="z-40 flex min-h-[76px] items-end justify-around border-t border-gray-200 bg-white/98 px-1 pt-1 backdrop-blur-sm pb-[calc(0.5rem+var(--safe-bottom))]"
       aria-label={t('Main navigation', 'Navigation principale')}
     >

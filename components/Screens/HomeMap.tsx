@@ -201,7 +201,7 @@ const HomeMap: React.FC<Props> = ({
     : [];
 
   return (
-    <div className="flex-1 bg-navy-light relative overflow-hidden z-0 min-h-0">
+    <div data-testid="home-map-view" className="flex-1 bg-navy-light relative overflow-hidden z-0 min-h-0">
       <MapContainer
         key={`map-${mapScope}`}
         center={mapCenter}

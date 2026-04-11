@@ -1176,7 +1176,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-page overflow-y-auto overflow-x-hidden no-scrollbar" style={{ scrollPaddingBottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 1rem)' }}>
+    <div
+      data-testid="screen-admin-queue"
+      className="flex flex-col h-full bg-page overflow-y-auto overflow-x-hidden no-scrollbar"
+      style={{ scrollPaddingBottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 1rem)' }}
+    >
       <div className="sticky top-0 z-30 bg-ink text-white px-4 h-14 flex items-center justify-between">
         <button onClick={onBack} className={`p-2 -ml-2 hover:text-terra transition-colors ${focusRingClass}`} aria-label={t('Go back', 'Retour')}>
           <ArrowLeft size={20} />
@@ -1446,7 +1450,13 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
             )}
 
             <div className="space-y-4 lg:grid lg:grid-cols-[360px,minmax(0,1fr)] lg:gap-4 lg:space-y-0">
-              <div className="order-2 lg:order-1 space-y-3" role="listbox" aria-label={t('Review queue', 'File de revue')} aria-busy={isLoadingReview}>
+              <div
+                data-testid="admin-review-queue"
+                className="order-2 lg:order-1 space-y-3"
+                role="listbox"
+                aria-label={t('Review queue', 'File de revue')}
+                aria-busy={isLoadingReview}
+              >
                 {isLoadingReview && (
                   <div className="card p-5 text-xs text-gray-500">{t('Loading review queue...', 'Chargement de la file de revue...')}</div>
                 )}

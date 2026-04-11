@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   BarChart3,
   LineChart as LineChartIcon,
+  MapPinned,
   Medal,
   Share2,
   ShieldCheck,
@@ -35,15 +36,45 @@ interface Props {
   onDeltaDashboard?: () => void;
   onInvestorDashboard?: () => void;
   isAdmin?: boolean;
+  isClient?: boolean;
   language: 'en' | 'fr';
 }
 
 type HeatLevel = 'High' | 'Medium' | 'Low';
 
+interface AnalyticsSnapshotRow {
+  snapshot_date: string;
+  vertical_id: string;
+  total_points: number | string;
+  completed_points: number | string;
+  completion_rate: number | string;
+  new_count: number | string;
+  removed_count: number | string;
+  changed_count: number | string;
+  unchanged_count: number | string;
+  week_over_week_growth: number | string | null;
+}
+
+interface AnalyticsAnomalyRow {
+  snapshot_date: string;
+  vertical_id: string;
+  total_points: number | string;
+  anomaly_flags?: Array<{ metric: string; zScore: number; direction: string }>;
+}
+
 const HEATMAP_COLORS: Record<HeatLevel, string> = {
   High: 'bg-forest',
   Medium: 'bg-terra',
   Low: 'bg-gray-200'
+};
+
+const toNumber = (value: unknown): number => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
 };
 
 const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
@@ -52,17 +83,30 @@ const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
   return 'bonamoussadi';
 };
 
-const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDeltaDashboard, onInvestorDashboard, isAdmin, language }) => {
+const Analytics: React.FC<Props> = ({
+  onBack,
+  onAdmin,
+  onAgentPerformance,
+  onDeltaDashboard,
+  onInvestorDashboard,
+  isAdmin,
+  isClient,
+  language
+}) => {
   const adminMode = Boolean(isAdmin);
+  const clientMode = Boolean(isClient) && !adminMode;
   const [adminName, setAdminName] = useState<string | null>(null);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
   const [adminAvatar, setAdminAvatar] = useState<AvatarPreset>('baobab');
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [isLoadingLeaderboard, setIsLoadingLeaderboard] = useState(true);
   const [isLoadingAdminData, setIsLoadingAdminData] = useState(false);
+  const [isLoadingClientData, setIsLoadingClientData] = useState(false);
   const [completionRate, setCompletionRate] = useState(0);
   const [activeContributors, setActiveContributors] = useState(0);
   const [categoryData, setCategoryData] = useState<Array<{ name: string; value: number; color: string }>>([]);
+  const [clientSnapshots, setClientSnapshots] = useState<AnalyticsSnapshotRow[]>([]);
+  const [clientAnomalies, setClientAnomalies] = useState<AnalyticsAnomalyRow[]>([]);
   const [heatmap, setHeatmap] = useState<HeatLevel[][]>([
     ['Low', 'Low', 'Low', 'Low'],
     ['Low', 'Low', 'Low', 'Low'],
@@ -189,6 +233,29 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
     void loadAdminAnalytics();
   }, [adminMode, language]);
 
+  useEffect(() => {
+    if (!clientMode) return;
+
+    const loadClientAnalytics = async () => {
+      try {
+        setIsLoadingClientData(true);
+        const [snapshots, anomalies] = await Promise.all([
+          apiJson<AnalyticsSnapshotRow[]>('/api/analytics?view=snapshots&limit=12'),
+          apiJson<AnalyticsAnomalyRow[]>('/api/analytics?view=anomalies'),
+        ]);
+        setClientSnapshots(Array.isArray(snapshots) ? snapshots : []);
+        setClientAnomalies(Array.isArray(anomalies) ? anomalies : []);
+      } catch {
+        setClientSnapshots([]);
+        setClientAnomalies([]);
+      } finally {
+        setIsLoadingClientData(false);
+      }
+    };
+
+    void loadClientAnalytics();
+  }, [clientMode]);
+
   const formatLastSeen = (iso: string | null) => {
     if (!iso) return t('No date', 'Pas de date');
     const date = new Date(iso);
@@ -236,10 +303,69 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
     return sorted[0] ?? null;
   }, [leaderboard]);
 
+  const latestClientSnapshotDate = useMemo(() => {
+    if (clientSnapshots.length === 0) return null;
+    return clientSnapshots
+      .map((row) => row.snapshot_date)
+      .sort((a, b) => b.localeCompare(a))[0] ?? null;
+  }, [clientSnapshots]);
+
+  const latestClientSnapshots = useMemo(() => {
+    if (!latestClientSnapshotDate) return [];
+    return clientSnapshots.filter((row) => row.snapshot_date === latestClientSnapshotDate);
+  }, [clientSnapshots, latestClientSnapshotDate]);
+
+  const clientTrackedPoints = useMemo(
+    () => latestClientSnapshots.reduce((sum, row) => sum + toNumber(row.total_points), 0),
+    [latestClientSnapshots]
+  );
+
+  const clientCompletionRate = useMemo(() => {
+    if (latestClientSnapshots.length === 0) return 0;
+    const total = latestClientSnapshots.reduce((sum, row) => sum + toNumber(row.completion_rate), 0);
+    return Math.round(total / latestClientSnapshots.length);
+  }, [latestClientSnapshots]);
+
+  const clientAverageGrowth = useMemo(() => {
+    const values = latestClientSnapshots
+      .map((row) => row.week_over_week_growth)
+      .filter((value): value is number | string => value !== null)
+      .map((value) => toNumber(value));
+    if (values.length === 0) return 0;
+    return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+  }, [latestClientSnapshots]);
+
+  const clientAnomalyCount = useMemo(
+    () => clientAnomalies.reduce((sum, row) => sum + (row.anomaly_flags?.length ?? 0), 0),
+    [clientAnomalies]
+  );
+
+  const clientTopCategory = useMemo(() => {
+    let best: { verticalId: SubmissionCategory; totalPoints: number } | null = null;
+    for (const row of latestClientSnapshots) {
+      const totalPoints = toNumber(row.total_points);
+      if (best === null || totalPoints > best.totalPoints) {
+        best = {
+          verticalId: row.vertical_id as SubmissionCategory,
+          totalPoints,
+        };
+      }
+    }
+    return best;
+  }, [latestClientSnapshots]);
+
+  const clientTopContributors = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
+
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-analytics" className="screen-shell">
       <ScreenHeader
-        title={adminMode ? t('Investor Analytics', 'Analytique investisseur') : t('Leaderboard', 'Classement')}
+        title={
+          adminMode
+            ? t('Investor Analytics', 'Analytique investisseur')
+            : clientMode
+              ? t('Insights Center', "Centre d'insights")
+              : t('Leaderboard', 'Classement')
+        }
         onBack={onBack}
         language={language}
         trailing={
@@ -274,6 +400,15 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
                 {t('Admin', 'Admin')}
               </button>
             )}
+          </div>
+        ) : clientMode ? (
+          <div className="flex items-center justify-between py-2">
+            <div className="flex flex-col">
+              <span className="micro-label text-gray-400">{t('Client Insights', 'Insights client')}</span>
+              <span className="text-sm font-semibold text-gray-900">
+                {t('Choose the right reporting layer for the story you need to tell', "Choisissez la bonne couche de reporting pour l'histoire à raconter")}
+              </span>
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-between py-2">
@@ -332,6 +467,45 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
           </div>
         )}
 
+        {clientMode && (
+          <div data-testid="client-insights-hub" className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            {onDeltaDashboard && (
+              <button
+                onClick={onDeltaDashboard}
+                className="w-full flex items-center justify-between bg-navy text-white p-4 rounded-2xl shadow-sm hover:bg-navy-mid transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <MapPinned size={18} />
+                  <div className="text-left">
+                    <span className="text-xs font-bold block">{t('Delta Intelligence', 'Intelligence Delta')}</span>
+                    <span className="text-[11px] text-gray-300">
+                      {t('Neighborhood shifts, top cells, and export-ready map context', 'Changements de quartier, top cells et contexte cartographique exportable')}
+                    </span>
+                  </div>
+                </div>
+                <ArrowLeft size={16} className="rotate-180" />
+              </button>
+            )}
+            {onInvestorDashboard && (
+              <button
+                onClick={onInvestorDashboard}
+                className="w-full flex items-center justify-between bg-white border border-gray-100 text-navy p-4 rounded-2xl shadow-sm hover:border-navy transition-colors"
+              >
+                <div className="flex items-center space-x-3">
+                  <LineChartIcon size={18} />
+                  <div className="text-left">
+                    <span className="text-xs font-bold block">{t('Investor Dashboard', 'Tableau investisseur')}</span>
+                    <span className="text-[11px] text-gray-500">
+                      {t('Executive KPIs for trust, growth, and reporting confidence', 'KPIs exécutifs pour la confiance, la croissance et le reporting')}
+                    </span>
+                  </div>
+                </div>
+                <ArrowLeft size={16} className="rotate-180" />
+              </button>
+            )}
+          </div>
+        )}
+
         {adminMode && (
           <div className="grid grid-cols-2 gap-4">
             <div className="card p-5 space-y-2">
@@ -347,6 +521,69 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
                 <span className="text-xl font-bold text-gray-900">{activeContributors}</span>
                 <span className="text-[11px] text-navy font-bold">{t('30d', '30j')}</span>
               </div>
+            </div>
+          </div>
+        )}
+
+        {clientMode && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="card p-5 space-y-2">
+              <span className="micro-label text-gray-400">{t('Tracked points', 'Points suivis')}</span>
+              <div className="flex items-baseline space-x-1">
+                <span className="text-xl font-bold text-gray-900">{clientTrackedPoints}</span>
+                <span className="text-[11px] text-navy font-bold">{latestClientSnapshotDate ?? t('latest', 'dernier')}</span>
+              </div>
+            </div>
+            <div className="card p-5 space-y-2">
+              <span className="micro-label text-gray-400">{t('Completion rate', 'Taux de complétion')}</span>
+              <div className="flex items-baseline space-x-1">
+                <span className="text-xl font-bold text-gray-900">{clientCompletionRate}%</span>
+                <span className="text-[11px] text-forest font-bold">{isLoadingClientData ? '...' : t('live', 'live')}</span>
+              </div>
+            </div>
+            <div className="card p-5 space-y-2">
+              <span className="micro-label text-gray-400">{t('Anomaly flags', 'Signaux anomalies')}</span>
+              <div className="flex items-baseline space-x-1">
+                <span className="text-xl font-bold text-gray-900">{clientAnomalyCount}</span>
+                <span className="text-[11px] text-terra font-bold">{t('watchlist', 'watchlist')}</span>
+              </div>
+            </div>
+            <div className="card p-5 space-y-2">
+              <span className="micro-label text-gray-400">{t('Avg WoW growth', 'Croissance moy. hebdo')}</span>
+              <div className="flex items-baseline space-x-1">
+                <span className="text-xl font-bold text-gray-900">{clientAverageGrowth}%</span>
+                <span className="text-[11px] text-forest font-bold">{t('across tracked verticals', 'sur les verticales suivies')}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {clientMode && (
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <BarChart3 size={16} className="text-navy" />
+                <span className="micro-label text-gray-900">{t('How clients use this surface', 'Comment utiliser cette vue client')}</span>
+              </div>
+              <span className="micro-label text-gray-400">{t('Role-specific', 'Spécifique au rôle')}</span>
+            </div>
+            <div className="rounded-2xl bg-page p-4 space-y-2">
+              <div className="text-sm font-semibold text-gray-900">
+                {clientTopCategory
+                  ? `${t('Top tracked category:', 'Catégorie la plus suivie :')} ${categorylabel(clientTopCategory.verticalId)}`
+                  : t('No category data yet', 'Pas encore de données catégorie')}
+              </div>
+              <p className="text-xs text-gray-500">
+                {clientTopCategory
+                  ? t(
+                      'Start with Delta Intelligence when you need exact map location, cluster drivers, and exportable context. Move to Investor Dashboard when the conversation shifts to trust, growth, and executive KPIs.',
+                      "Commencez par Intelligence Delta pour localiser précisément le signal, ses drivers et le contexte exportable. Passez au Tableau investisseur quand la discussion bascule vers la confiance, la croissance et les KPIs exécutifs."
+                    )
+                  : t(
+                      'Use Delta Intelligence for map-first analysis and Investor Dashboard for board-ready packaging.',
+                      "Utilisez Intelligence Delta pour l'analyse cartographique et le Tableau investisseur pour le packaging exécutif."
+                    )}
+              </p>
             </div>
           </div>
         )}
@@ -423,64 +660,106 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
           </div>
         )}
 
-        <div className="card p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Medal size={16} className="text-navy" />
-              <span className="micro-label text-gray-900">
-                {adminMode ? t('Top Contributor Leaderboard', 'Classement des top contributeurs') : t('Top Contributors Near You', 'Top contributeurs près de vous')}
-              </span>
-            </div>
-            <span className="micro-label text-gray-400">{adminMode ? t('Monthly', 'Mensuel') : t('Local', 'Local')}</span>
-          </div>
-          <div className="rounded-2xl bg-page p-4">
-            <div className="micro-label text-gray-400">
-              {t('How rankings work', 'Comment fonctionne le classement')}
-            </div>
-            <div className="mt-2 text-sm font-semibold text-gray-900">
-              {t('Ranking score = submissions x average quality', 'Score = soumissions x qualité moyenne')}
-            </div>
-            {topVerticalChampion && (
-              <div className="mt-2 text-xs text-gray-500">
-                {t('Busiest category:', 'Catégorie la plus active :')} {categorylabel(topVerticalChampion[0] as SubmissionCategory)} ({topVerticalChampion[1]})
+        {!clientMode && (
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Medal size={16} className="text-navy" />
+                <span className="micro-label text-gray-900">
+                  {adminMode ? t('Top Contributor Leaderboard', 'Classement des top contributeurs') : t('Top Contributors Near You', 'Top contributeurs près de vous')}
+                </span>
               </div>
-            )}
-          </div>
-          <div className="space-y-3">
-            {isLoadingLeaderboard && (
-              <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                {t('Loading contributors...', 'Chargement des contributeurs...')}
+              <span className="micro-label text-gray-400">{adminMode ? t('Monthly', 'Mensuel') : t('Local', 'Local')}</span>
+            </div>
+            <div className="rounded-2xl bg-page p-4">
+              <div className="micro-label text-gray-400">
+                {t('How rankings work', 'Comment fonctionne le classement')}
               </div>
-            )}
-            {!isLoadingLeaderboard && leaderboard.length === 0 && (
-              <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                {t('No contributor data yet.', 'Pas encore de données contributeur.')}
+              <div className="mt-2 text-sm font-semibold text-gray-900">
+                {t('Ranking score = submissions x average quality', 'Score = soumissions x qualité moyenne')}
               </div>
-            )}
-            {!isLoadingLeaderboard &&
-              leaderboard.map((entry) => (
-                <div key={entry.userId} className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3">
-                  <div>
-                    <p className="text-sm font-bold text-gray-900">#{entry.rank} {entry.name}</p>
-                    <p className="micro-label text-gray-400">
-                      {entry.contributions} {t('submissions', 'soumissions')} • {formatLastSeen(entry.lastContributionAt)}
-                    </p>
-                    <p className="text-[11px] text-gray-400 truncate max-w-[220px]">{entry.lastLocation}</p>
-                    <p className="text-[11px] text-gray-500 mt-1">
-                      {t('Ranking score', 'Score de classement')}: {entry.contributions} x {entry.averageQualityScore}% = {entry.rankingScore.toLocaleString()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className="block text-xs font-bold text-navy">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
-                    <span className="block text-xs font-bold text-forest">{entry.xp.toLocaleString()} XP</span>
-                    <span className="block micro-label text-gray-400">
-                      {entry.averageQualityScore}% {t('quality', 'qualité')}
-                    </span>
-                  </div>
+              {topVerticalChampion && (
+                <div className="mt-2 text-xs text-gray-500">
+                  {t('Busiest category:', 'Catégorie la plus active :')} {categorylabel(topVerticalChampion[0] as SubmissionCategory)} ({topVerticalChampion[1]})
                 </div>
-              ))}
+              )}
+            </div>
+            <div className="space-y-3">
+              {isLoadingLeaderboard && (
+                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
+                  {t('Loading contributors...', 'Chargement des contributeurs...')}
+                </div>
+              )}
+              {!isLoadingLeaderboard && leaderboard.length === 0 && (
+                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
+                  {t('No contributor data yet.', 'Pas encore de données contributeur.')}
+                </div>
+              )}
+              {!isLoadingLeaderboard &&
+                leaderboard.map((entry) => (
+                  <div key={entry.userId} className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3">
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">#{entry.rank} {entry.name}</p>
+                      <p className="micro-label text-gray-400">
+                        {entry.contributions} {t('submissions', 'soumissions')} • {formatLastSeen(entry.lastContributionAt)}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate max-w-[220px]">{entry.lastLocation}</p>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {t('Ranking score', 'Score de classement')}: {entry.contributions} x {entry.averageQualityScore}% = {entry.rankingScore.toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-xs font-bold text-navy">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
+                      <span className="block text-xs font-bold text-forest">{entry.xp.toLocaleString()} XP</span>
+                      <span className="block micro-label text-gray-400">
+                        {entry.averageQualityScore}% {t('quality', 'qualité')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+            </div>
           </div>
-        </div>
+        )}
+
+        {clientMode && (
+          <div className="card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Users size={16} className="text-navy" />
+                <span className="micro-label text-gray-900">{t('Field network pulse', 'Pouls du réseau terrain')}</span>
+              </div>
+              <span className="micro-label text-gray-400">{t('Top 3 contributors', 'Top 3 contributeurs')}</span>
+            </div>
+            <div className="space-y-3">
+              {isLoadingLeaderboard && (
+                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
+                  {t('Loading contributors...', 'Chargement des contributeurs...')}
+                </div>
+              )}
+              {!isLoadingLeaderboard && clientTopContributors.length === 0 && (
+                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
+                  {t('No contributor data yet.', 'Pas encore de données contributeur.')}
+                </div>
+              )}
+              {!isLoadingLeaderboard &&
+                clientTopContributors.map((entry) => (
+                  <div key={entry.userId} className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3">
+                    <div>
+                      <p className="text-sm font-bold text-gray-900">#{entry.rank} {entry.name}</p>
+                      <p className="micro-label text-gray-400">
+                        {entry.contributions} {t('submissions', 'soumissions')} • {formatLastSeen(entry.lastContributionAt)}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate max-w-[220px]">{entry.lastLocation}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-xs font-bold text-navy">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
+                      <span className="block text-xs font-bold text-forest">{entry.averageQualityScore}% {t('quality', 'qualité')}</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
 
         {adminMode && (
           <div className="bg-page p-6 rounded-2xl border-2 border-dashed border-gray-200 text-center space-y-3">

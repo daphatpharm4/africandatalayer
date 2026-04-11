@@ -317,7 +317,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
 
   if (loading && !kpi) {
     return (
-      <div className="screen-shell">
+      <div data-testid="screen-investor-dashboard" className="screen-shell">
         <ScreenHeader title={t('Investor Dashboard', 'Tableau investisseur')} onBack={onBack} language={language} />
         <div className="flex items-center justify-center h-64">
           <div className="text-center space-y-2">
@@ -330,7 +330,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
   }
 
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-investor-dashboard" className="screen-shell">
       <ScreenHeader
         title={t('Investor Dashboard', 'Tableau investisseur')}
         onBack={onBack}

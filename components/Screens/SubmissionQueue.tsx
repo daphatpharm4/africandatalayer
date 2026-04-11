@@ -168,7 +168,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
   };
 
   return (
-    <div className="screen-shell">
+    <div data-testid="screen-submission-queue" className="screen-shell">
       <ScreenHeader
         title={t('Pending Uploads', 'Envois en attente')}
         onBack={onBack}
