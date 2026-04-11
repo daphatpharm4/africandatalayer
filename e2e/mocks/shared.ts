@@ -7,6 +7,7 @@ import type {
   SubmissionPhotoMetadata,
   SubmissionLocation,
   TrendDataPoint,
+  UserProfile,
 } from "../../shared/types";
 
 export const BONAMOUSSADI_LOCATION: SubmissionLocation = {
@@ -37,6 +38,86 @@ export const PLACEHOLDER_IMAGE_DATA_URL = `data:image/svg+xml;charset=UTF-8,${en
 export const NOW_ISO = "2026-04-11T09:00:00.000Z";
 export const YESTERDAY_ISO = "2026-04-10T08:30:00.000Z";
 export const LAST_WEEK_ISO = "2026-04-03T09:00:00.000Z";
+
+export const agentProfile: UserProfile = {
+  id: "agent.bonamoussadi@adl.test",
+  name: "Chantal Field Ops",
+  email: "agent.bonamoussadi@adl.test",
+  phone: null,
+  image: "baobab",
+  avatarPreset: "baobab",
+  occupation: "Field agent",
+  XP: 1280,
+  isAdmin: false,
+  role: "agent",
+  mapScope: "bonamoussadi",
+  trustScore: 91,
+  trustTier: "trusted",
+  suspendedUntil: null,
+  wipeRequested: false,
+  failedLoginCount: 0,
+  lockedUntil: null,
+};
+
+export const adminProfile: UserProfile = {
+  id: "admin.ops@adl.test",
+  name: "Amina Review Lead",
+  email: "admin.ops@adl.test",
+  phone: null,
+  image: "baobab",
+  avatarPreset: "baobab",
+  occupation: "Operations lead",
+  XP: 2040,
+  isAdmin: true,
+  role: "admin",
+  mapScope: "global",
+  trustScore: 98,
+  trustTier: "trusted",
+  suspendedUntil: null,
+  wipeRequested: false,
+  failedLoginCount: 0,
+  lockedUntil: null,
+};
+
+export const clientProfile: UserProfile = {
+  id: "client.insights@adl.test",
+  name: "Kasi Insight Buyer",
+  email: "client.insights@adl.test",
+  phone: null,
+  image: "baobab",
+  avatarPreset: "baobab",
+  occupation: "Client stakeholder",
+  XP: 0,
+  isAdmin: false,
+  role: "client",
+  mapScope: "bonamoussadi",
+  trustScore: 50,
+  trustTier: "standard",
+  suspendedUntil: null,
+  wipeRequested: false,
+  failedLoginCount: 0,
+  lockedUntil: null,
+};
+
+export const managedReviewerProfile: UserProfile = {
+  id: "field.reviewer@adl.test",
+  name: "Serge Route Mapper",
+  email: "field.reviewer@adl.test",
+  phone: null,
+  image: "sunrise",
+  avatarPreset: "sunrise",
+  occupation: "Field reviewer",
+  XP: 940,
+  isAdmin: false,
+  role: "agent",
+  mapScope: "bonamoussadi",
+  trustScore: 86,
+  trustTier: "trusted",
+  suspendedUntil: null,
+  wipeRequested: false,
+  failedLoginCount: 0,
+  lockedUntil: null,
+};
 
 export const projectedPoints: ProjectedPoint[] = [
   {

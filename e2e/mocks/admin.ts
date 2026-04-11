@@ -1,6 +1,12 @@
 import type { AdminReviewQueueResponse } from "../../lib/shared/adminReviewQueue";
 import type { AdminSubmissionEvent, AssignmentPlannerContext, LeadCandidate } from "../../shared/types";
-import { adminFraudCheckByPointId, agentAssignments, PLACEHOLDER_IMAGE_DATA_URL, pointEvents } from "./shared";
+import {
+  adminFraudCheckByPointId,
+  agentAssignments,
+  managedReviewerProfile,
+  PLACEHOLDER_IMAGE_DATA_URL,
+  pointEvents,
+} from "./shared";
 import type { MockApiResolver } from "./types";
 
 const adminReviewEvents: AdminSubmissionEvent[] = [
@@ -144,6 +150,17 @@ const automationLeads: LeadCandidate[] = [
 ];
 
 export const resolveAdminApi: MockApiResolver = (url, method) => {
+  if (method === "PATCH" && url.pathname === "/api/user" && url.searchParams.get("view") === "account_access") {
+    return {
+      body: {
+        ...managedReviewerProfile,
+        role: "admin",
+        isAdmin: true,
+        mapScope: "global",
+      },
+    };
+  }
+
   if (method !== "GET") return null;
 
   if (url.pathname === "/api/submissions" && url.searchParams.get("view") === "review_queue") {
@@ -167,6 +184,19 @@ export const resolveAdminApi: MockApiResolver = (url, method) => {
       body: {
         context: assignmentPlannerContext,
         assignments: agentAssignments,
+      },
+    };
+  }
+
+  if (url.pathname === "/api/user" && url.searchParams.get("view") === "lookup") {
+    const identifier = url.searchParams.get("identifier");
+    if (identifier === "field.reviewer@adl.test") {
+      return { body: managedReviewerProfile };
+    }
+    return {
+      status: 404,
+      body: {
+        error: "Profile not found",
       },
     };
   }

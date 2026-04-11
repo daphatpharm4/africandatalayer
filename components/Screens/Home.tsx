@@ -76,6 +76,21 @@ const selectableCategories: Category[] = [
   Category.CENSUS_PROXY,
 ];
 
+const ADMIN_MAP_SCOPE_STORAGE_KEY = 'adl_admin_map_scope';
+
+function readStoredAdminMapScope(): MapScope {
+  if (typeof window === 'undefined') return 'global';
+  try {
+    const stored = window.localStorage.getItem(ADMIN_MAP_SCOPE_STORAGE_KEY);
+    if (stored === 'bonamoussadi' || stored === 'cameroon' || stored === 'global') {
+      return stored;
+    }
+  } catch {
+    // Ignore storage access failures and fall back to the default admin scope.
+  }
+  return 'global';
+}
+
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
@@ -93,7 +108,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
-  const [mapScope, setMapScope] = useState<MapScope>('bonamoussadi');
+  const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? readStoredAdminMapScope() : 'bonamoussadi'));
   const [sheetSnap, setSheetSnap] = useState<SnapPoint>('peek');
   const contributePressTimer = useRef<number | null>(null);
   const longPressTriggered = useRef(false);
@@ -101,7 +116,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
-  const listContentTopInset = isLowEndDevice ? '12rem' : '8.75rem';
+  const listContentTopInset = isLowEndDevice ? (isAdmin ? '15rem' : '12rem') : (isAdmin ? '11.75rem' : '8.75rem');
+  const mapScopeOptions: Array<{ value: MapScope; label: string }> = [
+    { value: 'bonamoussadi', label: t('Bonamoussadi', 'Bonamoussadi') },
+    { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
+    { value: 'global', label: t('Worldwide', 'Monde entier') },
+  ];
 
   useEffect(() => {
     if (!isVerticalPickerOpen) return;
@@ -276,9 +296,21 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   };
 
   useEffect(() => {
-    // Always start at Bonamoussadi street level — admins can zoom out manually
-    setMapScope('bonamoussadi');
+    setMapScope(isAdmin ? readStoredAdminMapScope() : 'bonamoussadi');
   }, [isAuthenticated, isAdmin]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (isAdmin) {
+        window.localStorage.setItem(ADMIN_MAP_SCOPE_STORAGE_KEY, mapScope);
+      } else {
+        window.localStorage.removeItem(ADMIN_MAP_SCOPE_STORAGE_KEY);
+      }
+    } catch {
+      // Ignore storage access failures.
+    }
+  }, [isAdmin, mapScope]);
 
   useEffect(() => {
     const loadPoints = async () => {
@@ -593,6 +625,34 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
             </div>
           )}
         </div>
+
+        {isAdmin && (
+          <div data-testid="home-map-scope-toggle" className="space-y-2">
+            <div className="micro-label text-gray-400">{t('Map Scope', 'Portée de la carte')}</div>
+            <div className="grid grid-cols-3 gap-2">
+              {mapScopeOptions.map((scope) => {
+                const isActive = mapScope === scope.value;
+                return (
+                  <button
+                    key={scope.value}
+                    type="button"
+                    data-testid={`home-map-scope-${scope.value}`}
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      if (isActive) return;
+                      void runViewTransition(() => setMapScope(scope.value));
+                    }}
+                    className={`motion-pressable min-h-[44px] rounded-xl border px-3 text-xs font-semibold ${
+                      isActive ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-600'
+                    }`}
+                  >
+                    {scope.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       </header>
 

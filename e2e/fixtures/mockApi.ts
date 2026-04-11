@@ -2,7 +2,7 @@ import type { Page, Route } from "@playwright/test";
 import { resolveAdminApi } from "../mocks/admin";
 import { resolveAgentApi } from "../mocks/agent";
 import { resolveClientApi } from "../mocks/client";
-import { leaderboard, pointEvents, projectedPoints } from "../mocks/shared";
+import { adminProfile, agentProfile, clientProfile, leaderboard, pointEvents, projectedPoints } from "../mocks/shared";
 import type { MockApiResponse, MockApiResolver } from "../mocks/types";
 import { getMockSession, type AdlRole } from "./roles";
 
@@ -42,6 +42,12 @@ const COMMON_RESOLVERS: MockApiResolver[] = [
   },
 ];
 
+const ROLE_PROFILES = {
+  agent: agentProfile,
+  admin: adminProfile,
+  client: clientProfile,
+} as const;
+
 function toRoutePayload(response: MockApiResponse) {
   const status = response.status ?? 200;
   const headers = { ...(response.headers ?? {}) };
@@ -66,7 +72,11 @@ function toRoutePayload(response: MockApiResponse) {
   };
 }
 
-function resolveApiRequest(_role: AdlRole, url: URL, method: string): MockApiResponse | null {
+function resolveApiRequest(role: AdlRole, url: URL, method: string): MockApiResponse | null {
+  if (method === "GET" && url.pathname === "/api/user" && !url.searchParams.get("view")) {
+    return { body: ROLE_PROFILES[role] };
+  }
+
   const resolvers: MockApiResolver[] = [
     ...COMMON_RESOLVERS,
     resolveAgentApi,

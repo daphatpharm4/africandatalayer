@@ -154,6 +154,13 @@ export const userStatusPatchSchema = z
   })
   .strict();
 
+export const adminUserAccessPatchSchema = z
+  .object({
+    userId: z.string().trim().min(1).max(160),
+    role: z.enum(["agent", "admin", "client"]),
+  })
+  .strict();
+
 export const privacyRequestSchema = z
   .object({
     requestType: z.enum(["access", "rectification", "erasure"]),

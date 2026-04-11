@@ -1,4 +1,5 @@
 import { requireUser } from "../../lib/auth.js";
+import { normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { computeCanonicalUserXp } from "../../lib/server/xp.js";
@@ -12,13 +13,14 @@ import {
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { updateUserTrust } from "../../lib/server/userTrust.js";
-import { userStatusPatchSchema, userUpdateSchema } from "../../lib/server/validation.js";
+import { adminUserAccessPatchSchema, userStatusPatchSchema, userUpdateSchema } from "../../lib/server/validation.js";
 import { encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type {
   CollectionAssignmentCreateInput,
   CollectionAssignmentStatus,
   CollectionAssignmentUpdateInput,
   MapScope,
+  UserRole,
 } from "../../shared/types.js";
 
 const MAP_SCOPES: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
@@ -43,8 +45,20 @@ function normalizeAssignmentStatus(input: unknown): CollectionAssignmentStatus |
   return normalized as CollectionAssignmentStatus;
 }
 
+function normalizeLookupIdentifier(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const raw = input.trim();
+  if (!raw) return null;
+  return normalizeIdentifier(raw)?.value ?? raw.toLowerCase();
+}
+
 function isAdminToken(token: unknown): boolean {
   return (token as { isAdmin?: unknown } | undefined)?.isAdmin === true;
+}
+
+function resolveUserRole(role: unknown, isAdmin: boolean): UserRole {
+  if (role === "admin" || role === "agent" || role === "client") return role;
+  return isAdmin ? "admin" : "agent";
 }
 
 function sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit<T, "passwordHash"> {
@@ -123,6 +137,23 @@ export async function GET(request: Request): Promise<Response> {
         }),
       ]);
       return jsonResponse({ context, assignments }, { status: 200 });
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
+  }
+
+  if (view === "lookup") {
+    if (!authIsAdmin) return errorResponse("Forbidden", 403);
+    const identifier = normalizeLookupIdentifier(url.searchParams.get("identifier"));
+    if (!identifier) return errorResponse("Identifier is required", 400);
+
+    try {
+      const profile = await getUserProfile(identifier);
+      if (!profile) return errorResponse("Profile not found", 404);
+      return jsonResponse(sanitizeProfile(profile), { status: 200 });
     } catch (error) {
       if (isStorageUnavailableError(error)) {
         return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
@@ -295,6 +326,72 @@ export async function PATCH(request: Request): Promise<Response> {
         },
         { status: 200 },
       );
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
+  }
+
+  if (view === "account_access") {
+    if (!authIsAdmin) return errorResponse("Forbidden", 403);
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+    const validation = adminUserAccessPatchSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 400);
+    }
+
+    const body = validation.data;
+    const targetUserId = normalizeLookupIdentifier(body.userId);
+    if (!targetUserId) return errorResponse("User id is required", 400);
+    if (targetUserId === auth.id.toLowerCase().trim()) {
+      return errorResponse("Admins cannot change their own role from this panel", 400);
+    }
+
+    try {
+      const profile = await getUserProfile(targetUserId);
+      if (!profile) return errorResponse("Profile not found", 404);
+
+      const previousRole = resolveUserRole(profile.role, profile.isAdmin === true);
+      const previousIsAdmin = profile.isAdmin === true;
+      const previousMapScope = normalizeMapScope(profile.mapScope);
+
+      const nextRole = body.role;
+      const nextIsAdmin = nextRole === "admin";
+      const nextMapScope: MapScope = nextIsAdmin ? "global" : "bonamoussadi";
+
+      profile.role = nextRole;
+      profile.isAdmin = nextIsAdmin;
+      profile.mapScope = nextMapScope;
+
+      const changed =
+        previousRole !== nextRole || previousIsAdmin !== nextIsAdmin || previousMapScope !== nextMapScope;
+
+      if (changed) {
+        await upsertUserProfile(targetUserId, profile);
+        await logSecurityEvent({
+          eventType: "role_changed",
+          userId: targetUserId,
+          request,
+          details: {
+            actorUserId: auth.id,
+            previousRole,
+            nextRole,
+            previousIsAdmin,
+            nextIsAdmin,
+            previousMapScope,
+            nextMapScope,
+          },
+        });
+      }
+
+      return jsonResponse(sanitizeProfile(profile), { status: 200 });
     } catch (error) {
       if (isStorageUnavailableError(error)) {
         return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });

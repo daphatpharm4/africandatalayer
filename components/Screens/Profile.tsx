@@ -15,7 +15,7 @@ import {
 import { apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listQueueItems, listSyncErrorRecords, subscribeQueueSnapshot, type QueueItem, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import { AVATAR_PRESETS, coerceAvatarPreset, encodeAvatarPresetImage, type AvatarPreset } from '../../shared/avatarPresets';
-import type { CollectionAssignment, MapScope, PointEvent, UserProfile } from '../../shared/types';
+import type { CollectionAssignment, MapScope, PointEvent, UserProfile, UserRole } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 import { getEffectiveEventXp } from '../../shared/xp';
 import {
@@ -60,15 +60,39 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const [isUpdatingAssignmentId, setIsUpdatingAssignmentId] = useState<string | null>(null);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
   const [avatarSaveError, setAvatarSaveError] = useState('');
+  const [accountLookupInput, setAccountLookupInput] = useState('');
+  const [managedAccount, setManagedAccount] = useState<UserProfile | null>(null);
+  const [managedRole, setManagedRole] = useState<UserRole>('agent');
+  const [lookupError, setLookupError] = useState('');
+  const [accessActionError, setAccessActionError] = useState('');
+  const [accessActionSuccess, setAccessActionSuccess] = useState('');
+  const [isLookingUpAccount, setIsLookingUpAccount] = useState(false);
+  const [isSavingAccountAccess, setIsSavingAccountAccess] = useState(false);
   const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
   const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
     if (isAdminMode) return 'global';
     if (value === 'cameroon' || value === 'global') return value;
     return 'bonamoussadi';
   };
+  const resolveRole = (user: Pick<UserProfile, 'role' | 'isAdmin'> | null): UserRole => {
+    if (user?.role === 'admin' || user?.role === 'agent' || user?.role === 'client') return user.role;
+    return user?.isAdmin ? 'admin' : 'agent';
+  };
+  const roleLabel = (role: UserRole) => {
+    if (role === 'admin') return t('Admin', 'Admin');
+    if (role === 'client') return t('Client', 'Client');
+    return t('Agent', 'Agent');
+  };
+  const mapScopeLabel = (scope: MapScope) => {
+    if (scope === 'global') return t('Worldwide', 'Monde entier');
+    if (scope === 'cameroon') return t('Cameroon', 'Cameroun');
+    return t('Bonamoussadi only', 'Bonamoussadi uniquement');
+  };
   const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
   const isMapUnlocked = activeMapScope !== 'bonamoussadi';
   const activeAvatarPreset = coerceAvatarPreset(profile?.avatarPreset ?? profile?.image);
+  const managedAccountRole = resolveRole(managedAccount);
+  const hasManagedAccessChanges = Boolean(managedAccount) && managedRole !== managedAccountRole;
 
   const submissionToHistory = (submission: PointEvent) => {
     const details = (submission.details ?? {}) as Record<string, unknown>;
@@ -320,6 +344,69 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     }
   };
 
+  const handleLookupAccount = async () => {
+    if (isLookingUpAccount) return;
+    const identifier = accountLookupInput.trim();
+    if (!identifier) {
+      setLookupError(t('Enter an exact email or phone number.', 'Saisissez un email ou un numero exact.'));
+      setManagedAccount(null);
+      setAccessActionError('');
+      setAccessActionSuccess('');
+      return;
+    }
+
+    setLookupError('');
+    setAccessActionError('');
+    setAccessActionSuccess('');
+
+    try {
+      setIsLookingUpAccount(true);
+      const params = new URLSearchParams({ view: 'lookup', identifier });
+      const account = await apiJson<UserProfile>(`/api/user?${params.toString()}`);
+      setManagedAccount(account);
+      setManagedRole(resolveRole(account));
+    } catch (error) {
+      setManagedAccount(null);
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : t('Unable to load account.', 'Impossible de charger le compte.');
+      setLookupError(message);
+    } finally {
+      setIsLookingUpAccount(false);
+    }
+  };
+
+  const handleSaveAccountAccess = async () => {
+    if (!managedAccount || isSavingAccountAccess || !hasManagedAccessChanges) return;
+
+    setAccessActionError('');
+    setAccessActionSuccess('');
+
+    try {
+      setIsSavingAccountAccess(true);
+      const updated = await apiJson<UserProfile>('/api/user?view=account_access', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: managedAccount.id,
+          role: managedRole,
+        }),
+      });
+      setManagedAccount(updated);
+      setManagedRole(resolveRole(updated));
+      setAccessActionSuccess(t('Account access updated.', 'Accès du compte mis à jour.'));
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : t('Unable to update account access.', 'Impossible de mettre à jour l\'accès du compte.');
+      setAccessActionError(message);
+    } finally {
+      setIsSavingAccountAccess(false);
+    }
+  };
+
   return (
     <div data-testid="screen-profile" className="screen-shell">
       <ScreenHeader
@@ -490,6 +577,109 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
                 ? t('Explorer map is unlocked worldwide.', 'La carte Explorer est debloquee dans le monde entier.')
                 : t('Explorer map is locked to Bonamoussadi.', 'La carte Explorer est limitee a Bonamoussadi.')}
             </p>
+          </div>
+        )}
+
+        {profile?.isAdmin && (
+          <div data-testid="profile-admin-access" className="card p-5 space-y-4">
+            <div className="space-y-1">
+              <span className="micro-label text-gray-400">
+                {t('Account Access', 'Acces aux comptes')}
+              </span>
+              <h3 className="text-sm font-bold text-gray-900">
+                {t('Grant admin access to another account', 'Donner un acces admin a un autre compte')}
+              </h3>
+              <p className="text-xs leading-5 text-gray-500">
+                {t(
+                  'Look up an account by exact email or phone, then promote it to admin. Admin accounts automatically unlock Cameroon and worldwide map views.',
+                  'Recherchez un compte par email ou numero exact, puis promouvez-le en admin. Les comptes admin debloquent automatiquement les vues Cameroun et monde entier.',
+                )}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                type="text"
+                value={accountLookupInput}
+                onChange={(event) => setAccountLookupInput(event.target.value)}
+                placeholder={t('name@example.com or +237...', 'nom@exemple.com ou +237...')}
+                data-testid="admin-account-lookup-input"
+                className="h-11 flex-1 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+              />
+              <button
+                type="button"
+                onClick={handleLookupAccount}
+                disabled={isLookingUpAccount}
+                data-testid="admin-account-lookup-submit"
+                className={`h-11 rounded-xl px-4 text-sm font-semibold ${
+                  isLookingUpAccount ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
+                }`}
+              >
+                {isLookingUpAccount ? t('Loading...', 'Chargement...') : t('Load account', 'Charger le compte')}
+              </button>
+            </div>
+
+            {lookupError && (
+              <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
+                {lookupError}
+              </div>
+            )}
+
+            {managedAccount && (
+              <div className="space-y-4 rounded-2xl border border-navy-border bg-page p-4">
+                <div className="space-y-1">
+                  <div className="text-sm font-bold text-gray-900">
+                    {managedAccount.name || managedAccount.id}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {managedAccount.email || managedAccount.phone || managedAccount.id}
+                  </div>
+                  <div className="micro-label text-gray-500">
+                    {t('Current access', 'Acces actuel')}: {roleLabel(managedAccountRole)} · {mapScopeLabel(normalizeMapScope(managedAccount.mapScope, Boolean(managedAccount.isAdmin)))}
+                  </div>
+                </div>
+
+                <label className="block space-y-2">
+                  <span className="micro-label text-gray-400">
+                    {t('Role', 'Rôle')}
+                  </span>
+                  <select
+                    value={managedRole}
+                    onChange={(event) => setManagedRole(event.target.value as UserRole)}
+                    data-testid="admin-account-role"
+                    className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900 outline-none transition-colors focus:border-navy"
+                  >
+                    <option value="agent">{t('Agent', 'Agent')}</option>
+                    <option value="client">{t('Client', 'Client')}</option>
+                    <option value="admin">{t('Admin', 'Admin')}</option>
+                  </select>
+                </label>
+
+                {accessActionError && (
+                  <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
+                    {accessActionError}
+                  </div>
+                )}
+
+                {accessActionSuccess && (
+                  <div className="rounded-xl border border-forest/20 bg-forest-wash p-3 text-[11px] text-forest-dark">
+                    {accessActionSuccess}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleSaveAccountAccess}
+                  disabled={isSavingAccountAccess || !hasManagedAccessChanges}
+                  data-testid="admin-account-save"
+                  className={`h-11 rounded-xl px-4 text-sm font-semibold ${
+                    isSavingAccountAccess || !hasManagedAccessChanges ? 'bg-gray-100 text-gray-400' : 'bg-terra text-white'
+                  }`}
+                >
+                  {isSavingAccountAccess ? t('Saving...', 'Enregistrement...') : t('Save access', 'Enregistrer l\'accès')}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

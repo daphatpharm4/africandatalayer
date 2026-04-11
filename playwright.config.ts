@@ -39,7 +39,12 @@ export default defineConfig({
     },
     {
       name: "admin-desktop",
-      testMatch: ["e2e/smoke/admin.smoke.spec.ts", "e2e/smoke/profile-help-entry.smoke.spec.ts", "e2e/docs/admin-roadmap.spec.ts"],
+      testMatch: [
+        "e2e/smoke/admin.smoke.spec.ts",
+        "e2e/smoke/admin-access-controls.smoke.spec.ts",
+        "e2e/smoke/profile-help-entry.smoke.spec.ts",
+        "e2e/docs/admin-roadmap.spec.ts",
+      ],
       use: {
         ...devices["Desktop Chrome"],
         locale: "en-US",

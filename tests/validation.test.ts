@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  adminUserAccessPatchSchema,
   consentStatusSchema,
   reviewBodySchema,
   submissionInputSchema,
@@ -90,4 +91,26 @@ test("userUpdateSchema accepts only built-in avatar presets", () => {
   );
 
   assert.throws(() => userUpdateSchema.parse({ avatarPreset: "remote-url" }), /Invalid option/);
+});
+
+test("adminUserAccessPatchSchema allows explicit role changes only", () => {
+  assert.deepEqual(
+    adminUserAccessPatchSchema.parse({
+      userId: "field.reviewer@adl.test",
+      role: "admin",
+    }),
+    {
+      userId: "field.reviewer@adl.test",
+      role: "admin",
+    },
+  );
+
+  assert.throws(
+    () =>
+      adminUserAccessPatchSchema.parse({
+        userId: "field.reviewer@adl.test",
+        role: "super_admin",
+      }),
+    /Invalid option/,
+  );
 });
