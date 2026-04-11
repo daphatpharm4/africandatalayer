@@ -2,6 +2,8 @@ import { requireUser } from "../../lib/auth.js";
 import { query } from "../../lib/server/db.js";
 import { jsonResponse, errorResponse } from "../../lib/server/http.js";
 import { computeMovingAverage } from "../../lib/server/snapshotEngine.js";
+import { getSpatialIntelligence } from "../../lib/server/spatialIntelligence.js";
+import type { SpatialIntelligenceSort } from "../../shared/types.js";
 
 export const maxDuration = 60;
 
@@ -12,6 +14,12 @@ const VALID_METRICS = new Set([
   "removed_count",
   "avg_price",
   "week_over_week_growth",
+]);
+
+const VALID_SPATIAL_SORTS = new Set<SpatialIntelligenceSort>([
+  "opportunity_score",
+  "coverage_gap_score",
+  "change_signal_score",
 ]);
 
 export interface CronDispatchSchedule {
@@ -321,13 +329,15 @@ export async function GET(request: Request): Promise<Response> {
       return handleTrends(url);
     case "anomalies":
       return handleAnomalies();
+    case "spatial_intelligence":
+      return handleSpatialIntelligence(url);
     case "kpi_summary":
       return handleKpiSummary();
     case "kpi_weekly":
       return handleKpiWeekly(url);
     default:
       return errorResponse(
-        `Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, kpi_summary, kpi_weekly, cron_dispatch, cron, cron_monthly, cron_daily_road, cron_daily_trust_decay, cron_daily_gps_anomaly`,
+        `Invalid view: ${view}. Valid: snapshots, deltas, monthly, trends, anomalies, spatial_intelligence, kpi_summary, kpi_weekly, cron_dispatch, cron, cron_monthly, cron_daily_road, cron_daily_trust_decay, cron_daily_gps_anomaly`,
         400,
       );
   }
@@ -481,6 +491,41 @@ async function handleAnomalies(): Promise<Response> {
   );
 
   return jsonResponse(result.rows);
+}
+
+async function handleSpatialIntelligence(url: URL): Promise<Response> {
+  const vertical = url.searchParams.get("vertical");
+  if (!vertical) {
+    return errorResponse("vertical parameter is required", 400);
+  }
+
+  const sort = (url.searchParams.get("sort") ?? "opportunity_score") as SpatialIntelligenceSort;
+  if (!VALID_SPATIAL_SORTS.has(sort)) {
+    return errorResponse(
+      `Invalid sort. Valid: ${[...VALID_SPATIAL_SORTS].join(", ")}`,
+      400,
+    );
+  }
+
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "12", 10), 50);
+  const snapshotDate = url.searchParams.get("date") ?? undefined;
+
+  try {
+    const result = await getSpatialIntelligence({
+      verticalId: vertical,
+      snapshotDate,
+      limit,
+      sort,
+    });
+    return jsonResponse(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Spatial intelligence failed";
+    if (message.startsWith("No snapshots found")) {
+      return errorResponse(message, 404);
+    }
+    console.error("Spatial intelligence failed:", error);
+    return errorResponse(message, 500);
+  }
 }
 
 async function handleKpiSummary(): Promise<Response> {

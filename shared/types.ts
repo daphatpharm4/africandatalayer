@@ -353,6 +353,55 @@ export interface TrendDataPoint {
   movingAvg: number | null;
 }
 
+export type SpatialIntelligenceSort =
+  | "opportunity_score"
+  | "coverage_gap_score"
+  | "change_signal_score";
+
+export type SpatialDriverImpact = "positive" | "negative" | "neutral";
+
+export interface SpatialInsightDriver {
+  label: string;
+  impact: SpatialDriverImpact;
+  score: number;
+  evidence: string;
+}
+
+export interface SpatialIntelligenceCell {
+  cellId: string;
+  verticalId: string;
+  snapshotDate: string;
+  center: SubmissionLocation;
+  totalPoints: number;
+  completedPoints: number;
+  completionRate: number;
+  avgConfidenceScore: number;
+  photoCoverageRate: number;
+  recentActivityRate: number;
+  medianFreshnessDays: number;
+  publishableChangeCount: number;
+  newCount: number;
+  removedCount: number;
+  changedCount: number;
+  operatorDiversity: number;
+  marketSignalScore: number;
+  opportunityScore: number;
+  coverageGapScore: number;
+  changeSignalScore: number;
+  drivers: SpatialInsightDriver[];
+  caveats: string[];
+  summary: string;
+}
+
+export interface SpatialIntelligenceResponse {
+  snapshotDate: string;
+  verticalId: string;
+  totalCells: number;
+  totalPoints: number;
+  cells: SpatialIntelligenceCell[];
+  narrative: string;
+}
+
 export interface ZoneBounds {
   south: number;
   west: number;

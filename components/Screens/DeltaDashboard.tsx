@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Download, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { AlertTriangle, Download, Minus, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import ScreenHeader from '../shared/ScreenHeader';
 import {
   LineChart,
@@ -15,7 +15,13 @@ import {
 import { apiJson, buildUrl } from '../../lib/client/api';
 import ExportPanel from '../ExportPanel';
 import { categoryLabel, VERTICAL_IDS } from '../../shared/verticals';
-import type { TrendDataPoint, AnomalyFlag } from '../../shared/types';
+import type {
+  TrendDataPoint,
+  AnomalyFlag,
+  SpatialIntelligenceCell,
+  SpatialIntelligenceResponse,
+  SpatialIntelligenceSort,
+} from '../../shared/types';
 
 interface Props {
   onBack: () => void;
@@ -61,15 +67,27 @@ interface AnomalyRow {
   anomaly_flags: AnomalyFlag[];
 }
 
+const SPATIAL_SORT_OPTIONS: Array<{
+  id: SpatialIntelligenceSort;
+  label: { en: string; fr: string };
+}> = [
+  { id: 'opportunity_score', label: { en: 'Opportunity', fr: 'Opportunité' } },
+  { id: 'coverage_gap_score', label: { en: 'Coverage Gap', fr: 'Manque de couverture' } },
+  { id: 'change_signal_score', label: { en: 'Change Signal', fr: 'Signal de changement' } },
+];
+
 const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const [selectedVertical, setSelectedVertical] = useState<string>('all');
   const [selectedFormat, setSelectedFormat] = useState<'csv' | 'geojson' | 'pdf'>('csv');
+  const [selectedSpatialSort, setSelectedSpatialSort] = useState<SpatialIntelligenceSort>('opportunity_score');
   const [stats, setStats] = useState<StatsRow[]>([]);
   const [anomalies, setAnomalies] = useState<AnomalyRow[]>([]);
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [recentDeltas, setRecentDeltas] = useState<DeltaRow[]>([]);
+  const [spatialData, setSpatialData] = useState<SpatialIntelligenceResponse | null>(null);
+  const [spatialLoading, setSpatialLoading] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Load stats and anomalies on mount
@@ -99,22 +117,32 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       if (selectedVertical === 'all') {
         setTrendData([]);
         setRecentDeltas([]);
+        setSpatialData(null);
+        setSpatialLoading(false);
         return;
       }
       try {
-        const [trend, deltasResp] = await Promise.all([
+        setSpatialLoading(true);
+        const [trend, deltasResp, spatialResp] = await Promise.all([
           apiJson<{ data: TrendDataPoint[] }>(`/api/analytics?view=trends&vertical=${selectedVertical}&metric=total_points&weeks=12`),
           apiJson<{ deltas: DeltaRow[] }>(`/api/analytics?view=deltas&vertical=${selectedVertical}&publishable=true&limit=20`),
+          apiJson<SpatialIntelligenceResponse>(
+            `/api/analytics?view=spatial_intelligence&vertical=${selectedVertical}&sort=${selectedSpatialSort}&limit=8`,
+          ),
         ]);
         setTrendData(Array.isArray(trend?.data) ? trend.data : []);
         setRecentDeltas(Array.isArray(deltasResp?.deltas) ? deltasResp.deltas : []);
+        setSpatialData(spatialResp ?? null);
       } catch {
         setTrendData([]);
         setRecentDeltas([]);
+        setSpatialData(null);
+      } finally {
+        setSpatialLoading(false);
       }
     };
     void loadVerticalData();
-  }, [selectedVertical]);
+  }, [selectedSpatialSort, selectedVertical]);
 
   // Derived data
   const filteredStats = selectedVertical === 'all'
@@ -186,12 +214,41 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   }, [language, latestDate]);
 
   const apiPreview = useMemo(() => {
-    const params = new URLSearchParams({ view: 'deltas', publishable: 'true', limit: '20' });
-    if (selectedVertical !== 'all') params.set('vertical', selectedVertical);
+    const params = new URLSearchParams(
+      selectedVertical !== 'all' && spatialData?.cells?.length
+        ? {
+            view: 'spatial_intelligence',
+            vertical: selectedVertical,
+            sort: selectedSpatialSort,
+            limit: String(spatialData.cells.length),
+          }
+        : { view: 'deltas', publishable: 'true', limit: '20' },
+    );
+    if (selectedVertical !== 'all' && !params.has('vertical')) params.set('vertical', selectedVertical);
     return buildUrl(`/api/analytics?${params.toString()}`);
-  }, [selectedVertical]);
+  }, [selectedSpatialSort, selectedVertical, spatialData]);
 
   const exportRows = useMemo(() => {
+    if (selectedVertical !== 'all' && spatialData?.cells?.length) {
+      return spatialData.cells.map((cell) => ({
+        snapshot_date: cell.snapshotDate,
+        vertical_id: cell.verticalId,
+        cell_id: cell.cellId,
+        center_latitude: cell.center.latitude,
+        center_longitude: cell.center.longitude,
+        total_points: cell.totalPoints,
+        completed_points: cell.completedPoints,
+        completion_rate: cell.completionRate,
+        avg_confidence_score: cell.avgConfidenceScore,
+        publishable_change_count: cell.publishableChangeCount,
+        opportunity_score: cell.opportunityScore,
+        coverage_gap_score: cell.coverageGapScore,
+        change_signal_score: cell.changeSignalScore,
+        summary: cell.summary,
+        caveats: cell.caveats.join(' | '),
+      }));
+    }
+
     if (selectedVertical === 'all') {
       return stats
         .filter((row) => row.snapshot_date === latestDate)
@@ -247,7 +304,13 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       type: 'FeatureCollection',
       features: exportRows.map((row) => ({
         type: 'Feature',
-        geometry: null,
+        geometry:
+          typeof row.center_latitude === 'number' && typeof row.center_longitude === 'number'
+            ? {
+                type: 'Point',
+                coordinates: [row.center_longitude, row.center_latitude],
+              }
+            : null,
         properties: row,
       })),
     };
@@ -295,6 +358,33 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       default: return t('UNCHANGED', 'INCHANGÉ');
     }
   };
+
+  const scoreLabel = (sort: SpatialIntelligenceSort) => {
+    switch (sort) {
+      case 'coverage_gap_score':
+        return t('Coverage Gap', 'Manque de couverture');
+      case 'change_signal_score':
+        return t('Change Signal', 'Signal de changement');
+      default:
+        return t('Opportunity', 'Opportunité');
+    }
+  };
+
+  const topSpatialCell = spatialData?.cells?.[0] ?? null;
+  const renderSpatialDriver = (driver: SpatialIntelligenceCell['drivers'][number]) => (
+    <span
+      key={`${driver.label}-${driver.impact}`}
+      className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-[0.14em] ${
+        driver.impact === 'negative'
+          ? 'bg-red-50 text-red-700'
+          : driver.impact === 'neutral'
+            ? 'bg-gray-100 text-gray-600'
+            : 'bg-forest/10 text-forest'
+      }`}
+    >
+      {driver.label}
+    </span>
+  );
 
   return (
     <div className="screen-shell">
@@ -513,6 +603,172 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
+              </div>
+            )}
+
+            {selectedVertical !== 'all' && (
+              <div className="card-pill p-5 space-y-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="micro-label-wide text-gray-400">
+                      {t('Spatial Intelligence', 'Intelligence spatiale')}
+                    </div>
+                    <h4 className="mt-1 text-lg font-bold text-gray-900">
+                      {t('Why this vertical clusters where it does', 'Pourquoi cette verticale se concentre à ces endroits')}
+                    </h4>
+                    <p className="mt-2 text-[11px] text-gray-500 max-w-2xl">
+                      {spatialData?.narrative ?? t(
+                        'Select a category with weekly data to generate ranked map cells, strongest drivers, and evidence gaps.',
+                        'Sélectionnez une catégorie avec des données hebdomadaires pour générer des cellules classées, les principaux facteurs et les manques de preuve.'
+                      )}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 min-w-full lg:min-w-[260px]">
+                    {SPATIAL_SORT_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setSelectedSpatialSort(option.id)}
+                        className={`rounded-2xl px-3 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors ${
+                          selectedSpatialSort === option.id
+                            ? 'bg-navy text-white'
+                            : 'bg-page text-gray-600 border border-gray-100'
+                        }`}
+                      >
+                        {language === 'fr' ? option.label.fr : option.label.en}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {spatialLoading ? (
+                  <div className="rounded-3xl bg-page px-4 py-6 text-center text-[11px] text-gray-500">
+                    {t('Building ranked intelligence cells...', 'Construction des cellules d\'intelligence...')}
+                  </div>
+                ) : spatialData?.cells?.length ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                      <div className="rounded-3xl bg-page px-4 py-3">
+                        <div className="micro-label text-gray-400">{t('Cells', 'Cellules')}</div>
+                        <div className="mt-1 text-lg font-bold text-gray-900">{spatialData.totalCells}</div>
+                      </div>
+                      <div className="rounded-3xl bg-page px-4 py-3">
+                        <div className="micro-label text-gray-400">{t('Mapped Points', 'Points cartographiés')}</div>
+                        <div className="mt-1 text-lg font-bold text-gray-900">{spatialData.totalPoints}</div>
+                      </div>
+                      <div className="rounded-3xl bg-page px-4 py-3">
+                        <div className="micro-label text-gray-400">{scoreLabel(selectedSpatialSort)}</div>
+                        <div className="mt-1 text-lg font-bold text-gray-900">
+                          {topSpatialCell ? `${selectedSpatialSort === 'coverage_gap_score'
+                            ? topSpatialCell.coverageGapScore
+                            : selectedSpatialSort === 'change_signal_score'
+                              ? topSpatialCell.changeSignalScore
+                              : topSpatialCell.opportunityScore}/100` : '--'}
+                        </div>
+                      </div>
+                      <div className="rounded-3xl bg-page px-4 py-3">
+                        <div className="micro-label text-gray-400">{t('Top Cell', 'Cellule clé')}</div>
+                        <div className="mt-1 text-lg font-bold text-gray-900">{topSpatialCell?.cellId ?? '--'}</div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {spatialData.cells.map((cell) => {
+                        const activeScore = selectedSpatialSort === 'coverage_gap_score'
+                          ? cell.coverageGapScore
+                          : selectedSpatialSort === 'change_signal_score'
+                            ? cell.changeSignalScore
+                            : cell.opportunityScore;
+
+                        return (
+                          <div key={cell.cellId} className="rounded-[28px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+                            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                              <div>
+                                <div className="inline-flex items-center gap-2 rounded-full bg-navy-wash px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-navy">
+                                  {cell.cellId}
+                                  <span className="text-gray-400">•</span>
+                                  {selectedVerticalLabel}
+                                </div>
+                                <p className="mt-2 text-sm font-semibold text-gray-900">{cell.summary}</p>
+                              </div>
+                              <div className="rounded-3xl bg-page px-4 py-3 min-w-[140px]">
+                                <div className="micro-label text-gray-400">{scoreLabel(selectedSpatialSort)}</div>
+                                <div className="mt-1 text-xl font-extrabold text-gray-900">{activeScore}/100</div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+                              <div className="rounded-2xl bg-page px-3 py-2">
+                                <div className="micro-label text-gray-400">{t('Points', 'Points')}</div>
+                                <div className="mt-1 text-sm font-bold text-gray-900">{cell.totalPoints}</div>
+                              </div>
+                              <div className="rounded-2xl bg-page px-3 py-2">
+                                <div className="micro-label text-gray-400">{t('Publishable Changes', 'Changements publiables')}</div>
+                                <div className="mt-1 text-sm font-bold text-gray-900">{cell.publishableChangeCount}</div>
+                              </div>
+                              <div className="rounded-2xl bg-page px-3 py-2">
+                                <div className="micro-label text-gray-400">{t('Confidence', 'Confiance')}</div>
+                                <div className="mt-1 text-sm font-bold text-gray-900">{cell.avgConfidenceScore}/100</div>
+                              </div>
+                              <div className="rounded-2xl bg-page px-3 py-2">
+                                <div className="micro-label text-gray-400">{t('Freshness', 'Fraîcheur')}</div>
+                                <div className="mt-1 text-sm font-bold text-gray-900">{cell.medianFreshnessDays}{t('d', 'j')}</div>
+                              </div>
+                              <div className="rounded-2xl bg-page px-3 py-2">
+                                <div className="micro-label text-gray-400">{t('Operators', 'Opérateurs')}</div>
+                                <div className="mt-1 text-sm font-bold text-gray-900">{cell.operatorDiversity}</div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+                              <div className="space-y-2">
+                                <div className="inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-navy">
+                                  <ShieldCheck size={14} />
+                                  {t('Strongest drivers', 'Principaux facteurs')}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {cell.drivers.length > 0
+                                    ? cell.drivers.slice(0, 5).map(renderSpatialDriver)
+                                    : (
+                                      <span className="text-[11px] text-gray-500">
+                                        {t('No dominant drivers surfaced for this cell yet.', 'Aucun facteur dominant n\'a encore émergé pour cette cellule.')}
+                                      </span>
+                                    )}
+                                </div>
+                              </div>
+
+                              <div className="space-y-2 rounded-3xl bg-page px-4 py-3">
+                                <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-gray-500">
+                                  {t('Caveats', 'Réserves')}
+                                </div>
+                                {cell.caveats.length > 0 ? (
+                                  <div className="space-y-1">
+                                    {cell.caveats.slice(0, 3).map((caveat) => (
+                                      <p key={caveat} className="text-[11px] text-gray-600">
+                                        {caveat}
+                                      </p>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-[11px] text-gray-600">
+                                    {t('No major evidence caveats flagged in this cell.', 'Aucune réserve majeure de preuve signalée dans cette cellule.')}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-3xl border border-gray-100 bg-page px-4 py-5 text-[11px] text-gray-500">
+                    {t(
+                      'Spatial intelligence appears once a vertical has snapshots and ranked map cells can be generated.',
+                      'L\'intelligence spatiale apparaît lorsqu\'une verticale a des snapshots et que des cellules cartographiques peuvent être classées.'
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
