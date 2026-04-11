@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Download, Minus, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { MapContainer, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import ScreenHeader from '../shared/ScreenHeader';
 import {
   LineChart,
@@ -15,6 +16,7 @@ import {
 import { apiJson, buildUrl } from '../../lib/client/api';
 import ExportPanel from '../ExportPanel';
 import { categoryLabel, VERTICAL_IDS } from '../../shared/verticals';
+import { BONAMOUSSADI_CENTER, bonamoussadiLeafletBounds } from '../../shared/geofence';
 import type {
   TrendDataPoint,
   AnomalyFlag,
@@ -22,6 +24,7 @@ import type {
   SpatialIntelligenceResponse,
   SpatialIntelligenceSort,
 } from '../../shared/types';
+import { decodeGeohashBounds } from '../../lib/shared/pointId';
 
 interface Props {
   onBack: () => void;
@@ -76,6 +79,36 @@ const SPATIAL_SORT_OPTIONS: Array<{
   { id: 'change_signal_score', label: { en: 'Change Signal', fr: 'Signal de changement' } },
 ];
 
+const BONAMOUSSADI_MAP_BOUNDS = bonamoussadiLeafletBounds();
+
+const scoreValueForCell = (sort: SpatialIntelligenceSort, cell: SpatialIntelligenceCell) => {
+  if (sort === 'coverage_gap_score') return cell.coverageGapScore;
+  if (sort === 'change_signal_score') return cell.changeSignalScore;
+  return cell.opportunityScore;
+};
+
+const scoreFillColor = (sort: SpatialIntelligenceSort, cell: SpatialIntelligenceCell) => {
+  const score = scoreValueForCell(sort, cell);
+  if (sort === 'coverage_gap_score') {
+    if (score >= 75) return '#c86b4a';
+    if (score >= 50) return '#e4a62a';
+    return '#0f2b46';
+  }
+  if (score >= 75) return '#0f2b46';
+  if (score >= 50) return '#2f855a';
+  return '#c86b4a';
+};
+
+const SpatialMapViewport: React.FC<{ bounds: [[number, number], [number, number]] }> = ({ bounds }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    map.fitBounds(bounds, { padding: [18, 18], animate: false });
+  }, [bounds, map]);
+
+  return null;
+};
+
 const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
@@ -88,6 +121,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const [recentDeltas, setRecentDeltas] = useState<DeltaRow[]>([]);
   const [spatialData, setSpatialData] = useState<SpatialIntelligenceResponse | null>(null);
   const [spatialLoading, setSpatialLoading] = useState(false);
+  const [focusedCellId, setFocusedCellId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Load stats and anomalies on mount
@@ -119,6 +153,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         setRecentDeltas([]);
         setSpatialData(null);
         setSpatialLoading(false);
+        setFocusedCellId(null);
         return;
       }
       try {
@@ -133,10 +168,12 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         setTrendData(Array.isArray(trend?.data) ? trend.data : []);
         setRecentDeltas(Array.isArray(deltasResp?.deltas) ? deltasResp.deltas : []);
         setSpatialData(spatialResp ?? null);
+        setFocusedCellId(spatialResp?.cells?.[0]?.cellId ?? null);
       } catch {
         setTrendData([]);
         setRecentDeltas([]);
         setSpatialData(null);
+        setFocusedCellId(null);
       } finally {
         setSpatialLoading(false);
       }
@@ -371,6 +408,16 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   };
 
   const topSpatialCell = spatialData?.cells?.[0] ?? null;
+  const focusedSpatialCell = spatialData?.cells?.find((cell) => cell.cellId === focusedCellId) ?? topSpatialCell;
+  const focusedCellBounds = focusedSpatialCell
+    ? decodeGeohashBounds(focusedSpatialCell.cellId)
+    : null;
+  const focusedMapBounds: [[number, number], [number, number]] = focusedCellBounds
+    ? [
+        [focusedCellBounds.south, focusedCellBounds.west],
+        [focusedCellBounds.north, focusedCellBounds.east],
+      ]
+    : BONAMOUSSADI_MAP_BOUNDS;
   const renderSpatialDriver = (driver: SpatialIntelligenceCell['drivers'][number]) => (
     <span
       key={`${driver.label}-${driver.impact}`}
@@ -672,6 +719,133 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       </div>
                     </div>
 
+                    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="micro-label text-gray-400">{t('Cluster map', 'Carte des clusters')}</div>
+                            <div className="mt-1 text-sm font-bold text-gray-900">
+                              {focusedSpatialCell
+                                ? `${t('Focused cell', 'Cellule ciblée')} ${focusedSpatialCell.cellId}`
+                                : t('Ranked cells in Bonamoussadi', 'Cellules classées à Bonamoussadi')}
+                            </div>
+                          </div>
+                          {focusedSpatialCell && (
+                            <div className="rounded-2xl bg-page px-3 py-2 text-right">
+                              <div className="micro-label text-gray-400">{t('Center', 'Centre')}</div>
+                              <div className="mt-1 text-[11px] font-bold text-gray-900">
+                                {focusedSpatialCell.center.latitude.toFixed(4)}, {focusedSpatialCell.center.longitude.toFixed(4)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="h-[320px] overflow-hidden rounded-[28px] border border-gray-100">
+                          <MapContainer
+                            center={[BONAMOUSSADI_CENTER.latitude, BONAMOUSSADI_CENTER.longitude]}
+                            zoom={15}
+                            minZoom={14}
+                            maxZoom={18}
+                            maxBounds={BONAMOUSSADI_MAP_BOUNDS}
+                            maxBoundsViscosity={1.0}
+                            scrollWheelZoom
+                            className="h-full w-full"
+                          >
+                            <TileLayer
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                              url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+                              subdomains="abcd"
+                              maxZoom={20}
+                            />
+                            <SpatialMapViewport bounds={focusedMapBounds} />
+                            {spatialData.cells.map((cell) => {
+                              const bounds = decodeGeohashBounds(cell.cellId);
+                              const isFocused = cell.cellId === focusedSpatialCell?.cellId;
+                              const fillColor = scoreFillColor(selectedSpatialSort, cell);
+                              const score = scoreValueForCell(selectedSpatialSort, cell);
+
+                              return (
+                                <Rectangle
+                                  key={cell.cellId}
+                                  bounds={[
+                                    [bounds.south, bounds.west],
+                                    [bounds.north, bounds.east],
+                                  ]}
+                                  pathOptions={{
+                                    color: isFocused ? '#c86b4a' : fillColor,
+                                    fillColor,
+                                    fillOpacity: isFocused ? 0.34 : 0.18,
+                                    weight: isFocused ? 3 : 2,
+                                  }}
+                                  eventHandlers={{
+                                    click: () => setFocusedCellId(cell.cellId),
+                                  }}
+                                >
+                                  <Popup>
+                                    <div className="space-y-1 text-[11px]">
+                                      <div className="font-bold text-gray-900">{cell.cellId}</div>
+                                      <div className="text-gray-700">{cell.summary}</div>
+                                      <div className="text-gray-500">
+                                        {scoreLabel(selectedSpatialSort)}: {score}/100
+                                      </div>
+                                      <div className="text-gray-500">
+                                        {t('Center', 'Centre')}: {cell.center.latitude.toFixed(4)}, {cell.center.longitude.toFixed(4)}
+                                      </div>
+                                    </div>
+                                  </Popup>
+                                </Rectangle>
+                              );
+                            })}
+                          </MapContainer>
+                        </div>
+
+                        <p className="text-[11px] text-gray-500">
+                          {t(
+                            'Each rectangle is the geohash cell footprint behind a ranked cluster. Click one to see where the top cell sits inside Bonamoussadi.',
+                            'Chaque rectangle représente l’empreinte de la cellule geohash derrière un cluster classé. Cliquez dessus pour voir où se situe la cellule clé dans Bonamoussadi.'
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="micro-label text-gray-400">{t('Cell selector', 'Sélecteur de cellule')}</div>
+                        <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                          {spatialData.cells.map((cell) => {
+                            const score = scoreValueForCell(selectedSpatialSort, cell);
+                            const isFocused = cell.cellId === focusedSpatialCell?.cellId;
+                            return (
+                              <button
+                                key={cell.cellId}
+                                type="button"
+                                onClick={() => setFocusedCellId(cell.cellId)}
+                                className={`w-full rounded-[24px] border px-4 py-3 text-left transition-colors ${
+                                  isFocused
+                                    ? 'border-navy bg-navy-wash'
+                                    : 'border-gray-100 bg-white hover:bg-page'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-gray-500">
+                                      {cell.cellId}
+                                    </div>
+                                    <p className="mt-1 text-[11px] text-gray-700">
+                                      {cell.center.latitude.toFixed(4)}, {cell.center.longitude.toFixed(4)}
+                                    </p>
+                                  </div>
+                                  <div className="rounded-2xl bg-page px-3 py-2">
+                                    <div className="micro-label text-gray-400">{scoreLabel(selectedSpatialSort)}</div>
+                                    <div className="mt-1 text-sm font-bold text-gray-900">{score}/100</div>
+                                  </div>
+                                </div>
+                                <p className="mt-2 text-[11px] text-gray-700 line-clamp-2">{cell.summary}</p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="space-y-3">
                       {spatialData.cells.map((cell) => {
                         const activeScore = selectedSpatialSort === 'coverage_gap_score'
@@ -681,7 +855,15 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                             : cell.opportunityScore;
 
                         return (
-                          <div key={cell.cellId} className="rounded-[28px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+                          <div
+                            key={cell.cellId}
+                            onClick={() => setFocusedCellId(cell.cellId)}
+                            className={`rounded-[28px] border bg-white p-4 shadow-sm space-y-3 cursor-pointer transition-colors ${
+                              cell.cellId === focusedSpatialCell?.cellId
+                                ? 'border-navy/30 ring-1 ring-navy/15'
+                                : 'border-gray-100'
+                            }`}
+                          >
                             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                               <div>
                                 <div className="inline-flex items-center gap-2 rounded-full bg-navy-wash px-3 py-1 text-[10px] font-bold uppercase tracking-[0.14em] text-navy">

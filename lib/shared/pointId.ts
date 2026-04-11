@@ -74,6 +74,49 @@ export function encodeGeohash(latitude: number, longitude: number, precision = 6
   return geohash;
 }
 
+export interface GeohashBounds {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+export function decodeGeohashBounds(geohash: string): GeohashBounds {
+  const normalized = geohash.trim().toLowerCase();
+  if (!normalized || [...normalized].some((char) => !GEOHASH_BASE32.includes(char))) {
+    throw new Error("Invalid geohash");
+  }
+
+  let latMin = -90;
+  let latMax = 90;
+  let lonMin = -180;
+  let lonMax = 180;
+  let isEvenBit = true;
+
+  for (const char of normalized) {
+    const character = GEOHASH_BASE32.indexOf(char);
+    for (let mask = 16; mask > 0; mask >>= 1) {
+      if (isEvenBit) {
+        const midpoint = (lonMin + lonMax) / 2;
+        if (character & mask) lonMin = midpoint;
+        else lonMax = midpoint;
+      } else {
+        const midpoint = (latMin + latMax) / 2;
+        if (character & mask) latMin = midpoint;
+        else latMax = midpoint;
+      }
+      isEvenBit = !isEvenBit;
+    }
+  }
+
+  return {
+    south: latMin,
+    west: lonMin,
+    north: latMax,
+    east: lonMax,
+  };
+}
+
 export function generatePointId(
   category: SubmissionCategory,
   latitude: number,
