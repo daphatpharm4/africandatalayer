@@ -1,8 +1,16 @@
-import { randomUUID } from "node:crypto";
 import type { SubmissionCategory } from "../../shared/types.js";
 
 const GEOHASH_BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
 const GEOHASH_6_PATTERN = /^[0123456789bcdefghjkmnpqrstuvwxyz]{6}$/;
+
+function createShortUuid(): string {
+  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+  }
+
+  const randomPart = Math.random().toString(16).slice(2, 10);
+  return randomPart.padEnd(8, "0").slice(0, 8);
+}
 
 function sanitizeSegment(input: string, fallback: string): string {
   const normalized = input
@@ -123,7 +131,7 @@ export function generatePointId(
   longitude: number,
 ): string {
   const geohash6 = encodeGeohash(latitude, longitude, 6);
-  const shortUuid = randomUUID().replace(/-/g, "").slice(0, 8);
+  const shortUuid = createShortUuid();
   return `${sanitizeSegment(category, "point")}-${geohash6}-${shortUuid}`;
 }
 
