@@ -259,12 +259,12 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
 
       </div>
 
-      <div className="fixed bottom-[calc(var(--bottom-nav-height)+var(--safe-bottom)+0.75rem)] left-0 right-0 z-40 mx-auto flex w-full max-w-md flex-col gap-2 px-4 sm:flex-row">
+      <div className="fixed bottom-[calc(var(--bottom-nav-height)+var(--safe-bottom)+0.75rem)] left-0 right-0 z-40 mx-auto flex w-full max-w-md flex-col gap-3 px-4">
         <button
           onClick={isAuthenticated ? onEnrich : onAuth}
-          className="btn-primary flex w-full flex-1 items-center justify-center gap-2 rounded-2xl shadow-lg"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-navy px-4 py-4 text-base font-semibold text-white shadow-lg active:scale-95 transition-all"
         >
-          <ShieldCheck size={18} />
+          <ShieldCheck size={20} />
           <span>
             {isAuthenticated
               ? gaps.length === 0
@@ -275,9 +275,9 @@ const Details: React.FC<Props> = ({ point, onBack, onEnrich, onAddNew, isAuthent
         </button>
         <button
           onClick={isAuthenticated ? onAddNew : onAuth}
-          className="btn-cta flex w-full flex-1 items-center justify-center gap-2 rounded-2xl shadow-lg"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-terra px-4 py-4 text-base font-semibold text-white shadow-lg active:scale-95 transition-all"
         >
-          <PlusCircle size={18} />
+          <PlusCircle size={20} />
           <span>{t('Add a new point', 'Ajouter un nouveau point')}</span>
         </button>
       </div>
