@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Award,
   BadgeCheck,
+  BookOpen,
   Calendar,
   Gift,
   MapPin,
@@ -33,12 +34,13 @@ import ScreenHeader from '../shared/ScreenHeader';
 interface Props {
   onBack: () => void;
   onSettings: () => void;
+  onOpenDocs: () => void;
   onRedeem: () => void;
   onSubmissionQueue: () => void;
   language: 'en' | 'fr';
 }
 
-const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQueue, language }) => {
+const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, onSubmissionQueue, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const historyPreviewLimit = 5;
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -400,15 +402,38 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onRedeem, onSubmissionQu
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onSubmissionQueue}
-          className="w-full rounded-2xl border border-navy-border bg-white p-4 text-left shadow-sm"
-        >
-          <div className="text-sm font-bold text-navy">
-            {t('Pending Uploads', 'Envois en attente')}
-          </div>
-        </button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={onSubmissionQueue}
+            className="w-full rounded-2xl border border-navy-border bg-white p-4 text-left shadow-sm"
+          >
+            <div className="text-sm font-bold text-navy">
+              {t('Pending Uploads', 'Envois en attente')}
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={onOpenDocs}
+            data-testid="profile-open-help-center"
+            aria-label={t('Open help center', "Ouvrir le centre d'aide")}
+            className="w-full rounded-2xl border border-gold/40 bg-gold-wash p-4 text-left shadow-sm transition-colors hover:bg-gold/20"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-navy shadow-sm">
+                <BookOpen size={18} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-bold text-navy">
+                  {t('Help Center', "Centre d'aide")}
+                </div>
+                <div className="text-xs text-gray-600">
+                  {t('Guides for your current role and workflow.', 'Guides pour votre rôle et votre workflow.')}
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
 
         <div className="bg-navy rounded-2xl p-6 text-white shadow-xl flex items-center justify-between relative overflow-hidden">
           <div className="relative z-10 space-y-1">

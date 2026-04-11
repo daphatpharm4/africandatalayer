@@ -19,6 +19,7 @@ import Navigation from './components/Navigation';
 import ErrorBoundary from './components/ErrorBoundary';
 import SyncStatusBar from './components/SyncStatusBar';
 import HelpCenter from './components/docs/HelpCenter';
+import { docsPathForAudience } from './lib/docs/helpCenter';
 
 const Details = lazy(() => import('./components/Screens/Details'));
 const Auth = lazy(() => import('./components/Screens/Auth'));
@@ -80,6 +81,7 @@ const App: React.FC = () => {
 
   const isClient = userRole === 'client';
   const isDocsMode = pathname.startsWith('/docs');
+  const docsAudience = isAdmin ? 'admin' : isClient ? 'client' : 'agent';
 
   const navigatePath = (path: string) => {
     if (typeof window === 'undefined') {
@@ -364,6 +366,7 @@ const App: React.FC = () => {
             language={language}
             onBack={goBack}
             onSettings={() => navigateTo(Screen.SETTINGS)}
+            onOpenDocs={() => navigatePath(docsPathForAudience(docsAudience))}
             onRedeem={() => navigateTo(Screen.REWARDS)}
             onSubmissionQueue={() => navigateTo(Screen.SUBMISSION_QUEUE)}
           />

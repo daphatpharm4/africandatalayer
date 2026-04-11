@@ -28,7 +28,7 @@ export default defineConfig({
   projects: [
     {
       name: "agent-mobile",
-      testMatch: ["e2e/smoke/agent.smoke.spec.ts", "e2e/docs/agent-roadmap.spec.ts"],
+      testMatch: ["e2e/smoke/agent.smoke.spec.ts", "e2e/smoke/profile-help-entry.smoke.spec.ts", "e2e/docs/agent-roadmap.spec.ts"],
       use: {
         ...devices["Pixel 5"],
         locale: "en-US",
@@ -39,7 +39,7 @@ export default defineConfig({
     },
     {
       name: "admin-desktop",
-      testMatch: ["e2e/smoke/admin.smoke.spec.ts", "e2e/docs/admin-roadmap.spec.ts"],
+      testMatch: ["e2e/smoke/admin.smoke.spec.ts", "e2e/smoke/profile-help-entry.smoke.spec.ts", "e2e/docs/admin-roadmap.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         locale: "en-US",
@@ -48,7 +48,7 @@ export default defineConfig({
     },
     {
       name: "client-desktop",
-      testMatch: ["e2e/smoke/client.smoke.spec.ts", "e2e/smoke/help-center.smoke.spec.ts", "e2e/docs/client-roadmap.spec.ts"],
+      testMatch: ["e2e/smoke/client.smoke.spec.ts", "e2e/smoke/help-center.smoke.spec.ts", "e2e/smoke/profile-help-entry.smoke.spec.ts", "e2e/docs/client-roadmap.spec.ts"],
       use: {
         ...devices["Desktop Chrome"],
         locale: "en-US",
