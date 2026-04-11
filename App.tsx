@@ -30,6 +30,7 @@ const RewardsCatalog = lazy(() => import('./components/Screens/RewardsCatalog'))
 const AdminQueue = lazy(() => import('./components/Screens/AdminQueue'));
 const AgentPerformance = lazy(() => import('./components/Screens/AgentPerformance'));
 const DeltaDashboard = lazy(() => import('./components/Screens/DeltaDashboard'));
+const InvestorDashboard = lazy(() => import('./components/Screens/InvestorDashboard'));
 const SubmissionQueue = lazy(() => import('./components/Screens/SubmissionQueue'));
 
 type WindowWithIdleCallback = Window & {
@@ -348,6 +349,7 @@ const App: React.FC = () => {
             onAdmin={isAdmin ? () => navigateTo(Screen.ADMIN) : undefined}
             onAgentPerformance={isAdmin ? () => navigateTo(Screen.AGENT_PERFORMANCE) : undefined}
             onDeltaDashboard={isAdmin || isClient ? () => navigateTo(Screen.DELTA_DASHBOARD) : undefined}
+            onInvestorDashboard={isAdmin || isClient ? () => navigateTo(Screen.INVESTOR_DASHBOARD) : undefined}
             language={language}
           />
         );
@@ -381,6 +383,8 @@ const App: React.FC = () => {
         return <AgentPerformance language={language} onBack={goBack} />;
       case Screen.DELTA_DASHBOARD:
         return <DeltaDashboard language={language} onBack={goBack} />;
+      case Screen.INVESTOR_DASHBOARD:
+        return <InvestorDashboard language={language} onBack={goBack} />;
       default:
         return <Splash onStart={(scr) => navigateTo(scr)} language={language} />;
     }
@@ -392,7 +396,8 @@ const App: React.FC = () => {
     currentScreen === Screen.ADMIN
     || currentScreen === Screen.AGENT_PERFORMANCE
     || (currentScreen === Screen.ANALYTICS && isAdmin)
-    || (currentScreen === Screen.DELTA_DASHBOARD && (isAdmin || isClient));
+    || (currentScreen === Screen.DELTA_DASHBOARD && (isAdmin || isClient))
+    || currentScreen === Screen.INVESTOR_DASHBOARD;
 
   return (
     <ErrorBoundary>

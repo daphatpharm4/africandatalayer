@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   BarChart3,
+  LineChart as LineChartIcon,
   Medal,
   Share2,
   ShieldCheck,
@@ -32,6 +33,7 @@ interface Props {
   onAdmin?: () => void;
   onAgentPerformance?: () => void;
   onDeltaDashboard?: () => void;
+  onInvestorDashboard?: () => void;
   isAdmin?: boolean;
   language: 'en' | 'fr';
 }
@@ -50,7 +52,7 @@ const normalizeMapScope = (scope: unknown, isAdminMode: boolean): MapScope => {
   return 'bonamoussadi';
 };
 
-const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDeltaDashboard, isAdmin, language }) => {
+const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDeltaDashboard, onInvestorDashboard, isAdmin, language }) => {
   const adminMode = Boolean(isAdmin);
   const [adminName, setAdminName] = useState<string | null>(null);
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
@@ -307,6 +309,21 @@ const Analytics: React.FC<Props> = ({ onBack, onAdmin, onAgentPerformance, onDel
                   <div className="text-left">
                     <span className="text-xs font-bold block">{t('Agent Performance', 'Performance agents')}</span>
                     <span className="text-[11px] text-gray-500">{t('Quality, fraud & assignment pace', 'Qualite, fraude et rythme des affectations')}</span>
+                  </div>
+                </div>
+                <ArrowLeft size={16} className="rotate-180" />
+              </button>
+            )}
+            {onInvestorDashboard && (
+              <button
+                onClick={onInvestorDashboard}
+                className="w-full flex items-center justify-between bg-gradient-to-r from-navy to-navy-mid text-white p-4 rounded-2xl shadow-sm hover:opacity-90 transition-opacity"
+              >
+                <div className="flex items-center space-x-3">
+                  <LineChartIcon size={18} />
+                  <div className="text-left">
+                    <span className="text-xs font-bold block">{t('Investor Dashboard', 'Tableau investisseur')}</span>
+                    <span className="text-[11px] text-white/70">{t('Kenya pitch mode — summit-ready metrics', 'Mode pitch Kenya — métriques prêtes')}</span>
                   </div>
                 </div>
                 <ArrowLeft size={16} className="rotate-180" />

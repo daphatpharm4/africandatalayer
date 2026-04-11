@@ -458,3 +458,32 @@
     opacity: 0;
   }
 }
+
+/* Print styles for Investor Dashboard */
+@media print {
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .app-shell {
+    max-width: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  .app-shell > main {
+    overflow: visible !important;
+  }
+  .screen-shell {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .screen-header {
+    position: static !important;
+  }
+  nav,
+  .print\\:hidden {
+    display: none !important;
+  }
+}
