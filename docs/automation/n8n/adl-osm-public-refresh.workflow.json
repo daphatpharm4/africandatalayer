@@ -39,9 +39,15 @@
       "parameters": {
         "method": "GET",
         "url": "https://overpass-api.de/api/interpreter",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "{\n  \"data\": \"[out:json];(node[\\\"amenity\\\"=\\\"fuel\\\"](4.0755,9.7185,4.0999,9.7602);node[\\\"amenity\\\"=\\\"pharmacy\\\"](4.0755,9.7185,4.0999,9.7602););out body;\"\n}"
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "data",
+              "value": "[out:json][timeout:30];(node[\"amenity\"=\"fuel\"](4.0755,9.7185,4.0999,9.7602);node[\"amenity\"=\"pharmacy\"](4.0755,9.7185,4.0999,9.7602);node[\"amenity\"=\"money_transfer\"](4.0755,9.7185,4.0999,9.7602);node[\"amenity\"=\"mobile_money\"](4.0755,9.7185,4.0999,9.7602);node[\"shop\"=\"mobile_phone\"](4.0755,9.7185,4.0999,9.7602);node[\"shop\"=\"alcohol\"](4.0755,9.7185,4.0999,9.7602);node[\"amenity\"=\"bar\"](4.0755,9.7185,4.0999,9.7602);node[\"amenity\"=\"pub\"](4.0755,9.7185,4.0999,9.7602);node[\"advertising\"=\"billboard\"](4.0755,9.7185,4.0999,9.7602);node[\"advertising\"=\"board\"](4.0755,9.7185,4.0999,9.7602););out body;"
+            }
+          ]
+        }
       }
     },
     {
@@ -52,7 +58,7 @@
       "position": [1020, 260],
       "parameters": {
         "language": "javaScript",
-        "jsCode": "const run = $items('Set Run Metadata', 0, 0)[0].json;\nconst elements = Array.isArray($json.elements) ? $json.elements : [];\nconst leads = elements.map((item) => ({\n  sourceRecordId: `osm:${item.id}`,\n  sourceUrl: `https://www.openstreetmap.org/node/${item.id}`,\n  category: item.tags?.amenity === 'fuel' ? 'fuel_station' : item.tags?.amenity === 'pharmacy' ? 'pharmacy' : 'billboard',\n  location: {\n    latitude: Number(item.lat),\n    longitude: Number(item.lon),\n  },\n  normalizedDetails: {\n    name: item.tags?.name ?? null,\n    brand: item.tags?.brand ?? null,\n  },\n  rawPayload: item,\n  evidenceUrls: [`https://www.openstreetmap.org/node/${item.id}`],\n  freshnessAt: new Date().toISOString(),\n  priority: item.tags?.amenity === 'fuel' ? 'high' : 'medium',\n}));\nreturn [{ json: { ...run, completedAt: new Date().toISOString(), leads } }];"
+        "jsCode": "function mapCategory(tags) {\n  if (!tags) return null;\n  const { amenity, shop, advertising } = tags;\n  if (amenity === 'fuel') return 'fuel_station';\n  if (amenity === 'pharmacy') return 'pharmacy';\n  if (amenity === 'money_transfer' || amenity === 'mobile_money') return 'mobile_money';\n  if (shop === 'mobile_phone') return 'mobile_money';\n  if (shop === 'alcohol' || amenity === 'bar' || amenity === 'pub') return 'alcohol_outlet';\n  if (advertising === 'billboard' || advertising === 'board') return 'billboard';\n  return null;\n}\n\nconst elements = Array.isArray($json.elements) ? $json.elements : [];\nconst leads = elements\n  .filter(item => item.lat != null && item.lon != null && item.id != null)\n  .map(item => {\n    const category = mapCategory(item.tags);\n    if (!category) return null;\n    const amenity = item.tags?.amenity;\n    return {\n      sourceRecordId: `osm:${item.id}`,\n      sourceUrl: `https://www.openstreetmap.org/node/${item.id}`,\n      category,\n      location: {\n        latitude: Number(item.lat),\n        longitude: Number(item.lon),\n      },\n      normalizedDetails: {\n        name: item.tags?.name ?? null,\n        brand: item.tags?.brand ?? null,\n        operator: item.tags?.operator ?? null,\n      },\n      rawPayload: item,\n      evidenceUrls: [`https://www.openstreetmap.org/node/${item.id}`],\n      freshnessAt: new Date().toISOString(),\n      priority: (amenity === 'fuel' || amenity === 'pharmacy') ? 'high' : 'medium',\n    };\n  })\n  .filter(Boolean);\n\nif (leads.length === 0) {\n  throw new Error('Overpass returned 0 mappable nodes — check bbox and query tags');\n}\n\nconst run = $('Set Run Metadata').first().json;\nreturn [{ json: { ...run, completedAt: new Date().toISOString(), leads } }];"
       }
     },
     {
@@ -130,7 +136,7 @@
     }
   },
   "settings": {},
-  "versionId": "adl-osm-public-refresh-v1",
+  "versionId": "adl-osm-public-refresh-v2",
   "meta": null,
   "pinData": {}
 }
