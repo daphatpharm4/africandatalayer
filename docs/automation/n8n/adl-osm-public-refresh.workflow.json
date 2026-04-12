@@ -36,6 +36,9 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [760, 260],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
       "parameters": {
         "method": "GET",
         "url": "https://overpass-api.de/api/interpreter",
@@ -67,6 +70,9 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [1280, 260],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
       "parameters": {
         "method": "POST",
         "url": "={{$env.ADL_BASE_URL + '/api/intake/leads'}}",
@@ -136,7 +142,7 @@
     }
   },
   "settings": {},
-  "versionId": "adl-osm-public-refresh-v2",
+  "versionId": "adl-osm-public-refresh-v3",
   "meta": null,
   "pinData": {}
 }

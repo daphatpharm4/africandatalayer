@@ -32,6 +32,22 @@ function normalizeName(input: unknown): string {
     .trim();
 }
 
+function normalizeBrand(input: unknown): string {
+  if (typeof input !== "string") return "";
+  return input
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .trim();
+}
+
+function brandMatchScore(sourceBrand: string, candidateBrand: string): number {
+  // Unknown on either side → neutral (neither reward nor penalty)
+  if (!sourceBrand || !candidateBrand) return 0.5;
+  return sourceBrand === candidateBrand ? 1.0 : 0.0;
+}
+
 function detailsName(details: SubmissionDetails): string {
   return (
     normalizeName(details.siteName) ||
@@ -99,14 +115,19 @@ export function buildDedupCandidates(
 ): DedupCheckResult {
   const radiusMeters = dedupRadiusMeters(category);
   const sourceName = detailsName(incomingDetails);
+  const sourceBrand = normalizeBrand(incomingDetails.brand ?? incomingDetails.operator);
   const candidates: DedupCandidate[] = points
     .filter((point) => point.category === category)
     .map((point) => {
       const distanceMeters = haversineKm(location, point.location) * 1000;
       const candidateName = pointName(point);
+      const candidateBrand = normalizeBrand(point.details?.brand ?? point.details?.operator);
       const nameScore = similarityScore(sourceName, candidateName);
       const distanceScore = Math.max(0, 1 - distanceMeters / radiusMeters);
-      const matchScore = Math.max(0, Math.min(1, nameScore * 0.65 + distanceScore * 0.35));
+      const bScore = brandMatchScore(sourceBrand, candidateBrand);
+      // Weights: name 55% · distance 35% · brand 10%
+      // Brand is a tiebreaker: matching brands reward, explicit conflicts penalise.
+      const matchScore = Math.max(0, Math.min(1, nameScore * 0.55 + distanceScore * 0.35 + bScore * 0.10));
       return {
         pointId: point.pointId,
         category: point.category,

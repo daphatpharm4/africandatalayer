@@ -22,7 +22,7 @@
       "position": [520, 260],
       "parameters": {
         "language": "javaScript",
-        "jsCode": "const rows = Array.isArray($json.rows) ? $json.rows : [];\nconst sourceSystem = typeof $json.sourceSystem === 'string' ? $json.sourceSystem : 'partner_file';\nconst workflowName = 'adl-file-intake';\nconst runKey = `${sourceSystem}-${Date.now()}`;\nconst leads = rows.map((row, index) => ({\n  sourceRecordId: String(row.sourceRecordId ?? row.external_id ?? `${sourceSystem}-${index}`),\n  sourceUrl: row.sourceUrl ?? null,\n  category: String(row.category ?? row.vertical ?? ''),\n  location: {\n    latitude: Number(row.latitude ?? row.lat),\n    longitude: Number(row.longitude ?? row.lon),\n  },\n  normalizedDetails: row.normalizedDetails ?? {\n    name: row.name ?? null,\n    brand: row.brand ?? null,\n  },\n  rawPayload: row,\n  evidenceUrls: Array.isArray(row.evidenceUrls) ? row.evidenceUrls : [],\n  freshnessAt: row.freshnessAt ?? new Date().toISOString(),\n  priority: row.priority ?? 'medium',\n}));\nreturn [{ json: { runKey, workflowName, sourceSystem, triggerType: 'file', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), leads } }];"
+        "jsCode": "const VALID_CATEGORIES = new Set([\n  'pharmacy', 'fuel_station', 'mobile_money',\n  'alcohol_outlet', 'billboard', 'transport_road', 'census_proxy',\n]);\nconst CATEGORY_ALIASES = {\n  fuel: 'fuel_station', petrol: 'fuel_station', gas: 'fuel_station',\n  pharmacy: 'pharmacy', chemist: 'pharmacy', drugstore: 'pharmacy',\n  mobile_money: 'mobile_money', momo: 'mobile_money', mobile_payment: 'mobile_money',\n  alcohol: 'alcohol_outlet', bar: 'alcohol_outlet', pub: 'alcohol_outlet',\n  billboard: 'billboard', advertising: 'billboard',\n  road: 'transport_road', transport: 'transport_road',\n  census: 'census_proxy', household: 'census_proxy',\n};\nfunction normalizeCategory(raw) {\n  if (!raw) return null;\n  const lower = String(raw).trim().toLowerCase().replace(/[^a-z_]/g, '_');\n  if (VALID_CATEGORIES.has(lower)) return lower;\n  const alias = CATEGORY_ALIASES[lower];\n  return alias ?? null;\n}\n\nconst rows = Array.isArray($json.rows) ? $json.rows : [];\nconst sourceSystem = typeof $json.sourceSystem === 'string' ? $json.sourceSystem : 'partner_file';\nconst workflowName = 'adl-file-intake';\nconst runKey = `${sourceSystem}-${Date.now()}`;\n\nconst leads = [];\nconst skipped = [];\nrows.forEach((row, index) => {\n  const category = normalizeCategory(row.category ?? row.vertical);\n  if (!category) {\n    skipped.push({ index, raw: row.category ?? row.vertical ?? null });\n    return;\n  }\n  leads.push({\n    sourceRecordId: String(row.sourceRecordId ?? row.external_id ?? `${sourceSystem}-${index}`),\n    sourceUrl: row.sourceUrl ?? null,\n    category,\n    location: {\n      latitude: Number(row.latitude ?? row.lat),\n      longitude: Number(row.longitude ?? row.lon),\n    },\n    normalizedDetails: row.normalizedDetails ?? {\n      name: row.name ?? null,\n      brand: row.brand ?? null,\n      operator: row.operator ?? null,\n    },\n    rawPayload: row,\n    evidenceUrls: Array.isArray(row.evidenceUrls) ? row.evidenceUrls : [],\n    freshnessAt: row.freshnessAt ?? new Date().toISOString(),\n    priority: row.priority ?? 'medium',\n  });\n});\n\nif (skipped.length > 0) {\n  console.warn(`[adl-file-intake] Skipped ${skipped.length}/${rows.length} rows with unmapped categories:`, JSON.stringify(skipped.slice(0, 10)));\n}\nif (leads.length === 0) {\n  throw new Error(`All ${rows.length} rows had unmapped categories — check category field values`);\n}\n\nreturn [{ json: { runKey, workflowName, sourceSystem, triggerType: 'file', startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), leads, _skippedCount: skipped.length } }];"
       }
     },
     {
@@ -31,6 +31,9 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [820, 260],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000,
       "parameters": {
         "method": "POST",
         "url": "={{$env.ADL_BASE_URL + '/api/intake/leads'}}",
@@ -100,7 +103,7 @@
     }
   },
   "settings": {},
-  "versionId": "adl-file-intake-v1",
+  "versionId": "adl-file-intake-v2",
   "meta": null,
   "pinData": {}
 }
