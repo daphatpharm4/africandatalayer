@@ -70,6 +70,7 @@ type AutomationLeadFilters = {
   sourceSystem?: string | null;
   priority?: AutomationLeadPriority | null;
   limit?: number;
+  offset?: number;
 };
 
 type ClassifiedAutomationLead = {
@@ -532,7 +533,9 @@ export async function listAutomationLeads(filters: AutomationLeadFilters = {}): 
   }
 
   const limit = Math.min(Math.max(filters.limit ?? 100, 1), 500);
+  const offset = Math.max(0, Math.floor(filters.offset ?? 0));
   values.push(limit);
+  values.push(offset);
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   const result = await query<AutomationLeadDbRow>(
     `SELECT *
@@ -541,7 +544,7 @@ export async function listAutomationLeads(filters: AutomationLeadFilters = {}): 
      ORDER BY
        CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
        updated_at DESC
-     LIMIT $${idx}`,
+     LIMIT $${idx} OFFSET $${idx + 1}`,
     values,
   );
   return result.rows.map(toLeadCandidate);

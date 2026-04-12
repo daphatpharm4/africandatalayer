@@ -42,6 +42,8 @@ export async function GET(request: Request): Promise<Response> {
   const priority = parsePriority(url.searchParams.get("priority"));
   const rawLimit = Number(url.searchParams.get("limit") ?? "100");
   const limit = Number.isFinite(rawLimit) ? rawLimit : 100;
+  const rawOffset = Number(url.searchParams.get("offset") ?? "0");
+  const offset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
   if (url.searchParams.get("status") && !status) {
     return errorResponse("Invalid status filter", 400);
@@ -61,6 +63,7 @@ export async function GET(request: Request): Promise<Response> {
       sourceSystem,
       priority,
       limit,
+      offset,
     });
     return jsonResponse(leads, { status: 200 });
   } catch (error) {

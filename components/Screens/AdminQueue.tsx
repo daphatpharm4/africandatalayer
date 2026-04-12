@@ -68,6 +68,7 @@ const AUTOMATION_LEAD_STATUSES: AutomationLeadStatus[] = [
 ];
 const AUTOMATION_PRIORITIES: AutomationLeadPriority[] = ['high', 'medium', 'low'];
 const REVIEW_PAGE_LIMIT = 24;
+const AUTOMATION_LEADS_PAGE_SIZE = 50;
 const focusRingClass =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy focus-visible:ring-offset-2 focus-visible:ring-offset-page';
 
@@ -417,6 +418,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [automationStatusFilter, setAutomationStatusFilter] = useState<AutomationStatusFilter>('ready_for_assignment');
   const [automationPriorityFilter, setAutomationPriorityFilter] = useState<AutomationPriorityFilter>('');
   const [automationCategoryFilter, setAutomationCategoryFilter] = useState<SubmissionCategory | ''>('');
+  const [automationSourceFilter, setAutomationSourceFilter] = useState('');
+  const [automationLeadsOffset, setAutomationLeadsOffset] = useState(0);
+  const [hasMoreAutomationLeads, setHasMoreAutomationLeads] = useState(false);
+  const [expandedLeadId, setExpandedLeadId] = useState<string | null>(null);
   const [selectedAutomationLeadIds, setSelectedAutomationLeadIds] = useState<Set<string>>(new Set());
   const [isApplyingAutomationAction, setIsApplyingAutomationAction] = useState(false);
   const [plannerAgent, setPlannerAgent] = useState('');
@@ -620,10 +625,18 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         if (automationStatusFilter) params.set('status', automationStatusFilter);
         if (automationPriorityFilter) params.set('priority', automationPriorityFilter);
         if (automationCategoryFilter) params.set('category', automationCategoryFilter);
-        params.set('limit', '120');
+        if (automationSourceFilter.trim()) params.set('sourceSystem', automationSourceFilter.trim());
+        params.set('limit', String(AUTOMATION_LEADS_PAGE_SIZE));
+        if (automationLeadsOffset > 0) params.set('offset', String(automationLeadsOffset));
         const data = await apiJson<LeadCandidate[]>(`/api/intake/leads?${params.toString()}`);
         if (cancelled) return;
-        setAutomationLeads(Array.isArray(data) ? data : []);
+        const newLeads = Array.isArray(data) ? data : [];
+        if (automationLeadsOffset === 0) {
+          setAutomationLeads(newLeads);
+        } else {
+          setAutomationLeads((prev) => [...prev, ...newLeads]);
+        }
+        setHasMoreAutomationLeads(newLeads.length === AUTOMATION_LEADS_PAGE_SIZE);
       } catch (error) {
         if (cancelled) return;
         const message =
@@ -631,7 +644,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
             ? error.message
             : t('Unable to load automation leads.', 'Impossible de charger les leads automatisés.');
         setAutomationLeadError(message);
-        setAutomationLeads([]);
+        if (automationLeadsOffset === 0) setAutomationLeads([]);
+        setHasMoreAutomationLeads(false);
       } finally {
         if (!cancelled) setIsLoadingAutomationLeads(false);
       }
@@ -641,7 +655,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     return () => {
       cancelled = true;
     };
-  }, [activeMode, automationStatusFilter, automationPriorityFilter, automationCategoryFilter]);
+  }, [activeMode, automationStatusFilter, automationPriorityFilter, automationCategoryFilter, automationSourceFilter, automationLeadsOffset]);
 
   useEffect(() => {
     setSelectedForBulk((prev) => new Set([...prev].filter((id) => reviewData.groups.some((group) => group.pointId === id))));
@@ -1038,6 +1052,27 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         error instanceof Error
           ? error.message
           : t('Unable to reject automation leads.', 'Impossible de rejeter les leads automatisés.');
+      setAutomationLeadError(message);
+    } finally {
+      setIsApplyingAutomationAction(false);
+    }
+  };
+
+  const handlePromoteToImportCandidate = async (lead: LeadCandidate) => {
+    if (isApplyingAutomationAction) return;
+    try {
+      setIsApplyingAutomationAction(true);
+      setAutomationLeadError('');
+      const updated = await apiJson<LeadCandidate>(`/api/intake/leads/${encodeURIComponent(lead.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'promote_to_import_candidate' }),
+      });
+      setAutomationLeads((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setAutomationLeadMessage(t('Lead marked as import candidate.', "Lead marqué comme candidat à l'import."));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : t('Unable to promote lead.', 'Impossible de promouvoir le lead.');
       setAutomationLeadError(message);
     } finally {
       setIsApplyingAutomationAction(false);
@@ -2052,10 +2087,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2">
               <select
                 value={automationStatusFilter}
-                onChange={(event) => setAutomationStatusFilter(event.target.value as AutomationStatusFilter)}
+                onChange={(event) => { setAutomationLeadsOffset(0); setAutomationStatusFilter(event.target.value as AutomationStatusFilter); }}
                 className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
               >
                 <option value="">{t('All statuses', 'Tous les statuts')}</option>
@@ -2067,7 +2102,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </select>
               <select
                 value={automationCategoryFilter}
-                onChange={(event) => setAutomationCategoryFilter((event.target.value as SubmissionCategory) || '')}
+                onChange={(event) => { setAutomationLeadsOffset(0); setAutomationCategoryFilter((event.target.value as SubmissionCategory) || ''); }}
                 className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
               >
                 <option value="">{t('All verticals', 'Toutes les verticales')}</option>
@@ -2079,7 +2114,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </select>
               <select
                 value={automationPriorityFilter}
-                onChange={(event) => setAutomationPriorityFilter((event.target.value as AutomationPriorityFilter) || '')}
+                onChange={(event) => { setAutomationLeadsOffset(0); setAutomationPriorityFilter((event.target.value as AutomationPriorityFilter) || ''); }}
                 className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
               >
                 <option value="">{t('All priorities', 'Toutes les priorités')}</option>
@@ -2089,6 +2124,13 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   </option>
                 ))}
               </select>
+              <input
+                type="text"
+                value={automationSourceFilter}
+                onChange={(event) => { setAutomationLeadsOffset(0); setAutomationSourceFilter(event.target.value); }}
+                placeholder={t('Source system', 'Système source')}
+                className={`h-10 rounded-xl border border-gray-100 px-3 text-xs bg-gray-50 ${focusRingClass}`}
+              />
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -2112,69 +2154,161 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               >
                 {t('Reject selection', 'Rejeter la sélection')}
               </button>
+              {automationLeads.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const allIds = new Set(automationLeads.map((l) => l.id));
+                    setSelectedAutomationLeadIds((prev) => {
+                      const allSelected = automationLeads.every((l) => prev.has(l.id));
+                      return allSelected ? new Set() : allIds;
+                    });
+                  }}
+                  className={`h-10 rounded-xl px-4 micro-label border border-gray-200 bg-white text-gray-700 ${focusRingClass}`}
+                >
+                  {automationLeads.every((l) => selectedAutomationLeadIds.has(l.id))
+                    ? t('Deselect all', 'Tout désélectionner')
+                    : t('Select all visible', 'Tout sélectionner')}
+                </button>
+              )}
             </div>
 
-            {isLoadingAutomationLeads ? (
+            {isLoadingAutomationLeads && automationLeadsOffset === 0 ? (
               <div className="text-xs text-gray-500">{t('Loading automation leads...', 'Chargement des leads automatisés...')}</div>
             ) : automationLeads.length === 0 ? (
               <div className="rounded-xl border border-gray-100 bg-page p-3 text-xs text-gray-500">
                 {t('No automation leads found.', 'Aucun lead automatisé trouvé.')}
               </div>
             ) : (
-              <div className="space-y-2 max-h-[620px] overflow-y-auto pr-1">
+              <div className="space-y-2">
                 {automationLeads.map((lead) => {
-                  const evidenceUrl = getAutomationEvidenceUrl(lead);
+                  const isExpanded = expandedLeadId === lead.id;
+                  const details = lead.normalizedDetails as SubmissionDetails;
+                  const detailEntries = Object.entries(details).filter(([, v]) => v != null && v !== '');
                   return (
-                    <div key={lead.id} className="rounded-2xl border border-gray-100 p-3 bg-page">
-                      <div className="flex items-start gap-3">
-                        <input
-                          type="checkbox"
-                          checked={selectedAutomationLeadIds.has(lead.id)}
-                          onChange={() => toggleAutomationLead(lead.id)}
-                          className={`mt-1 h-4 w-4 rounded border-gray-300 text-navy ${focusRingClass}`}
-                          aria-label={t('Select automation lead', 'Sélectionner le lead automatisé')}
-                        />
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <div className="text-xs font-bold text-gray-900">{getAutomationLeadName(lead, language)}</div>
-                              <div className="micro-label text-gray-400">
-                                {getCategoryLabel(lead.category, language)} • {lead.sourceSystem}
+                    <div key={lead.id} className="rounded-2xl border border-gray-100 bg-page overflow-hidden">
+                      <div className="p-3">
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedAutomationLeadIds.has(lead.id)}
+                            onChange={() => toggleAutomationLead(lead.id)}
+                            className={`mt-1 h-4 w-4 rounded border-gray-300 text-navy ${focusRingClass}`}
+                            aria-label={t('Select automation lead', 'Sélectionner le lead automatisé')}
+                          />
+                          <div className="flex-1 space-y-2 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-gray-900 truncate">{getAutomationLeadName(lead, language)}</div>
+                                <div className="micro-label text-gray-400">
+                                  {getCategoryLabel(lead.category, language)} • {lead.sourceSystem}
+                                </div>
                               </div>
+                              <span className={`shrink-0 rounded-lg border px-2 py-1 micro-label ${automationStatusClass(lead.status)}`}>
+                                {automationStatusLabel(lead.status, language)}
+                              </span>
                             </div>
-                            <span className={`rounded-lg border px-2 py-1 micro-label ${automationStatusClass(lead.status)}`}>
-                              {automationStatusLabel(lead.status, language)}
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-gray-600">
-                            <div>{t('Zone', 'Zone')}: {lead.zoneId ?? unavailableLabel}</div>
-                            <div>{t('Priority', 'Priorité')}: {automationPriorityLabel(lead.priority, language)}</div>
-                            <div>
-                              {t('Match', 'Correspondance')}:{' '}
-                              {lead.matchPointId
-                                ? `${lead.matchPointId} (${typeof lead.matchConfidence === 'number' ? lead.matchConfidence.toFixed(2) : '--'})`
-                                : unavailableLabel}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-x-3 gap-y-1 text-[11px] text-gray-600">
+                              <div>{t('Zone', 'Zone')}: {lead.zoneId ?? unavailableLabel}</div>
+                              <div>{t('Priority', 'Priorité')}: {automationPriorityLabel(lead.priority, language)}</div>
+                              {lead.matchPointId && (
+                                <div className="col-span-2 md:col-span-1">
+                                  {t('Match', 'Correspond.')}:{' '}
+                                  <span className="font-mono">{lead.matchPointId.slice(0, 8)}…</span>
+                                  {' '}({typeof lead.matchConfidence === 'number' ? (lead.matchConfidence * 100).toFixed(0) : '--'}%)
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setExpandedLeadId(isExpanded ? null : lead.id)}
+                                className={`text-[11px] text-navy underline ${focusRingClass}`}
+                              >
+                                {isExpanded ? t('Hide details', 'Masquer les détails') : t('Show details', 'Voir les détails')}
+                              </button>
+                              {lead.status === 'matched_existing' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handlePromoteToImportCandidate(lead)}
+                                  disabled={isApplyingAutomationAction}
+                                  className={`text-[11px] text-forest underline ${focusRingClass}`}
+                                >
+                                  {t('Mark for import', 'Marquer pour import')}
+                                </button>
+                              )}
                             </div>
                           </div>
-                          <div className="text-[11px] text-gray-600">
-                            {t('Source record', 'Enregistrement source')}: {lead.sourceRecordId}
-                          </div>
-                          {evidenceUrl && (
-                            <a
-                              href={evidenceUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className={`inline-flex items-center gap-1 text-[11px] text-navy underline break-all ${focusRingClass}`}
-                            >
-                              <MapPin size={12} />
-                              {t('Evidence', 'Preuve')}: {evidenceUrl}
-                            </a>
-                          )}
                         </div>
                       </div>
+
+                      {isExpanded && (
+                        <div className="border-t border-gray-100 bg-gray-50 p-3 space-y-3 text-[11px] text-gray-700">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                            <div><span className="font-semibold">{t('Coords', 'Coords')}:</span> {lead.location.latitude.toFixed(5)}, {lead.location.longitude.toFixed(5)}</div>
+                            <div><span className="font-semibold">{t('Source ID', 'ID source')}:</span> {lead.sourceRecordId}</div>
+                            {lead.freshnessAt && (
+                              <div><span className="font-semibold">{t('Freshness', 'Fraîcheur')}:</span> {lead.freshnessAt.slice(0, 10)}</div>
+                            )}
+                            {lead.sourceUrl && (
+                              <div className="col-span-2">
+                                <span className="font-semibold">{t('Source URL', 'URL source')}:</span>{' '}
+                                <a href={lead.sourceUrl} target="_blank" rel="noreferrer" className={`text-navy underline break-all ${focusRingClass}`}>{lead.sourceUrl}</a>
+                              </div>
+                            )}
+                          </div>
+
+                          {lead.evidenceUrls.length > 0 && (
+                            <div>
+                              <div className="micro-label text-gray-500 mb-1">{t('Evidence URLs', 'URLs de preuves')} ({lead.evidenceUrls.length})</div>
+                              <div className="space-y-0.5">
+                                {lead.evidenceUrls.map((url, i) => (
+                                  <div key={i}>
+                                    <a href={url} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-navy underline break-all ${focusRingClass}`}>
+                                      <MapPin size={10} />
+                                      {url}
+                                    </a>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {detailEntries.length > 0 && (
+                            <div>
+                              <div className="micro-label text-gray-500 mb-1">{t('Normalized details', 'Détails normalisés')}</div>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                                {detailEntries.map(([k, v]) => (
+                                  <div key={k}><span className="font-semibold">{k}:</span> {String(v)}</div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {Object.keys(lead.rawPayload).length > 0 && (
+                            <div>
+                              <div className="micro-label text-gray-500 mb-1">{t('Raw payload', 'Données brutes')}</div>
+                              <pre className="bg-white border border-gray-100 rounded-lg p-2 text-[10px] text-gray-600 overflow-x-auto max-h-40 no-scrollbar">
+                                {JSON.stringify(lead.rawPayload, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
+
+                {(hasMoreAutomationLeads || isLoadingAutomationLeads) && (
+                  <button
+                    type="button"
+                    onClick={() => setAutomationLeadsOffset((prev) => prev + AUTOMATION_LEADS_PAGE_SIZE)}
+                    disabled={isLoadingAutomationLeads}
+                    className={`w-full h-10 rounded-xl border border-gray-200 bg-white text-xs text-gray-600 ${focusRingClass} ${isLoadingAutomationLeads ? 'opacity-50' : ''}`}
+                  >
+                    {isLoadingAutomationLeads ? t('Loading…', 'Chargement…') : t('Load more', 'Charger plus')}
+                  </button>
+                )}
               </div>
             )}
           </div>
