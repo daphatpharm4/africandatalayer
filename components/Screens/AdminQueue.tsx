@@ -248,12 +248,6 @@ function getAutomationLeadName(lead: LeadCandidate, language: 'en' | 'fr'): stri
   return direct || (language === 'fr' ? 'Lead automatisé' : 'Automated lead');
 }
 
-function getAutomationEvidenceUrl(lead: LeadCandidate): string | null {
-  if (Array.isArray(lead.evidenceUrls) && lead.evidenceUrls.length > 0) {
-    return lead.evidenceUrls[0] ?? null;
-  }
-  return lead.sourceUrl ?? null;
-}
 
 function getMatchState(fraudCheck: SubmissionFraudCheck | null): MatchState {
   const match = fraudCheck?.primaryPhoto?.submissionGpsMatch;
