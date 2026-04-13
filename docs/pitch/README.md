@@ -9,6 +9,7 @@ This folder contains a comprehensive multi-audience pitch package grounded in `d
 - `03-contributor-pitch-deck.md`: contributor recruitment, trust, and activation deck.
 - `04-general-public-pitch-deck.md`: public-awareness and transparency deck.
 - `05-community-partner-pitch-deck.md`: institutional partnership and execution deck.
+- `06-mobile-distribution-strategy.md`: mobile app store distribution strategy and Capacitor approach.
 
 ## Audience Mapping
 - Investors: `01-investor-pitch-deck.md`
@@ -16,6 +17,7 @@ This folder contains a comprehensive multi-audience pitch package grounded in `d
 - Contributors: `03-contributor-pitch-deck.md`
 - General public: `04-general-public-pitch-deck.md`
 - Community partners (universities/churches/local associations): `05-community-partner-pitch-deck.md`
+- Investors (mobile distribution): `06-mobile-distribution-strategy.md`
 
 ## Slide Format Standard
 Every slide in every deck contains these fields:
@@ -40,7 +42,7 @@ Every slide in every deck contains these fields:
 4. If a number changes, update `00-deck-source-matrix.md` first, then all affected deck slides.
 
 ## Quality Checklist
-- All seven files exist in `docs/pitch/`.
+- All eight files exist in `docs/pitch/`.
 - Each deck ends with an audience-specific CTA.
 - Each deck includes problem, solution, proof, and action/ask.
 - Each quantitative claim maps to a source tag.
