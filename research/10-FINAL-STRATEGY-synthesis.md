@@ -5,6 +5,8 @@
 **Date:** March 2026
 **Purpose:** Executive-ready synthesis of all 9 teammate deliverables into a unified, actionable strategy
 
+> Historical note (2026-04-14): this synthesis remains useful for market, pilot, and vertical strategy, but it predates the Capacitor rollout and the current native distribution docs. For current product/distribution state, use `README.md` and `docs/team/09-mobile-distribution.md`.
+
 ---
 
 ## April 2026 Extension
@@ -162,7 +164,7 @@ The percentages below represent the recommended source of initial data for the B
 
 **Equipment:** 4 Samsung A15 phones (CFA 75,000 each), 4 power banks, 4 SIM cards with data plans, cases, branded ID badges.
 
-**Infrastructure:** Vercel Pro ($20/mo), Neon PostgreSQL ($20/mo), Google Gemini API ($10/mo est.), domain renewal.
+**Infrastructure:** Vercel Pro ($20/mo), managed PostgreSQL ($20/mo class), Google Gemini API ($10/mo est.), domain renewal.
 
 ### 3.2 Team Roles and Headcount
 
@@ -421,7 +423,7 @@ The top 20% of collection effort that produces 80% of commercial value:
 ```
 CAPTURE --> VERIFY --> SCORE CONFIDENCE --> PUBLISH DELTA
 
-Step 1: CAPTURE (Field Agent, via PWA)
+Step 1: CAPTURE (Field Agent, via mobile web or native shell)
   |
   |  Agent selects vertical, takes photo, GPS auto-captured,
   |  fills required fields (progressive disclosure)

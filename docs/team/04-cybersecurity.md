@@ -9,6 +9,8 @@
 - [03-cloud-engineering.md](./03-cloud-engineering.md) (Cloud Engineer)
 **Scope:** Threat modeling, vulnerability assessment, security controls, incident response, and hardening for African Data Layer
 
+**Implementation update (2026-04-14):** This assessment predates the tracked Capacitor mobile rollout. Current code includes `ios/` and `android/` shells, native API base resolution in `lib/client/native.ts`, native camera/geolocation integration in `components/Screens/ContributionFlow.tsx`, and server-side Gemini access via `/api/ai/search`. Any finding that assumes a browser-only client or a client-side Gemini key must be revalidated against current code before it is treated as an active issue.
+
 ---
 
 ## Table of Contents
@@ -30,11 +32,11 @@
 ```
 +-------------------------------------------------------------------+
 |  TRUST BOUNDARY 1: Client Device (untrusted)                      |
-|  - React SPA in browser                                           |
+|  - React SPA in browser or Capacitor native shell                 |
 |  - IndexedDB offline queue (lib/client/offlineQueue.ts)           |
-|  - Gemini API key embedded in client bundle (vite.config.ts:20)   |
+|  - Native camera/geolocation bridge via Capacitor when available  |
 |  - Photo capture + EXIF metadata                                  |
-|  - GPS coordinates from navigator.geolocation                     |
+|  - GPS coordinates from Capacitor geolocation or browser fallback |
 +-------------------------------------------------------------------+
           |  HTTPS (TLS 1.2+)
           v

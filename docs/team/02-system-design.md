@@ -6,6 +6,8 @@
 **Predecessor:** [01-cloud-architecture.md](./01-cloud-architecture.md) (Cloud Architect)
 **Scope:** Service boundaries, API design, data models, performance targets, failure handling, caching, and real-time sync for African Data Layer
 
+**Implementation update (2026-04-14):** ADL now ships through both the browser and Capacitor native shells. Notification planning should therefore treat `@capacitor/push-notifications` as the primary mobile path, with browser Web Push as an optional fallback rather than the default distribution assumption.
+
 ---
 
 ## Table of Contents
@@ -1453,7 +1455,7 @@ Admin Browser                    Supabase Realtime         PostgreSQL
 
 ### 7.4 Push Notification Architecture
 
-**Phase 2 feature.** Uses Web Push API for PWA notifications.
+**Phase 2 feature.** Uses Capacitor push notifications for native mobile builds first, with browser Web Push as an optional fallback if a browser-only campaign needs it.
 
 ```
 PUSH NOTIFICATION FLOW
@@ -1535,4 +1537,4 @@ CREATE TABLE push_subscriptions (
 | 2026-02-27 | Server-side idempotency table over Redis | Simpler, uses existing PostgreSQL, 24h TTL sufficient | Redis/Upstash (overkill for MVP) |
 | 2026-02-27 | Materialized projection table over in-memory cache | Survives cold starts, shared across instances, indexable | Redis cache (rejected: adds infra), in-memory (rejected: ephemeral) |
 | 2026-02-27 | Supabase Realtime over SSE/polling | Already in stack (Supabase), WebSocket support, built-in auth | SSE (rejected: no Supabase integration), polling (rejected: wasteful) |
-| 2026-02-27 | Web Push over Firebase/OneSignal | No vendor lock-in, PWA-native, no additional SDK | FCM (rejected: Google dependency), OneSignal (rejected: cost) |
+| 2026-02-27 | Push abstraction with Capacitor-native delivery first | Matches current iOS/Android distribution path while preserving an optional browser fallback | Browser-only Web Push (too narrow), OneSignal (rejected: cost/vendor dependency) |

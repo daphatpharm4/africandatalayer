@@ -11,6 +11,8 @@ export default tseslint.config(
       "playwright-report/**",
       "test-results/**",
       "artifacts/playwright/**",
+      "ios/**",
+      "android/**",
     ],
   },
   js.configs.recommended,

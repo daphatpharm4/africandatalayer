@@ -2,13 +2,22 @@
 
 **Author:** Mobile Distribution Team (Swift Expert, App Store Engineer, Play Store Engineer)
 **Date:** 2026-04-13
-**Status:** Living document -- updates with each distribution phase
+**Status:** Living document -- implementation now landed on the Capacitor branch set; update for each store-release phase
 **Predecessors:**
 - [02-system-design.md](./02-system-design.md) (System Design Expert)
 - [03-cloud-engineering.md](./03-cloud-engineering.md) (Cloud Engineer)
 - [08-service-delivery-project-plan.md](./08-service-delivery-project-plan.md) (Service Delivery Manager)
 
-**Scope:** Mobile app store distribution strategy, Capacitor architecture, iOS and Android submission guides, native rebuild assessment, and implementation roadmap for African Data Layer
+**Scope:** Mobile app store distribution strategy, Capacitor architecture, iOS and Android submission guides, native rebuild assessment, and implementation workflow for African Data Layer
+
+**Current implementation status (2026-04-14):**
+- `capacitor.config.ts` is committed and active.
+- Tracked native shells exist under `ios/` and `android/`.
+- Native platform detection and API base resolution live in `lib/client/native.ts` and `lib/client/api.ts`.
+- Native camera and geolocation are used in `components/Screens/ContributionFlow.tsx`.
+- Native splash screen, status bar, network listener, and Android back-button handling live in `App.tsx`.
+- CI workflows validate `feature/capacitor-base`, `feature/ios-distribution`, and `feature/android-distribution`.
+- Push notification plugins are scaffolded in the native shells, but app-level registration and permission UX are still pending.
 
 ---
 
@@ -36,7 +45,7 @@
    - [Signing](#signing)
    - [Testing Tracks](#testing-tracks)
    - [Play Store Listing Requirements](#play-store-listing-requirements)
-7. [Implementation Roadmap](#7-implementation-roadmap)
+7. [Current Operational Workflow](#7-current-operational-workflow)
 8. [Native Rebuild Assessment](#8-native-rebuild-assessment)
    - [What It Means](#what-it-means)
    - [Per-Platform Timeline](#per-platform-timeline)
@@ -62,23 +71,20 @@ The ADL web codebase is ~130 files and ~30,500 lines of production-quality code 
 
 ## 2. Codebase Audit
 
-The table below maps the existing codebase before any Capacitor work. Server-side code is platform-agnostic (Vercel serverless functions) and requires zero changes. Only the client layer needs adaptation.
+The mobile-distribution surface is now mostly implemented. The table below records the current as-built integration points instead of a pre-implementation estimate.
 
-| Layer | Files | Lines | Contents |
-|---|---|---|---|
-| Screens | 16 | 10,946 | All user-facing screens |
-| Other components | 19 | 2,450 | Shared UI, gamification, navigation |
-| App.tsx | 1 | 490 | State management, routing, auth |
-| Client lib | 12 | 1,344 | Offline queue, auth, GPS, sync |
-| Server lib | 20+ | 6,302 | Fraud, risk, snapshots, trust, dedup |
-| API endpoints | 12 | 3,773 | REST API |
-| Shared types | 9 | 2,026 | TypeScript interfaces, verticals, geofence, XP |
-| Tests | 30 | 2,701 | Server-side test suite |
-| CSS/design system | 1 | 489 | Tailwind components, animations |
-| DB migrations | 14 | — | PostgreSQL schema |
-| **Total** | **~130+** | **~30,500** | |
+| Area | Current files | Status |
+|---|---|---|
+| Native shell configuration | `capacitor.config.ts` | Implemented |
+| Tracked native projects | `ios/`, `android/` | Implemented |
+| Native platform detection + API base routing | `lib/client/native.ts`, `lib/client/api.ts` | Implemented |
+| Native camera + geolocation capture | `components/Screens/ContributionFlow.tsx` | Implemented |
+| Native lifecycle polish | `App.tsx` (`SplashScreen`, `StatusBar`, `Network`, `App`) | Implemented |
+| Shared web/native business logic | `lib/server/`, `api/`, `shared/`, most UI screens | Reused unchanged |
+| Platform CI validation | `.github/workflows/ci.yml`, `ios-build.yml`, `android-build.yml`, `merge-base-to-platforms.yml` | Implemented |
+| Push registration UX | no app-level JS usage yet | Pending |
 
-> **Note:** Server lib, API endpoints, DB migrations, and tests are all platform-agnostic. Only client lib, screens, and App.tsx have surface area that may need adaptation, and in practice the changes are limited to three capability swaps (see Section 4).
+> **Note:** The main architectural takeaway still holds: server code, shared domain types, and most UI logic remain platform-agnostic. The native work is concentrated in a small client-side surface area.
 
 ---
 
@@ -90,21 +96,21 @@ Capacitor bridges a standard web build to native iOS and Android shells. The Vit
 
 ### Directory Structure
 
-After Capacitor initialisation, the project gains two platform directories alongside the existing web structure:
+The current repo already contains the tracked platform directories alongside the shared web app:
 
 ```
 africandatalayer/
-├── android/                  # Android Studio project (git-tracked, generated)
+├── android/                  # Android Studio project (git-tracked)
 │   └── app/
 │       ├── src/main/
 │       └── build.gradle
-├── ios/                      # Xcode project (git-tracked, generated)
+├── ios/                      # Xcode project (git-tracked)
 │   └── App/
 │       ├── App/
 │       └── App.xcworkspace
 ├── capacitor.config.ts       # Capacitor configuration
-├── dist/                     # Vite build output (gitignored)
-├── src/                      # Existing React source
+├── dist/                     # Vite build output used for native sync
+├── components/               # Existing React UI surface
 ├── api/                      # Existing Vercel serverless functions
 ├── lib/                      # Existing server + client libs
 └── shared/                   # Existing TypeScript types
@@ -112,14 +118,16 @@ africandatalayer/
 
 ### Build Flow
 
-```
-npm run build          # Vite produces dist/
-npx cap sync           # Copies dist/ into ios/ and android/ native projects
-npx cap open ios       # Opens Xcode (for iOS build/submit)
-npx cap open android   # Opens Android Studio (for AAB build/submit)
+```bash
+npm run build              # Vite produces dist/
+npm run cap:sync           # Sync both native shells
+npm run cap:sync:ios       # Sync iOS only
+npm run cap:sync:android   # Sync Android only
+npm run cap:open:ios       # Open Xcode
+npm run cap:open:android   # Open Android Studio
 ```
 
-Run `npx cap sync` after every production build before submitting to either store.
+Run the relevant `cap:sync*` script after every production build before creating store binaries.
 
 ### Capacitor Configuration
 
@@ -144,7 +152,7 @@ const config: CapacitorConfig = {
     },
   },
   android: {
-    minWebViewVersion: '90.0.0',
+    minWebViewVersion: 90,
     allowMixedContent: false,
   },
 };
@@ -157,55 +165,38 @@ Key decisions in this config:
 - `androidScheme: 'https'` — ensures session cookies behave correctly inside the Android WebView (avoids the `http://localhost` scheme that breaks `SameSite=Strict` cookies used by @auth/core).
 - `launchAutoHide: false` — allows controlled splash-screen dismissal after the app bootstraps, preventing a white flash on cold start.
 - `backgroundColor: '#0f2b46'` — matches ADL navy, so splash and status bar are on-brand during launch.
-- `minWebViewVersion: '90.0.0'` — rejects devices whose WebView is too old to support the CSS and JS features used in the app (released 2021; safe floor for Cameroon market).
+- `minWebViewVersion: 90` — rejects devices whose WebView is too old to support the CSS and JS features used in the app (released 2021; safe floor for Cameroon market).
 
 ### API Base URL Strategy
 
 The web app uses relative `/api` paths for all fetch calls. Inside a native WebView, relative URLs resolve against the WebView's origin (e.g. `capacitor://localhost`), not the Vercel deployment. A thin environment shim is needed:
 
-| Context | API Base URL |
-|---|---|
-| Web (browser) | `/api` (relative, same origin) |
-| Native iOS | `https://africandatalayer.vercel.app/api` |
-| Native Android | `https://africandatalayer.vercel.app/api` |
+| Context | `getApiBase()` return value | Effective request path |
+|---|---|---|
+| Web (browser) | `VITE_API_BASE` or empty string | relative `/api/...` when empty |
+| Native iOS | `https://africandatalayer.vercel.app` | `https://africandatalayer.vercel.app/api/...` |
+| Native Android | `https://africandatalayer.vercel.app` | `https://africandatalayer.vercel.app/api/...` |
 
-Implementation: create `lib/client/native.ts` that exports `isNative(): boolean` (via `Capacitor.isNativePlatform()`) and a `getApiBase(): string` helper. Update `lib/client/api.ts` to prepend the base URL when running natively. No other code changes needed.
+Implementation is live today: `lib/client/native.ts` exports `isNative()` and `getApiBase()`, and `lib/client/api.ts` appends the path through `buildUrl()`.
 
 ---
 
 ## 4. Native Capability Mapping
 
-Three Web APIs require plugin substitution. All other browser APIs (IndexedDB, fetch, Web Crypto, ResizeObserver, etc.) work identically inside the Capacitor WebView.
+The integration surface is now a mix of implemented features and queued release work:
 
-| Current Web API | Capacitor Plugin | Why Upgrade |
+| Capability | Current implementation | Status |
 |---|---|---|
-| `navigator.geolocation` | `@capacitor/geolocation` | Background GPS, higher accuracy on native location stack, foreground service on Android, always-on permission flow on iOS |
-| `<input capture="environment">` | `@capacitor/camera` | Native camera UI, EXIF data retention control, consistent behaviour across Android OEM skins, photo library access |
-| `IndexedDB` (offline queue) | Works as-is | Capacitor's WebView exposes the same IndexedDB API; no change needed |
-| `fetch()` (API calls) | Works as-is (change base URL only) | Same Fetch API; only the base URL constant in `lib/client/api.ts` changes for native context |
-| Google Fonts CDN | Bundle Inter locally | Fonts loaded from CDN fail on offline devices; bundle Inter WOFF2 subset in `public/fonts/` |
-| Push notifications | `@capacitor/push-notifications` | New capability: submission status updates, assignment notifications |
-| Splash screen | `@capacitor/splash-screen` | Controlled launch experience, on-brand navy background |
-| Status bar | `@capacitor/status-bar` | Match ADL navy header colour on iOS/Android |
-| App lifecycle | `@capacitor/app` | Handle back-button on Android, foreground/background transitions |
-| Network status | `@capacitor/network` | More reliable than browser `navigator.onLine` for offline queue trigger |
-
-Install all plugins in one step:
-
-```bash
-npm install \
-  @capacitor/core \
-  @capacitor/cli \
-  @capacitor/ios \
-  @capacitor/android \
-  @capacitor/geolocation \
-  @capacitor/camera \
-  @capacitor/push-notifications \
-  @capacitor/splash-screen \
-  @capacitor/status-bar \
-  @capacitor/app \
-  @capacitor/network
-```
+| Geolocation | `@capacitor/geolocation` in `components/Screens/ContributionFlow.tsx` with web fallback | Implemented |
+| Camera capture | `@capacitor/camera` in `components/Screens/ContributionFlow.tsx` with web fallback | Implemented |
+| Offline queue | IndexedDB queue reused unchanged | Implemented |
+| API requests | native origin routing via `lib/client/native.ts` + `lib/client/api.ts` | Implemented |
+| Fonts | Google Fonts CDN removed from the built shell assets | Implemented |
+| Splash screen | `@capacitor/splash-screen` in `App.tsx` and `capacitor.config.ts` | Implemented |
+| Status bar | `@capacitor/status-bar` in `App.tsx` and `capacitor.config.ts` | Implemented |
+| Android back button / app lifecycle | `@capacitor/app` in `App.tsx` | Implemented |
+| Network status | `@capacitor/network` in `App.tsx` | Implemented |
+| Push notifications | plugin present in native shells, but no JS permission/registration flow yet | Pending |
 
 ---
 
@@ -350,78 +341,47 @@ Use Google Play's staged track system before production rollout:
 
 ---
 
-## 7. Implementation Roadmap
+## 7. Current Operational Workflow
 
-Five weeks from decision to both stores submitted. Each week has a clear owner and measurable output.
+The initial implementation roadmap has been completed on the shared Capacitor branch. The work that remains is operational release management and store readiness.
 
-### Week 1 — Capacitor Setup
-
-| Action | Command / Details |
-|---|---|
-| Install Capacitor core and CLI | `npm install @capacitor/core @capacitor/cli` |
-| Initialise Capacitor | `npx cap init "African Data Layer" com.africandatalayer.app --web-dir dist` |
-| Add iOS platform | `npx cap add ios` |
-| Add Android platform | `npx cap add android` |
-| Install all plugins | See full `npm install` block in Section 4 |
-| Run first build and sync | `npm run build && npx cap sync` |
-| Update `.gitignore` | Add `ios/App/Pods/`, `android/.gradle/`, `android/build/`, `dist/` |
-| Verify WebView loads app | `npx cap open ios` → run on simulator; `npx cap open android` → run on emulator |
-
-### Week 2 — Client Adaptation
+### Shared Build Workflow
 
 | Action | Command / Details |
 |---|---|
-| Create `lib/client/native.ts` | Export `isNative()` and `getApiBase()`; use `Capacitor.isNativePlatform()` |
-| Update `lib/client/api.ts` | Prepend `getApiBase()` to all fetch paths when native |
-| Swap geolocation | Replace `navigator.geolocation` calls in `ContributionFlow.tsx` with `@capacitor/geolocation` |
-| Swap camera | Replace `<input capture="environment">` in `ContributionFlow.tsx` with `@capacitor/camera` |
-| Bundle Inter font | Download Inter WOFF2 subset → `public/fonts/inter/`; update CSS `@font-face` to use local path; remove Google Fonts CDN link |
-| Replace network listener | Replace `window.addEventListener('online', ...)` in offline queue with `@capacitor/network` Network.addListener |
-| Add Android back-button handler | `@capacitor/app` App.addListener('backButton') → call `goBack()` |
-| Generate app icons | 1024×1024 master icon → `npx @capacitor/assets generate` |
-| Configure splash screen | Update `capacitor.config.ts` SplashScreen settings; add launch image assets |
+| Validate shared code | `npm run build`, `npm run typecheck`, tests and CI on `feature/capacitor-base` |
+| Sync native shells | `npm run cap:sync`, `npm run cap:sync:ios`, or `npm run cap:sync:android` |
+| Open platform IDE | `npm run cap:open:ios` or `npm run cap:open:android` |
+| Keep platform branches aligned | Use `.github/workflows/merge-base-to-platforms.yml` sync PRs |
 
-### Week 3 — iOS Build and Submission
+### iOS Release Checklist
 
 | Action | Command / Details |
 |---|---|
-| Open Xcode project | `npx cap open ios` |
-| Configure signing | Team → Automatic signing → Bundle ID `com.africandatalayer.app` |
-| Set deployment target | iOS 15.0 minimum in Xcode project settings |
-| Add Info.plist privacy strings | NSCameraUsageDescription, NSLocationWhenInUseUsageDescription, NSPhotoLibraryUsageDescription (see Section 5) |
-| Test on physical device | Geolocation, camera, offline queue, map render, auth flow |
-| Archive and upload to TestFlight | Product → Archive → Distribute App → App Store Connect → Upload |
-| Distribute TestFlight build | Invite 10–20 agents for 1-week beta |
-| Create App Store Connect listing | Fill all fields per Section 5; upload screenshots from physical device |
-| Submit for App Review | Include reviewer demo account in review notes |
+| Sync latest build into Xcode project | `npm run cap:sync:ios` |
+| Verify privacy strings and signing | `ios/App/App/Info.plist`, Xcode Signing & Capabilities |
+| Test on a physical device | geolocation, camera, offline queue, auth, map performance |
+| Archive and upload | Xcode Organizer / TestFlight |
+| Ship staged rollout | internal testing → TestFlight → App Review → production |
 
-### Week 4 — Android Build and Submission
+### Android Release Checklist
 
 | Action | Command / Details |
 |---|---|
-| Open Android Studio project | `npx cap open android` |
-| Set `minSdkVersion 24`, `targetSdkVersion 34` | In `android/app/build.gradle` |
-| Generate release keystore | `keytool` command (see Section 6); store securely |
-| Configure signing in build.gradle | Reference keystore via `keystore.properties` (gitignored) |
-| Test on low-end device | Physical Android 7–9, 2GB RAM; verify geolocation, camera, offline sync |
-| Build signed AAB | Android Studio: Build → Generate Signed Bundle → Android App Bundle |
-| Create Play Console listing | New app → upload AAB to internal testing track |
-| Complete Data Safety form | Per table in Section 6 |
-| Enroll in Play App Signing | Play Console → Release → Setup → App Signing |
-| Promote to closed testing (Alpha) | Invite pilot agents; gather crash reports |
-| Fill Play Store listing | Per Section 6 requirements |
+| Sync latest build into Android Studio project | `npm run cap:sync:android` |
+| Verify SDK floor and signing | Gradle config, keystore / Play App Signing |
+| Test on low-end Android hardware | camera, geolocation, reconnect sync, back-button behaviour |
+| Build signed AAB | Android Studio signed bundle flow |
+| Ship staged rollout | internal testing → closed/open testing → production rollout |
 
-### Week 5 — Submissions and Launch
+### Remaining Product Work Before a Full Store Rollout
 
-| Action | Command / Details |
+| Item | Status |
 |---|---|
-| Resolve App Store Review feedback | Monitor App Store Connect for reviewer messages; respond within 24h |
-| Submit iOS to production | After TestFlight validation and Review approval |
-| Promote Android to open testing (Beta) | Broader pilot; monitor Play Console crash dashboard |
-| Promote Android to production (10% rollout) | Play Console → Release → Production → 10% |
-| Monitor crash rates | Sentry (existing) + Play Console Android Vitals + App Store Connect Crashes |
-| Scale production rollout | 10% → 50% → 100% if crash rate stable (<0.5%) |
-| Announce to agents | In-app notification + field coordinator message; include store links |
+| Push notification permission + token registration UX | Pending |
+| Final store screenshots and metadata | Pending |
+| Signing assets / release credentials | Pending |
+| TestFlight / Play closed-test feedback loop | Pending |
 
 ---
 
@@ -508,7 +468,7 @@ No additional infrastructure costs. The existing Vercel deployment serves native
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | App Review 4.2 rejection (minimum functionality) | Medium | High | Integrate `@capacitor/camera` and `@capacitor/geolocation` as genuine native plugins, not decorative; include reviewer demo account and explicit notes explaining field collection use case |
-| WebView performance on low-end Android devices (API 24, 2GB RAM) | Medium | Medium | Set `minWebViewVersion: '90.0.0'` in `capacitor.config.ts`; test on physical Android 7 device with 2GB RAM before submission; profile and reduce CSS animation complexity if needed |
+| WebView performance on low-end Android devices (API 24, 2GB RAM) | Medium | Medium | Set `minWebViewVersion: 90` in `capacitor.config.ts`; test on physical Android 7 device with 2GB RAM before submission; profile and reduce CSS animation complexity if needed |
 | Inter font fails to load offline (CDN dependency) | High | Low | Bundle Inter WOFF2 subset in `public/fonts/`; update `@font-face` to local path; remove Google Fonts CDN `<link>` tag from `index.html` |
 | Session cookie / auth broken inside Android WebView | Medium | High | `androidScheme: 'https'` in `capacitor.config.ts` ensures cookies use HTTPS origin context; verify auth flow in Android emulator before release |
 | App Store listing localisation gap (French) | Low | Low | Submit with English as primary language; add French localisation (`fr-FR`) in App Store Connect as a fast follow after approval |
