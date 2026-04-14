@@ -13,6 +13,11 @@ import {
 import { executeAppWipe } from './lib/client/remoteWipe';
 import { sendSubmissionPayload } from './lib/client/submissionSync';
 import type { CollectionAssignment, UserRole } from './shared/types';
+import { isNative, getPlatform } from './lib/client/native';
+import { App as CapApp } from '@capacitor/app';
+import { SplashScreen } from '@capacitor/splash-screen';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { Network } from '@capacitor/network';
 import Splash from './components/Screens/Splash';
 import Home from './components/Screens/Home';
 import Navigation from './components/Navigation';
@@ -220,8 +225,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (isDocsMode) return undefined;
-    const handleStatus = async () => {
-      const online = navigator.onLine;
+    const handleOnlineChange = (online: boolean) => {
       setIsOffline(!online);
       if (!online) return;
       const windowWithIdle = window as WindowWithIdleCallback;
@@ -236,12 +240,28 @@ const App: React.FC = () => {
       }, 0);
     };
 
-    window.addEventListener('online', handleStatus);
-    window.addEventListener('offline', handleStatus);
-    void handleStatus();
+    if (isNative()) {
+      let cleanup: (() => void) | undefined;
+      const setup = async () => {
+        const status = await Network.getStatus();
+        handleOnlineChange(status.connected);
+        const listener = await Network.addListener('networkStatusChange', (s) => {
+          handleOnlineChange(s.connected);
+        });
+        cleanup = () => { void listener.remove(); };
+      };
+      void setup();
+      return () => { cleanup?.(); };
+    }
+
+    const onOnline = () => handleOnlineChange(true);
+    const onOffline = () => handleOnlineChange(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    handleOnlineChange(navigator.onLine);
     return () => {
-      window.removeEventListener('online', handleStatus);
-      window.removeEventListener('offline', handleStatus);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
     };
   }, [isDocsMode]);
 
@@ -266,6 +286,27 @@ const App: React.FC = () => {
       }
     };
     void bootstrap();
+  }, []);
+
+  useEffect(() => {
+    if (!isNative()) return;
+
+    void SplashScreen.hide();
+
+    void StatusBar.setStyle({ style: Style.Dark });
+    if (getPlatform() === 'android') {
+      void StatusBar.setBackgroundColor({ color: '#0f2b46' });
+    }
+
+    const listener = CapApp.addListener('backButton', () => {
+      if (history.length > 0) {
+        goBack();
+      } else {
+        void CapApp.exitApp();
+      }
+    });
+
+    return () => { void listener.then((l) => l.remove()); };
   }, []);
 
   useEffect(() => {

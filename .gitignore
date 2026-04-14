@@ -27,3 +27,18 @@ playwright-report/
 test-results/
 artifacts/playwright/docs/
 playwright/.auth/
+
+# Capacitor native builds
+ios/App/Pods/
+ios/App/DerivedData/
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/app/src/main/assets/public/
+ios/App/App/public/
+
+# Android signing
+*.jks
+*.keystore
+keystore.properties
