@@ -2,18 +2,28 @@
 
 ## Branch Model
 - `main`: production-ready code only.
-- `staging`: pre-production validation branch wired to a Vercel preview deployment and staging environment variables.
 - `feature/capacitor-base`: shared Capacitor/mobile foundation branch.
 - `feature/ios-distribution`: iOS-specific native work and release prep.
 - `feature/android-distribution`: Android-specific native work and release prep.
-- `codex/*` or other feature branches: short-lived delivery branches merged into `staging` first.
+- `codex/*` or other feature branches: short-lived delivery branches merged into the correct long-lived parent branch.
+
+## Current Operating Note
+
+As of `2026-04-14`, the repo has four active long-lived branches:
+
+- `main`
+- `feature/capacitor-base`
+- `feature/ios-distribution`
+- `feature/android-distribution`
+
+There is no active `staging` branch in the current branch topology. If a `staging` branch is reintroduced later, place it between `feature/capacitor-base` and `main`.
 
 ## Environment Matrix
 
 | Environment | Branch | Vercel | Database | Blob | Sentry |
 | --- | --- | --- | --- | --- | --- |
 | Local | any | `vercel dev` or Vite proxy | local `.env` target | shared test token only | optional |
-| Staging | `staging` | preview deployment | staging Postgres / Supabase target via env vars | staging prefix (`staging/...`) | staging DSN/project |
+| Branch preview | `feature/capacitor-base`, `feature/ios-distribution`, `feature/android-distribution`, `codex/*` | preview deployment if configured | non-production target via env vars | non-production prefix | non-production DSN/project |
 | Production | `main` | production deployment | production Postgres / Supabase target via env vars | production prefix (`production/...`) | production DSN/project |
 
 ## Required Variables
@@ -24,18 +34,19 @@
 - Fraud and ops: `FRAUD_ALERT_WEBHOOK_URL`, `QUEUE_MAX_ITEMS`, `QUEUE_MAX_RETRY_COUNT`, `QUEUE_MAX_ITEM_AGE_HOURS`
 
 ## Promotion Flow
-1. Merge feature work into `staging`.
-2. Apply pending SQL migrations to the staging database target.
-3. Validate `npm run test:ci` locally or in CI.
-4. Run manual staging checks:
+1. Merge shared feature work into `feature/capacitor-base`.
+2. Validate `npm run test:ci` locally or in CI.
+3. Run manual pre-release checks on the candidate branch:
    - `/api/health` returns `200`
    - admin review flow works
    - consent capture and privacy export/erase flow work
    - offline queue sync works after reconnect
    - native API base resolution works from a mobile shell build if the change touches Capacitor code
-5. Promote `staging` to `main`.
-6. Apply the same migration set to production immediately before deploy.
-7. Confirm production `/api/health` and Sentry are green.
+4. Sync `feature/capacitor-base` into `feature/ios-distribution` and `feature/android-distribution` if the change affects mobile builds.
+5. Merge any durable platform-specific release fixes back into `feature/capacitor-base`.
+6. Open a release PR from `feature/capacitor-base` to `main`.
+7. Apply pending production migrations immediately before deploy if required.
+8. Confirm production `/api/health` and Sentry are green.
 
 ## Mobile Release Track
 1. Land shared mobile changes on `feature/capacitor-base`.
@@ -45,7 +56,13 @@
    - `.github/workflows/android-build.yml`
 4. Run `npm run cap:sync:ios` or `npm run cap:sync:android` before store submission builds.
 5. Complete store signing, screenshots, privacy metadata, and staged rollout from the platform branch.
-6. Merge platform-specific release changes back into `feature/capacitor-base`, then forward into `staging` and `main` after release validation.
+6. Merge platform-specific release changes back into `feature/capacitor-base`, then promote into `main` after release validation.
+
+## Production Hotfix Flow
+1. Branch from `main` using `hotfix/*`.
+2. Merge the hotfix back into `main` after review and validation.
+3. Immediately back-merge `main` into `feature/capacitor-base`.
+4. Sync `feature/capacitor-base` forward into the platform branches if the hotfix affects shared app behavior or mobile builds.
 
 ## Rollback Flow
 1. Re-point traffic by redeploying the last known-good Vercel production build.

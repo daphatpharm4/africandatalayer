@@ -114,10 +114,19 @@ The app ships to iOS and Android via Capacitor 8. All Capacitor plugin calls are
 
 | Branch | Purpose |
 |--------|---------|
-| `main` | Web app (Vercel deployment) |
-| `feature/capacitor-base` | Shared Capacitor foundation (plugins, config, native guards) |
-| `feature/ios-distribution` | iOS platform (Info.plist, Xcode project, signing/distribution work) |
-| `feature/android-distribution` | Android platform (Gradle, signing config, Play distribution work) |
+| `main` | Production-ready and shipped code |
+| `feature/capacitor-base` | Shared app integration branch for React, Capacitor, offline queue, API, and mobile-safe shared logic |
+| `feature/ios-distribution` | iOS platform branch for Info.plist, Xcode project, signing, and App Store release work |
+| `feature/android-distribution` | Android platform branch for Gradle, AndroidManifest, signing, and Play release work |
+
+Day-to-day rule:
+
+- shared app changes go to `feature/capacitor-base`
+- iOS-native-only changes go to `feature/ios-distribution`
+- Android-native-only changes go to `feature/android-distribution`
+- urgent production fixes go to `main`, then back-merge into `feature/capacitor-base`
+
+See `docs/ops/branch-playbook.md` for command-level workflows.
 
 ### Build Commands
 
@@ -134,7 +143,7 @@ npm run cap:open:android     # Android Studio
 
 ### CI/CD Workflows
 
-- **`ci.yml`** — Lint, typecheck, test, build on push to main, staging, and all feature branches
+- **`ci.yml`** — Lint, typecheck, test, build on push to `main` and the long-lived mobile branches; supports `staging` too if that branch is reintroduced
 - **`ios-build.yml`** — macOS runner, xcodebuild (no code signing) on `feature/ios-distribution`
 - **`android-build.yml`** — Ubuntu runner, Java 17, Gradle debug APK on `feature/android-distribution`
 - **`merge-base-to-platforms.yml`** — Auto-creates sync PRs from `feature/capacitor-base` to platform branches
@@ -224,7 +233,9 @@ If credentials were shared publicly, rotate Supabase keys, Postgres URLs, and AP
 ## Operations
 
 - Release flow: `docs/ops/pilot-release-flow.md`
+- Branch playbook: `docs/ops/branch-playbook.md`
 - Backup and restore: `docs/ops/backup-restore-runbook.md`
+- Subagent operating system: `docs/ops/subagent-operating-system.md`
 - Compliance pack: `docs/compliance/`
 - Mobile distribution strategy: `docs/team/09-mobile-distribution.md`
 - Investor pitch (mobile): `docs/pitch/06-mobile-distribution-strategy.md`
