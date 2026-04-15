@@ -5,6 +5,8 @@
 **Status:** Living document -- updates with each scaling phase
 **Scope:** Full cloud architecture for African Data Layer (ADL), from current MVP through 100K+ contributors
 
+**Implementation update (2026-04-14):** The current delivery surface is no longer browser-only. ADL now runs as the same React/Vite application in the browser and inside tracked Capacitor iOS/Android shells (`ios/`, `android/`). Where this document previously said "PWA", read that as "web app with Capacitor-native distribution available" unless a section explicitly discusses browser-only behaviour.
+
 ---
 
 ## Table of Contents
@@ -44,7 +46,7 @@ ADL's architecture must serve contributors on low-end Android devices over 2G/3G
 | Metric | MVP (now) | Phase 2 (10K) | Phase 3 (100K) |
 |--------|-----------|---------------|----------------|
 | API p95 latency (Africa) | < 2s | < 800ms | < 400ms |
-| Offline submission queue max | 50 items | 200 items | 500 items |
+| Offline submission queue max | 75 items | 200 items | 500 items |
 | Photo upload size cap | 8 MB (`MAX_SUBMISSION_IMAGE_BYTES`) | 8 MB | 5 MB (auto-compress) |
 | Uptime SLA | 99% | 99.5% | 99.9% |
 | RTO / RPO | 4h / 24h | 1h / 1h | 15min / 5min |
@@ -56,7 +58,7 @@ ADL's architecture must serve contributors on low-end Android devices over 2G/3G
 ### 2.1 Current Architecture (As-Built)
 
 ```
-                          CONTRIBUTORS (Mobile/PWA)
+                    CONTRIBUTORS (Web + Capacitor Mobile)
                                     |
                         [Offline Queue - IndexedDB]
                         lib/client/offlineQueue.ts
@@ -118,7 +120,7 @@ ADL's architecture must serve contributors on low-end Android devices over 2G/3G
 
 ```
                     CONTRIBUTORS              API CONSUMERS
-                   (Mobile PWA)               (REST/GraphQL)
+               (Web + native shells)          (REST/GraphQL)
                         |                          |
               [IndexedDB Queue]                    |
               [Service Worker]                     |

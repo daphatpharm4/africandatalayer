@@ -15,6 +15,8 @@
 
 **Scope:** Project scope definition, milestone plan, ownership matrix, dependency map, RAID log, stakeholder cadence, and execution governance for African Data Layer
 
+**Implementation update (2026-04-14):** This plan was written before the Capacitor rollout landed. The current product now has tracked iOS and Android shells plus the browser app. References below to "PWA only" or "native later" have been updated where they affect current execution scope; historical milestone sequencing is preserved for auditability.
+
 ---
 
 ## Table of Contents
@@ -52,7 +54,7 @@
 | Area | Reason |
 |------|--------|
 | Multi-city expansion (beyond Bonamoussadi) | Must prove unit economics in one neighborhood first |
-| Native mobile app | PWA is sufficient for MVP; native only when retention data justifies the investment |
+| Full native rewrite | Keep the shared React/Capacitor codebase for now; revisit only when retention, performance, and scale justify a Kotlin/Swift rebuild |
 | Real-time streaming APIs | Monthly/weekly delta reports are the validated buyer need (Kasi Insight feedback) |
 | Contributor payout infrastructure | Manual payouts via mobile money until 50+ active contributors |
 | Enterprise SLAs | No contractual SLAs until Phase 2; best-effort uptime |
@@ -61,7 +63,7 @@
 
 | Criterion | Target | Measurement |
 |-----------|--------|-------------|
-| Verified data points | >= 200 across 3 categories | KPI-T1-01 query (doc 06) |
+| Verified data points | >= 200 across the 7 live verticals | KPI-T1-01 query (doc 06) |
 | Weekly Active Contributors (WAC) | >= 20 | KPI-T1-02 query (doc 06) |
 | Data freshness (median) | < 14 days | KPI-T1-03 query (doc 06) |
 | Fraud detection rate | >= 60% of synthetic submissions caught | Fraud pipeline metrics (doc 05) |
@@ -116,7 +118,7 @@
 | Deliverable | Owner | Acceptance Criteria | Dependency |
 |-------------|-------|---------------------|------------|
 | Campus ambassador program launched | Marketing | 3-5 ambassadors recruited at Universite de Douala / ESSEC, each with onboarding kit | M1: contributor plan |
-| WhatsApp onboarding bot/flow | Marketing + Cloud Engineer | Automated welcome sequence in French, link to PWA, first-contribution guide | M1: contributor plan |
+| WhatsApp onboarding bot/flow | Marketing + Cloud Engineer | Automated welcome sequence in French, link to signup / app, first-contribution guide | M1: contributor plan |
 | Contributor onboarding UX optimized | System Design + Cloud Engineer | < 60 second sign-up to first contribution, offline mode explained | M2: complete |
 | Gamification v1 live | Cloud Engineer | Leaderboard visible, XP earning transparent, weekly reset communicated | M1: CI/CD |
 | First 10 active contributors | Marketing | 10 distinct users with >= 1 submission each in production | M3: ambassador launch |
@@ -141,7 +143,7 @@
 | Deliverable | Owner | Acceptance Criteria | Dependency |
 |-------------|-------|---------------------|------------|
 | 20 WAC achieved | Marketing + all | KPI-T1-02 >= 20 for 2 consecutive weeks | M3: ambassador launch |
-| 200 verified points achieved | all | KPI-T1-01 >= 200 across 3 categories | M3: active contributors |
+| 200 verified points achieved | all | KPI-T1-01 >= 200 across the 7 live verticals | M3: active contributors |
 | Contributor retention analysis | Data Analyst | D7, D14, D30 cohort analysis with actionable insights | M5: 20 WAC |
 | First B2B demo delivered | Marketing | At least 1 demo meeting completed with qualified ICP | M4: outreach |
 | Security audit (pre-B2B) | Cybersecurity | Re-scan confirms 0 critical vulnerabilities, rate limiting active, secrets secured | M2: security fixes |
@@ -287,8 +289,8 @@ Phase 1 Exit Gate (M6, W11-12)
 |----|------------|-----------------|-------------------|:------:|
 | A-01 | University students in Bonamoussadi will contribute for 5,000-10,000 FCFA/week equivalent | Contributor model fails; need higher payouts or different demographic | Track actual contribution rates in weeks 5-7 | UNVALIDATED |
 | A-02 | FMCG companies will pay $2,000-$15,000/month for retail audit data | Revenue model fails; need different pricing or customer segment | B2B outreach responses in weeks 6-9 | UNVALIDATED |
-| A-03 | 200 verified points across 3 categories is achievable in 12 weeks | Phase 1 timeline fails | Weekly point creation velocity tracking from week 5 | UNVALIDATED |
-| A-04 | PWA is sufficient for field contributors (no native app needed) | Contributor UX is too poor for retention | D7 retention analysis after 50+ contributors onboarded | UNVALIDATED |
+| A-03 | 200 verified points across the 7 live verticals is achievable in 12 weeks | Phase 1 timeline fails | Weekly point creation velocity tracking from week 5 | UNVALIDATED |
+| A-04 | Shared React app plus Capacitor distribution is sufficient for field contributors without a full native rewrite | Contributor UX is too poor for retention or device performance is unacceptable | D7 retention analysis after 50+ contributors onboarded plus mobile shell testing | UNVALIDATED |
 | A-05 | Bonamoussadi (est. 100,000+ population) has enough POIs to be interesting to B2B buyers | Dataset is too small to sell; need to expand geography sooner | Map saturation analysis after 150+ points | UNVALIDATED |
 | A-06 | Manual contributor payouts via mobile money are feasible up to 50 contributors | Payout overhead becomes unsustainable | Track payout time per contributor weekly | UNVALIDATED |
 | A-07 | Vercel + Supabase free/hobby tiers are sufficient for Phase 1 costs | Need budget for infrastructure earlier than planned | Monthly infrastructure cost tracking | UNVALIDATED |
@@ -311,7 +313,7 @@ Phase 1 Exit Gate (M6, W11-12)
 |----|----------|:----:|---------|-----------|------------------------|
 | D-01 | Start with Bonamoussadi only, no multi-city in Phase 1 | 2026-02-26 | Charles + Kasi Insight feedback | Must prove unit economics and operational model in one neighborhood before expanding | Multi-city from day 1 (rejected: too expensive, quality risk) |
 | D-02 | Target monthly/weekly delta reports, not real-time | 2026-02-26 | Charles + Kasi Insight feedback | "The continent is fine with monthly or even weekly data" -- real-time is overkill for first buyers | Real-time streaming API (rejected: overbuilt for current demand) |
-| D-03 | PWA over native app | 2026-02-27 | Cloud Architect (T1) | Zero app store friction, instant updates, lower development cost. Revisit if D7 retention < 15% | React Native (rejected: higher cost, app store delays) |
+| D-03 | Capacitor-native distribution over a full native rewrite | 2026-04-13 | Mobile distribution team | Preserves shared codebase, enables App Store / Play distribution, and keeps engineering effort focused on product iteration. Revisit only if field performance or scale justifies native rebuilds | Full native rewrite now (rejected: cost and maintenance overhead), React Native (rejected: extra migration cost without clear upside) |
 | D-04 | Serverless-first architecture | 2026-02-27 | Cloud Architect (T1) | Zero idle cost, auto-scaling, no ops burden at MVP stage | Container-based (rejected: fixed costs, ops overhead) |
 | D-05 | Event-sourcing data model (append-only) | 2026-02-27 | System Design (T2) | Full audit trail, replay capability, data provenance for B2B trust | Mutable records (rejected: lose provenance, audit trail) |
 | D-06 | Focus on 3 initial verticals: pharmacy, mobile money, fuel station | 2026-02-26 | Charles + Kasi Insight feedback | High churn categories with clear buyer demand | All verticals at once (rejected: scope too broad) |

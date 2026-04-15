@@ -10,6 +10,9 @@ import {
   Target,
   Zap,
 } from 'lucide-react';
+import { isNative } from '../../lib/client/native';
+import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { Geolocation as CapGeolocation } from '@capacitor/geolocation';
 import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
 import {
   calculateSubmissionRewardBreakdown,
@@ -633,6 +636,36 @@ const ContributionFlow: React.FC<Props> = ({
 
   // 1A: GPS with accuracy tracking via watchPosition
   useEffect(() => {
+    if (isNative()) {
+      let watchId: string | undefined;
+      const startWatch = async () => {
+        try {
+          watchId = await CapGeolocation.watchPosition(
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 },
+            (pos, err) => {
+              if (err || !pos) { setLocation(null); return; }
+              setLastPosition(pos as unknown as GeolocationPosition);
+              setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+              setGpsAccuracy(pos.coords.accuracy);
+            }
+          );
+        } catch {
+          if (!navigator.geolocation) return;
+          navigator.geolocation.watchPosition(
+            (pos) => {
+              setLastPosition(pos);
+              setLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+              setGpsAccuracy(pos.coords.accuracy);
+            },
+            () => setLocation(null),
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+          );
+        }
+      };
+      void startWatch();
+      return () => { if (watchId) void CapGeolocation.clearWatch({ id: watchId }); };
+    }
+
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -783,8 +816,16 @@ const ContributionFlow: React.FC<Props> = ({
     }
   };
 
-  const getCurrentLocation = () =>
-    new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
+  const getCurrentLocation = async (): Promise<{ latitude: number; longitude: number }> => {
+    if (isNative()) {
+      try {
+        const pos = await CapGeolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 });
+        return { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      } catch {
+        // Fall through to web API
+      }
+    }
+    return new Promise<{ latitude: number; longitude: number }>((resolve, reject) => {
       if (!navigator.geolocation) {
         reject(new Error(t('Geolocation not supported.', 'Géolocalisation non supportée.')));
         return;
@@ -795,6 +836,7 @@ const ContributionFlow: React.FC<Props> = ({
         { enableHighAccuracy: true, timeout: 10000 }
       );
     });
+  };
 
   const retryLocation = async () => {
     setLocationError('');
@@ -831,6 +873,32 @@ const ContributionFlow: React.FC<Props> = ({
       if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
       return nextPreview;
     });
+  };
+
+  const takeNativePhoto = async () => {
+    try {
+      const photo = await CapCamera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+        width: MAX_UPLOAD_DIMENSION,
+        height: MAX_UPLOAD_DIMENSION,
+        correctOrientation: true,
+      });
+      if (photo.dataUrl) {
+        setDraftImageBase64(photo.dataUrl);
+        setPhotoFile(null);
+        setDraftClientExif(null);
+        setPhotoError('');
+        setPhotoPreview((prev) => {
+          if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+          return photo.dataUrl!;
+        });
+      }
+    } catch {
+      // User cancelled or plugin failed -- no-op
+    }
   };
 
   const fileToBase64 = async (file: File) => {
@@ -1635,20 +1703,32 @@ const ContributionFlow: React.FC<Props> = ({
             <p className="text-xs font-bold uppercase tracking-widest opacity-60">{t('Live capture required', 'Capture live requise')}</p>
           </>
         )}
-        <input
-          id="capture-photo"
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handlePhotoChange}
-          className="sr-only"
-        />
-        <label
-          htmlFor="capture-photo"
-          className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
-        >
-          {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
-        </label>
+        {isNative() ? (
+          <button
+            type="button"
+            onClick={() => void takeNativePhoto()}
+            className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
+          >
+            {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
+          </button>
+        ) : (
+          <>
+            <input
+              id="capture-photo"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoChange}
+              className="sr-only"
+            />
+            <label
+              htmlFor="capture-photo"
+              className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
+            >
+              {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
+            </label>
+          </>
+        )}
       </div>
       {photoError && (
         <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">

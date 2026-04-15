@@ -1,4 +1,6 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? "";
+import { getApiBase } from './native';
+
+const API_BASE = getApiBase();
 
 export function buildUrl(path: string) {
   if (!API_BASE) return path;

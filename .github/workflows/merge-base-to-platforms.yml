@@ -1,0 +1,46 @@
+name: Sync Base to Platform Branches
+
+on:
+  push:
+    branches: [feature/capacitor-base]
+
+jobs:
+  sync-ios:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create sync PR to iOS branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin feature/ios-distribution 2>/dev/null || exit 0
+          gh pr create \
+            --base feature/ios-distribution \
+            --head feature/capacitor-base \
+            --title "sync: merge capacitor-base updates into iOS branch" \
+            --body "Automated sync of shared Capacitor changes to iOS branch." \
+            2>/dev/null || echo "PR already exists or branch not yet created"
+
+  sync-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create sync PR to Android branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git fetch origin feature/android-distribution 2>/dev/null || exit 0
+          gh pr create \
+            --base feature/android-distribution \
+            --head feature/capacitor-base \
+            --title "sync: merge capacitor-base updates into Android branch" \
+            --body "Automated sync of shared Capacitor changes to Android branch." \
+            2>/dev/null || echo "PR already exists or branch not yet created"

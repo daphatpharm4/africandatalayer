@@ -107,7 +107,7 @@
 |---|---|
 | **Description** | Contributor uses a GPS spoofing app (Fake GPS, Mock Locations on Android) to submit from a fabricated location without being physically present. |
 | **Attacker Motivation** | Submit POIs in areas they have never visited. Claim to have surveyed distant neighborhoods. |
-| **Attack Method** | Enable mock locations on Android. Set GPS to coordinates within Bonamoussadi bounds. Submit a photo (possibly taken elsewhere). The `navigator.geolocation` API returns the spoofed coordinates. The current system compares submission GPS to photo EXIF GPS (`submissionFraud.ts:157-172`), but if the photo lacks EXIF GPS (common on feature phones), this check produces null. |
+| **Attack Method** | Enable mock locations on Android. Set GPS to coordinates within Bonamoussadi bounds. Submit a photo (possibly taken elsewhere). The client receives spoofed coordinates through the active location provider (`@capacitor/geolocation` in native shells, browser geolocation as fallback). The current system compares submission GPS to photo EXIF GPS (`submissionFraud.ts:157-172`), but if the photo lacks EXIF GPS (common on feature phones), this check produces null. |
 | **Detection Difficulty** | Medium. Cross-referencing with IP geolocation helps -- the current system fetches IP location via `ipapi.co` (`api/submissions/index.ts:223-240`). A 50km IP-to-photo threshold (`IP_PHOTO_MATCH_KM = 50`) catches coarse mismatches. However, a VPN user in the same city defeats this. |
 | **Business Impact** | High. Allows remote fabrication of an entire neighborhood's data without physical presence. |
 

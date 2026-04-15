@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - staging
+      - feature/capacitor-base
+      - feature/ios-distribution
+      - feature/android-distribution
   pull_request:
 
 jobs:

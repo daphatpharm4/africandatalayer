@@ -189,7 +189,7 @@ Contributors are the engine of ADL. Per the analytics framework (doc 06), Phase 
 | **Goals** | Earn consistent side income without conflicting with class schedule. Build a portfolio of tech-related work for future job applications. Get recognized among peers as someone who knows the neighborhood well. |
 | **Frustrations** | Most "earn money with your phone" apps are scams or pay after weeks of delay. Data bundles run out quickly if apps are data-hungry. Apps that crash on her phone or drain battery are immediately deleted. |
 | **How she discovers ADL** | Her friend Serge, a campus ambassador, posts in their department WhatsApp group: "Gagnez 5,000 FCFA/semaine en mappant les pharmacies de Bonamoussadi." She clicks the link during a boring lecture. |
-| **First experience** | Opens the PWA, signs up with Google in 30 seconds. Sees the map centered on Bonamoussadi with nearby pharmacies. Contributes data about the pharmacy next to her lecture hall. Earns 5 XP immediately. Feels a small dopamine hit. |
+| **First experience** | Opens ADL on her phone, signs up with Google in 30 seconds, and can later install the native app from the store when prompted. She sees the map centered on Bonamoussadi with nearby pharmacies, contributes data about the pharmacy next to her lecture hall, and earns 5 XP immediately. |
 | **What makes her stay** | Weekly XP leaderboard where she competes with Serge. Consistent payouts every Friday. The app works when her data runs out (offline mode). She can contribute during her walk from campus to her room. |
 | **What makes her leave** | Payout delays beyond 48 hours. App starts eating her data bundle. XP rewards feel meaningless (no real-world redemption). A newer, shinier earning app launches. |
 | **Lifetime value to ADL** | 15-25 verified contributions/month for 4-6 months. If retained through one academic year, she becomes a campus ambassador recruiting 3-5 others. |
@@ -322,7 +322,7 @@ Contributors are the engine of ADL. Per the analytics framework (doc 06), Phase 
 | **Jobs to be done** | Earn supplemental income with flexible hours. Build marketable skills. Gain social recognition in their community. |
 | **Pains** | Most mobile earning apps are scams or pay too little. Data bundles are expensive and most apps waste them. No way to monetize local knowledge. Unemployment or underemployment, especially for students. |
 | **Gains** | Weekly payouts in mobile money (FCFA). Visible progress (XP, leaderboard ranking). Works offline -- does not eat data bundles. Takes 2-3 minutes per contribution (fits into any routine). Community recognition as a "data ambassador." |
-| **Pain relievers (ADL)** | Offline-first design (IndexedDB queue syncs when connectivity returns). Lightweight PWA (<500 KB initial load). Transparent XP system (5 XP per event, visible immediately). Weekly payout cycle, not monthly. |
+| **Pain relievers (ADL)** | Offline-first design (IndexedDB queue syncs when connectivity returns). Lightweight mobile-first client with browser access plus native store distribution. Transparent XP system (5 XP per event, visible immediately). Weekly payout cycle, not monthly. |
 | **Gain creators (ADL)** | Leaderboard competition. Campus ambassador program with elevated status. Referral bonuses. Skill certification ("ADL Verified Data Collector") for CV. |
 
 #### Segment B: Data Buyers
@@ -372,7 +372,7 @@ Contributors are the engine of ADL. Per the analytics framework (doc 06), Phase 
 
 | Channel | Audience | Primary Message | Tone | CTA |
 |---|---|---|---|---|
-| **WhatsApp group** | Students, gig workers | "Gagnez de l'argent en marchant dans votre quartier. 5 min = 250 FCFA." | Casual, peer-to-peer, French/Pidgin | "Cliquez ici pour commencer" (link to PWA) |
+| **WhatsApp group** | Students, gig workers | "Gagnez de l'argent en marchant dans votre quartier. 5 min = 250 FCFA." | Casual, peer-to-peer, French/Pidgin | "Cliquez ici pour commencer" (link to signup / app) |
 | **Facebook/Instagram ad** | Young adults in Douala | "Vos voisins gagnent deja de l'argent avec ADL. Et vous?" | Social proof, FOMO, visual (screenshot of earnings) | "Telecharger maintenant" |
 | **LinkedIn post** | Fintech/logistics PMs | "We mapped 200+ pharmacies in one Douala neighborhood in 3 weeks. Our API delivers what Google Maps cannot: verified, fresh, informal-sector data." | Professional, data-driven | "Request API access" |
 | **Twitter/X thread** | Data/tech community | "Why is African POI data so broken? A thread. (1/8)" | Educational, provocative | "Follow us for updates" |
@@ -528,7 +528,7 @@ Contributors are the engine of ADL. Per the analytics framework (doc 06), Phase 
 | Field | Detail |
 |---|---|
 | **Hypothesis** | Flyers placed at 15 fuel stations and 15 pharmacies in Bonamoussadi will generate 20 signups within 3 weeks (people who work at these locations have downtime and local knowledge). |
-| **Experiment design** | Design bilingual flyer (French/English): headline "Gagnez de l'argent avec votre telephone / Earn money with your phone," QR code to PWA, 3 bullet points (earn weekly, works offline, 5 minutes per contribution). Negotiate with station managers and pharmacists to display at counter. Leave 20 flyers per location. |
+| **Experiment design** | Design bilingual flyer (French/English): headline "Gagnez de l'argent avec votre telephone / Earn money with your phone," QR code to signup / app, 3 bullet points (earn weekly, works offline, 5 minutes per contribution). Negotiate with station managers and pharmacists to display at counter. Leave 20 flyers per location. |
 | **Budget** | 15,000 FCFA ($24) for 600 flyers. 10,000 FCFA ($16) for distribution transport. Total: 25,000 FCFA ($40). |
 | **Timeline** | Weeks 3-5 |
 | **Success metric** | 20 signups from QR code scans (tracked via UTM) |
@@ -622,7 +622,7 @@ Contributors are the engine of ADL. Per the analytics framework (doc 06), Phase 
 
 **Active Verified Data Points per Region** (KPI-T1-01 from analytics framework).
 
-This metric captures both sides of the marketplace: contributors must produce data (supply), and the data must be cross-verified (quality). Phase 1 target: 200 verified points across 3 categories in Bonamoussadi.
+This metric captures both sides of the marketplace: contributors must produce data (supply), and the data must be cross-verified (quality). Phase 1 target: 200 verified points across the 7 live verticals in Bonamoussadi, with density emphasis on the highest-priority categories.
 
 ### 5.4 Key Ratios to Monitor Weekly
 
@@ -647,7 +647,7 @@ This metric captures both sides of the marketplace: contributors must produce da
 |---|---|---|---|
 | 1-2 | Finalize contributor-facing messaging in French and English | Marketing | Messaging doc approved |
 | 1-2 | Create WhatsApp Community (3 groups: Annonces, Contributeurs Bonamoussadi, Support) | Marketing | Community live with welcome message |
-| 3-4 | Design and print 500 flyers (bilingual, QR code to PWA) | Marketing | Flyers ready for distribution |
+| 3-4 | Design and print 500 flyers (bilingual, QR code to signup / app) | Marketing | Flyers ready for distribution |
 | 3-4 | Set up UTM tracking for all channels (WhatsApp, Facebook, flyers, campus, radio) | Engineering | UTM parameters configured, tracking dashboard live |
 | 5-6 | Record 3 TikTok/Instagram Reels showing contribution workflow | Marketing | Videos edited and scheduled |
 | 5-6 | Create campus ambassador recruitment post for university WhatsApp groups | Marketing | Post approved, ready to send |
@@ -753,7 +753,7 @@ This metric captures both sides of the marketplace: contributors must produce da
 |---|---|---|
 | Total signups | 200+ | < 100 |
 | Weekly Active Contributors (WAC) | 40+ | < 20 |
-| Verified data points | 200+ across 3 categories | < 100 |
+| Verified data points | 200+ across 7 live verticals | < 100 |
 | D7 retention | >= 20% | < 10% |
 | D30 retention | >= 10% | < 5% |
 | B2B pipeline | 10 prospects, 1 paying pilot | 0 paying customers and < 5 prospects |
@@ -902,7 +902,7 @@ This is a lean budget appropriate for a pre-revenue startup validating product-m
 
 | Factor | Detail | Implication for ADL |
 |---|---|---|
-| **Internet penetration** | ~45% (2025), heavily mobile. MTN and Orange dominate. | Mobile-first PWA is the right form factor. |
+| **Internet penetration** | ~45% (2025), heavily mobile. MTN and Orange dominate. | Mobile-first delivery remains the right form factor, now with browser access and native app-store distribution. |
 | **Smartphone penetration** | ~55% in urban areas, predominantly low-end Android (Tecno, Itel). | App must work on 1-2 GB RAM devices. Offline-first is essential. |
 | **Mobile money** | MTN MoMo and Orange Money are the primary payment rails. 70%+ of urban adults use mobile money. | Payout via MoMo/OM is the only viable contributor payment method. |
 | **Language** | French dominant in Douala, English in Northwest/Southwest, Pidgin as lingua franca. | All contributor-facing content must be bilingual (FR/EN). Pidgin for informal communications (WhatsApp, TikTok). |

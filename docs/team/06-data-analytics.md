@@ -40,7 +40,7 @@ These three metrics define whether ADL is succeeding at its core mission: buildi
 | **Definition** | Count of unique `point_id` values that have at least one `CREATE_EVENT` and at least one `ENRICH_EVENT` (cross-validated by a second contributor), grouped by geographic region. A point is "verified" when it has events from two or more distinct `user_id` values. |
 | **Why it matters** | Raw point counts inflate easily with fabricated data. Requiring cross-contributor verification ensures the metric reflects real, trustworthy locations. |
 | **SQL** | See below |
-| **Phase 1 target (Bonamoussadi MVP)** | 200 verified points across 3 categories |
+| **Phase 1 target (Bonamoussadi live product)** | 200 verified points across the 7 live verticals, with strongest density in the priority capture categories |
 | **Phase 2 target (Cameroon expansion)** | 2,000 verified points |
 | **Phase 3 target (Pan-African)** | 50,000 verified points |
 | **Alert threshold** | Fewer than 5 new verified points per week in any active region |

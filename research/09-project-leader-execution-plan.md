@@ -4,6 +4,8 @@
 **Teammate 9 -- Service Delivery Manager**
 **Date:** March 2026
 
+> Historical note (2026-04-14): this research artifact captures the pre-Capacitor pilot planning state. The current as-built operating model now uses Supabase/Postgres naming, tracked Capacitor iOS/Android shells, and native distribution docs in `docs/team/09-mobile-distribution.md`. Preserve this file for planning history, not as the current source of truth.
+
 ---
 
 ## Table of Contents
@@ -26,7 +28,7 @@ This execution plan synthesizes the work of all 8 prior teammates:
 
 - **Teammate 1 (Data Analyst):** Bonamoussadi has ~560 businesses, 7 verticals, estimated 375-615 POIs. Priority order: Roads and Mobile Money (P0), then Pharmacy/Fuel/Alcohol (P1), then Billboards/Census (P2). Rainy season starts June. Cameroon's data protection law compliance deadline is June 23, 2026.
 - **Teammate 2 (System Design):** Event-sourced model (`point_events`), weekly snapshots, delta computation with z-score anomaly detection, per-vertical field schemas, confidence scoring (recency 25%, sourceCount 20%, photoEvidence 20%, gpsAccuracy 15%, reviewerApproval 10%, fieldCompleteness 10%).
-- **Teammate 3 (Cloud Architect):** Current stack: React PWA on Vercel, Neon PostgreSQL, Vercel Blob for photos, IndexedDB offline queue. Infrastructure cost: $50-200/month. Sync protocol with idempotency keys and exponential backoff.
+- **Teammate 3 (Cloud Architect):** Current stack at the time of writing: React web app on Vercel, managed PostgreSQL, Vercel Blob for photos, IndexedDB offline queue. The current implementation has since added tracked Capacitor iOS/Android shells while keeping the same shared backend and sync protocol.
 - **Teammate 4 (Cloud Engineer):** 12 API routes deployed, Vercel Cron for weekly snapshots, 8 test files. CI/CD via Vercel Git Integration on GitHub. Implementation roadmap with phased delivery.
 - **Teammate 5 (Cybersecurity):** Threat model (GPS spoofing highest risk at 16/25), privacy framework for Law 2024/017, incident response plan, field agent security training requirements. Current gaps: no MFA, no granular RBAC, no field-level PII encryption.
 - **Teammate 6 (Fraud Specialist):** Multi-layered GPS spoofing detection, duplicate detection via perceptual hashing, confidence scoring with fraud penalty, velocity analysis, collusion pattern detection. Priority: A1 (Fabrication) + A3 (GPS Spoofing) highest risk.
@@ -49,18 +51,18 @@ This execution plan synthesizes the work of all 8 prior teammates:
 | **W1D1 (Mon)** | Finalize field team lead hire; confirm contract terms | Charles (CEO) | Signed contract with Field Team Lead | Team Lead confirmed and available by W1D3 |
 | **W1D1** | Deploy RBAC migration: add `field_agent`, `team_lead`, `admin`, `data_consumer` roles to database | Charles (CEO) | Database migration applied to production | Roles queryable; existing users unaffected |
 | **W1D1** | Purchase 4x Android phones (Samsung A15 or Tecno Spark 20) + 4x power banks + 4x SIM cards (MTN or Orange) | Charles (CEO) | Equipment procurement order placed | Delivery confirmed by W1D3 |
-| **W1D2 (Tue)** | Deploy transport_road and census_proxy vertical schemas to production (Teammate 2 specs) | Charles (CEO) | New verticals visible in PWA | All 7 verticals selectable in capture form |
+| **W1D2 (Tue)** | Deploy transport_road and census_proxy vertical schemas to production (Teammate 2 specs) | Charles (CEO) | New verticals visible in the shared client | All 7 verticals selectable in capture form |
 | **W1D2** | Deploy GPS integrity module (client-side mock location detection, sensor data collection) per Teammate 6 spec | Charles (CEO) | `gpsIntegrity.ts` deployed, collecting data on submissions | GPS integrity data appearing in submission payloads |
 | **W1D2** | Deploy velocity check and photo hash deduplication endpoints per Teammate 6 spec | Charles (CEO) | Fraud detection pipeline operational | Test submissions correctly flagged/passed |
-| **W1D3 (Wed)** | Field Team Lead orientation (remote video call): ADL mission, system walkthrough, pilot objectives, reporting structure | Charles (CEO) + Field Team Lead | Team Lead understands system and objectives | Team Lead can navigate PWA, submit test POI, access admin queue |
+| **W1D3 (Wed)** | Field Team Lead orientation (remote video call): ADL mission, system walkthrough, pilot objectives, reporting structure | Charles (CEO) + Field Team Lead | Team Lead understands system and objectives | Team Lead can navigate the app, submit test POI, access admin queue |
 | **W1D3** | Recruit 3 field agents via Field Team Lead's local network; criteria: smartphone-literate, knows Bonamoussadi, available full-time for 6 weeks | Field Team Lead | 3 agent candidates identified | Candidates confirmed and available from W1D5 |
 | **W1D3** | Define Bonamoussadi zone grid: divide pilot area into 4 collection zones (A: north Bonamoussadi, B: central/Carrefour, C: south/Makepe, D: commercial corridor) | Charles (CEO) + Field Team Lead | Zone map with GPS boundaries | 4 zones defined with bounding boxes matching Teammate 2 geofence (4.0755-4.0999 N, 9.7185-9.7602 E) |
 | **W1D4 (Thu)** | Field agent onboarding: 3-hour training session in Bonamoussadi covering app usage, photo standards, data quality expectations, fraud rules, safety protocols | Field Team Lead | 3 agents trained and equipped with phones/power banks | Each agent completes 5 practice submissions that pass fraud checks |
 | **W1D4** | Create agent accounts in system with `field_agent` role; assign each agent to a primary zone | Charles (CEO) | 3 agent accounts + 1 team lead account active | All accounts can log in, submit, and sync |
-| **W1D4** | Deploy consent collection flow per Teammate 5 privacy framework (click-through consent for agents; data collection notice for public-facing capture) | Charles (CEO) | Consent flow live in PWA | Agents must accept terms before first submission |
+| **W1D4** | Deploy consent collection flow per Teammate 5 privacy framework (click-through consent for agents; data collection notice for public-facing capture) | Charles (CEO) | Consent flow live in the app | Agents must accept terms before first submission |
 | **W1D5 (Fri)** | Supervised test day: all 3 agents + Team Lead do a half-day supervised field test in Zone B (Carrefour Bonamoussadi) | Field Team Lead + All Agents | 20-30 test submissions per agent | >80% of submissions pass quality checks; sync works; photos acceptable |
 | **W1D5** | Review test submissions; identify training gaps; adjust field protocols | Charles (CEO) + Field Team Lead | Training gap analysis document | Issues documented and remediation planned for W2D1 |
-| **W1D5** | Set up Supabase/Neon database monitoring alerts (disk usage, connection count, query performance) | Charles (CEO) | Monitoring dashboard live | Alerts configured for >80% disk, >50 connections, queries >5s |
+| **W1D5** | Set up managed Postgres database monitoring alerts (disk usage, connection count, query performance) | Charles (CEO) | Monitoring dashboard live | Alerts configured for >80% disk, >50 connections, queries >5s |
 
 **Week 1 Deliverables:**
 - M1: Infrastructure Ready (all technical deployments complete)
@@ -70,7 +72,7 @@ This execution plan synthesizes the work of all 8 prior teammates:
 - All fraud detection and quality scoring operational
 
 **Week 1 Success Criteria:**
-- All 7 verticals deployable and functional in PWA
+- All 7 verticals deployable and functional in the shared client
 - GPS integrity, velocity checks, photo hash dedup all operational
 - Each agent can independently capture, sync, and verify submissions
 - Zero data loss during test day
@@ -352,7 +354,7 @@ All amounts in CFA (XAF). Exchange rate reference: 1 USD ~ 615 CFA.
 | Line Item | Monthly Cost | Duration | Total (CFA) | Notes |
 |---|---|---|---|---|
 | Vercel Pro plan | CFA 12,300 ($20) | 1.5 months | **18,450** | Current hosting |
-| Neon PostgreSQL (Pro) | CFA 12,300 ($20) | 1.5 months | **18,450** | Database hosting |
+| Managed PostgreSQL / Supabase | CFA 12,300 ($20) | 1.5 months | **18,450** | Database hosting |
 | Vercel Blob storage | CFA 0 (included in Pro) | -- | **0** | Photo storage within Pro limits |
 | Domain renewal (if needed) | CFA 6,150 | 1 | **6,150** | africandatalayer.com |
 | Google Gemini API (search) | CFA 6,150 ($10 est.) | 1.5 months | **9,225** | AI-assisted search features |
@@ -659,7 +661,7 @@ DECISION
 | R08 | **Zero client meetings by end of W6** | Medium | High | 12 | Start outreach W5D1 (not later); use free data samples as hook; leverage Yannick Lefang's network; target 10+ outreach messages | Charles | Open |
 | R09 | **Admin review bottleneck (Charles alone)** | High | Medium | 10 | Batch approval for low-risk submissions; auto-approve submissions from high-trust agents (trust score >80); prioritize fraud-flagged only | Charles | Open |
 | R10 | **Data protection compliance risk** | Low | Critical | 10 | Consent flow deployed W1D4 (Teammate 5); no PII collection beyond business names; photos of storefronts (public spaces); register as data controller before June 2026 deadline | Charles | Open |
-| R11 | **Platform downtime during field hours** | Low | High | 6 | Offline-first design; Vercel 99.9% SLA; Neon monitoring alerts; agents can work offline indefinitely | Charles | Mitigated |
+| R11 | **Platform downtime during field hours** | Low | High | 6 | Offline-first design; Vercel 99.9% SLA; database monitoring alerts; agents can work offline indefinitely | Charles | Mitigated |
 | R12 | **Fraud detection false positives frustrate agents** | Medium | Medium | 8 | Low-end device exceptions for GPS accuracy; gradual tuning of thresholds based on W2 data; transparent feedback to agents on quality | Charles | Open |
 | R13 | **Insufficient POI density to demonstrate value** | Low | High | 6 | Teammate 1 estimates 375-615 POIs in Bonamoussadi; even 400 POIs across 7 verticals is commercially meaningful | Charles | Open |
 | R14 | **Budget overrun** | Low | Medium | 4 | 15% contingency budgeted; weekly expense tracking; no variable costs beyond personnel and data plans | Charles | Open |
@@ -680,7 +682,7 @@ DECISION
 | A07 | Deploy consent collection flow | Charles | W1D4 (April 17) | Not Started |
 | A08 | Define Bonamoussadi 4-zone grid with GPS boundaries | Charles + Team Lead | W1D3 (April 16) | Not Started |
 | A09 | Create field agent training manual (2 pages, French, with screenshots) | Charles | W1D3 (April 16) | Not Started |
-| A10 | Set up database monitoring alerts (Neon dashboard) | Charles | W1D5 (April 18) | Not Started |
+| A10 | Set up database monitoring alerts (managed Postgres dashboard) | Charles | W1D5 (April 18) | Not Started |
 | A11 | Create weekly dashboard template (spreadsheet or Notion) | Charles | W2D1 (April 21) | Not Started |
 | A12 | Prepare "Bonamoussadi Data Sample" template for client outreach | Charles | W4D3 (May 7) | Not Started |
 | A13 | Register ADL as vendor with World Bank procurement system | Charles | W4D5 (May 9) | Not Started |
@@ -1003,7 +1005,7 @@ LESSONS LEARNED:
 | **Target Date** | W1D5 (Friday, April 18, 2026) |
 | **Owner** | Charles (CEO) |
 | **Definition** | All technical systems deployed and functional for pilot start |
-| **Acceptance Criteria** | (1) All 7 verticals selectable in PWA (2) RBAC roles deployed (3) GPS integrity module collecting data (4) Velocity + photo hash fraud checks operational (5) Consent flow live (6) Database monitoring active (7) All agent accounts created and tested (8) Test day completed with >80% submission pass rate |
+| **Acceptance Criteria** | (1) All 7 verticals selectable in the shared client (2) RBAC roles deployed (3) GPS integrity module collecting data (4) Velocity + photo hash fraud checks operational (5) Consent flow live (6) Database monitoring active (7) All agent accounts created and tested (8) Test day completed with >80% submission pass rate |
 | **Predecessor** | None (first milestone) |
 | **Risk** | Medium -- depends on deployment speed. All code changes are in Charles's control. |
 
