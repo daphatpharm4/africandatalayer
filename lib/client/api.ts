@@ -1,4 +1,4 @@
-import { getApiBase } from './native';
+import { getApiBase, isNative, getPlatform } from './native';
 
 const API_BASE = getApiBase();
 
@@ -8,12 +8,16 @@ export function buildUrl(path: string) {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> ?? {}),
+  };
+  if (isNative()) {
+    headers['X-Capacitor-Platform'] = getPlatform();
+  }
   return fetch(buildUrl(path), {
     credentials: "include",
     ...init,
-    headers: {
-      ...(init.headers ?? {}),
-    },
+    headers,
   });
 }
 

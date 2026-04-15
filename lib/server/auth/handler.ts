@@ -1,4 +1,4 @@
-import { Auth } from "@auth/core";
+import { Auth, skipCSRFCheck } from "@auth/core";
 import Credentials from "@auth/core/providers/credentials";
 import Google from "@auth/core/providers/google";
 import type { AppProviders } from "@auth/core/providers";
@@ -323,6 +323,11 @@ if (googleClientId && googleClientSecret) {
   );
 }
 
+function isNativeCapacitorRequest(request: Request): boolean {
+  const platform = request.headers.get("x-capacitor-platform");
+  return platform === "ios" || platform === "android";
+}
+
 export default async function handler(request: Request): Promise<Response> {
   try {
     const authSecret = getAuthSecret();
@@ -333,7 +338,14 @@ export default async function handler(request: Request): Promise<Response> {
     if (!authBaseUrl) {
       throw new Error("AUTH_URL (or NEXTAUTH_URL) is required for Auth.js");
     }
+    const isNativeRequest = isNativeCapacitorRequest(request);
     const normalizedRequest = await withAbsoluteUrl(request, authBaseUrl);
+    // Native Capacitor apps make cross-origin requests (WebView → Vercel API).
+    // CSRF protection is unnecessary for native apps (no browser cross-site
+    // context), and SameSite=lax cookies aren't sent cross-origin which causes
+    // the MissingCSRF error. For native: skip CSRF and use SameSite=none so
+    // session cookies travel with cross-origin requests.
+    const cookieSameSite = isNativeRequest ? "none" as const : "lax" as const;
     return await Auth(normalizedRequest, {
       providers,
       secret: authSecret,
@@ -341,13 +353,32 @@ export default async function handler(request: Request): Promise<Response> {
       // Auth.js requires trusted hosts. We already require AUTH_URL and normalize
       // relative auth requests against that configured origin before calling Auth().
       trustHost: true,
+      ...(isNativeRequest ? { skipCSRFCheck } : {}),
       basePath: "/api/auth",
       cookies: {
         sessionToken: {
           name: getSessionCookieName(),
           options: {
             httpOnly: true,
-            sameSite: "lax",
+            sameSite: cookieSameSite,
+            path: "/",
+            secure: true,
+          },
+        },
+        csrfToken: {
+          name: isSecureRequest() ? "__Host-authjs.csrf-token" : "authjs.csrf-token",
+          options: {
+            httpOnly: true,
+            sameSite: cookieSameSite,
+            path: "/",
+            secure: isSecureRequest(),
+          },
+        },
+        callbackUrl: {
+          name: isSecureRequest() ? "__Secure-authjs.callback-url" : "authjs.callback-url",
+          options: {
+            httpOnly: true,
+            sameSite: cookieSameSite,
             path: "/",
             secure: isSecureRequest(),
           },

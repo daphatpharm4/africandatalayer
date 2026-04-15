@@ -298,6 +298,14 @@ const App: React.FC = () => {
       void StatusBar.setBackgroundColor({ color: '#0f2b46' });
     }
 
+    // Lock to portrait — field agents use the app one-handed
+    try {
+      const lockOrientation = (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })?.lock;
+      if (lockOrientation) {
+        void lockOrientation.call(screen.orientation, 'portrait-primary').catch(() => {});
+      }
+    } catch { /* orientation lock unsupported */ }
+
     const listener = CapApp.addListener('backButton', () => {
       if (history.length > 0) {
         goBack();
