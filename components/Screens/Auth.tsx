@@ -55,6 +55,17 @@ const Auth: React.FC<Props> = ({
     'code' in value &&
     typeof (value as { code?: unknown }).code === 'string';
 
+  const isLowSignalRuntimeMessage = (message: string): boolean => {
+    const normalized = message.trim().toLowerCase();
+    return (
+      normalized.includes('string did not match the expected pattern') ||
+      normalized.includes('failed to fetch') ||
+      normalized.includes('networkerror') ||
+      normalized.includes('load failed') ||
+      normalized.includes('invalid url')
+    );
+  };
+
   const mapAuthErrorMessage = (error: unknown): string => {
     if (isAuthClientError(error)) {
       switch (error.code) {
@@ -124,10 +135,10 @@ const Auth: React.FC<Props> = ({
           );
         case 'request_error': {
           const msg = error.message?.trim();
-          if (msg) return msg;
+          if (msg && !isLowSignalRuntimeMessage(msg)) return msg;
           return t(
-            'Unable to sign in with the provided details.',
-            "Connexion impossible avec les informations fournies.",
+            'Unable to sign in right now. Please check your connection and try again.',
+            "Connexion impossible pour le moment. Vérifiez la connexion et réessayez.",
           );
         }
         default:
@@ -140,7 +151,12 @@ const Auth: React.FC<Props> = ({
 
     if (error instanceof Error) {
       const message = error.message.replace(/^Error:\s*/, '').trim();
-      if (message && !/^<!doctype/i.test(message) && !/^<html/i.test(message)) {
+      if (
+        message &&
+        !isLowSignalRuntimeMessage(message) &&
+        !/^<!doctype/i.test(message) &&
+        !/^<html/i.test(message)
+      ) {
         return message;
       }
     }
