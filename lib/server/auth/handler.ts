@@ -125,6 +125,16 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
     if (!normalizedIdentifier || !password) return null;
     const identifier = normalizedIdentifier.value;
     const ip = extractRequestIp(request);
+    const reject = (reason: string, extra: Record<string, unknown> = {}) => {
+      logWarnFn("auth.credentials_rejected", {
+        reason,
+        identifier,
+        hasRequest: Boolean(request),
+        ip,
+        ...extra,
+      });
+      return null;
+    };
     if (ip) {
       const authRate = await consumeRateLimitFn({
         route: "POST /api/auth/callback/credentials",
@@ -135,7 +145,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
         userId: identifier,
       });
       if (!authRate.allowed) {
-        return null;
+        return reject("rate_limited");
       }
     }
 
@@ -148,7 +158,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
           request,
           details: { reason: "account_locked", lockedUntil: profile.lockedUntil },
         });
-        return null;
+        return reject("account_locked", { userId: profile.id, lockedUntil: profile.lockedUntil });
       }
       const adminMatch = await comparePasswordFn(password, profile.passwordHash);
       if (adminMatch) {
@@ -166,7 +176,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
         };
       }
       await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
-      return null;
+      return reject("invalid_admin_db_credentials", { userId: profile.id });
     }
 
     // Env-var bootstrap fallback: only fires when no DB admin matched above.
@@ -177,7 +187,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
     if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail) {
       if (!isBcryptHash(adminPassword)) {
         logWarnFn("auth.admin_password_invalid_format", { userId: identifier });
-        return null;
+        return reject("invalid_admin_env_password_hash_format");
       }
       const adminMatch = await comparePasswordFn(password, adminPassword);
       if (adminMatch) {
@@ -195,7 +205,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
         request,
         details: { reason: "invalid_admin_credentials" },
       });
-      return null;
+      return reject("invalid_admin_env_credentials");
     }
 
     if (profile?.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
@@ -205,17 +215,17 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
         request,
         details: { reason: "account_locked", lockedUntil: profile.lockedUntil },
       });
-      return null;
+      return reject("account_locked", { userId: profile.id, lockedUntil: profile.lockedUntil });
     }
     if (!profile?.passwordHash) {
       await persistLoginFailure(profile ?? null, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
-      return null;
+      return reject("missing_profile_or_password_hash", { hasProfile: Boolean(profile) });
     }
 
     const valid = await comparePasswordFn(password, profile.passwordHash);
     if (!valid) {
       await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
-      return null;
+      return reject("invalid_credentials", { userId: profile.id });
     }
 
     await clearLoginFailure(profile, { upsertUserProfileFn });
