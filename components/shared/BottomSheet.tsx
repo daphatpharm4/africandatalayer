@@ -179,7 +179,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   return (
     <div
       ref={sheetRef}
-      className={`fixed inset-x-0 z-30 mx-auto w-full max-w-md rounded-t-[28px] border-t border-gray-100 shadow-[0_-4px_24px_rgba(15,43,70,0.12)] ${
+      className={`fixed inset-x-0 z-30 mx-auto w-full max-w-md md:max-w-lg rounded-t-[28px] border-t border-gray-100 shadow-[0_-4px_24px_rgba(15,43,70,0.12)] ${
         isLowEndDevice ? 'bg-white' : 'bg-white/98 backdrop-blur-xl'
       } ${className}`}
       style={{
@@ -192,7 +192,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     >
       {/* Drag handle */}
       <div
-        className="bottom-sheet flex items-center justify-center h-8 cursor-grab active:cursor-grabbing"
+        className="bottom-sheet flex items-center justify-center h-11 cursor-grab active:cursor-grabbing"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -204,7 +204,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
       {/* Content */}
       <div
         className="bottom-sheet-content overflow-y-auto no-scrollbar px-4 pb-4"
-        style={{ maxHeight: `${maxH - 32}px` }}
+        style={{ maxHeight: `${maxH - 44}px` }}
       >
         {children}
       </div>

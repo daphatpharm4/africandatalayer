@@ -52,4 +52,4 @@ const StreakTracker: React.FC<Props> = ({ language, streakDays, activeDays }) =>
   );
 };
 
-export default StreakTracker;
+export default React.memo(StreakTracker);

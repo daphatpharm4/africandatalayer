@@ -8,7 +8,7 @@ import {
   Share2,
   ShieldCheck,
   ThermometerSun,
-  Users
+  Users,
 } from 'lucide-react';
 import {
   BarChart,
@@ -19,15 +19,28 @@ import {
   YAxis,
   Tooltip,
   PieChart,
-  Pie
+  Pie,
 } from 'recharts';
 import { getSession } from '../../lib/client/auth';
 import { apiJson } from '../../lib/client/api';
-import type { LeaderboardEntry, MapScope, PointEvent, ProjectedPoint, SubmissionCategory } from '../../shared/types';
-import { categoryPluralLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
+import type {
+  LeaderboardEntry,
+  MapScope,
+  PointEvent,
+  ProjectedPoint,
+  SubmissionCategory,
+} from '../../shared/types';
+import {
+  categoryPluralLabel,
+  VERTICAL_IDS,
+  VERTICALS,
+} from '../../shared/verticals';
 import ProfileAvatar from '../shared/ProfileAvatar';
 import ScreenHeader from '../shared/ScreenHeader';
-import { coerceAvatarPreset, type AvatarPreset } from '../../shared/avatarPresets';
+import {
+  coerceAvatarPreset,
+  type AvatarPreset,
+} from '../../shared/avatarPresets';
 
 interface Props {
   onBack: () => void;
@@ -65,7 +78,7 @@ interface AnalyticsAnomalyRow {
 const HEATMAP_COLORS: Record<HeatLevel, string> = {
   High: 'bg-forest',
   Medium: 'bg-terra',
-  Low: 'bg-gray-200'
+  Low: 'bg-gray-200',
 };
 
 const toNumber = (value: unknown): number => {
@@ -91,7 +104,7 @@ const Analytics: React.FC<Props> = ({
   onInvestorDashboard,
   isAdmin,
   isClient,
-  language
+  language,
 }) => {
   const adminMode = Boolean(isAdmin);
   const clientMode = Boolean(isClient) && !adminMode;
@@ -104,13 +117,19 @@ const Analytics: React.FC<Props> = ({
   const [isLoadingClientData, setIsLoadingClientData] = useState(false);
   const [completionRate, setCompletionRate] = useState(0);
   const [activeContributors, setActiveContributors] = useState(0);
-  const [categoryData, setCategoryData] = useState<Array<{ name: string; value: number; color: string }>>([]);
-  const [clientSnapshots, setClientSnapshots] = useState<AnalyticsSnapshotRow[]>([]);
-  const [clientAnomalies, setClientAnomalies] = useState<AnalyticsAnomalyRow[]>([]);
+  const [categoryData, setCategoryData] = useState<
+    Array<{ name: string; value: number; color: string }>
+  >([]);
+  const [clientSnapshots, setClientSnapshots] = useState<
+    AnalyticsSnapshotRow[]
+  >([]);
+  const [clientAnomalies, setClientAnomalies] = useState<AnalyticsAnomalyRow[]>(
+    [],
+  );
   const [heatmap, setHeatmap] = useState<HeatLevel[][]>([
     ['Low', 'Low', 'Low', 'Low'],
     ['Low', 'Low', 'Low', 'Low'],
-    ['Low', 'Low', 'Low', 'Low']
+    ['Low', 'Low', 'Low', 'Low'],
   ]);
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
@@ -154,7 +173,10 @@ const Analytics: React.FC<Props> = ({
 
         const pointParams = new URLSearchParams();
         if (scope !== 'bonamoussadi') pointParams.set('scope', scope);
-        const pointsPath = pointParams.size > 0 ? `/api/submissions?${pointParams.toString()}` : '/api/submissions';
+        const pointsPath =
+          pointParams.size > 0
+            ? `/api/submissions?${pointParams.toString()}`
+            : '/api/submissions';
 
         const eventParams = new URLSearchParams({ view: 'events' });
         if (scope !== 'bonamoussadi') eventParams.set('scope', scope);
@@ -162,14 +184,19 @@ const Analytics: React.FC<Props> = ({
 
         const [points, events] = await Promise.all([
           apiJson<ProjectedPoint[]>(pointsPath),
-          apiJson<PointEvent[]>(eventsPath)
+          apiJson<PointEvent[]>(eventsPath),
         ]);
 
         const safePoints = Array.isArray(points) ? points : [];
         const safeEvents = Array.isArray(events) ? events : [];
 
-        const completed = safePoints.filter((point) => Array.isArray(point.gaps) && point.gaps.length === 0).length;
-        const completion = safePoints.length > 0 ? Math.round((completed / safePoints.length) * 100) : 0;
+        const completed = safePoints.filter(
+          (point) => Array.isArray(point.gaps) && point.gaps.length === 0,
+        ).length;
+        const completion =
+          safePoints.length > 0
+            ? Math.round((completed / safePoints.length) * 100)
+            : 0;
         setCompletionRate(completion);
 
         const now = Date.now();
@@ -178,22 +205,32 @@ const Analytics: React.FC<Props> = ({
           safeEvents
             .filter((event) => {
               const createdAt = new Date(event.createdAt).getTime();
-              return Number.isFinite(createdAt) && now - createdAt <= activeWindowMs;
+              return (
+                Number.isFinite(createdAt) && now - createdAt <= activeWindowMs
+              );
             })
             .map((event) => event.userId)
-            .filter((userId) => typeof userId === 'string' && userId.trim().length > 0)
+            .filter(
+              (userId) =>
+                typeof userId === 'string' && userId.trim().length > 0,
+            ),
         );
         setActiveContributors(activeUsers.size);
 
         const categoryCounts: Record<string, number> = {};
         for (const id of VERTICAL_IDS) categoryCounts[id] = 0;
         for (const event of safeEvents) {
-          if (event.category in categoryCounts) categoryCounts[event.category] += 1;
+          if (event.category in categoryCounts)
+            categoryCounts[event.category] += 1;
         }
         setCategoryData(
-          VERTICAL_IDS
-            .filter((id) => (categoryCounts[id] ?? 0) > 0)
-            .map((id) => ({ name: categorylabel(id as SubmissionCategory), value: categoryCounts[id], color: VERTICALS[id].color }))
+          VERTICAL_IDS.filter((id) => (categoryCounts[id] ?? 0) > 0).map(
+            (id) => ({
+              name: categorylabel(id as SubmissionCategory),
+              value: categoryCounts[id],
+              color: VERTICALS[id].color,
+            }),
+          ),
         );
 
         const categories = VERTICAL_IDS;
@@ -201,10 +238,18 @@ const Analytics: React.FC<Props> = ({
         const heatWindowMs = 24 * 60 * 60 * 1000;
         for (const event of safeEvents) {
           const timestamp = new Date(event.createdAt).getTime();
-          if (!Number.isFinite(timestamp) || now - timestamp > heatWindowMs || timestamp > now) continue;
+          if (
+            !Number.isFinite(timestamp) ||
+            now - timestamp > heatWindowMs ||
+            timestamp > now
+          )
+            continue;
           const categoryIndex = categories.indexOf(event.category);
           if (categoryIndex === -1) continue;
-          const bucketIndex = Math.max(0, Math.min(3, Math.floor(new Date(timestamp).getHours() / 6)));
+          const bucketIndex = Math.max(
+            0,
+            Math.min(3, Math.floor(new Date(timestamp).getHours() / 6)),
+          );
           bucketsPerCategory[categoryIndex][bucketIndex] += 1;
         }
 
@@ -218,13 +263,17 @@ const Analytics: React.FC<Props> = ({
         };
 
         setHeatmap(
-          bucketsPerCategory.map((row) => row.map((value) => toHeatLevel(value)))
+          bucketsPerCategory.map((row) =>
+            row.map((value) => toHeatLevel(value)),
+          ),
         );
       } catch {
         setCompletionRate(0);
         setActiveContributors(0);
         setCategoryData([]);
-        setHeatmap(VERTICAL_IDS.map(() => ['Low', 'Low', 'Low', 'Low'] as HeatLevel[]));
+        setHeatmap(
+          VERTICAL_IDS.map(() => ['Low', 'Low', 'Low', 'Low'] as HeatLevel[]),
+        );
       } finally {
         setIsLoadingAdminData(false);
       }
@@ -240,7 +289,9 @@ const Analytics: React.FC<Props> = ({
       try {
         setIsLoadingClientData(true);
         const [snapshots, anomalies] = await Promise.all([
-          apiJson<AnalyticsSnapshotRow[]>('/api/analytics?view=snapshots&limit=12'),
+          apiJson<AnalyticsSnapshotRow[]>(
+            '/api/analytics?view=snapshots&limit=12',
+          ),
           apiJson<AnalyticsAnomalyRow[]>('/api/analytics?view=anomalies'),
         ]);
         setClientSnapshots(Array.isArray(snapshots) ? snapshots : []);
@@ -263,9 +314,11 @@ const Analytics: React.FC<Props> = ({
     const now = Date.now();
     const diffMs = now - date.getTime();
     const minutes = Math.max(1, Math.round(diffMs / 60000));
-    if (minutes < 60) return language === 'fr' ? `il y a ${minutes} min` : `${minutes}m ago`;
+    if (minutes < 60)
+      return language === 'fr' ? `il y a ${minutes} min` : `${minutes}m ago`;
     const hours = Math.round(minutes / 60);
-    if (hours < 24) return language === 'fr' ? `il y a ${hours}h` : `${hours}h ago`;
+    if (hours < 24)
+      return language === 'fr' ? `il y a ${hours}h` : `${hours}h ago`;
     const days = Math.round(hours / 24);
     return language === 'fr' ? `il y a ${days}j` : `${days}d ago`;
   };
@@ -275,7 +328,7 @@ const Analytics: React.FC<Props> = ({
       { name: '0-100', value: 0, color: '#d5e1eb' },
       { name: '100-500', value: 0, color: '#0f2b46' },
       { name: '500-1k', value: 0, color: '#4c7c59' },
-      { name: '1k+', value: 0, color: '#c86b4a' }
+      { name: '1k+', value: 0, color: '#c86b4a' },
     ];
     for (const entry of leaderboard) {
       if (entry.xp < 100) {
@@ -295,9 +348,15 @@ const Analytics: React.FC<Props> = ({
     if (leaderboard.length === 0) return null;
     const totals = new Map<string, number>();
     for (const entry of leaderboard) {
-      Object.entries(entry.verticalBreakdown ?? {}).forEach(([vertical, count]) => {
-        totals.set(vertical, (totals.get(vertical) ?? 0) + (typeof count === 'number' ? count : 0));
-      });
+      Object.entries(entry.verticalBreakdown ?? {}).forEach(
+        ([vertical, count]) => {
+          totals.set(
+            vertical,
+            (totals.get(vertical) ?? 0) +
+              (typeof count === 'number' ? count : 0),
+          );
+        },
+      );
     }
     const sorted = [...totals.entries()].sort((a, b) => b[1] - a[1]);
     return sorted[0] ?? null;
@@ -305,24 +364,35 @@ const Analytics: React.FC<Props> = ({
 
   const latestClientSnapshotDate = useMemo(() => {
     if (clientSnapshots.length === 0) return null;
-    return clientSnapshots
-      .map((row) => row.snapshot_date)
-      .sort((a, b) => b.localeCompare(a))[0] ?? null;
+    return (
+      clientSnapshots
+        .map((row) => row.snapshot_date)
+        .sort((a, b) => b.localeCompare(a))[0] ?? null
+    );
   }, [clientSnapshots]);
 
   const latestClientSnapshots = useMemo(() => {
     if (!latestClientSnapshotDate) return [];
-    return clientSnapshots.filter((row) => row.snapshot_date === latestClientSnapshotDate);
+    return clientSnapshots.filter(
+      (row) => row.snapshot_date === latestClientSnapshotDate,
+    );
   }, [clientSnapshots, latestClientSnapshotDate]);
 
   const clientTrackedPoints = useMemo(
-    () => latestClientSnapshots.reduce((sum, row) => sum + toNumber(row.total_points), 0),
-    [latestClientSnapshots]
+    () =>
+      latestClientSnapshots.reduce(
+        (sum, row) => sum + toNumber(row.total_points),
+        0,
+      ),
+    [latestClientSnapshots],
   );
 
   const clientCompletionRate = useMemo(() => {
     if (latestClientSnapshots.length === 0) return 0;
-    const total = latestClientSnapshots.reduce((sum, row) => sum + toNumber(row.completion_rate), 0);
+    const total = latestClientSnapshots.reduce(
+      (sum, row) => sum + toNumber(row.completion_rate),
+      0,
+    );
     return Math.round(total / latestClientSnapshots.length);
   }, [latestClientSnapshots]);
 
@@ -332,16 +402,25 @@ const Analytics: React.FC<Props> = ({
       .filter((value): value is number | string => value !== null)
       .map((value) => toNumber(value));
     if (values.length === 0) return 0;
-    return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+    return (
+      Math.round(
+        (values.reduce((sum, value) => sum + value, 0) / values.length) * 10,
+      ) / 10
+    );
   }, [latestClientSnapshots]);
 
   const clientAnomalyCount = useMemo(
-    () => clientAnomalies.reduce((sum, row) => sum + (row.anomaly_flags?.length ?? 0), 0),
-    [clientAnomalies]
+    () =>
+      clientAnomalies.reduce(
+        (sum, row) => sum + (row.anomaly_flags?.length ?? 0),
+        0,
+      ),
+    [clientAnomalies],
   );
 
   const clientTopCategory = useMemo(() => {
-    let best: { verticalId: SubmissionCategory; totalPoints: number } | null = null;
+    let best: { verticalId: SubmissionCategory; totalPoints: number } | null =
+      null;
     for (const row of latestClientSnapshots) {
       const totalPoints = toNumber(row.total_points);
       if (best === null || totalPoints > best.totalPoints) {
@@ -354,7 +433,11 @@ const Analytics: React.FC<Props> = ({
     return best;
   }, [latestClientSnapshots]);
 
-  const clientTopContributors = useMemo(() => leaderboard.slice(0, 3), [leaderboard]);
+  const clientTopContributors = useMemo(
+    () => leaderboard.slice(0, 3),
+    [leaderboard],
+  );
+  const contributorMode = !adminMode && !clientMode;
 
   return (
     <div data-testid="screen-analytics" className="screen-shell">
@@ -369,18 +452,34 @@ const Analytics: React.FC<Props> = ({
         onBack={onBack}
         language={language}
         trailing={
-          <button className="p-2 text-gray-400" aria-label={t('Share', 'Partager')}>
+          <button
+            className="flex h-11 w-11 items-center justify-center text-gray-400"
+            aria-label={t('Share', 'Partager')}
+          >
             <Share2 size={20} />
           </button>
         }
       />
 
-      <div className="p-4 pb-24 space-y-6">
+      <div
+        className={
+          contributorMode ? 'px-4 pb-4 pt-4 space-y-4' : 'p-4 pb-24 space-y-6'
+        }
+        style={
+          contributorMode
+            ? { paddingBottom: 'calc(var(--screen-content-bottom) + 0.25rem)' }
+            : undefined
+        }
+      >
         {adminMode ? (
           <div className="flex items-center justify-between py-2">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 rounded-full border-2 border-white shadow bg-navy-light overflow-hidden">
-                <ProfileAvatar preset={adminAvatar} alt={t('avatar', 'avatar')} className="w-full h-full" />
+                <ProfileAvatar
+                  preset={adminAvatar}
+                  alt={t('avatar', 'avatar')}
+                  className="w-full h-full"
+                />
               </div>
               <div className="flex flex-col">
                 <h4 className="font-bold text-gray-900 text-sm">
@@ -388,7 +487,9 @@ const Analytics: React.FC<Props> = ({
                 </h4>
                 <div className="flex items-center space-x-1.5">
                   <ShieldCheck size={12} className="text-forest" />
-                  <span className="micro-label text-gray-400">{t('Senior Contributor', 'Contributeur senior')}</span>
+                  <span className="micro-label text-gray-400">
+                    {t('Senior Contributor', 'Contributeur senior')}
+                  </span>
                 </div>
               </div>
             </div>
@@ -404,18 +505,25 @@ const Analytics: React.FC<Props> = ({
         ) : clientMode ? (
           <div className="flex items-center justify-between py-2">
             <div className="flex flex-col">
-              <span className="micro-label text-gray-400">{t('Client Insights', 'Insights client')}</span>
+              <span className="micro-label text-gray-400">
+                {t('Client Insights', 'Insights client')}
+              </span>
               <span className="text-sm font-semibold text-gray-900">
-                {t('Choose the right reporting layer for the story you need to tell', "Choisissez la bonne couche de reporting pour l'histoire à raconter")}
+                {t(
+                  'Your data, two ways — map-level context or executive summary',
+                  'Vos données sous deux angles — contexte terrain ou synthèse exécutive',
+                )}
               </span>
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between py-2">
-            <div className="flex flex-col">
-              <span className="micro-label text-gray-400">{t('Leaderboard', 'Classement')}</span>
-              <span className="text-sm font-semibold text-gray-900">{t('Top contributors near you', 'Top contributeurs près de vous')}</span>
-            </div>
+          <div className="px-1 pt-1">
+            <span className="micro-label text-gray-400">
+              {t('Leaderboard', 'Classement')}
+            </span>
+            <p className="mt-1 text-lg font-bold leading-tight text-gray-900">
+              {t('Top contributors near you', 'Top contributeurs près de vous')}
+            </p>
           </div>
         )}
 
@@ -428,8 +536,15 @@ const Analytics: React.FC<Props> = ({
               <div className="flex items-center space-x-3">
                 <BarChart3 size={18} />
                 <div className="text-left">
-                  <span className="text-xs font-bold block">{t('Delta Intelligence', 'Intelligence Delta')}</span>
-                  <span className="text-[11px] text-gray-300">{t('Snapshots, trends & anomalies', 'Snapshots, tendances & anomalies')}</span>
+                  <span className="text-xs font-bold block">
+                    {t('Delta Intelligence', 'Intelligence Delta')}
+                  </span>
+                  <span className="text-[11px] text-white/70">
+                    {t(
+                      'Snapshots, trends & anomalies',
+                      'Snapshots, tendances & anomalies',
+                    )}
+                  </span>
                 </div>
               </div>
               <ArrowLeft size={16} className="rotate-180" />
@@ -442,8 +557,15 @@ const Analytics: React.FC<Props> = ({
                 <div className="flex items-center space-x-3">
                   <Users size={18} />
                   <div className="text-left">
-                    <span className="text-xs font-bold block">{t('Agent Performance', 'Performance agents')}</span>
-                    <span className="text-[11px] text-gray-500">{t('Quality, fraud & assignment pace', 'Qualite, fraude et rythme des affectations')}</span>
+                    <span className="text-xs font-bold block">
+                      {t('Agent Performance', 'Performance agents')}
+                    </span>
+                    <span className="text-[11px] text-gray-500">
+                      {t(
+                        'Quality, fraud & assignment pace',
+                        'Qualite, fraude et rythme des affectations',
+                      )}
+                    </span>
                   </div>
                 </div>
                 <ArrowLeft size={16} className="rotate-180" />
@@ -457,8 +579,15 @@ const Analytics: React.FC<Props> = ({
                 <div className="flex items-center space-x-3">
                   <LineChartIcon size={18} />
                   <div className="text-left">
-                    <span className="text-xs font-bold block">{t('Investor Dashboard', 'Tableau investisseur')}</span>
-                    <span className="text-[11px] text-white/70">{t('Kenya pitch mode — summit-ready metrics', 'Mode pitch Kenya — métriques prêtes')}</span>
+                    <span className="text-xs font-bold block">
+                      {t('Investor Dashboard', 'Tableau investisseur')}
+                    </span>
+                    <span className="text-[11px] text-white/70">
+                      {t(
+                        'Kenya pitch mode — summit-ready metrics',
+                        'Mode pitch Kenya — métriques prêtes',
+                      )}
+                    </span>
                   </div>
                 </div>
                 <ArrowLeft size={16} className="rotate-180" />
@@ -468,7 +597,10 @@ const Analytics: React.FC<Props> = ({
         )}
 
         {clientMode && (
-          <div data-testid="client-insights-hub" className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div
+            data-testid="client-insights-hub"
+            className="grid grid-cols-1 gap-3 lg:grid-cols-2"
+          >
             {onDeltaDashboard && (
               <button
                 onClick={onDeltaDashboard}
@@ -477,9 +609,14 @@ const Analytics: React.FC<Props> = ({
                 <div className="flex items-center space-x-3">
                   <MapPinned size={18} />
                   <div className="text-left">
-                    <span className="text-xs font-bold block">{t('Delta Intelligence', 'Intelligence Delta')}</span>
-                    <span className="text-[11px] text-gray-300">
-                      {t('Neighborhood shifts, top cells, and export-ready map context', 'Changements de quartier, top cells et contexte cartographique exportable')}
+                    <span className="text-xs font-bold block">
+                      {t('Delta Intelligence', 'Intelligence Delta')}
+                    </span>
+                    <span className="text-[11px] text-white/70">
+                      {t(
+                        'Neighborhood shifts, top cells, and export-ready map context',
+                        'Changements de quartier, top cells et contexte cartographique exportable',
+                      )}
                     </span>
                   </div>
                 </div>
@@ -494,9 +631,14 @@ const Analytics: React.FC<Props> = ({
                 <div className="flex items-center space-x-3">
                   <LineChartIcon size={18} />
                   <div className="text-left">
-                    <span className="text-xs font-bold block">{t('Investor Dashboard', 'Tableau investisseur')}</span>
+                    <span className="text-xs font-bold block">
+                      {t('Investor Dashboard', 'Tableau investisseur')}
+                    </span>
                     <span className="text-[11px] text-gray-500">
-                      {t('Executive KPIs for trust, growth, and reporting confidence', 'KPIs exécutifs pour la confiance, la croissance et le reporting')}
+                      {t(
+                        'Executive KPIs for trust, growth, and reporting confidence',
+                        'KPIs exécutifs pour la confiance, la croissance et le reporting',
+                      )}
                     </span>
                   </div>
                 </div>
@@ -508,18 +650,30 @@ const Analytics: React.FC<Props> = ({
 
         {adminMode && (
           <div className="grid grid-cols-2 gap-4">
-            <div className="card p-5 space-y-2">
-              <span className="micro-label text-gray-400">{t('Data Complete', 'Données complètes')}</span>
+            <div className="card p-4 space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Data Complete', 'Données complètes')}
+              </span>
               <div className="flex items-baseline space-x-1">
-                <span className="text-xl font-bold text-gray-900">{completionRate}%</span>
-                <span className="text-[11px] text-forest font-bold">{isLoadingAdminData ? '...' : t('live', 'live')}</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {completionRate}%
+                </span>
+                <span className="text-[11px] text-forest font-bold">
+                  {isLoadingAdminData ? '...' : t('live', 'live')}
+                </span>
               </div>
             </div>
-            <div className="card p-5 space-y-2">
-              <span className="micro-label text-gray-400">{t('Active Contributors', 'Contributeurs actifs')}</span>
+            <div className="card p-4 space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Active Contributors', 'Contributeurs actifs')}
+              </span>
               <div className="flex items-baseline space-x-1">
-                <span className="text-xl font-bold text-gray-900">{activeContributors}</span>
-                <span className="text-[11px] text-navy font-bold">{t('30d', '30j')}</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {activeContributors}
+                </span>
+                <span className="text-[11px] text-navy font-bold">
+                  {t('30d', '30j')}
+                </span>
               </div>
             </div>
           </div>
@@ -527,61 +681,95 @@ const Analytics: React.FC<Props> = ({
 
         {clientMode && (
           <div className="grid grid-cols-2 gap-4">
-            <div className="card p-5 space-y-2">
-              <span className="micro-label text-gray-400">{t('Tracked points', 'Points suivis')}</span>
+            <div className="card p-4 space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Tracked points', 'Points suivis')}
+              </span>
               <div className="flex items-baseline space-x-1">
-                <span className="text-xl font-bold text-gray-900">{clientTrackedPoints}</span>
-                <span className="text-[11px] text-navy font-bold">{latestClientSnapshotDate ?? t('latest', 'dernier')}</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {clientTrackedPoints}
+                </span>
+                <span className="text-[11px] text-navy font-bold">
+                  {latestClientSnapshotDate ?? t('latest', 'dernier')}
+                </span>
               </div>
             </div>
-            <div className="card p-5 space-y-2">
-              <span className="micro-label text-gray-400">{t('Completion rate', 'Taux de complétion')}</span>
+            <div className="card p-4 space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Completion rate', 'Taux de complétion')}
+              </span>
               <div className="flex items-baseline space-x-1">
-                <span className="text-xl font-bold text-gray-900">{clientCompletionRate}%</span>
-                <span className="text-[11px] text-forest font-bold">{isLoadingClientData ? '...' : t('live', 'live')}</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {clientCompletionRate}%
+                </span>
+                <span className="text-[11px] text-forest font-bold">
+                  {isLoadingClientData ? '...' : t('live', 'live')}
+                </span>
               </div>
             </div>
-            <div className="card p-5 space-y-2">
-              <span className="micro-label text-gray-400">{t('Anomaly flags', 'Signaux anomalies')}</span>
+            <div className="card p-4 space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Anomaly flags', 'Signaux anomalies')}
+              </span>
               <div className="flex items-baseline space-x-1">
-                <span className="text-xl font-bold text-gray-900">{clientAnomalyCount}</span>
-                <span className="text-[11px] text-terra font-bold">{t('watchlist', 'watchlist')}</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {clientAnomalyCount}
+                </span>
+                <span className="text-[11px] text-terra font-bold">
+                  {t('watchlist', 'watchlist')}
+                </span>
               </div>
             </div>
-            <div className="card p-5 space-y-2">
-              <span className="micro-label text-gray-400">{t('Avg WoW growth', 'Croissance moy. hebdo')}</span>
+            <div className="card p-4 space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Avg WoW growth', 'Croissance moy. hebdo')}
+              </span>
               <div className="flex items-baseline space-x-1">
-                <span className="text-xl font-bold text-gray-900">{clientAverageGrowth}%</span>
-                <span className="text-[11px] text-forest font-bold">{t('across tracked verticals', 'sur les verticales suivies')}</span>
+                <span className="text-xl font-bold text-gray-900">
+                  {clientAverageGrowth}%
+                </span>
+                <span className="text-[11px] text-forest font-bold">
+                  {t('across tracked verticals', 'sur les verticales suivies')}
+                </span>
               </div>
             </div>
           </div>
         )}
 
         {clientMode && (
-          <div className="card p-5 space-y-4">
+          <div className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <BarChart3 size={16} className="text-navy" />
-                <span className="micro-label text-gray-900">{t('How clients use this surface', 'Comment utiliser cette vue client')}</span>
+                <span className="micro-label text-gray-900">
+                  {t(
+                    'How clients use this surface',
+                    'Comment utiliser cette vue client',
+                  )}
+                </span>
               </div>
-              <span className="micro-label text-gray-400">{t('Role-specific', 'Spécifique au rôle')}</span>
+              <span className="micro-label text-gray-400">
+                {t('Role-specific', 'Spécifique au rôle')}
+              </span>
             </div>
             <div className="rounded-2xl bg-page p-4 space-y-2">
               <div className="text-sm font-semibold text-gray-900">
                 {clientTopCategory
                   ? `${t('Top tracked category:', 'Catégorie la plus suivie :')} ${categorylabel(clientTopCategory.verticalId)}`
-                  : t('No category data yet', 'Pas encore de données catégorie')}
+                  : t(
+                      'No category data yet',
+                      'Pas encore de données catégorie',
+                    )}
               </div>
               <p className="text-xs text-gray-500">
                 {clientTopCategory
                   ? t(
                       'Start with Delta Intelligence when you need exact map location, cluster drivers, and exportable context. Move to Investor Dashboard when the conversation shifts to trust, growth, and executive KPIs.',
-                      "Commencez par Intelligence Delta pour localiser précisément le signal, ses drivers et le contexte exportable. Passez au Tableau investisseur quand la discussion bascule vers la confiance, la croissance et les KPIs exécutifs."
+                      'Commencez par Intelligence Delta pour localiser précisément le signal, ses drivers et le contexte exportable. Passez au Tableau investisseur quand la discussion bascule vers la confiance, la croissance et les KPIs exécutifs.',
                     )
                   : t(
                       'Use Delta Intelligence for map-first analysis and Investor Dashboard for board-ready packaging.',
-                      "Utilisez Intelligence Delta pour l'analyse cartographique et le Tableau investisseur pour le packaging exécutif."
+                      "Utilisez Intelligence Delta pour l'analyse cartographique et le Tableau investisseur pour le packaging exécutif.",
                     )}
               </p>
             </div>
@@ -589,19 +777,34 @@ const Analytics: React.FC<Props> = ({
         )}
 
         {adminMode && (
-          <div className="card p-5 space-y-4">
+          <div className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <BarChart3 size={16} className="text-navy" />
-                <span className="micro-label text-gray-900">{t('Contributions by Category', 'Contributions par catégorie')}</span>
+                <span className="micro-label text-gray-900">
+                  {t(
+                    'Contributions by Category',
+                    'Contributions par catégorie',
+                  )}
+                </span>
               </div>
-              <span className="micro-label text-gray-400">{t('Live', 'Live')}</span>
+              <span className="micro-label text-gray-400">
+                {t('Live', 'Live')}
+              </span>
             </div>
             <div className="h-40 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryData} layout="vertical" margin={{ left: 10, right: 10 }}>
+                <BarChart
+                  data={categoryData}
+                  layout="vertical"
+                  margin={{ left: 10, right: 10 }}
+                >
                   <XAxis type="number" hide />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fontSize: 10 }}
+                  />
                   <Tooltip />
                   <Bar dataKey="value" radius={[6, 6, 6, 6]}>
                     {categoryData.map((entry, index) => (
@@ -615,18 +818,27 @@ const Analytics: React.FC<Props> = ({
         )}
 
         {adminMode && (
-          <div className="card p-5 space-y-4">
+          <div className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Medal size={16} className="text-forest" />
-                <span className="micro-label text-gray-900">{t('XP Distribution', 'Distribution XP')}</span>
+                <span className="micro-label text-gray-900">
+                  {t('XP Distribution', 'Distribution XP')}
+                </span>
               </div>
-              <span className="micro-label text-gray-400">{t('All Users', 'Tous les utilisateurs')}</span>
+              <span className="micro-label text-gray-400">
+                {t('All Users', 'Tous les utilisateurs')}
+              </span>
             </div>
             <div className="h-44 w-full flex items-center">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={xpDistribution} dataKey="value" outerRadius={70} innerRadius={40}>
+                  <Pie
+                    data={xpDistribution}
+                    dataKey="value"
+                    outerRadius={70}
+                    innerRadius={40}
+                  >
                     {xpDistribution.map((entry, index) => (
                       <Cell key={`xp-cell-${index}`} fill={entry.color} />
                     ))}
@@ -639,13 +851,17 @@ const Analytics: React.FC<Props> = ({
         )}
 
         {adminMode && (
-          <div className="card p-5 space-y-4">
+          <div className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <ThermometerSun size={16} className="text-terra" />
-                <span className="micro-label text-gray-900">{t('Data Freshness Heatmap', 'Heatmap fraîcheur des données')}</span>
+                <span className="micro-label text-gray-900">
+                  {t('Data Freshness Heatmap', 'Heatmap fraîcheur des données')}
+                </span>
               </div>
-              <span className="micro-label text-gray-400">{t('Last 24h', 'Dernieres 24h')}</span>
+              <span className="micro-label text-gray-400">
+                {t('Last 24h', 'Dernieres 24h')}
+              </span>
             </div>
             <div className="grid grid-cols-4 gap-2">
               {heatmap.flatMap((row, rowIndex) =>
@@ -654,122 +870,319 @@ const Analytics: React.FC<Props> = ({
                     key={`${rowIndex}-${colIndex}`}
                     className={`h-8 rounded-xl ${HEATMAP_COLORS[cell]}`}
                   />
-                ))
+                )),
               )}
             </div>
           </div>
         )}
 
-        {!clientMode && (
-          <div className="card p-5 space-y-4">
+        {contributorMode && (
+          <div className="card-pill border-gray-100 p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="micro-label text-gray-900">
+                  {t(
+                    'Top contributors near you',
+                    'Top contributeurs près de vous',
+                  )}
+                </span>
+                <span className="micro-label text-gray-500">
+                  {t('Local', 'Local')}
+                </span>
+              </div>
+              <span className="micro-label text-gray-500">
+                {t('Live', 'Live')}
+              </span>
+            </div>
+
+            <div className="mt-4 rounded-[1.5rem] border border-gray-100 bg-page px-4 py-4">
+              <p className="micro-label text-gray-400">
+                {t('How rankings work', 'Comment fonctionne le classement')}
+              </p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-gray-900">
+                {t(
+                  'Score = verified submissions x average quality',
+                  'Score = soumissions vérifiées x qualité moyenne',
+                )}
+              </p>
+              {topVerticalChampion && (
+                <p className="mt-2 text-xs leading-5 text-gray-500">
+                  {t('Busiest category:', 'Catégorie la plus active :')}{' '}
+                  {categorylabel(topVerticalChampion[0] as SubmissionCategory)}{' '}
+                  ({topVerticalChampion[1]})
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {isLoadingLeaderboard && (
+                <div className="rounded-[1.35rem] border border-gray-100 bg-page p-4 micro-label text-gray-400">
+                  {t(
+                    'Loading contributors...',
+                    'Chargement des contributeurs...',
+                  )}
+                </div>
+              )}
+              {!isLoadingLeaderboard && leaderboard.length === 0 && (
+                <div className="rounded-[1.35rem] border border-gray-100 bg-page p-4 micro-label text-gray-400">
+                  {t(
+                    'No contributor data yet.',
+                    'Pas encore de données contributeur.',
+                  )}
+                </div>
+              )}
+              {!isLoadingLeaderboard &&
+                leaderboard.map((entry) => {
+                  const rankAccent =
+                    entry.rank === 1
+                      ? 'border-l-[3px] border-l-gold'
+                      : entry.rank === 2
+                        ? 'border-l-[3px] border-l-navy-border'
+                        : entry.rank === 3
+                          ? 'border-l-[3px] border-l-terra'
+                          : '';
+                  const rankColor =
+                    entry.rank === 1
+                      ? 'text-gold'
+                      : entry.rank === 2
+                        ? 'text-navy-mid'
+                        : entry.rank === 3
+                          ? 'text-terra'
+                          : 'text-gray-900';
+                  return (
+                  <div
+                    key={entry.userId}
+                    className={`rounded-[1.35rem] border border-gray-100 bg-white px-4 py-4 shadow-sm ${rankAccent}`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-base font-bold leading-tight text-gray-900">
+                          <span className={rankColor}>#{entry.rank}</span> {entry.name}
+                        </p>
+                        <p className="mt-1 micro-label text-gray-400">
+                          {entry.contributions}{' '}
+                          {t('submissions', 'soumissions')} •{' '}
+                          {formatLastSeen(entry.lastContributionAt)}
+                        </p>
+                        <p className="mt-1 truncate text-[0.78rem] text-gray-500">
+                          {entry.lastLocation}
+                        </p>
+                        <p className="mt-2 text-[0.72rem] leading-5 text-gray-500">
+                          {t(
+                            'Verified value score',
+                            'Score de valeur vérifiée',
+                          )}{' '}
+                          : {entry.rankingScore.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span className="block text-xs font-bold text-navy">
+                          {t('Score', 'Score')}:{' '}
+                          {entry.rankingScore.toLocaleString()}
+                        </span>
+                        <span className="mt-1 block text-xs font-bold text-forest">
+                          {entry.xp.toLocaleString()} XP
+                        </span>
+                        <span className="mt-1 block micro-label text-gray-400">
+                          {entry.averageQualityScore}% {t('quality', 'qualité')}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        {adminMode && (
+          <div className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Medal size={16} className="text-navy" />
                 <span className="micro-label text-gray-900">
-                  {adminMode ? t('Top Contributor Leaderboard', 'Classement des top contributeurs') : t('Top Contributors Near You', 'Top contributeurs près de vous')}
+                  {t(
+                    'Top Contributor Leaderboard',
+                    'Classement des top contributeurs',
+                  )}
                 </span>
               </div>
-              <span className="micro-label text-gray-400">{adminMode ? t('Monthly', 'Mensuel') : t('Local', 'Local')}</span>
+              <span className="micro-label text-gray-400">
+                {t('Monthly', 'Mensuel')}
+              </span>
             </div>
             <div className="rounded-2xl bg-page p-4">
               <div className="micro-label text-gray-400">
                 {t('How rankings work', 'Comment fonctionne le classement')}
               </div>
               <div className="mt-2 text-sm font-semibold text-gray-900">
-                {t('Ranking score = submissions x average quality', 'Score = soumissions x qualité moyenne')}
+                {t(
+                  'Ranking score = submissions x average quality',
+                  'Score = soumissions x qualité moyenne',
+                )}
               </div>
               {topVerticalChampion && (
                 <div className="mt-2 text-xs text-gray-500">
-                  {t('Busiest category:', 'Catégorie la plus active :')} {categorylabel(topVerticalChampion[0] as SubmissionCategory)} ({topVerticalChampion[1]})
+                  {t('Busiest category:', 'Catégorie la plus active :')}{' '}
+                  {categorylabel(topVerticalChampion[0] as SubmissionCategory)}{' '}
+                  ({topVerticalChampion[1]})
                 </div>
               )}
             </div>
             <div className="space-y-3">
               {isLoadingLeaderboard && (
                 <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                  {t('Loading contributors...', 'Chargement des contributeurs...')}
+                  {t(
+                    'Loading contributors...',
+                    'Chargement des contributeurs...',
+                  )}
                 </div>
               )}
               {!isLoadingLeaderboard && leaderboard.length === 0 && (
                 <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                  {t('No contributor data yet.', 'Pas encore de données contributeur.')}
+                  {t(
+                    'No contributor data yet.',
+                    'Pas encore de données contributeur.',
+                  )}
                 </div>
               )}
               {!isLoadingLeaderboard &&
-                leaderboard.map((entry) => (
-                  <div key={entry.userId} className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3">
+                leaderboard.map((entry) => {
+                  const rankColor =
+                    entry.rank === 1
+                      ? 'text-gold'
+                      : entry.rank === 2
+                        ? 'text-navy-mid'
+                        : entry.rank === 3
+                          ? 'text-terra'
+                          : 'text-gray-900';
+                  return (
+                  <div
+                    key={entry.userId}
+                    className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3"
+                  >
                     <div>
-                      <p className="text-sm font-bold text-gray-900">#{entry.rank} {entry.name}</p>
-                      <p className="micro-label text-gray-400">
-                        {entry.contributions} {t('submissions', 'soumissions')} • {formatLastSeen(entry.lastContributionAt)}
+                      <p className="text-sm font-bold text-gray-900">
+                        <span className={rankColor}>#{entry.rank}</span> {entry.name}
                       </p>
-                      <p className="text-[11px] text-gray-400 truncate max-w-[220px]">{entry.lastLocation}</p>
+                      <p className="micro-label text-gray-400">
+                        {entry.contributions} {t('submissions', 'soumissions')}{' '}
+                        • {formatLastSeen(entry.lastContributionAt)}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate max-w-[220px]">
+                        {entry.lastLocation}
+                      </p>
                       <p className="text-[11px] text-gray-500 mt-1">
-                        {t('Ranking score', 'Score de classement')}: {entry.contributions} x {entry.averageQualityScore}% = {entry.rankingScore.toLocaleString()}
+                        {t('Ranking score', 'Score de classement')}:{' '}
+                        {entry.contributions} x {entry.averageQualityScore}% ={' '}
+                        {entry.rankingScore.toLocaleString()}
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="block text-xs font-bold text-navy">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
-                      <span className="block text-xs font-bold text-forest">{entry.xp.toLocaleString()} XP</span>
+                      <span className="block text-xs font-bold text-navy">
+                        {t('Score', 'Score')}:{' '}
+                        {entry.rankingScore.toLocaleString()}
+                      </span>
+                      <span className="block text-xs font-bold text-forest">
+                        {entry.xp.toLocaleString()} XP
+                      </span>
                       <span className="block micro-label text-gray-400">
                         {entry.averageQualityScore}% {t('quality', 'qualité')}
                       </span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         )}
 
         {clientMode && (
-          <div className="card p-5 space-y-4">
+          <div className="card p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Users size={16} className="text-navy" />
-                <span className="micro-label text-gray-900">{t('Field network pulse', 'Pouls du réseau terrain')}</span>
+                <span className="micro-label text-gray-900">
+                  {t('Field network pulse', 'Pouls du réseau terrain')}
+                </span>
               </div>
-              <span className="micro-label text-gray-400">{t('Top 3 contributors', 'Top 3 contributeurs')}</span>
+              <span className="micro-label text-gray-400">
+                {t('Top 3 contributors', 'Top 3 contributeurs')}
+              </span>
             </div>
             <div className="space-y-3">
               {isLoadingLeaderboard && (
                 <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                  {t('Loading contributors...', 'Chargement des contributeurs...')}
+                  {t(
+                    'Loading contributors...',
+                    'Chargement des contributeurs...',
+                  )}
                 </div>
               )}
               {!isLoadingLeaderboard && clientTopContributors.length === 0 && (
                 <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                  {t('No contributor data yet.', 'Pas encore de données contributeur.')}
+                  {t(
+                    'No contributor data yet.',
+                    'Pas encore de données contributeur.',
+                  )}
                 </div>
               )}
               {!isLoadingLeaderboard &&
-                clientTopContributors.map((entry) => (
-                  <div key={entry.userId} className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3">
+                clientTopContributors.map((entry) => {
+                  const rankColor =
+                    entry.rank === 1
+                      ? 'text-gold'
+                      : entry.rank === 2
+                        ? 'text-navy-mid'
+                        : entry.rank === 3
+                          ? 'text-terra'
+                          : 'text-gray-900';
+                  return (
+                  <div
+                    key={entry.userId}
+                    className="flex items-center justify-between bg-page border border-gray-100 rounded-2xl p-3"
+                  >
                     <div>
-                      <p className="text-sm font-bold text-gray-900">#{entry.rank} {entry.name}</p>
-                      <p className="micro-label text-gray-400">
-                        {entry.contributions} {t('submissions', 'soumissions')} • {formatLastSeen(entry.lastContributionAt)}
+                      <p className="text-sm font-bold text-gray-900">
+                        <span className={rankColor}>#{entry.rank}</span> {entry.name}
                       </p>
-                      <p className="text-[11px] text-gray-400 truncate max-w-[220px]">{entry.lastLocation}</p>
+                      <p className="micro-label text-gray-400">
+                        {entry.contributions} {t('submissions', 'soumissions')}{' '}
+                        • {formatLastSeen(entry.lastContributionAt)}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate max-w-[220px]">
+                        {entry.lastLocation}
+                      </p>
                     </div>
                     <div className="text-right">
-                      <span className="block text-xs font-bold text-navy">{t('Score', 'Score')}: {entry.rankingScore.toLocaleString()}</span>
-                      <span className="block text-xs font-bold text-forest">{entry.averageQualityScore}% {t('quality', 'qualité')}</span>
+                      <span className="block text-xs font-bold text-navy">
+                        {t('Score', 'Score')}:{' '}
+                        {entry.rankingScore.toLocaleString()}
+                      </span>
+                      <span className="block text-xs font-bold text-forest">
+                        {entry.averageQualityScore}% {t('quality', 'qualité')}
+                      </span>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         )}
 
         {adminMode && (
           <div className="bg-page p-6 rounded-2xl border-2 border-dashed border-gray-200 text-center space-y-3">
-            <p className="micro-label text-navy">{t('API Monetization Ready', 'API prête à monétiser')}</p>
+            <p className="micro-label text-navy">
+              {t('Enterprise API Access', 'Accès API entreprise')}
+            </p>
             <p className="text-xs text-gray-500">
-              {t('Tiered access for municipalities, NGOs, and logistics providers with real-time SLAs.', 'Acces par paliers pour municipalites, ONG et logisticiens avec SLA temps reel.')}
+              {t(
+                'Structured data access for municipalities, NGOs, and logistics teams — with guaranteed uptime.',
+                'Accès structuré pour municipalités, ONG et logisticiens — avec disponibilité garantie.',
+              )}
             </p>
           </div>
         )}
-
       </div>
     </div>
   );

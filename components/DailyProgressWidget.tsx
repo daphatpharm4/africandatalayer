@@ -47,7 +47,7 @@ const DailyProgressWidget: React.FC<Props> = ({
           <div className="mt-2 text-2xl font-bold text-gray-900">{submissionsToday}</div>
         </div>
         <div className="stat-tile bg-navy-wash">
-          <div className="inline-flex items-center gap-2 micro-label text-gray-500">
+          <div className="inline-flex items-center gap-2 micro-label text-terra">
             <Sparkles size={12} />
             {t('Enrichments', 'Enrichissements')}
           </div>
@@ -82,4 +82,4 @@ const DailyProgressWidget: React.FC<Props> = ({
   );
 };
 
-export default DailyProgressWidget;
+export default React.memo(DailyProgressWidget);

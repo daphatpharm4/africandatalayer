@@ -272,4 +272,4 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
   );
 };
 
-export default BadgeGrid;
+export default React.memo(BadgeGrid);

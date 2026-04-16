@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { Category, Screen } from './types';
 import type { ContributionMode, DataPoint } from './types';
 import { getSession, signOut } from './lib/client/auth';
@@ -110,17 +110,19 @@ const App: React.FC = () => {
     };
   }, []);
 
-  const navigateTo = (screen: Screen, point: DataPoint | null = null) => {
-    if (currentScreen === Screen.SPLASH && screen !== Screen.SPLASH) {
-      try { localStorage.setItem('adl_splash_seen', 'true'); } catch { /* private browsing */ }
-    }
-    if (screen === Screen.AUTH) {
-      setAuthReturnScreen(currentScreen);
-    }
-    setHistory((prev) => [...prev, currentScreen]);
-    setCurrentScreen(screen);
+  const navigateTo = useCallback((screen: Screen, point: DataPoint | null = null) => {
+    setCurrentScreen((prev) => {
+      if (prev === Screen.SPLASH && screen !== Screen.SPLASH) {
+        try { localStorage.setItem('adl_splash_seen', 'true'); } catch { /* private browsing */ }
+      }
+      if (screen === Screen.AUTH) {
+        setAuthReturnScreen(prev);
+      }
+      setHistory((h) => [...h, prev]);
+      return screen;
+    });
     if (point) setSelectedPoint(point);
-  };
+  }, []);
 
   const clearContributionContext = () => {
     setContributionMode('CREATE');
@@ -130,10 +132,10 @@ const App: React.FC = () => {
     setBatchCaptureMode(false);
   };
 
-  const goBack = () => {
+  const goBack = useCallback(() => {
     if (history.length > 0) {
       const prev = history[history.length - 1];
-      setHistory((prevHistory) => prevHistory.slice(0, -1));
+      setHistory((h) => h.slice(0, -1));
       setCurrentScreen(prev);
       return;
     }
@@ -143,9 +145,9 @@ const App: React.FC = () => {
     }
     setHistory([]);
     setCurrentScreen(isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
-  };
+  }, [history, currentScreen, authReturnScreen, isClient]);
 
-  const switchTab = (screen: Screen) => {
+  const switchTab = useCallback((screen: Screen) => {
     setHistory([]);
     if (screen === Screen.CONTRIBUTE && isClient) {
       return;
@@ -162,9 +164,9 @@ const App: React.FC = () => {
       setAuthReturnScreen(currentScreen);
     }
     setCurrentScreen(screen);
-  };
+  }, [isClient, isAuthenticated, currentScreen]);
 
-  const openContribution = (mode: ContributionMode, options: ContributionLaunchOptions = {}) => {
+  const openContribution = useCallback((mode: ContributionMode, options: ContributionLaunchOptions = {}) => {
     setContributionMode(mode);
     setContributionPoint(options.point ?? null);
     setContributionDraft(options.draft ?? null);
@@ -175,7 +177,7 @@ const App: React.FC = () => {
       return;
     }
     navigateTo(Screen.AUTH);
-  };
+  }, [isAuthenticated, navigateTo]);
 
   const checkSecurityStatus = async (): Promise<{
     wipeRequested: boolean;
@@ -491,8 +493,10 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <div
         className={`app-shell relative mx-auto flex w-full flex-col overflow-hidden bg-white ${
-          wideShell ? 'max-w-none xl:max-w-7xl' : 'max-w-none sm:max-w-md'
-        } border-x-0 border-gray-100 shadow-none sm:border-x sm:shadow-2xl`}
+          wideShell ? 'max-w-none xl:max-w-7xl' : 'max-w-none sm:max-w-md md:max-w-lg'
+        } border-x-0 border-gray-100 shadow-none sm:border-x sm:shadow-2xl ${
+          !showSyncBar ? 'pt-[var(--safe-top)]' : ''
+        }`}
       >
         {showSyncBar && (
           <SyncStatusBar

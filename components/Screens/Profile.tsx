@@ -479,7 +479,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
           </div>
           {loadError && (
             <div className="mt-2 micro-label text-red-500">
-              {loadError === 'LOAD_FAILED' ? t('Unable to load profile.', 'Impossible de charger le profil.') : loadError}
+              {loadError === 'LOAD_FAILED' ? t('Couldn\'t load your profile. Go back and try again.', 'Impossible de charger votre profil. Revenez et réessayez.') : loadError}
             </div>
           )}
           <div className="mt-4">
@@ -558,7 +558,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
         />
 
         {profile?.isAdmin && (
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <span className="micro-label text-gray-400">
@@ -581,7 +581,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
         )}
 
         {profile?.isAdmin && (
-          <div data-testid="profile-admin-access" className="card p-5 space-y-4">
+          <div data-testid="profile-admin-access" className="card p-4 space-y-4">
             <div className="space-y-1">
               <span className="micro-label text-gray-400">
                 {t('Account Access', 'Acces aux comptes')}
@@ -683,7 +683,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
           </div>
         )}
 
-        <div className="card p-5 space-y-3">
+        <div className="card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex flex-col">
               <span className="micro-label text-gray-400">
@@ -746,7 +746,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
                         type="button"
                         disabled={isUpdating}
                         onClick={() => handleAssignmentStatus(assignment.id, canStart ? 'in_progress' : 'completed')}
-                        className={`h-9 rounded-xl px-3 micro-label ${
+                        className={`min-h-[44px] rounded-2xl px-3 micro-label ${
                           isUpdating ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
                         }`}
                       >
@@ -767,12 +767,12 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <button
             onClick={onRedeem}
-            className="flex h-14 items-center justify-center gap-2 rounded-xl border border-navy-border bg-white px-4 text-sm font-semibold text-navy shadow-sm transition-all hover:bg-gray-100"
+            className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-navy-border bg-white px-4 text-sm font-semibold text-navy shadow-sm transition-all hover:bg-gray-100"
           >
             <Gift size={16} />
             <span>{t('Redeem XP', 'Échanger XP')}</span>
           </button>
-          <button className="flex h-14 items-center justify-center gap-2 rounded-xl bg-terra px-4 text-sm font-semibold text-white shadow-lg transition-all hover:bg-terra-dark">
+          <button className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-terra px-4 text-sm font-semibold text-white shadow-lg transition-all hover:bg-terra-dark">
             <Wallet size={16} />
             <span>{t('Convert to Rewards', 'Convertir en recompenses')}</span>
           </button>
@@ -782,7 +782,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
           const WEEKLY_TARGET = 50;
           const progress = Math.min(100, Math.round((pointsThisWeek / WEEKLY_TARGET) * 100));
           return (
-            <div className="card p-5 space-y-3">
+            <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="micro-label text-gray-400">
                   {t('Weekly Target', 'Objectif hebdomadaire')}
@@ -807,7 +807,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
         })()}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 space-y-3">
             <div className="flex items-center space-x-2 text-forest">
               <BadgeCheck size={16} />
               <span className="micro-label">{t('Trust Score', 'Score de confiance')}</span>
@@ -819,7 +819,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
               </div>
             </div>
           </div>
-          <div className="card p-5 space-y-3">
+          <div className="card p-4 space-y-3">
             <div className="flex items-center space-x-2 text-navy">
               <TrendingUp size={16} />
               <span className="micro-label">{t('This Week', 'Cette semaine')}</span>
@@ -831,7 +831,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
           </div>
         </div>
 
-        <div className="card p-5">
+        <div className="card p-4">
           <BadgeGrid badges={badges} language={language} />
         </div>
 
@@ -858,13 +858,13 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
             {visibleHistory.map((act) => (
               <div key={act.id} className="card p-4 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400">
+                  <div className="w-10 h-10 rounded-xl bg-navy-wash flex items-center justify-center text-navy">
                     <Calendar size={18} />
                   </div>
                   <div className="flex flex-col">
                     <span className="text-xs font-bold text-gray-900">{act.type}</span>
-                    <span className="text-[11px] text-gray-400 font-bold uppercase">{act.date}</span>
-                    <span className="text-[11px] text-gray-400 font-medium">{act.location}</span>
+                    <span className="text-[11px] text-navy/50 font-bold uppercase">{act.date}</span>
+                    <span className="text-[11px] text-gray-500 font-medium">{act.location}</span>
                   </div>
                 </div>
                 <div className="text-right">

@@ -11,7 +11,11 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   const headers: Record<string, string> = {
     ...(init.headers as Record<string, string> ?? {}),
   };
-  if (isNative()) {
+
+  // Only auth routes need the native platform hint for cookie/CSRF handling.
+  // Adding it to every native request forces a CORS preflight that breaks
+  // simple public reads like GET /api/submissions in the iOS app.
+  if (isNative() && path.startsWith("/api/auth")) {
     headers['X-Capacitor-Platform'] = getPlatform();
   }
   return fetch(buildUrl(path), {

@@ -56,6 +56,7 @@ interface Props {
   mapCenter: [number, number];
   mapZoom: number;
   mapMinZoom: number;
+  mapMaxZoom?: number;
   mapBounds: [[number, number], [number, number]] | undefined;
   mapPointGroups: MapPointGroup[];
   selectedCityLabel: string;
@@ -180,6 +181,7 @@ const HomeMap: React.FC<Props> = ({
   mapCenter,
   mapZoom,
   mapMinZoom,
+  mapMaxZoom,
   mapBounds,
   mapPointGroups,
   selectedCityLabel,
@@ -207,6 +209,7 @@ const HomeMap: React.FC<Props> = ({
         center={mapCenter}
         zoom={mapZoom}
         minZoom={mapMinZoom}
+        maxZoom={mapMaxZoom}
         maxBounds={mapBounds}
         maxBoundsViscosity={mapBounds ? 1.0 : undefined}
         scrollWheelZoom
@@ -269,7 +272,7 @@ const HomeMap: React.FC<Props> = ({
                       <p className="text-xs leading-4 text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                     )}
                     <button
-                      className="mt-2 w-full rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white"
+                      className="mt-2 w-full min-h-[44px] rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white"
                       onClick={() => onSelectPoint(singlePoint)}
                     >
                       {t('View details', 'Voir les détails')}
@@ -284,7 +287,7 @@ const HomeMap: React.FC<Props> = ({
                       {group.points.map((point) => (
                         <button
                           key={point.id}
-                          className="w-full rounded-lg border border-gray-100 px-2 py-1.5 text-left hover:bg-gray-50"
+                          className="w-full min-h-[44px] rounded-lg border border-gray-100 px-3 py-2 text-left hover:bg-gray-50"
                           onClick={() => onSelectPoint(point)}
                         >
                           <p className="text-xs font-semibold text-gray-900 truncate">{point.name}</p>
@@ -321,11 +324,12 @@ const HomeMap: React.FC<Props> = ({
       <button
         type="button"
         onClick={() => setShowHeatmap((prev) => !prev)}
-        className={`absolute top-20 right-4 z-20 w-10 h-10 rounded-xl border shadow-sm flex items-center justify-center transition-colors ${
+        className={`absolute top-20 right-4 z-20 w-11 h-11 rounded-xl border shadow-sm flex items-center justify-center transition-colors ${
           showHeatmap ? 'bg-navy text-white border-navy' : 'bg-white/95 text-gray-600 border-gray-100'
         }`}
         title={t('Toggle heatmap', 'Afficher ou masquer la carte thermique')}
         aria-label={t('Toggle heatmap', 'Afficher ou masquer la carte thermique')}
+        aria-pressed={showHeatmap}
       >
         <Layers size={18} />
       </button>

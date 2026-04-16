@@ -1,6 +1,7 @@
 import { Auth, skipCSRFCheck } from "@auth/core";
 import Credentials from "@auth/core/providers/credentials";
 import Google from "@auth/core/providers/google";
+import Apple from "@auth/core/providers/apple";
 import type { AppProviders } from "@auth/core/providers";
 import bcrypt from "bcryptjs";
 import type { UserProfile } from "../../../shared/types.js";
@@ -17,6 +18,8 @@ import { logWarn } from "../logger.js";
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID ?? "";
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET ?? "";
+const appleClientId = process.env.APPLE_CLIENT_ID ?? "";
+const appleClientSecret = process.env.APPLE_CLIENT_SECRET ?? "";
 const LOCKOUT_MAX_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
 
@@ -323,6 +326,15 @@ if (googleClientId && googleClientSecret) {
   );
 }
 
+if (appleClientId && appleClientSecret) {
+  providers.push(
+    Apple({
+      clientId: appleClientId,
+      clientSecret: appleClientSecret,
+    })
+  );
+}
+
 function isNativeCapacitorRequest(request: Request): boolean {
   const platform = request.headers.get("x-capacitor-platform");
   return platform === "ios" || platform === "android";
@@ -405,7 +417,7 @@ export default async function handler(request: Request): Promise<Response> {
           const provider = account?.provider ?? "unknown";
 
           if (!email) return true;
-          if (!isAdminAccount && account?.provider !== "google") return true;
+          if (!isAdminAccount && account?.provider !== "google" && account?.provider !== "apple") return true;
 
           try {
             if (isAdminAccount) {

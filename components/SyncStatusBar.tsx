@@ -53,14 +53,14 @@ const SyncStatusBar: React.FC<Props> = ({
           bgClass: 'bg-forest/10',
           textClass: 'text-forest',
           label: synced > 0
-            ? t(`${synced} uploads synced. Queue is clear.`, `${synced} envois synchronisés. La file est vide.`)
-            : t('Ready to capture. No uploads waiting.', 'Prêt à capturer. Aucun envoi en attente.'),
+            ? t(`${synced} uploads synced. All done.`, `${synced} envois synchronisés. Tout est fait.`)
+            : t('All synced. Ready to capture.', 'Tout synchronisé. Prêt à capturer.'),
           icon: <CheckCircle size={12} className="text-forest flex-shrink-0" />,
         };
 
   return (
     <div
-      className={`sticky top-0 z-30 flex min-h-9 items-center justify-between px-3 ${status.bgClass} transition-colors duration-300`}
+      className={`sticky top-0 z-30 flex min-h-9 items-center justify-between px-3 pt-[var(--safe-top)] ${status.bgClass} transition-colors duration-300`}
     >
       <button
         type="button"
@@ -80,14 +80,14 @@ const SyncStatusBar: React.FC<Props> = ({
             e.stopPropagation();
             onRefresh();
           }}
-          className={`flex-shrink-0 ml-2 p-0.5 rounded hover:opacity-70 transition-opacity ${status.textClass}`}
+          className={`flex-shrink-0 ml-1 flex h-11 w-11 items-center justify-center rounded-full hover:opacity-70 transition-opacity ${status.textClass}`}
           aria-label={t('Refresh', 'Actualiser')}
         >
-          <RefreshCw size={12} />
+          <RefreshCw size={14} />
         </button>
       )}
     </div>
   );
 };
 
-export default SyncStatusBar;
+export default React.memo(SyncStatusBar);

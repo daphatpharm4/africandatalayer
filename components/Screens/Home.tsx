@@ -23,6 +23,7 @@ import VerticalIcon from '../shared/VerticalIcon';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
+import { isNative } from '../../lib/client/native';
 import BrandLogo from '../BrandLogo';
 import { runViewTransition } from '../../lib/client/motion';
 import BottomSheet from '../shared/BottomSheet';
@@ -107,6 +108,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const [isVerticalPickerOpen, setIsVerticalPickerOpen] = useState(false);
   const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
+  const [pointsLoadError, setPointsLoadError] = useState('');
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? readStoredAdminMapScope() : 'bonamoussadi'));
   const [sheetSnap, setSheetSnap] = useState<SnapPoint>('peek');
@@ -130,8 +132,15 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         setIsVerticalPickerOpen(false);
       }
     };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsVerticalPickerOpen(false);
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [isVerticalPickerOpen]);
 
   const selectedCityLabel =
@@ -148,7 +157,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         ? [20, 0]
         : [BONAMOUSSADI_CENTER.latitude, BONAMOUSSADI_CENTER.longitude];
   const mapZoom = mapScope === 'cameroon' ? 6 : mapScope === 'global' ? 2 : 15;
-  const mapMinZoom = mapScope === 'cameroon' ? 5 : mapScope === 'global' ? 2 : 14;
+  const mapMinZoom = mapScope === 'cameroon' ? 5 : mapScope === 'global' ? 2 : 15;
+  const mapMaxZoom = mapScope === 'cameroon' ? 10 : mapScope === 'global' ? 18 : 19;
   const mapBounds =
     mapScope === 'bonamoussadi' ? BONAMOUSSADI_MAP_BOUNDS : mapScope === 'cameroon' ? CAMEROON_MAP_BOUNDS : undefined;
   const mapLockLabel =
@@ -312,26 +322,39 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     }
   }, [isAdmin, mapScope]);
 
-  useEffect(() => {
-    const loadPoints = async () => {
-      try {
-        setIsLoadingPoints(true);
-        const params = new URLSearchParams();
-        if (mapScope !== 'bonamoussadi') params.set('scope', mapScope);
-        const query = params.toString();
-        const data = await apiJson<ProjectedPoint[]>(query ? `/api/submissions?${query}` : '/api/submissions');
-        if (Array.isArray(data)) {
-          const mapped = data
-            .map(mapProjectedToPoint)
-            .filter((point) => (mapScope === 'bonamoussadi' ? isWithinBonamoussadi(point.coordinates) : true));
-          setPoints(mapped);
-        }
-      } catch {
+  const loadPoints = async () => {
+    try {
+      setIsLoadingPoints(true);
+      setPointsLoadError('');
+      const params = new URLSearchParams();
+      if (mapScope !== 'bonamoussadi') params.set('scope', mapScope);
+      const query = params.toString();
+      const data = await apiJson<ProjectedPoint[]>(
+        query ? `/api/submissions?${query}` : '/api/submissions',
+        isNative() ? { credentials: 'omit' } : {}
+      );
+      if (Array.isArray(data)) {
+        const mapped = data
+          .map(mapProjectedToPoint)
+          .filter((point) => (mapScope === 'bonamoussadi' ? isWithinBonamoussadi(point.coordinates) : true));
+        setPoints(mapped);
+      } else {
         setPoints([]);
-      } finally {
-        setIsLoadingPoints(false);
       }
-    };
+    } catch {
+      setPoints([]);
+      setPointsLoadError(
+        t(
+          "Data points failed to load. Tap retry or check back in a moment.",
+          "Impossible de charger les points. Réessayez ou revenez dans un instant."
+        )
+      );
+    } finally {
+      setIsLoadingPoints(false);
+    }
+  };
+
+  useEffect(() => {
     void loadPoints();
   }, [mapScope]); // language removed: API response is language-independent
 
@@ -506,7 +529,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     });
 
     return cards;
-  }, [activeAssignment, activeCategory, filteredPoints.length, isAuthenticated, nearbyEnrichCount, onAuth, onContribute, t, viewMode]);
+  }, [activeAssignment, activeCategory, filteredPoints.length, isAuthenticated, nearbyEnrichCount, onAuth, onContribute, language, viewMode]);
 
   const launchSingleCapture = () => {
     if (isAuthenticated && onContribute) {
@@ -548,10 +571,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       className="relative h-full min-h-0 bg-page overflow-x-hidden"
     >
       <header className="route-grid absolute top-0 left-0 right-0 z-20 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 shadow-[0_4px_24px_rgba(15,43,70,0.08)] backdrop-blur-xl">
-        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
-          <div className="ambient-orb right-[-2rem] top-[-1.5rem] h-20 w-20 bg-gold/20" />
-          <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
-        </div>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div className="min-w-0 flex flex-col">
             <div className="flex items-center gap-2">
@@ -582,23 +601,33 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         </div>
 
         {isLowEndDevice && (
-          <div className="mb-3 rounded-xl border border-navy-border bg-navy-wash px-3 py-2 text-[11px] font-semibold leading-4 text-navy">
+          <div className="mb-3 rounded-2xl border border-navy-border bg-navy-wash px-3 py-2 text-[11px] font-semibold leading-4 text-navy">
             {t('Lite mode is on to keep map movement smooth on this phone.', 'Le mode allégé est activé pour garder la carte fluide sur ce téléphone.')}
           </div>
         )}
 
         <div ref={verticalPickerRef} className="relative mb-2">
-          <button
-            onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
-            className="motion-pressable flex h-12 w-full items-center justify-between rounded-2xl bg-gray-100 px-4 text-sm font-semibold text-navy"
-          >
-            <span className="min-w-0 truncate text-left">
-              {t('Category', 'Catégorie')} : {categoryLabel(activeCategory)}
-            </span>
-            <ChevronDown size={14} className={`transition-transform ${isVerticalPickerOpen ? 'rotate-180' : ''}`} />
-          </button>
+          {(() => {
+            const vid = LEGACY_CATEGORY_MAP[activeCategory] ?? activeCategory;
+            const verticalColor = VERTICALS[vid]?.color ?? '#0f2b46';
+            return (
+            <button
+              onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
+              aria-expanded={isVerticalPickerOpen}
+              aria-haspopup="listbox"
+              className="motion-pressable flex h-12 w-full items-center justify-between rounded-2xl bg-gray-100 px-4 text-sm font-semibold text-navy"
+              style={{ borderLeft: `3px solid ${verticalColor}` }}
+            >
+              <span className="min-w-0 truncate text-left flex items-center gap-2">
+                <VerticalIcon name={VERTICALS[vid]?.icon ?? 'pill'} size={14} />
+                {t('Category', 'Catégorie')} : {categoryLabel(activeCategory)}
+              </span>
+              <ChevronDown size={14} className={`transition-transform ${isVerticalPickerOpen ? 'rotate-180' : ''}`} />
+            </button>
+            );
+          })()}
           {isVerticalPickerOpen && (
-            <div className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg">
+            <div className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg" role="listbox" aria-label={t('Category', 'Catégorie')}>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {selectableCategories.map((category) => {
                   const verticalId = LEGACY_CATEGORY_MAP[category] ?? category;
@@ -608,6 +637,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                     <button
                       key={category}
                       type="button"
+                      role="option"
+                      aria-selected={isActive}
                       onClick={() => {
                         onCategoryChange(category);
                         setIsVerticalPickerOpen(false);
@@ -675,6 +706,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               mapCenter={mapCenter}
               mapZoom={mapZoom}
               mapMinZoom={mapMinZoom}
+              mapMaxZoom={mapMaxZoom}
               mapBounds={mapBounds}
               mapPointGroups={mapPointGroups}
               selectedCityLabel={selectedCityLabel}
@@ -690,6 +722,20 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               sheetSnap={sheetSnap}
             />
           </Suspense>
+        )}
+        {viewMode === 'map' && pointsLoadError && !isLoadingPoints && (
+          <div className="pointer-events-none absolute inset-x-4 top-4 z-30 flex justify-center">
+            <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-terra/20 bg-white/96 p-3 shadow-lg backdrop-blur-sm">
+              <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+              <button
+                type="button"
+                onClick={() => void loadPoints()}
+                className="mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
+              >
+                {t('Try again', 'Réessayer')}
+              </button>
+            </div>
+          </div>
         )}
         {viewMode === 'list' && (
           <div
@@ -714,6 +760,18 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               {isLoadingPoints && (
                 <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
                   {t('Loading data points...', 'Chargement des points de données...')}
+                </div>
+              )}
+              {pointsLoadError && !isLoadingPoints && (
+                <div className="rounded-2xl border border-terra/20 bg-white p-4 shadow-sm">
+                  <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                  <button
+                    type="button"
+                    onClick={() => void loadPoints()}
+                    className="mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
+                  >
+                    {t('Try again', 'Réessayer')}
+                  </button>
                 </div>
               )}
               {filteredPoints.map((point) => (
@@ -743,14 +801,16 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                       )}
                     </div>
                   </div>
-                  <MapPin size={16} className="text-gray-300" />
+                  {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
+                    <MapPin size={16} style={{ color: v?.color ?? '#d1d5db' }} />
+                  ); })()}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {viewMode === 'map' && (
+        {viewMode === 'map' && isAuthenticated && (
           <BottomSheet
             peekHeight={88}
             onSnapChange={setSheetSnap}
@@ -819,16 +879,6 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               {t('Tap for one point. Press and hold to start a batch.', 'Touchez pour un point. Maintenez pour lancer une série.')}
             </div>
           </div>
-        )}
-
-        {!isAuthenticated && (
-          <button
-            onClick={onAuth}
-            className="motion-pressable absolute left-4 right-4 top-[7.25rem] z-20 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-xl"
-          >
-            <span className="min-w-0 text-left text-sm font-bold text-gray-900">{t('Sign in to unlock field capture and assignment progress.', 'Connectez-vous pour débloquer la capture terrain et le suivi des missions.')}</span>
-            <span className="rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white">{t('Sign In', 'Connexion')}</span>
-          </button>
         )}
       </div>
     </div>

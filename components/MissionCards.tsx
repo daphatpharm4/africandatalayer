@@ -72,7 +72,7 @@ const MissionCards: React.FC<MissionCardsProps> = ({
     <div className="space-y-3">
       {/* Active assignment card */}
       {showAgentWidgets && activeAssignment && (
-        <div className="mission-card surface-reveal rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+        <div className="mission-card surface-reveal rounded-[28px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="micro-label-wide text-gray-400">
@@ -110,7 +110,7 @@ const MissionCards: React.FC<MissionCardsProps> = ({
             key={card.id}
             type="button"
             onClick={card.action}
-            className={`motion-pressable mission-card w-full rounded-[1.6rem] px-5 py-4 text-left border-l-[4px] ${card.tone} ${
+            className={`motion-pressable mission-card w-full rounded-2xl px-5 py-4 text-left border-l-[4px] ${card.tone} ${
               card.id === 'primary' ? 'border-l-gold' : card.id === 'nearby' ? 'border-l-terra' : 'border-l-forest'
             }`}
             style={{

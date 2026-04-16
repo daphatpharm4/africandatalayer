@@ -102,7 +102,7 @@ const RewardsCatalog: React.FC<Props> = ({ onBack, language }) => {
 
       {selectedReward && (
         <div className="fixed inset-0 bg-black/40 flex items-end justify-center z-50">
-          <div className="bg-white w-full max-w-md rounded-t-2xl p-6 space-y-4 shadow-xl">
+          <div className="bg-white w-full max-w-md md:max-w-lg rounded-t-2xl p-6 space-y-4 shadow-xl">
             {redeemed ? (
               <div className="space-y-4 text-center">
                 <div className="w-14 h-14 rounded-full bg-forest-wash text-forest flex items-center justify-center mx-auto">

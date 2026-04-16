@@ -1,35 +1,49 @@
-import type { Page, Route } from "@playwright/test";
-import { resolveAdminApi } from "../mocks/admin";
-import { resolveAgentApi } from "../mocks/agent";
-import { resolveClientApi } from "../mocks/client";
-import { adminProfile, agentProfile, clientProfile, leaderboard, pointEvents, projectedPoints } from "../mocks/shared";
-import type { MockApiResponse, MockApiResolver } from "../mocks/types";
-import { getMockSession, type AdlRole } from "./roles";
+import type { Page, Route } from '@playwright/test';
+import { resolveAdminApi } from '../mocks/admin';
+import { resolveAgentApi } from '../mocks/agent';
+import { resolveClientApi } from '../mocks/client';
+import {
+  adminProfile,
+  agentProfile,
+  clientProfile,
+  leaderboard,
+  pointEvents,
+  projectedPoints,
+} from '../mocks/shared';
+import type { MockApiResponse, MockApiResolver } from '../mocks/types';
+import { getMockSession, type AdlRole, type MockAuthSession } from './roles';
 
 const BLANK_TILE_PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pN96mQAAAAASUVORK5CYII=",
-  "base64",
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pN96mQAAAAASUVORK5CYII=',
+  'base64',
 );
 
-const TILE_URL_PATTERN = /https:\/\/[a-z]\.basemaps\.cartocdn\.com\/light_all\/.+/i;
+const TILE_URL_PATTERN =
+  /https:\/\/[a-z]\.basemaps\.cartocdn\.com\/light_all\/.+/i;
 
 const COMMON_RESOLVERS: MockApiResolver[] = [
   (url, method) => {
-    if (method !== "GET") return null;
+    if (method !== 'GET') return null;
 
-    if (url.pathname === "/api/submissions" && !url.searchParams.get("view")) {
+    if (url.pathname === '/api/submissions' && !url.searchParams.get('view')) {
       return { body: projectedPoints };
     }
 
-    if (url.pathname === "/api/submissions" && url.searchParams.get("view") === "events") {
+    if (
+      url.pathname === '/api/submissions' &&
+      url.searchParams.get('view') === 'events'
+    ) {
       return { body: pointEvents };
     }
 
-    if (url.pathname === "/api/leaderboard") {
+    if (url.pathname === '/api/leaderboard') {
       return { body: leaderboard };
     }
 
-    if (url.pathname === "/api/user" && url.searchParams.get("view") === "status") {
+    if (
+      url.pathname === '/api/user' &&
+      url.searchParams.get('view') === 'status'
+    ) {
       return {
         body: {
           wipeRequested: false,
@@ -48,16 +62,21 @@ const ROLE_PROFILES = {
   client: clientProfile,
 } as const;
 
+type InstallAdlMockOptions = {
+  initialSession?: MockAuthSession | null;
+  enableCredentialAuth?: boolean;
+};
+
 function toRoutePayload(response: MockApiResponse) {
   const status = response.status ?? 200;
   const headers = { ...(response.headers ?? {}) };
-  const contentType = response.contentType ?? "application/json";
+  const contentType = response.contentType ?? 'application/json';
 
-  if (!headers["content-type"]) {
-    headers["content-type"] = contentType;
+  if (!headers['content-type']) {
+    headers['content-type'] = contentType;
   }
 
-  if (contentType === "application/json") {
+  if (contentType === 'application/json') {
     return {
       status,
       headers,
@@ -68,12 +87,23 @@ function toRoutePayload(response: MockApiResponse) {
   return {
     status,
     headers,
-    body: typeof response.body === "string" || Buffer.isBuffer(response.body) ? response.body : "",
+    body:
+      typeof response.body === 'string' || Buffer.isBuffer(response.body)
+        ? response.body
+        : '',
   };
 }
 
-function resolveApiRequest(role: AdlRole, url: URL, method: string): MockApiResponse | null {
-  if (method === "GET" && url.pathname === "/api/user" && !url.searchParams.get("view")) {
+function resolveApiRequest(
+  role: AdlRole,
+  url: URL,
+  method: string,
+): MockApiResponse | null {
+  if (
+    method === 'GET' &&
+    url.pathname === '/api/user' &&
+    !url.searchParams.get('view')
+  ) {
     return { body: ROLE_PROFILES[role] };
   }
 
@@ -92,31 +122,138 @@ function resolveApiRequest(role: AdlRole, url: URL, method: string): MockApiResp
   return null;
 }
 
-async function fulfillRoute(route: Route, response: MockApiResponse): Promise<void> {
+async function fulfillRoute(
+  route: Route,
+  response: MockApiResponse,
+): Promise<void> {
   await route.fulfill(toRoutePayload(response));
 }
 
-export async function installAdlMocks(page: Page, role: AdlRole): Promise<void> {
+export async function installAdlMocks(
+  page: Page,
+  role: AdlRole,
+  options: InstallAdlMockOptions = {},
+): Promise<void> {
+  await page.unroute('**/api/**');
+  await page.unroute(TILE_URL_PATTERN);
+
+  let currentSession: MockAuthSession | null =
+    options.initialSession !== undefined
+      ? options.initialSession
+      : getMockSession(role);
+  const knownCredentials = new Map<string, string>([
+    [agentProfile.email ?? agentProfile.id, 'Password123!'],
+    [adminProfile.email ?? adminProfile.id, 'Password123!'],
+    [clientProfile.email ?? clientProfile.id, 'Password123!'],
+  ]);
+  const knownNames = new Map<string, string>([
+    [agentProfile.email ?? agentProfile.id, agentProfile.name],
+    [adminProfile.email ?? adminProfile.id, adminProfile.name],
+    [clientProfile.email ?? clientProfile.id, clientProfile.name],
+  ]);
+
   await page.route(TILE_URL_PATTERN, async (route) => {
     await route.fulfill({
       status: 200,
-      contentType: "image/png",
+      contentType: 'image/png',
       body: BLANK_TILE_PNG,
     });
   });
 
-  await page.route("**/api/**", async (route) => {
+  await page.route('**/api/**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method().toUpperCase();
 
-    if (url.pathname === "/api/auth/session") {
-      await fulfillRoute(route, { body: getMockSession(role) });
+    if (url.pathname === '/api/auth/session') {
+      await fulfillRoute(route, { body: currentSession ?? {} });
       return;
     }
 
-    if (url.pathname === "/api/auth/csrf") {
-      await fulfillRoute(route, { body: { csrfToken: "playwright-csrf-token" } });
+    if (url.pathname === '/api/auth/csrf') {
+      await fulfillRoute(route, {
+        body: { csrfToken: 'playwright-csrf-token' },
+      });
+      return;
+    }
+
+    if (
+      options.enableCredentialAuth &&
+      url.pathname === '/api/auth/register' &&
+      method === 'POST'
+    ) {
+      const payload = request.postDataJSON() as {
+        identifier?: string;
+        email?: string;
+        password?: string;
+        name?: string;
+      };
+      const identifier = String(
+        payload.identifier ?? payload.email ?? '',
+      ).trim();
+
+      if (knownCredentials.has(identifier)) {
+        await fulfillRoute(route, {
+          status: 409,
+          body: { error: 'An account already exists for this phone/email' },
+        });
+        return;
+      }
+
+      knownCredentials.set(identifier, String(payload.password ?? ''));
+      knownNames.set(
+        identifier,
+        String(payload.name ?? 'New field account').trim() ||
+          'New field account',
+      );
+      await fulfillRoute(route, { status: 201, body: { ok: true } });
+      return;
+    }
+
+    if (
+      options.enableCredentialAuth &&
+      url.pathname === '/api/auth/callback/credentials' &&
+      method === 'POST'
+    ) {
+      const body = new URLSearchParams(request.postData() ?? '');
+      const identifier = String(
+        body.get('identifier') ?? body.get('email') ?? '',
+      ).trim();
+      const password = String(body.get('password') ?? '');
+      const isValid =
+        Boolean(identifier) && knownCredentials.get(identifier) === password;
+
+      if (!isValid) {
+        await fulfillRoute(route, {
+          body: {
+            url: 'http://127.0.0.1:4173/auth?error=CredentialsSignin&code=credentials',
+          },
+        });
+        return;
+      }
+
+      const baseSession = getMockSession(role);
+      currentSession = {
+        ...baseSession,
+        user: {
+          ...baseSession.user,
+          id: identifier,
+          email: identifier,
+          name: knownNames.get(identifier) ?? baseSession.user.name,
+        },
+      };
+
+      await fulfillRoute(route, { body: { url: 'http://127.0.0.1:4173/' } });
+      return;
+    }
+
+    if (
+      options.enableCredentialAuth &&
+      url.pathname === '/api/auth/signout' &&
+      method === 'POST'
+    ) {
+      currentSession = null;
+      await fulfillRoute(route, { body: { url: 'http://127.0.0.1:4173/' } });
       return;
     }
 

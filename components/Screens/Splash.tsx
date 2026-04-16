@@ -21,8 +21,8 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
       action: t('Continue', 'Continuer')
     },
     {
-      title: t('Permission Use Notice', 'Avis d\'utilisation des permissions'),
-      desc: t('Camera + location are required for geotagging and fraud prevention. No gallery uploads allowed.', 'La camera et la localisation sont requises pour le geotagging et la prevention de fraude. Import galerie interdit.'),
+      title: t('Before you start', 'Avant de commencer'),
+      desc: t('We need your camera and location to verify each capture. Only live photos are accepted — no gallery uploads.', 'Nous avons besoin de votre caméra et de votre position pour vérifier chaque capture. Seules les photos en direct sont acceptées.'),
       icon: (
         <div className="flex items-center space-x-4 text-white">
           <Camera size={28} />
@@ -122,11 +122,11 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
           <div className="rounded-[1.75rem] border border-white/80 bg-white/90 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <div className="micro-label-wide text-gray-400">{t('Why agents trust this flow', 'Pourquoi les agents font confiance a ce flux')}</div>
+                <div className="micro-label-wide text-gray-400">{t('Built for the field', 'Conçu pour le terrain')}</div>
                 <div className="mt-1 text-sm font-bold text-gray-900">
                   {step < 2
-                    ? t('Fast orientation before first capture', 'Orientation rapide avant la premiere capture')
-                    : t('Clear next step, clear reward, clear proof', 'Action claire, recompense claire, preuve claire')}
+                    ? t('Get set up in under a minute', 'Prêt en moins d\'une minute')
+                    : t('Every action earns XP with GPS proof', 'Chaque action rapporte des XP avec preuve GPS')}
                 </div>
               </div>
               <div className="rounded-2xl bg-navy-wash px-3 py-2 text-right">
@@ -150,7 +150,7 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
           {!isFinalSlide && (
             <button
               onClick={handleNext}
-              className="motion-pressable w-full h-14 rounded-[1.2rem] bg-navy text-white font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2"
+              className="motion-pressable w-full h-14 rounded-2xl bg-navy text-white font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2"
               style={{ boxShadow: 'var(--shadow-lift)' }}
             >
               <span>{slides[step].action}</span>
@@ -162,13 +162,13 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
             <div className="space-y-3">
               <button
                 onClick={() => onStart(Screen.HOME)}
-                className="motion-pressable w-full h-14 rounded-[1.2rem] bg-white text-navy border border-navy/20 font-bold uppercase text-xs tracking-widest"
+                className="motion-pressable w-full h-14 rounded-2xl bg-white text-navy border border-navy/20 font-bold uppercase text-xs tracking-widest"
               >
                 {t('Browse as Guest', 'Continuer en invite')}
               </button>
               <button
                 onClick={() => onStart(Screen.AUTH)}
-                className="motion-pressable button-breathe w-full h-14 rounded-[1.2rem] bg-terra text-white font-bold uppercase text-xs tracking-widest flex items-center justify-center space-x-2"
+                className="motion-pressable button-breathe w-full h-14 rounded-2xl bg-terra text-white font-bold uppercase text-xs tracking-widest flex items-center justify-center space-x-2"
                 style={{ boxShadow: 'var(--shadow-terra)' }}
               >
                 <Globe size={16} />

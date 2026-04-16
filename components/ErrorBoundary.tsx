@@ -24,17 +24,32 @@ class ErrorBoundary extends React.Component<Props, State> {
     captureClientException(error, { componentStack: info.componentStack });
   }
 
+  private getLanguage(): 'en' | 'fr' {
+    try {
+      return localStorage.getItem('adl_language') === 'en' ? 'en' : 'fr';
+    } catch {
+      return 'fr';
+    }
+  }
+
   render() {
     if (this.state.hasError) {
+      const lang = this.getLanguage();
       return (
         <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'sans-serif' }}>
-          <h2 style={{ marginBottom: '0.5rem' }}>The app ran into a problem.</h2>
-          <p style={{ marginBottom: '1rem', color: '#666', fontSize: '0.875rem' }}>Your data is saved offline — nothing is lost.</p>
+          <h2 style={{ marginBottom: '0.5rem' }}>
+            {lang === 'fr' ? "L'application a rencontré un problème." : 'The app ran into a problem.'}
+          </h2>
+          <p style={{ marginBottom: '1rem', color: '#666', fontSize: '0.875rem' }}>
+            {lang === 'fr'
+              ? 'Vos données sont sauvegardées hors ligne — rien n\u2019est perdu.'
+              : 'Your data is saved offline — nothing is lost.'}
+          </p>
           <button
             onClick={() => window.location.reload()}
-            style={{ padding: '0.5rem 1.5rem', cursor: 'pointer', borderRadius: '0.5rem', border: '1px solid #ccc' }}
+            style={{ padding: '0.75rem 1.5rem', cursor: 'pointer', borderRadius: '0.5rem', border: '1px solid #ccc', minHeight: '44px' }}
           >
-            Reload App
+            {lang === 'fr' ? 'Recharger l\u2019application' : 'Reload App'}
           </button>
         </div>
       );

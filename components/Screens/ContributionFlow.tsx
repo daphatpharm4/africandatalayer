@@ -1825,7 +1825,7 @@ const ContributionFlow: React.FC<Props> = ({
             <span className="text-xs font-semibold text-gray-600">{t('Open now', 'Ouvert maintenant')}</span>
             <button
               onClick={() => setIsOpenNow((prev) => !prev)}
-              className={`px-4 py-2 rounded-full micro-label ${isOpenNow ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isOpenNow ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1842,7 +1842,7 @@ const ContributionFlow: React.FC<Props> = ({
               <button
                 key={provider}
                 onClick={() => setProviders((prev) => toggleListValue(prev, provider))}
-                className={`px-3 py-2 rounded-full micro-label ${providers.includes(provider) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
+                className={`px-3 py-2 min-h-[44px] rounded-full micro-label ${providers.includes(provider) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
               >
                 {provider}
               </button>
@@ -1868,7 +1868,7 @@ const ContributionFlow: React.FC<Props> = ({
             <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
             <button
               onClick={() => setHasFuelAvailable((prev) => !prev)}
-              className={`px-4 py-2 rounded-full micro-label ${hasFuelAvailable ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${hasFuelAvailable ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1915,7 +1915,7 @@ const ContributionFlow: React.FC<Props> = ({
             <span className="text-xs font-semibold text-gray-600">{t('Formal / licensed', 'Formel / licencié')}</span>
             <button
               onClick={() => setIsFormal((prev) => !prev)}
-              className={`px-4 py-2 rounded-full micro-label ${isFormal ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isFormal ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {isFormal ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1953,7 +1953,7 @@ const ContributionFlow: React.FC<Props> = ({
             <span className="text-xs font-semibold text-gray-600">{t('Occupied', 'Occupé')}</span>
             <button
               onClick={() => setIsOccupied((prev) => !prev)}
-              className={`px-4 py-2 rounded-full micro-label ${isOccupied ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isOccupied ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {isOccupied ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -1997,7 +1997,7 @@ const ContributionFlow: React.FC<Props> = ({
             <span className="text-xs font-semibold text-gray-600">{t('Blocked', 'Bloqué')}</span>
             <button
               onClick={() => setRoadBlocked((prev) => !prev)}
-              className={`px-4 py-2 rounded-full micro-label ${roadBlocked ? 'bg-terra text-white' : 'bg-gray-100 text-gray-500'}`}
+              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${roadBlocked ? 'bg-terra text-white' : 'bg-gray-100 text-gray-500'}`}
             >
               {roadBlocked ? t('Yes', 'Oui') : t('No', 'Non')}
             </button>
@@ -2088,14 +2088,14 @@ const ContributionFlow: React.FC<Props> = ({
             <button
               type="button"
               onClick={() => setEnrichFieldValue(gap, true)}
-              className={`h-10 rounded-xl micro-label ${selected === true ? 'bg-forest text-white' : 'bg-gray-50 text-gray-500'}`}
+              className={`min-h-[44px] rounded-2xl micro-label ${selected === true ? 'bg-forest text-white' : 'bg-gray-50 text-gray-500'}`}
             >
               {t('Yes', 'Oui')}
             </button>
             <button
               type="button"
               onClick={() => setEnrichFieldValue(gap, false)}
-              className={`h-10 rounded-xl micro-label ${selected === false ? 'bg-terra text-white' : 'bg-gray-50 text-gray-500'}`}
+              className={`min-h-[44px] rounded-2xl micro-label ${selected === false ? 'bg-terra text-white' : 'bg-gray-50 text-gray-500'}`}
             >
               {t('No', 'Non')}
             </button>
@@ -2175,7 +2175,7 @@ const ContributionFlow: React.FC<Props> = ({
                   key={preset}
                   type="button"
                   onClick={() => setEnrichFieldValue(gap, preset)}
-                  className={`px-3 py-2 rounded-full micro-label ${value === preset ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
+                  className={`px-3 py-2 min-h-[44px] rounded-full micro-label ${value === preset ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
                 >
                   {preset}
                 </button>
@@ -2278,7 +2278,7 @@ const ContributionFlow: React.FC<Props> = ({
                 key={option.value}
                 type="button"
                 onClick={() => toggleEnrichMultiValue(gap, option.value)}
-                className={`px-3 py-2 rounded-full micro-label ${selectedValues.includes(option.value) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
+                className={`px-3 py-2 min-h-[44px] rounded-full micro-label ${selectedValues.includes(option.value) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
               >
                 {optionLabel(option, language)}
               </button>
@@ -2472,7 +2472,7 @@ const ContributionFlow: React.FC<Props> = ({
         <div className="ambient-orb right-[-2rem] top-[-1rem] h-20 w-20 bg-gold/20" />
         <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
         <div className="flex items-center justify-between mb-3">
-          <button onClick={handleBackPress} className="motion-pressable p-1 -ml-1 text-gray-500">
+          <button onClick={handleBackPress} className="motion-pressable flex h-11 w-11 items-center justify-center -ml-2 text-gray-500">
             <ArrowLeft size={24} />
           </button>
           <span className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em]">
@@ -2509,7 +2509,7 @@ const ContributionFlow: React.FC<Props> = ({
         })()}
       </div>
 
-      <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-5">
+      <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>
         <div className="surface-reveal card p-4 flex items-center justify-between">
           <div className="flex items-center space-x-2 text-navy">
             {verticalIcon}
@@ -2612,7 +2612,7 @@ const ContributionFlow: React.FC<Props> = ({
                 type="button"
                 onClick={handleDedupUseExisting}
                 disabled={isResolvingDedup}
-                className={`h-10 rounded-xl micro-label ${
+                className={`min-h-[44px] rounded-2xl micro-label ${
                   isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
                 }`}
               >
@@ -2622,7 +2622,7 @@ const ContributionFlow: React.FC<Props> = ({
                 type="button"
                 onClick={handleDedupCreateNew}
                 disabled={isResolvingDedup}
-                className={`h-10 rounded-xl micro-label ${
+                className={`min-h-[44px] rounded-2xl micro-label ${
                   isResolvingDedup ? 'bg-gray-100 text-gray-400' : 'bg-terra text-white'
                 }`}
               >
@@ -2632,7 +2632,7 @@ const ContributionFlow: React.FC<Props> = ({
             <button
               type="button"
               onClick={clearDedupPrompt}
-              className="micro-label text-gray-500"
+              className="micro-label text-gray-500 min-h-[44px] px-3"
             >
               {t('Dismiss', 'Ignorer')}
             </button>

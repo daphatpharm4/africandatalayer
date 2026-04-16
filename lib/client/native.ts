@@ -12,5 +12,9 @@ export function getApiBase(): string {
   if (isNative()) {
     return 'https://africandatalayer.vercel.app';
   }
-  return import.meta.env.VITE_API_BASE ?? '';
+  const viteEnv =
+    typeof import.meta !== 'undefined' && typeof import.meta.env === 'object'
+      ? (import.meta.env as { VITE_API_BASE?: string })
+      : undefined;
+  return viteEnv?.VITE_API_BASE ?? '';
 }

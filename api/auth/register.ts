@@ -6,6 +6,7 @@ import { registerBodySchema } from "../../lib/server/validation.js";
 import { consumeRateLimit, extractRateLimitIp } from "../../lib/server/rateLimit.js";
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type { UserProfile } from "../../shared/types.js";
+import { preflightResponse, applyCorsHeaders } from "../../lib/server/auth/cors.js";
 
 const REGISTER_IP_LIMIT_PER_HOUR = Number(process.env.REGISTER_IP_LIMIT_PER_HOUR ?? "20") || 20;
 const REGISTER_IDENTIFIER_LIMIT_PER_HOUR = Number(process.env.REGISTER_IDENTIFIER_LIMIT_PER_HOUR ?? "5") || 5;
@@ -136,4 +137,14 @@ export function createRegisterHandler(
   };
 }
 
-export const POST = createRegisterHandler();
+const handleRegister = createRegisterHandler();
+
+export async function OPTIONS(request: Request): Promise<Response> {
+  return preflightResponse(request);
+}
+
+export async function POST(request: Request): Promise<Response> {
+  const response = await handleRegister(request);
+  applyCorsHeaders(request, response);
+  return response;
+}

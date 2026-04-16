@@ -43,4 +43,4 @@ const ScreenHeader: React.FC<Props> = ({ title, onBack, language, trailing, vari
   );
 };
 
-export default ScreenHeader;
+export default React.memo(ScreenHeader);

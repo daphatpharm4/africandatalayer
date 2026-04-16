@@ -1,8 +1,9 @@
-import { apiFetch, apiJson, buildUrl } from "./api";
-import { normalizeIdentifier } from "../shared/identifier";
-import { sanitizeErrorMessage } from "./errorUtils";
+import { apiFetch, apiJson, buildUrl } from './api';
+import { getApiBase, isNative } from './native';
+import { normalizeIdentifier } from '../shared/identifier';
+import { sanitizeErrorMessage } from './errorUtils';
 
-export type UserRole = "agent" | "admin" | "client";
+export type UserRole = 'agent' | 'admin' | 'client';
 
 export interface AuthSession {
   user?: {
@@ -22,16 +23,17 @@ export interface SignInWithCredentialsOptions {
 }
 
 export type AuthClientErrorCode =
-  | "invalid_credentials"
-  | "callback_error"
-  | "configuration_error"
-  | "access_denied"
-  | "auth_unavailable"
-  | "storage_unavailable"
-  | "registration_conflict"
-  | "validation_error"
-  | "request_error"
-  | "unknown_error";
+  | 'invalid_credentials'
+  | 'callback_error'
+  | 'configuration_error'
+  | 'access_denied'
+  | 'provider_unavailable'
+  | 'auth_unavailable'
+  | 'storage_unavailable'
+  | 'registration_conflict'
+  | 'validation_error'
+  | 'request_error'
+  | 'unknown_error';
 
 export class AuthClientError extends Error {
   code: AuthClientErrorCode;
@@ -40,10 +42,10 @@ export class AuthClientError extends Error {
   constructor(
     code: AuthClientErrorCode,
     message: string,
-    options: { retryable?: boolean; cause?: unknown } = {}
+    options: { retryable?: boolean; cause?: unknown } = {},
   ) {
     super(message);
-    this.name = "AuthClientError";
+    this.name = 'AuthClientError';
     this.code = code;
     this.retryable = Boolean(options.retryable);
     if (options.cause !== undefined) {
@@ -56,9 +58,11 @@ type AuthRedirectPayload = {
   url?: unknown;
 };
 
-const DEFAULT_SIGN_IN_ERROR = "Unable to sign in. Please try again.";
-const DEFAULT_SIGN_OUT_ERROR = "Unable to sign out";
-const DEFAULT_SIGN_UP_ERROR = "Unable to create account";
+const DEFAULT_SIGN_IN_ERROR = 'Unable to sign in. Please try again.';
+const DEFAULT_SIGN_OUT_ERROR = 'Unable to sign out';
+const DEFAULT_SIGN_UP_ERROR = 'Unable to create account';
+const DEFAULT_NATIVE_GOOGLE_ERROR =
+  'Google sign-in is not available in the mobile app yet. Use phone/email and password.';
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,6 +78,47 @@ function normalizeDelayMs(value: number | undefined): number {
   return Math.max(0, Math.floor(value as number));
 }
 
+type AuthRuntimeOptions = {
+  nativeApp?: boolean;
+  apiBase?: string;
+  windowOrigin?: string;
+};
+
+function toOrigin(value: string | undefined | null): string | null {
+  if (!value?.trim()) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+export function resolveAuthCallbackUrl(
+  options: AuthRuntimeOptions = {},
+): string {
+  const nativeApp = options.nativeApp ?? isNative();
+  const apiOrigin = toOrigin(options.apiBase ?? getApiBase());
+  const browserOrigin = toOrigin(
+    options.windowOrigin ??
+      (typeof window !== 'undefined' ? window.location.origin : null),
+  );
+
+  if (nativeApp && apiOrigin) return apiOrigin;
+  return browserOrigin ?? apiOrigin ?? 'http://localhost';
+}
+
+export function resolveAuthRedirectUrl(
+  url: string,
+  options: AuthRuntimeOptions = {},
+): URL {
+  return new URL(url, resolveAuthCallbackUrl(options));
+}
+
+export function isGoogleSignInSupported(
+  options: Pick<AuthRuntimeOptions, 'nativeApp'> = {},
+): boolean {
+  return !(options.nativeApp ?? isNative());
+}
 
 async function safeReadJson<T>(response: Response): Promise<T | null> {
   try {
@@ -88,56 +133,93 @@ type ApiErrorPayload = {
   code?: string;
 };
 
-async function extractResponseErrorPayload(response: Response, fallback: string): Promise<ApiErrorPayload> {
-  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (contentType.includes("application/json")) {
-    const payload = await safeReadJson<{ error?: unknown; message?: unknown; code?: unknown }>(response);
+async function extractResponseErrorPayload(
+  response: Response,
+  fallback: string,
+): Promise<ApiErrorPayload> {
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  if (contentType.includes('application/json')) {
+    const payload = await safeReadJson<{
+      error?: unknown;
+      message?: unknown;
+      code?: unknown;
+    }>(response);
     if (payload) {
-      const message = sanitizeErrorMessage(payload.error ?? payload.message, fallback);
-      const code = typeof payload.code === "string" && payload.code.trim() ? payload.code.trim() : undefined;
+      const message = sanitizeErrorMessage(
+        payload.error ?? payload.message,
+        fallback,
+      );
+      const code =
+        typeof payload.code === 'string' && payload.code.trim()
+          ? payload.code.trim()
+          : undefined;
       return { message, code };
     }
     return { message: fallback };
   }
-  const text = await response.text().catch(() => "");
+  const text = await response.text().catch(() => '');
   return { message: sanitizeErrorMessage(text, fallback) };
 }
 
-function mapAuthJsError(errorType: string | null, errorCode: string | null): AuthClientError {
+function mapAuthJsError(
+  errorType: string | null,
+  errorCode: string | null,
+): AuthClientError {
   switch (errorType) {
-    case "CredentialsSignin":
-      return new AuthClientError("invalid_credentials", "Invalid phone/email or password.", { retryable: true });
-    case "Callback":
-    case "CallbackRouteError":
-      return new AuthClientError("callback_error", DEFAULT_SIGN_IN_ERROR, { retryable: true });
-    case "Configuration":
-      return new AuthClientError("configuration_error", DEFAULT_SIGN_IN_ERROR, { retryable: true });
-    case "AccessDenied":
-      return new AuthClientError("access_denied", "Access denied for this account.");
+    case 'CredentialsSignin':
+      return new AuthClientError(
+        'invalid_credentials',
+        'Invalid phone/email or password.',
+        { retryable: true },
+      );
+    case 'Callback':
+    case 'CallbackRouteError':
+      return new AuthClientError('callback_error', DEFAULT_SIGN_IN_ERROR, {
+        retryable: true,
+      });
+    case 'Configuration':
+      return new AuthClientError('configuration_error', DEFAULT_SIGN_IN_ERROR, {
+        retryable: true,
+      });
+    case 'AccessDenied':
+      return new AuthClientError(
+        'access_denied',
+        'Access denied for this account.',
+      );
     default:
-      if (errorCode === "credentials") {
-        return new AuthClientError("invalid_credentials", "Invalid phone/email or password.", { retryable: true });
+      if (errorCode === 'credentials') {
+        return new AuthClientError(
+          'invalid_credentials',
+          'Invalid phone/email or password.',
+          { retryable: true },
+        );
       }
-      return new AuthClientError("unknown_error", DEFAULT_SIGN_IN_ERROR, { retryable: true });
+      return new AuthClientError('unknown_error', DEFAULT_SIGN_IN_ERROR, {
+        retryable: true,
+      });
   }
 }
 
 function toAuthClientError(error: unknown, fallback: string): AuthClientError {
   if (error instanceof AuthClientError) return error;
   if (error instanceof Error) {
-    return new AuthClientError("unknown_error", sanitizeErrorMessage(error.message, fallback), { cause: error });
+    return new AuthClientError(
+      'unknown_error',
+      sanitizeErrorMessage(error.message, fallback),
+      { cause: error },
+    );
   }
-  return new AuthClientError("unknown_error", fallback);
+  return new AuthClientError('unknown_error', fallback);
 }
 
 async function getCsrfToken(): Promise<string> {
-  const data = await apiJson<{ csrfToken: string }>("/api/auth/csrf");
+  const data = await apiJson<{ csrfToken: string }>('/api/auth/csrf');
   return data.csrfToken;
 }
 
 export async function getSession(): Promise<AuthSession | null> {
   try {
-    const session = await apiJson<AuthSession>("/api/auth/session");
+    const session = await apiJson<AuthSession>('/api/auth/session');
     if (session?.user) return session;
     return null;
   } catch {
@@ -145,46 +227,62 @@ export async function getSession(): Promise<AuthSession | null> {
   }
 }
 
-async function signInWithCredentialsOnce(identifier: string, password: string): Promise<void> {
-  const normalizedIdentifier = normalizeIdentifier(identifier)?.value ?? identifier.trim();
+async function signInWithCredentialsOnce(
+  identifier: string,
+  password: string,
+): Promise<void> {
+  const normalizedIdentifier =
+    normalizeIdentifier(identifier)?.value ?? identifier.trim();
   const csrfToken = await getCsrfToken();
+  const callbackUrl = resolveAuthCallbackUrl();
   const body = new URLSearchParams();
-  body.set("csrfToken", csrfToken);
-  body.set("identifier", normalizedIdentifier);
-  body.set("email", normalizedIdentifier);
-  body.set("password", password);
-  body.set("callbackUrl", window.location.origin);
-  body.set("json", "true");
+  body.set('csrfToken', csrfToken);
+  body.set('identifier', normalizedIdentifier);
+  body.set('email', normalizedIdentifier);
+  body.set('password', password);
+  body.set('callbackUrl', callbackUrl);
+  body.set('json', 'true');
 
-  const response = await apiFetch("/api/auth/callback/credentials", {
-    method: "POST",
+  const response = await apiFetch('/api/auth/callback/credentials', {
+    method: 'POST',
     headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "X-Auth-Return-Redirect": "1",
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-Auth-Return-Redirect': '1',
     },
     body,
   });
 
   if (!response.ok) {
-    const { message } = await extractResponseErrorPayload(response, DEFAULT_SIGN_IN_ERROR);
+    const { message } = await extractResponseErrorPayload(
+      response,
+      DEFAULT_SIGN_IN_ERROR,
+    );
     const retryable = response.status >= 500;
-    throw new AuthClientError(retryable ? "auth_unavailable" : "request_error", message, { retryable });
+    throw new AuthClientError(
+      retryable ? 'auth_unavailable' : 'request_error',
+      message,
+      { retryable },
+    );
   }
 
   const payload = await safeReadJson<AuthRedirectPayload>(response);
-  if (!payload || typeof payload.url !== "string") {
-    throw new AuthClientError("unknown_error", DEFAULT_SIGN_IN_ERROR, { retryable: true });
+  if (!payload || typeof payload.url !== 'string') {
+    throw new AuthClientError('unknown_error', DEFAULT_SIGN_IN_ERROR, {
+      retryable: true,
+    });
   }
 
   let url: URL;
   try {
-    url = new URL(payload.url, window.location.origin);
+    url = resolveAuthRedirectUrl(payload.url);
   } catch {
-    throw new AuthClientError("unknown_error", DEFAULT_SIGN_IN_ERROR, { retryable: true });
+    throw new AuthClientError('unknown_error', DEFAULT_SIGN_IN_ERROR, {
+      retryable: true,
+    });
   }
 
-  const errorType = url.searchParams.get("error");
-  const errorCode = url.searchParams.get("code");
+  const errorType = url.searchParams.get('error');
+  const errorCode = url.searchParams.get('code');
   if (errorType || errorCode) {
     throw mapAuthJsError(errorType, errorCode);
   }
@@ -193,7 +291,7 @@ async function signInWithCredentialsOnce(identifier: string, password: string): 
 export async function signInWithCredentials(
   identifier: string,
   password: string,
-  options: SignInWithCredentialsOptions = {}
+  options: SignInWithCredentialsOptions = {},
 ): Promise<void> {
   const maxAttempts = normalizeAttempts(options.maxAttempts);
   const retryDelayMs = normalizeDelayMs(options.retryDelayMs);
@@ -214,63 +312,117 @@ export async function signInWithCredentials(
 export async function signOut(): Promise<void> {
   const csrfToken = await getCsrfToken();
   const body = new URLSearchParams();
-  body.set("csrfToken", csrfToken);
-  body.set("callbackUrl", window.location.origin);
-  body.set("json", "true");
+  body.set('csrfToken', csrfToken);
+  body.set('callbackUrl', resolveAuthCallbackUrl());
+  body.set('json', 'true');
 
-  const response = await apiFetch("/api/auth/signout", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  const response = await apiFetch('/api/auth/signout', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
   });
   if (!response.ok) {
-    const { message } = await extractResponseErrorPayload(response, DEFAULT_SIGN_OUT_ERROR);
+    const { message } = await extractResponseErrorPayload(
+      response,
+      DEFAULT_SIGN_OUT_ERROR,
+    );
     const retryable = response.status >= 500;
-    throw new AuthClientError(retryable ? "auth_unavailable" : "request_error", message, { retryable });
+    throw new AuthClientError(
+      retryable ? 'auth_unavailable' : 'request_error',
+      message,
+      { retryable },
+    );
   }
 }
 
-export async function registerWithCredentials(identifier: string, password: string, name?: string): Promise<void> {
-  const normalizedIdentifier = normalizeIdentifier(identifier)?.value ?? identifier.trim();
-  const response = await apiFetch("/api/auth/register", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ identifier: normalizedIdentifier, email: normalizedIdentifier, password, name }),
+export async function registerWithCredentials(
+  identifier: string,
+  password: string,
+  name?: string,
+): Promise<void> {
+  const normalizedIdentifier =
+    normalizeIdentifier(identifier)?.value ?? identifier.trim();
+  const response = await apiFetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      identifier: normalizedIdentifier,
+      email: normalizedIdentifier,
+      password,
+      name,
+    }),
   });
 
   if (!response.ok) {
-    const { message, code } = await extractResponseErrorPayload(response, DEFAULT_SIGN_UP_ERROR);
+    const { message, code } = await extractResponseErrorPayload(
+      response,
+      DEFAULT_SIGN_UP_ERROR,
+    );
     if (response.status === 409) {
-      throw new AuthClientError("registration_conflict", message);
+      throw new AuthClientError('registration_conflict', message);
     }
     if (response.status === 400) {
-      throw new AuthClientError("validation_error", message);
+      throw new AuthClientError('validation_error', message);
     }
-    if (response.status === 503 && code === "storage_unavailable") {
-      throw new AuthClientError("storage_unavailable", message, { retryable: true });
+    if (response.status === 503 && code === 'storage_unavailable') {
+      throw new AuthClientError('storage_unavailable', message, {
+        retryable: true,
+      });
     }
     const retryable = response.status >= 500;
-    throw new AuthClientError(retryable ? "auth_unavailable" : "request_error", message, { retryable });
+    throw new AuthClientError(
+      retryable ? 'auth_unavailable' : 'request_error',
+      message,
+      { retryable },
+    );
   }
 }
 
 export async function signInWithGoogle(): Promise<void> {
+  if (!isGoogleSignInSupported()) {
+    throw new AuthClientError(
+      'provider_unavailable',
+      DEFAULT_NATIVE_GOOGLE_ERROR,
+    );
+  }
   const csrfToken = await getCsrfToken();
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = buildUrl("/api/auth/signin/google");
-  form.style.display = "none";
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = buildUrl('/api/auth/signin/google');
+  form.style.display = 'none';
 
   const addField = (name: string, value: string) => {
-    const input = document.createElement("input");
-    input.type = "hidden";
+    const input = document.createElement('input');
+    input.type = 'hidden';
     input.name = name;
     input.value = value;
     form.appendChild(input);
   };
 
-  addField("csrfToken", csrfToken);
-  addField("callbackUrl", window.location.origin);
+  addField('csrfToken', csrfToken);
+  addField('callbackUrl', resolveAuthCallbackUrl());
+
+  document.body.appendChild(form);
+  form.submit();
+}
+
+export async function signInWithApple(): Promise<void> {
+  const csrfToken = await getCsrfToken();
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = buildUrl('/api/auth/signin/apple');
+  form.style.display = 'none';
+
+  const addField = (name: string, value: string) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+  };
+
+  addField('csrfToken', csrfToken);
+  addField('callbackUrl', resolveAuthCallbackUrl());
 
   document.body.appendChild(form);
   form.submit();
@@ -289,7 +441,13 @@ export function startIdleWatcher(
     timer = setTimeout(onTimeout, timeoutMs);
   }
 
-  const events: Array<keyof WindowEventMap> = ["mousemove", "keydown", "touchstart", "scroll", "click"];
+  const events: Array<keyof WindowEventMap> = [
+    'mousemove',
+    'keydown',
+    'touchstart',
+    'scroll',
+    'click',
+  ];
   for (const event of events) {
     window.addEventListener(event, resetTimer, { passive: true });
   }
@@ -310,9 +468,11 @@ export function checkRemoteWipe(onWipe: () => void): () => void {
     try {
       const session = await getSession();
       if (!session?.user?.id) return;
-      const response = await apiFetch(`/api/user?id=${encodeURIComponent(session.user.id)}`);
+      const response = await apiFetch(
+        `/api/user?id=${encodeURIComponent(session.user.id)}`,
+      );
       if (!response.ok) return;
-      const data = await response.json() as { wipeRequested?: boolean };
+      const data = (await response.json()) as { wipeRequested?: boolean };
       if (data.wipeRequested === true) {
         onWipe();
       }

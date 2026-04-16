@@ -269,7 +269,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
                   type="button"
                   onClick={() => handleRetryItem(item.id)}
                   disabled={activeItemId === item.id}
-                  className="h-10 rounded-xl bg-navy text-white micro-label disabled:bg-gray-100 disabled:text-gray-400"
+                  className="min-h-[44px] rounded-2xl bg-navy text-white micro-label disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <span className="inline-flex items-center gap-1">
                     <RotateCcw size={12} />
@@ -279,7 +279,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
                 <button
                   type="button"
                   onClick={() => onEditDraft(item)}
-                  className="h-10 rounded-xl border border-gray-100 bg-gray-50 micro-label text-gray-700"
+                  className="min-h-[44px] rounded-2xl border border-gray-100 bg-gray-50 micro-label text-gray-700"
                 >
                   <span className="inline-flex items-center gap-1">
                     <Pencil size={12} />
@@ -290,7 +290,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
                   type="button"
                   onClick={() => handleDeleteItem(item.id)}
                   disabled={activeItemId === item.id}
-                  className="h-10 rounded-xl border border-red-100 bg-red-50 micro-label text-red-600 disabled:bg-gray-100 disabled:text-gray-400"
+                  className="min-h-[44px] rounded-2xl border border-red-100 bg-red-50 micro-label text-red-600 disabled:bg-gray-100 disabled:text-gray-400"
                 >
                   <span className="inline-flex items-center gap-1">
                     <Trash2 size={12} />
