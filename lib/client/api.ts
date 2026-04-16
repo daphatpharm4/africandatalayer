@@ -18,17 +18,36 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   if (isNative() && path.startsWith("/api/auth")) {
     headers['X-Capacitor-Platform'] = getPlatform();
   }
-  return fetch(buildUrl(path), {
-    credentials: "include",
-    ...init,
-    headers,
-  });
+
+  const url = buildUrl(path);
+  const method = init.method ?? 'GET';
+  if (path.startsWith('/api/auth')) {
+    console.log('[API]', method, url);
+  }
+
+  try {
+    const response = await fetch(url, {
+      credentials: "include",
+      ...init,
+      headers,
+    });
+    if (path.startsWith('/api/auth')) {
+      console.log('[API]', method, url, '→', response.status);
+    }
+    return response;
+  } catch (error) {
+    console.error('[API]', method, url, '→ NETWORK ERROR', error);
+    throw error;
+  }
 }
 
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await apiFetch(path, init);
   if (!response.ok) {
     const text = await response.text();
+    if (path.startsWith('/api/auth')) {
+      console.error('[API] apiJson non-OK:', path, response.status, text.slice(0, 200));
+    }
     throw new Error(text || "Request failed");
   }
   return (await response.json()) as T;

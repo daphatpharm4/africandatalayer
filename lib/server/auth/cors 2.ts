@@ -10,8 +10,6 @@ const ALLOWED_ORIGINS: readonly string[] = [
   "https://localhost",
   "http://localhost",
   "https://africandatalayer.vercel.app",
-  "https://app.africandatalayer.com",
-  "https://www.app.africandatalayer.com",
 ];
 
 export function getCorsOrigin(request: Request): string | null {

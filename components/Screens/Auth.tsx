@@ -174,26 +174,35 @@ const Auth: React.FC<Props> = ({
     resetFeedback();
     let accountCreated = false;
 
+    console.log('[AUTH:UI] handleCredentialsSubmit:', mode, 'identifier=', normalizedIdentifier.slice(0, 5) + '***');
+
     try {
       if (mode === 'signup') {
+        console.log('[AUTH:UI] registering...');
         await registerWithCredentials(normalizedIdentifier, password);
         accountCreated = true;
+        console.log('[AUTH:UI] registration succeeded, auto-signing in...');
         await signInWithCredentials(normalizedIdentifier, password, {
           maxAttempts: 6,
           retryDelayMs: 500,
         });
       } else {
+        console.log('[AUTH:UI] signing in...');
         await signInWithCredentials(normalizedIdentifier, password);
       }
 
+      console.log('[AUTH:UI] credentials flow done, fetching session...');
       const session = await getSession();
       if (!session?.user) {
+        console.error('[AUTH:UI] session is null after successful sign-in');
         throw new AuthClientError(
           'unknown_error',
           t('Unable to start a session.', 'Impossible de démarrer la session.'),
           { retryable: true },
         );
       }
+
+      console.log('[AUTH:UI] session OK, user=', session.user.id);
 
       try {
         localStorage.setItem('adl_has_authenticated', 'true');
@@ -203,7 +212,9 @@ const Auth: React.FC<Props> = ({
 
       onComplete();
     } catch (error) {
+      console.error('[AUTH:UI] handleCredentialsSubmit error:', error);
       if (mode === 'signup' && accountCreated) {
+        console.log('[AUTH:UI] account was created but auto-sign-in failed, switching to sign-in mode');
         setMode('signin');
         setErrorCode('');
         setErrorMessage(

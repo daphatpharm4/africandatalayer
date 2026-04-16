@@ -213,16 +213,26 @@ function toAuthClientError(error: unknown, fallback: string): AuthClientError {
 }
 
 async function getCsrfToken(): Promise<string> {
-  const data = await apiJson<{ csrfToken: string }>('/api/auth/csrf');
-  return data.csrfToken;
+  console.log('[AUTH] getCsrfToken: fetching /api/auth/csrf');
+  try {
+    const data = await apiJson<{ csrfToken: string }>('/api/auth/csrf');
+    console.log('[AUTH] getCsrfToken: success, token length:', data.csrfToken?.length ?? 0);
+    return data.csrfToken;
+  } catch (error) {
+    console.error('[AUTH] getCsrfToken: FAILED', error);
+    throw error;
+  }
 }
 
 export async function getSession(): Promise<AuthSession | null> {
+  console.log('[AUTH] getSession: fetching /api/auth/session');
   try {
     const session = await apiJson<AuthSession>('/api/auth/session');
+    console.log('[AUTH] getSession: response', session?.user ? `user=${session.user.id}` : 'no user');
     if (session?.user) return session;
     return null;
-  } catch {
+  } catch (error) {
+    console.error('[AUTH] getSession: FAILED (returning null)', error);
     return null;
   }
 }
@@ -233,8 +243,10 @@ async function signInWithCredentialsOnce(
 ): Promise<void> {
   const normalizedIdentifier =
     normalizeIdentifier(identifier)?.value ?? identifier.trim();
+  console.log('[AUTH] signInOnce: identifier=', normalizedIdentifier);
   const csrfToken = await getCsrfToken();
   const callbackUrl = resolveAuthCallbackUrl();
+  console.log('[AUTH] signInOnce: callbackUrl=', callbackUrl);
   const body = new URLSearchParams();
   body.set('csrfToken', csrfToken);
   body.set('identifier', normalizedIdentifier);
@@ -243,6 +255,7 @@ async function signInWithCredentialsOnce(
   body.set('callbackUrl', callbackUrl);
   body.set('json', 'true');
 
+  console.log('[AUTH] signInOnce: POSTing to /api/auth/callback/credentials');
   const response = await apiFetch('/api/auth/callback/credentials', {
     method: 'POST',
     headers: {
@@ -252,11 +265,14 @@ async function signInWithCredentialsOnce(
     body,
   });
 
+  console.log('[AUTH] signInOnce: response status=', response.status);
+
   if (!response.ok) {
     const { message } = await extractResponseErrorPayload(
       response,
       DEFAULT_SIGN_IN_ERROR,
     );
+    console.error('[AUTH] signInOnce: non-OK response', response.status, message);
     const retryable = response.status >= 500;
     throw new AuthClientError(
       retryable ? 'auth_unavailable' : 'request_error',
@@ -266,7 +282,9 @@ async function signInWithCredentialsOnce(
   }
 
   const payload = await safeReadJson<AuthRedirectPayload>(response);
+  console.log('[AUTH] signInOnce: redirect payload=', JSON.stringify(payload));
   if (!payload || typeof payload.url !== 'string') {
+    console.error('[AUTH] signInOnce: missing redirect URL in payload');
     throw new AuthClientError('unknown_error', DEFAULT_SIGN_IN_ERROR, {
       retryable: true,
     });
@@ -275,17 +293,21 @@ async function signInWithCredentialsOnce(
   let url: URL;
   try {
     url = resolveAuthRedirectUrl(payload.url);
-  } catch {
+  } catch (e) {
+    console.error('[AUTH] signInOnce: failed to parse redirect URL', payload.url, e);
     throw new AuthClientError('unknown_error', DEFAULT_SIGN_IN_ERROR, {
       retryable: true,
     });
   }
 
+  console.log('[AUTH] signInOnce: redirect URL=', url.toString());
   const errorType = url.searchParams.get('error');
   const errorCode = url.searchParams.get('code');
   if (errorType || errorCode) {
+    console.error('[AUTH] signInOnce: Auth.js error type=', errorType, 'code=', errorCode);
     throw mapAuthJsError(errorType, errorCode);
   }
+  console.log('[AUTH] signInOnce: SUCCESS');
 }
 
 export async function signInWithCredentials(
@@ -297,12 +319,15 @@ export async function signInWithCredentials(
   const retryDelayMs = normalizeDelayMs(options.retryDelayMs);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    console.log('[AUTH] signInWithCredentials: attempt', attempt, 'of', maxAttempts);
     try {
       await signInWithCredentialsOnce(identifier, password);
+      console.log('[AUTH] signInWithCredentials: SUCCESS on attempt', attempt);
       return;
     } catch (error) {
       const authError = toAuthClientError(error, DEFAULT_SIGN_IN_ERROR);
       const shouldRetry = authError.retryable && attempt < maxAttempts;
+      console.error('[AUTH] signInWithCredentials: attempt', attempt, 'failed:', authError.code, authError.message, 'retryable=', shouldRetry);
       if (!shouldRetry) throw authError;
       await delay(retryDelayMs);
     }
@@ -342,6 +367,7 @@ export async function registerWithCredentials(
 ): Promise<void> {
   const normalizedIdentifier =
     normalizeIdentifier(identifier)?.value ?? identifier.trim();
+  console.log('[AUTH] register: identifier=', normalizedIdentifier, 'name=', name ?? '(none)');
   const response = await apiFetch('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -353,6 +379,7 @@ export async function registerWithCredentials(
     }),
   });
 
+  console.log('[AUTH] register: response status=', response.status);
   if (!response.ok) {
     const { message, code } = await extractResponseErrorPayload(
       response,
@@ -379,53 +406,74 @@ export async function registerWithCredentials(
 }
 
 export async function signInWithGoogle(): Promise<void> {
+  console.log('[AUTH] signInWithGoogle: starting');
   if (!isGoogleSignInSupported()) {
+    console.warn('[AUTH] signInWithGoogle: not supported (native app)');
     throw new AuthClientError(
       'provider_unavailable',
       DEFAULT_NATIVE_GOOGLE_ERROR,
     );
   }
-  const csrfToken = await getCsrfToken();
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = buildUrl('/api/auth/signin/google');
-  form.style.display = 'none';
+  try {
+    const csrfToken = await getCsrfToken();
+    const actionUrl = buildUrl('/api/auth/signin/google');
+    const callbackUrl = resolveAuthCallbackUrl();
+    console.log('[AUTH] signInWithGoogle: action=', actionUrl, 'callbackUrl=', callbackUrl);
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = actionUrl;
+    form.style.display = 'none';
 
-  const addField = (name: string, value: string) => {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-  };
+    const addField = (name: string, value: string) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    };
 
-  addField('csrfToken', csrfToken);
-  addField('callbackUrl', resolveAuthCallbackUrl());
+    addField('csrfToken', csrfToken);
+    addField('callbackUrl', callbackUrl);
 
-  document.body.appendChild(form);
-  form.submit();
+    document.body.appendChild(form);
+    console.log('[AUTH] signInWithGoogle: submitting form');
+    form.submit();
+  } catch (error) {
+    console.error('[AUTH] signInWithGoogle: FAILED', error);
+    throw error;
+  }
 }
 
 export async function signInWithApple(): Promise<void> {
-  const csrfToken = await getCsrfToken();
-  const form = document.createElement('form');
-  form.method = 'POST';
-  form.action = buildUrl('/api/auth/signin/apple');
-  form.style.display = 'none';
+  console.log('[AUTH] signInWithApple: starting');
+  try {
+    const csrfToken = await getCsrfToken();
+    const actionUrl = buildUrl('/api/auth/signin/apple');
+    const callbackUrl = resolveAuthCallbackUrl();
+    console.log('[AUTH] signInWithApple: action=', actionUrl, 'callbackUrl=', callbackUrl);
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = actionUrl;
+    form.style.display = 'none';
 
-  const addField = (name: string, value: string) => {
-    const input = document.createElement('input');
-    input.type = 'hidden';
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
-  };
+    const addField = (name: string, value: string) => {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    };
 
-  addField('csrfToken', csrfToken);
-  addField('callbackUrl', resolveAuthCallbackUrl());
+    addField('csrfToken', csrfToken);
+    addField('callbackUrl', callbackUrl);
 
-  document.body.appendChild(form);
-  form.submit();
+    document.body.appendChild(form);
+    console.log('[AUTH] signInWithApple: submitting form');
+    form.submit();
+  } catch (error) {
+    console.error('[AUTH] signInWithApple: FAILED', error);
+    throw error;
+  }
 }
 
 const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;

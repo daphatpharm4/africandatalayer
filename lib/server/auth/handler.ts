@@ -122,7 +122,12 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
     const normalizedIdentifier = normalizeIdentifier(rawIdentifier);
     const password = typeof credentials?.password === "string" ? credentials.password : "";
 
-    if (!normalizedIdentifier || !password) return null;
+    console.log("[auth:authorize] start identifier=", rawIdentifier ? rawIdentifier.slice(0, 5) + "***" : "(empty)", "hasPassword=", !!password);
+
+    if (!normalizedIdentifier || !password) {
+      console.log("[auth:authorize] → null: missing identifier or password");
+      return null;
+    }
     const identifier = normalizedIdentifier.value;
     const ip = extractRequestIp(request);
     if (ip) {
@@ -135,13 +140,17 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
         userId: identifier,
       });
       if (!authRate.allowed) {
+        console.log("[auth:authorize] → null: rate limited ip=", ip);
         return null;
       }
     }
 
     const profile = await getUserProfileFn(identifier);
+    console.log("[auth:authorize] profile lookup:", profile ? `found (role=${profile.role}, hasHash=${!!profile.passwordHash})` : "not found");
+
     if (profile?.role === "admin" && profile.passwordHash) {
       if (profile.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
+        console.log("[auth:authorize] → null: admin account locked until", profile.lockedUntil);
         await logSecurityEventFn({
           eventType: "login_failure",
           userId: profile.id,
@@ -152,6 +161,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
       }
       const adminMatch = await comparePasswordFn(password, profile.passwordHash);
       if (adminMatch) {
+        console.log("[auth:authorize] → SUCCESS: admin DB credentials match");
         await clearLoginFailure(profile, { upsertUserProfileFn });
         await logSecurityEventFn({
           eventType: "login_success",
@@ -165,6 +175,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
           email: profile.email ?? undefined,
         };
       }
+      console.log("[auth:authorize] → null: admin DB password mismatch");
       await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
       return null;
     }
@@ -176,11 +187,13 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
     const adminPassword = process.env.ADMIN_PASSWORD ?? "";
     if (adminEmail && adminPassword && normalizedIdentifier.type === "email" && identifier === adminEmail) {
       if (!isBcryptHash(adminPassword)) {
+        console.log("[auth:authorize] → null: ADMIN_PASSWORD env var is not a bcrypt hash");
         logWarnFn("auth.admin_password_invalid_format", { userId: identifier });
         return null;
       }
       const adminMatch = await comparePasswordFn(password, adminPassword);
       if (adminMatch) {
+        console.log("[auth:authorize] → SUCCESS: admin env bootstrap match");
         await logSecurityEventFn({
           eventType: "login_success",
           userId: identifier,
@@ -189,6 +202,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
         });
         return { id: identifier, name: "Admin", email: identifier };
       }
+      console.log("[auth:authorize] → null: admin env bootstrap password mismatch");
       await logSecurityEventFn({
         eventType: "login_failure",
         userId: identifier,
@@ -199,6 +213,7 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
     }
 
     if (profile?.lockedUntil && new Date(profile.lockedUntil).getTime() > Date.now()) {
+      console.log("[auth:authorize] → null: account locked until", profile.lockedUntil);
       await logSecurityEventFn({
         eventType: "login_failure",
         userId: profile.id,
@@ -208,16 +223,19 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
       return null;
     }
     if (!profile?.passwordHash) {
+      console.log("[auth:authorize] → null: no profile or no passwordHash");
       await persistLoginFailure(profile ?? null, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
       return null;
     }
 
     const valid = await comparePasswordFn(password, profile.passwordHash);
     if (!valid) {
+      console.log("[auth:authorize] → null: password mismatch for user");
       await persistLoginFailure(profile, request, identifier, { upsertUserProfileFn, logSecurityEventFn });
       return null;
     }
 
+    console.log("[auth:authorize] → SUCCESS: credentials match for user");
     await clearLoginFailure(profile, { upsertUserProfileFn });
     await logSecurityEventFn({
       eventType: "login_success",
@@ -341,6 +359,8 @@ function isNativeCapacitorRequest(request: Request): boolean {
 }
 
 export default async function handler(request: Request): Promise<Response> {
+  const url = new URL(request.url, "https://africandatalayer.vercel.app");
+  console.log("[auth:handler]", request.method, url.pathname + url.search);
   try {
     const authSecret = getAuthSecret();
     if (!authSecret) {
