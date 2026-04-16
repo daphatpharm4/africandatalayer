@@ -122,6 +122,14 @@ const Auth: React.FC<Props> = ({
             'Access denied for this account.',
             'Accès refusé pour ce compte.',
           );
+        case 'request_error': {
+          const msg = error.message?.trim();
+          if (msg) return msg;
+          return t(
+            'Unable to sign in with the provided details.',
+            "Connexion impossible avec les informations fournies.",
+          );
+        }
         default:
           return t(
             'Authentication failed. Please try again.',
