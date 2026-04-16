@@ -43,12 +43,45 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
 
 export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await apiFetch(path, init);
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  const bodyText = await response.text();
+
   if (!response.ok) {
-    const text = await response.text();
     if (path.startsWith('/api/auth')) {
-      console.error('[API] apiJson non-OK:', path, response.status, text.slice(0, 200));
+      console.error('[API] apiJson non-OK:', path, response.status, bodyText.slice(0, 200));
     }
-    throw new Error(text || "Request failed");
+    throw new Error(bodyText || "Request failed");
   }
-  return (await response.json()) as T;
+
+  try {
+    return JSON.parse(bodyText) as T;
+  } catch (error) {
+    const preview = bodyText.slice(0, 200);
+    const receivedHtml =
+      contentType.includes('text/html') ||
+      /^<!doctype html/i.test(bodyText) ||
+      /^<html/i.test(bodyText);
+
+    if (path.startsWith('/api/auth')) {
+      console.error('[API] apiJson parse failed:', {
+        path,
+        contentType: contentType || '(missing)',
+        bodyPreview: preview,
+      });
+    }
+
+    if (receivedHtml) {
+      throw new Error(
+        `Expected JSON from ${path} but received HTML. This usually means the request hit the SPA fallback instead of the API route.`,
+      );
+    }
+
+    if (!contentType.includes('application/json')) {
+      throw new Error(
+        `Expected JSON from ${path} but received ${contentType || 'a non-JSON response'}.`,
+      );
+    }
+
+    throw error;
+  }
 }

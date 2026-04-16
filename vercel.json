@@ -134,8 +134,15 @@
     }
   },
   "rewrites": [
+    { "source": "/api/auth/csrf", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/auth/session", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/auth/signin", "destination": "/api/auth/[...auth]" },
     { "source": "/api/auth/callback/:path*", "destination": "/api/auth/[...auth]" },
     { "source": "/api/auth/signin/:path*", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/auth/signout", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/auth/providers", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/auth/error", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/auth/verify-request", "destination": "/api/auth/[...auth]" },
     { "source": "/api/intake/leads/:id", "destination": "/api/intake/leads" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
