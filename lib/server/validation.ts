@@ -71,6 +71,8 @@ export const submissionInputSchema = z
   })
   .strict();
 
+const POLICY_KIND_VALUES = ["privacy", "terms"] as const;
+
 export const registerBodySchema = z
   .object({
     identifier: z.string().trim().min(3).max(160).optional(),
@@ -83,6 +85,12 @@ export const registerBodySchema = z
       .regex(/[a-z]/, "Password must include a lowercase letter")
       .regex(/[0-9]/, "Password must include a number"),
     name: z.string().trim().max(160).optional(),
+    acceptedPolicies: z
+      .array(z.enum(POLICY_KIND_VALUES))
+      .min(2)
+      .refine((kinds) => kinds.includes("privacy") && kinds.includes("terms"), {
+        message: "Must accept both the Privacy Policy and Terms of Use",
+      }),
   })
   .strict();
 
@@ -173,5 +181,30 @@ export const privacyActionSchema = z
   .object({
     subjectReference: z.string().trim().min(1).max(160),
     notes: z.string().trim().max(1000).optional(),
+  })
+  .strict();
+
+export const policyAcceptanceSchema = z
+  .object({
+    accept: z.array(z.enum(POLICY_KIND_VALUES)).min(1).max(2),
+  })
+  .strict();
+
+export const ipReportSchema = z
+  .object({
+    reporterName: z.string().trim().min(2).max(160),
+    reporterEmail: z.string().trim().email().max(160),
+    targetKind: z.enum(["submission", "point", "other"]),
+    targetRef: z.string().trim().max(160).optional(),
+    description: z.string().trim().min(20).max(4000),
+    sworn: z.literal(true),
+  })
+  .strict();
+
+export const ipReportPatchSchema = z
+  .object({
+    id: z.string().trim().uuid(),
+    status: z.enum(["open", "reviewing", "resolved", "rejected"]),
+    resolutionNotes: z.string().trim().max(4000).optional(),
   })
   .strict();

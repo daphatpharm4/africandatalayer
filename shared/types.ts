@@ -284,6 +284,21 @@ export interface PrivacyRequest {
   updatedAt: string;
 }
 
+export interface IpReport {
+  id: string;
+  reporterName: string;
+  reporterEmail: string;
+  reporterUser?: string | null;
+  targetKind: "submission" | "point" | "other";
+  targetRef?: string | null;
+  description: string;
+  sworn: boolean;
+  status: "open" | "reviewing" | "resolved" | "rejected";
+  resolutionNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LeaderboardEntry {
   rank: number;
   userId: string;

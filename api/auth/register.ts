@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { createHash } from "node:crypto";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
@@ -7,6 +8,9 @@ import { consumeRateLimit, extractRateLimitIp } from "../../lib/server/rateLimit
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type { UserProfile } from "../../shared/types.js";
 import { preflightResponse, applyCorsHeaders } from "../../lib/server/auth/cors.js";
+import { query } from "../../lib/server/db.js";
+import { logSecurityEvent } from "../../lib/server/securityAudit.js";
+import { POLICY_VERSIONS, type PolicyKind } from "../../shared/legalPolicies.js";
 
 const REGISTER_IP_LIMIT_PER_HOUR = Number(process.env.REGISTER_IP_LIMIT_PER_HOUR ?? "20") || 20;
 const REGISTER_IDENTIFIER_LIMIT_PER_HOUR = Number(process.env.REGISTER_IDENTIFIER_LIMIT_PER_HOUR ?? "5") || 5;
@@ -15,6 +19,49 @@ type GetUserProfileFn = typeof getUserProfile;
 type UpsertUserProfileFn = typeof upsertUserProfile;
 type ConsumeRateLimitFn = typeof consumeRateLimit;
 type HashPasswordFn = typeof bcrypt.hash;
+type RecordPolicyAcceptanceFn = (input: {
+  userId: string;
+  kinds: PolicyKind[];
+  ipHash: string | null;
+  userAgent: string | null;
+  request: Request;
+}) => Promise<void>;
+
+async function defaultRecordPolicyAcceptance({
+  userId,
+  kinds,
+  ipHash,
+  userAgent,
+  request,
+}: {
+  userId: string;
+  kinds: PolicyKind[];
+  ipHash: string | null;
+  userAgent: string | null;
+  request: Request;
+}): Promise<void> {
+  for (const kind of kinds) {
+    await query(
+      `INSERT INTO policy_acceptance (user_id, policy_kind, version, ip_hash, user_agent)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, policy_kind, version) DO NOTHING`,
+      [userId, kind, POLICY_VERSIONS[kind], ipHash, userAgent],
+    );
+  }
+  await logSecurityEvent({
+    eventType: "policy_accepted",
+    userId,
+    request,
+    details: {
+      context: "register",
+      kinds,
+      versions: kinds.reduce<Record<string, string>>((acc, kind) => {
+        acc[kind] = POLICY_VERSIONS[kind];
+        return acc;
+      }, {}),
+    },
+  });
+}
 
 export function createRegisterHandler(
   deps: {
@@ -22,12 +69,14 @@ export function createRegisterHandler(
     upsertUserProfileFn?: UpsertUserProfileFn;
     consumeRateLimitFn?: ConsumeRateLimitFn;
     hashPasswordFn?: HashPasswordFn;
+    recordPolicyAcceptanceFn?: RecordPolicyAcceptanceFn;
   } = {},
 ): (request: Request) => Promise<Response> {
   const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
   const upsertUserProfileFn = deps.upsertUserProfileFn ?? upsertUserProfile;
   const consumeRateLimitFn = deps.consumeRateLimitFn ?? consumeRateLimit;
   const hashPasswordFn = deps.hashPasswordFn ?? bcrypt.hash;
+  const recordPolicyAcceptanceFn = deps.recordPolicyAcceptanceFn ?? defaultRecordPolicyAcceptance;
 
   return async function handleRegister(request: Request): Promise<Response> {
     let parsedBody: unknown;
@@ -127,6 +176,18 @@ export function createRegisterHandler(
       };
 
       await upsertUserProfileFn(identifier, profile);
+
+      const ipForHash = requestIp ?? extractRateLimitIp(request);
+      const ipHash = ipForHash ? createHash("sha256").update(ipForHash).digest("hex") : null;
+      const userAgent = request.headers.get("user-agent");
+      await recordPolicyAcceptanceFn({
+        userId: identifier,
+        kinds: body.acceptedPolicies as PolicyKind[],
+        ipHash,
+        userAgent,
+        request,
+      });
+
       return jsonResponse({ ok: true }, { status: 201 });
     } catch (error) {
       if (isStorageUnavailableError(error)) {

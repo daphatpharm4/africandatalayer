@@ -19,7 +19,10 @@ export type SecurityAuditEventType =
   | "admin_review"
   | "api_rate_limited"
   | "idempotency_conflict"
-  | "suspicious_activity";
+  | "suspicious_activity"
+  | "policy_accepted"
+  | "ip_report_filed"
+  | "ip_report_updated";
 
 function normalizeIp(raw: string | null): string | null {
   const value = raw?.split(",")[0]?.trim();

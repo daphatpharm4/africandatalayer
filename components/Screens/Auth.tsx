@@ -20,12 +20,14 @@ import {
 import { isNative } from '../../lib/client/native';
 import { normalizeIdentifier } from '../../lib/shared/identifier';
 import BrandLogo from '../BrandLogo';
+import { Screen } from '../../types';
 
 interface Props {
   onBack: () => void;
   onComplete: () => void;
   language: 'en' | 'fr';
   initialMode?: 'signin' | 'signup';
+  navigateTo?: (screen: Screen) => void;
 }
 
 type AuthMode = 'signin' | 'signup';
@@ -36,6 +38,7 @@ const Auth: React.FC<Props> = ({
   onComplete,
   language,
   initialMode = 'signin',
+  navigateTo,
 }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [identifier, setIdentifier] = useState('');
@@ -44,6 +47,7 @@ const Auth: React.FC<Props> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [errorCode, setErrorCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const isNativeApp = isNative();
@@ -194,6 +198,17 @@ const Auth: React.FC<Props> = ({
       return;
     }
 
+    if (mode === 'signup' && !acceptedTerms) {
+      setErrorCode('validation_error');
+      setErrorMessage(
+        t(
+          'You must accept the Terms of Use and Privacy Policy.',
+          "Vous devez accepter les Conditions d'utilisation et la Politique de confidentialité.",
+        ),
+      );
+      return;
+    }
+
     setSubmitAction('credentials');
     resetFeedback();
     let accountCreated = false;
@@ -203,7 +218,9 @@ const Auth: React.FC<Props> = ({
     try {
       if (mode === 'signup') {
         console.log('[AUTH:UI] registering...');
-        await registerWithCredentials(normalizedIdentifier, password);
+        await registerWithCredentials(normalizedIdentifier, password, {
+          acceptedPolicies: ['privacy', 'terms'],
+        });
         accountCreated = true;
         console.log('[AUTH:UI] registration succeeded, auto-signing in...');
         await signInWithCredentials(normalizedIdentifier, password, {
@@ -477,6 +494,44 @@ const Auth: React.FC<Props> = ({
                   </button>
                 )}
               </div>
+            )}
+
+            {mode === 'signup' && (
+              <label
+                className="flex items-start gap-2 px-1 text-xs leading-5 text-gray-600"
+                data-testid="auth-accept-terms"
+              >
+                <input
+                  type="checkbox"
+                  checked={acceptedTerms}
+                  onChange={(e) => setAcceptedTerms(e.target.checked)}
+                  required
+                  className="mt-1 min-w-[16px]"
+                  aria-label={t(
+                    'Accept Terms of Use and Privacy Policy',
+                    "Accepter les Conditions d'utilisation et la Politique de confidentialité",
+                  )}
+                />
+                <span>
+                  {t('I agree to the ', "J'accepte les ")}
+                  <button
+                    type="button"
+                    onClick={() => navigateTo?.(Screen.TERMS_OF_USE)}
+                    className="font-semibold text-navy underline"
+                  >
+                    {t('Terms of Use', "Conditions d'utilisation")}
+                  </button>
+                  {t(' and ', ' et la ')}
+                  <button
+                    type="button"
+                    onClick={() => navigateTo?.(Screen.PRIVACY_POLICY)}
+                    className="font-semibold text-navy underline"
+                  >
+                    {t('Privacy Policy', 'Politique de confidentialité')}
+                  </button>
+                  .
+                </span>
+              </label>
             )}
 
             <button

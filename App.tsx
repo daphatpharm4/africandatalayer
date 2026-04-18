@@ -4,6 +4,11 @@ import type { ContributionMode, DataPoint } from './types';
 import { getSession, signOut } from './lib/client/auth';
 import { apiJson } from './lib/client/api';
 import {
+  fetchOutstandingPolicies,
+  recordPolicyAcceptance,
+} from './lib/client/legal';
+import type { PolicyKind } from './shared/legalPolicies';
+import {
   flushOfflineQueue,
   getQueueSnapshot,
   subscribeQueueSnapshot,
@@ -39,6 +44,10 @@ const AgentPerformance = lazy(() => import('./components/Screens/AgentPerformanc
 const DeltaDashboard = lazy(() => import('./components/Screens/DeltaDashboard'));
 const InvestorDashboard = lazy(() => import('./components/Screens/InvestorDashboard'));
 const SubmissionQueue = lazy(() => import('./components/Screens/SubmissionQueue'));
+const PrivacyPolicy = lazy(() => import('./components/Screens/PrivacyPolicy'));
+const TermsOfUse = lazy(() => import('./components/Screens/TermsOfUse'));
+const DataCompliance = lazy(() => import('./components/Screens/DataCompliance'));
+const IpReport = lazy(() => import('./components/Screens/IpReport'));
 
 type WindowWithIdleCallback = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -83,6 +92,8 @@ const App: React.FC = () => {
   const [activeCategory, setActiveCategory] = useState<Category>(Category.PHARMACY);
   const [queueSnapshot, setQueueSnapshot] = useState<QueueSnapshot>(defaultQueueSnapshot);
   const [pathname, setPathname] = useState(() => (typeof window === 'undefined' ? '/' : window.location.pathname));
+  const [outstandingPolicies, setOutstandingPolicies] = useState<PolicyKind[]>([]);
+  const [policyAcceptPending, setPolicyAcceptPending] = useState(false);
 
   const isClient = userRole === 'client';
   const isDocsMode = pathname.startsWith('/docs');
@@ -273,7 +284,44 @@ const App: React.FC = () => {
     setIsAuthenticated(hasUser);
     setIsAdmin(Boolean(session?.user?.isAdmin));
     setUserRole((session?.user?.role as UserRole) ?? 'agent');
+    if (hasUser) {
+      try {
+        const result = await fetchOutstandingPolicies();
+        setOutstandingPolicies(result?.outstanding ?? []);
+      } catch {
+        setOutstandingPolicies([]);
+      }
+    } else {
+      setOutstandingPolicies([]);
+    }
     return hasUser;
+  };
+
+  const handleAcceptOutstandingPolicies = async () => {
+    if (outstandingPolicies.length === 0) return;
+    setPolicyAcceptPending(true);
+    try {
+      const result = await recordPolicyAcceptance(outstandingPolicies);
+      if (result?.ok) {
+        setOutstandingPolicies([]);
+      }
+    } finally {
+      setPolicyAcceptPending(false);
+    }
+  };
+
+  const handleDeclineOutstandingPolicies = async () => {
+    try {
+      await signOut();
+    } catch {
+      /* best effort */
+    } finally {
+      await refreshSession();
+      setIsAuthenticated(false);
+      setOutstandingPolicies([]);
+      setHistory([]);
+      setCurrentScreen(Screen.SPLASH);
+    }
   };
 
   useEffect(() => {
@@ -372,6 +420,7 @@ const App: React.FC = () => {
             language={language}
             onBack={goBack}
             initialMode={hasAuthenticated ? 'signin' : 'signup'}
+            navigateTo={(screen) => navigateTo(screen)}
             onComplete={async () => {
               await refreshSession();
               const session = await getSession();
@@ -441,6 +490,7 @@ const App: React.FC = () => {
             onBack={goBack}
             language={language}
             onLanguageChange={setLanguage}
+            navigateTo={(screen) => navigateTo(screen)}
             onLogout={async () => {
               try {
                 await signOut();
@@ -467,6 +517,22 @@ const App: React.FC = () => {
         return <DeltaDashboard language={language} onBack={goBack} />;
       case Screen.INVESTOR_DASHBOARD:
         return <InvestorDashboard language={language} onBack={goBack} />;
+      case Screen.PRIVACY_POLICY:
+        return <PrivacyPolicy language={language} onBack={goBack} />;
+      case Screen.TERMS_OF_USE:
+        return <TermsOfUse language={language} onBack={goBack} />;
+      case Screen.DATA_COMPLIANCE:
+        return <DataCompliance language={language} onBack={goBack} />;
+      case Screen.IP_REPORT:
+        return (
+          <IpReport
+            language={language}
+            onBack={goBack}
+            onSubmitted={() => {
+              /* Stay on confirmation; user taps Back. */
+            }}
+          />
+        );
       default:
         return <Splash onStart={(scr) => navigateTo(scr)} language={language} />;
     }
@@ -541,6 +607,73 @@ const App: React.FC = () => {
           />
         )}
       </div>
+      {outstandingPolicies.length > 0 && isAuthenticated && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+          role="dialog"
+          aria-modal="true"
+          data-testid="policy-gate"
+        >
+          <div className="w-full max-w-md rounded-t-3xl bg-white p-6 sm:rounded-2xl">
+            <h2 className="text-base font-bold text-ink">
+              {language === 'fr' ? 'Mise à jour des conditions' : 'Policy update required'}
+            </h2>
+            <p className="mt-2 text-sm text-gray-700 leading-relaxed">
+              {language === 'fr'
+                ? 'Nos conditions ont été mises à jour. Veuillez les accepter pour continuer.'
+                : 'Our policies have been updated. Please review and accept to continue.'}
+            </p>
+            <ul className="mt-3 text-xs text-gray-600 space-y-1 list-disc pl-5">
+              {outstandingPolicies.map((kind) => (
+                <li key={kind}>
+                  <button
+                    type="button"
+                    className="underline font-medium text-navy"
+                    onClick={() =>
+                      navigateTo(
+                        kind === 'privacy' ? Screen.PRIVACY_POLICY : Screen.TERMS_OF_USE,
+                      )
+                    }
+                  >
+                    {kind === 'privacy'
+                      ? language === 'fr'
+                        ? 'Politique de confidentialité'
+                        : 'Privacy Policy'
+                      : language === 'fr'
+                      ? "Conditions d'utilisation"
+                      : 'Terms of Use'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => void handleDeclineOutstandingPolicies()}
+                className="btn-ghost"
+                data-testid="policy-gate-decline"
+              >
+                {language === 'fr' ? 'Se déconnecter' : 'Sign out'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleAcceptOutstandingPolicies()}
+                disabled={policyAcceptPending}
+                className="btn-primary disabled:opacity-60"
+                data-testid="policy-gate-accept"
+              >
+                {policyAcceptPending
+                  ? language === 'fr'
+                    ? 'Enregistrement…'
+                    : 'Saving…'
+                  : language === 'fr'
+                  ? 'Tout accepter'
+                  : 'Accept all'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ErrorBoundary>
   );
 };

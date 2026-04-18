@@ -15,6 +15,8 @@ import {
 import ProfileAvatar from '../shared/ProfileAvatar';
 import { coerceAvatarPreset } from '../../shared/avatarPresets';
 import { apiFetch, apiJson } from '../../lib/client/api';
+import { fetchIpReports, updateIpReport } from '../../lib/client/legal';
+import type { IpReport } from '../../shared/types';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import {
   buildAdminSubmissionGroups,
@@ -46,7 +48,7 @@ interface Props {
 type ReviewDecision = 'approved' | 'rejected' | 'flagged';
 type AutomationStatusFilter = '' | AutomationLeadStatus;
 type AutomationPriorityFilter = '' | AutomationLeadPriority;
-type AdminMode = 'review' | 'assignments' | 'automation';
+type AdminMode = 'review' | 'assignments' | 'automation' | 'ip-reports';
 type MatchState = 'match' | 'mismatch' | 'unavailable';
 
 type ViewTransitionDocument = Document & {
@@ -432,6 +434,50 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isApplyingDecision, setIsApplyingDecision] = useState(false);
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
+  const [ipReports, setIpReports] = useState<IpReport[]>([]);
+  const [isLoadingIpReports, setIsLoadingIpReports] = useState(false);
+  const [ipReportMessage, setIpReportMessage] = useState('');
+  const [ipReportDraft, setIpReportDraft] = useState<Record<string, { status: IpReport['status']; resolutionNotes: string }>>({});
+
+  useEffect(() => {
+    if (activeMode !== 'ip-reports') return;
+    let cancelled = false;
+    setIsLoadingIpReports(true);
+    void (async () => {
+      try {
+        const rows = await fetchIpReports();
+        if (cancelled) return;
+        setIpReports(rows);
+        const seed: Record<string, { status: IpReport['status']; resolutionNotes: string }> = {};
+        for (const row of rows) {
+          seed[row.id] = { status: row.status, resolutionNotes: row.resolutionNotes ?? '' };
+        }
+        setIpReportDraft(seed);
+      } finally {
+        if (!cancelled) setIsLoadingIpReports(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMode]);
+
+  const saveIpReport = async (id: string) => {
+    const draft = ipReportDraft[id];
+    if (!draft) return;
+    setIpReportMessage('');
+    const updated = await updateIpReport({
+      id,
+      status: draft.status,
+      resolutionNotes: draft.resolutionNotes || undefined,
+    });
+    if (!updated) {
+      setIpReportMessage(t('Update failed.', 'Échec de la mise à jour.'));
+      return;
+    }
+    setIpReports((prev) => prev.map((row) => (row.id === id ? updated : row)));
+    setIpReportMessage(t('Saved.', 'Enregistré.'));
+  };
 
   const assignmentAgentNameById = useMemo(
     () => new Map((assignmentContext?.agents ?? []).map((agent) => [agent.id, agent.name] as const)),
@@ -1220,11 +1266,12 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
       <div className="p-4 pb-24 space-y-4">
         <div className="card p-2">
-          <div className="grid grid-cols-3 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
             {([
               ['review', t('Review cockpit', 'Cockpit revue')],
               ['assignments', t('Assignments', 'Affectations')],
               ['automation', t('Automation', 'Automatisation')],
+              ['ip-reports', t('IP Reports', 'Signalements PI')],
             ] as Array<[AdminMode, string]>).map(([mode, label]) => (
               <button
                 key={mode}
@@ -2305,6 +2352,126 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {activeMode === 'ip-reports' && (
+          <div className="card p-4 space-y-4" data-testid="admin-ip-reports">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="micro-label-wide text-navy">{t('IP infringement reports', 'Signalements atteinte PI')}</div>
+                <div className="text-xs text-gray-500">
+                  {isLoadingIpReports
+                    ? t('Loading…', 'Chargement…')
+                    : t(`${ipReports.length} report(s) total.`, `${ipReports.length} signalement(s) au total.`)}
+                </div>
+              </div>
+              {ipReportMessage && (
+                <div className="text-xs text-gray-600">{ipReportMessage}</div>
+              )}
+            </div>
+
+            {ipReports.length === 0 && !isLoadingIpReports && (
+              <p className="text-sm text-gray-500">
+                {t('No reports yet.', 'Aucun signalement pour le moment.')}
+              </p>
+            )}
+
+            <div className="space-y-3">
+              {ipReports.map((report) => {
+                const draft = ipReportDraft[report.id] ?? {
+                  status: report.status,
+                  resolutionNotes: report.resolutionNotes ?? '',
+                };
+                return (
+                  <div
+                    key={report.id}
+                    className="rounded-2xl border border-gray-100 bg-white p-4 space-y-3"
+                    data-testid={`admin-ip-report-${report.id}`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <div className="text-sm font-semibold text-ink">
+                          {report.reporterName}{' '}
+                          <span className="text-xs font-normal text-gray-500">
+                            &lt;{report.reporterEmail}&gt;
+                          </span>
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {t('Target: ', 'Cible : ')}
+                          {report.targetKind}
+                          {report.targetRef ? ` · ${report.targetRef}` : ''}
+                        </div>
+                        <div className="text-[11px] text-gray-400">
+                          {new Date(report.createdAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB')}
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-navy bg-navy-wash px-2 py-1 rounded-full">
+                        {report.status}
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+                      {report.description}
+                    </p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="micro-label text-gray-500">{t('Status', 'Statut')}</span>
+                        <select
+                          value={draft.status}
+                          onChange={(e) =>
+                            setIpReportDraft((prev) => ({
+                              ...prev,
+                              [report.id]: {
+                                ...draft,
+                                status: e.target.value as IpReport['status'],
+                              },
+                            }))
+                          }
+                          className="rounded-xl border border-gray-200 p-2 text-sm bg-white"
+                        >
+                          <option value="open">{t('Open', 'Ouvert')}</option>
+                          <option value="reviewing">{t('Reviewing', 'En revue')}</option>
+                          <option value="resolved">{t('Resolved', 'Résolu')}</option>
+                          <option value="rejected">{t('Rejected', 'Rejeté')}</option>
+                        </select>
+                      </label>
+
+                      <label className="flex flex-col gap-1">
+                        <span className="micro-label text-gray-500">{t('Resolution notes', 'Notes de résolution')}</span>
+                        <textarea
+                          rows={2}
+                          maxLength={4000}
+                          value={draft.resolutionNotes}
+                          onChange={(e) =>
+                            setIpReportDraft((prev) => ({
+                              ...prev,
+                              [report.id]: {
+                                ...draft,
+                                resolutionNotes: e.target.value,
+                              },
+                            }))
+                          }
+                          className="rounded-xl border border-gray-200 p-2 text-sm"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => void saveIpReport(report.id)}
+                        className="btn-primary h-10 px-4 text-xs"
+                        data-testid={`admin-ip-report-save-${report.id}`}
+                      >
+                        {t('Save', 'Enregistrer')}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

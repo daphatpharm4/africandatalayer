@@ -360,14 +360,26 @@ export async function signOut(): Promise<void> {
   }
 }
 
+export interface RegisterOptions {
+  name?: string;
+  acceptedPolicies: Array<'privacy' | 'terms'>;
+}
+
 export async function registerWithCredentials(
   identifier: string,
   password: string,
-  name?: string,
+  options: RegisterOptions,
 ): Promise<void> {
   const normalizedIdentifier =
     normalizeIdentifier(identifier)?.value ?? identifier.trim();
-  console.log('[AUTH] register: identifier=', normalizedIdentifier, 'name=', name ?? '(none)');
+  console.log(
+    '[AUTH] register: identifier=',
+    normalizedIdentifier,
+    'name=',
+    options.name ?? '(none)',
+    'acceptedPolicies=',
+    options.acceptedPolicies.join(','),
+  );
   const response = await apiFetch('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -375,7 +387,8 @@ export async function registerWithCredentials(
       identifier: normalizedIdentifier,
       email: normalizedIdentifier,
       password,
-      name,
+      name: options.name,
+      acceptedPolicies: options.acceptedPolicies,
     }),
   });
 

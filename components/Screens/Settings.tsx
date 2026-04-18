@@ -1,20 +1,23 @@
 import React, { useEffect, useState } from 'react';
 import {
   Check,
+  ChevronRight,
   Contrast,
   LogOut,
 } from 'lucide-react';
 import BrandLogo from '../BrandLogo';
 import ScreenHeader from '../shared/ScreenHeader';
+import { Screen } from '../../types';
 
 interface Props {
   onBack: () => void;
   onLogout: () => void;
   language: 'en' | 'fr';
   onLanguageChange: (language: 'en' | 'fr') => void;
+  navigateTo: (screen: Screen) => void;
 }
 
-const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChange }) => {
+const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChange, navigateTo }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [highContrast, setHighContrast] = useState(() => {
     try { return localStorage.getItem('adl_high_contrast') === '1'; } catch { return false; }
@@ -76,6 +79,29 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
                 <span className={`absolute left-0.5 top-0.5 h-7 w-7 rounded-full bg-white shadow transition-transform ${highContrast ? 'translate-x-6' : ''}`} />
               </button>
             </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <h4 className="micro-label px-1 text-gray-400">{t('Legal', 'Légal')}</h4>
+          <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white divide-y divide-gray-50">
+            {[
+              { label: t('Privacy Policy', 'Politique de confidentialité'), screen: Screen.PRIVACY_POLICY, testId: 'settings-legal-privacy' },
+              { label: t('Terms of Use', "Conditions d'utilisation"), screen: Screen.TERMS_OF_USE, testId: 'settings-legal-terms' },
+              { label: t('Data & Compliance', 'Données et conformité'), screen: Screen.DATA_COMPLIANCE, testId: 'settings-legal-compliance' },
+              { label: t('Report IP Infringement', 'Signaler une atteinte PI'), screen: Screen.IP_REPORT, testId: 'settings-legal-ip' },
+            ].map((item) => (
+              <button
+                key={item.screen}
+                type="button"
+                onClick={() => navigateTo(item.screen)}
+                data-testid={item.testId}
+                className="flex w-full items-center justify-between px-4 min-h-[52px] active:bg-gray-50"
+              >
+                <span className="text-sm font-medium text-gray-900">{item.label}</span>
+                <ChevronRight size={16} className="text-gray-400" />
+              </button>
+            ))}
           </div>
         </div>
 
