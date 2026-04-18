@@ -688,8 +688,14 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       </header>
 
       <div
-        className="absolute inset-x-0 bottom-0 flex flex-col overflow-hidden"
-        style={{ top: viewMode === 'list' ? listContentTopInset : '0px' }}
+        className="absolute inset-x-0 flex flex-col overflow-hidden"
+        style={{
+          top: listContentTopInset,
+          bottom:
+            viewMode === 'map'
+              ? 'calc(var(--bottom-nav-height) + var(--safe-bottom, 0px) + 5.75rem)'
+              : '0px',
+        }}
       >
         {viewMode === 'map' && (
           <Suspense
