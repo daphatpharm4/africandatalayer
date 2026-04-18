@@ -80,7 +80,7 @@ const selectableCategories: Category[] = [
 const ADMIN_MAP_SCOPE_STORAGE_KEY = 'adl_admin_map_scope';
 
 function readStoredAdminMapScope(): MapScope {
-  if (typeof window === 'undefined') return 'global';
+  if (typeof window === 'undefined') return 'bonamoussadi';
   try {
     const stored = window.localStorage.getItem(ADMIN_MAP_SCOPE_STORAGE_KEY);
     if (stored === 'bonamoussadi' || stored === 'cameroon' || stored === 'global') {
@@ -89,7 +89,7 @@ function readStoredAdminMapScope(): MapScope {
   } catch {
     // Ignore storage access failures and fall back to the default admin scope.
   }
-  return 'global';
+  return 'bonamoussadi';
 }
 
 
