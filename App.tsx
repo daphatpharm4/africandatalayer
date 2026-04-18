@@ -484,7 +484,12 @@ const App: React.FC = () => {
   if (isDocsMode) {
     return (
       <ErrorBoundary>
-        <HelpCenter pathname={pathname} onNavigate={navigatePath} />
+        <HelpCenter
+          pathname={pathname}
+          onNavigate={navigatePath}
+          viewerRole={userRole}
+          isAuthenticated={isAuthenticated}
+        />
       </ErrorBoundary>
     );
   }

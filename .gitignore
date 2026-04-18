@@ -42,3 +42,5 @@ ios/App/App/public/
 *.jks
 *.keystore
 keystore.properties
+# Added by code-review-graph
+.code-review-graph/

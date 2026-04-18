@@ -18,4 +18,16 @@ test("profile help center entry opens the role-specific documentation", async ({
 
   await expect(page).toHaveURL(new RegExp(`/docs/${adlRole}$`));
   await expect(page.getByRole("heading", { name: docsHeading })).toBeVisible();
+
+  const ownTab = adlRole === "client" ? /^Client$/i : adlRole === "admin" ? /^Admin$/i : /^Agent$/i;
+  const foreignTabs = (["client", "agent", "admin"] as const)
+    .filter((role) => role !== adlRole)
+    .map((role) => new RegExp(`^${role.charAt(0).toUpperCase() + role.slice(1)}$`, "i"));
+
+  const tabs = page.getByRole("navigation", { name: /Help center audiences/i });
+  await expect(tabs.getByRole("button", { name: /^Overview$/i })).toBeVisible();
+  await expect(tabs.getByRole("button", { name: ownTab })).toBeVisible();
+  for (const foreign of foreignTabs) {
+    await expect(tabs.getByRole("button", { name: foreign })).toHaveCount(0);
+  }
 });

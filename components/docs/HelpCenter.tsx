@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowRight,
   BookOpen,
@@ -27,10 +27,17 @@ import {
   type DocsTone,
   type DocsWorkflow,
 } from '../../lib/docs/helpCenter';
+import type { UserRole } from '../../shared/types';
 
 interface HelpCenterProps {
   pathname: string;
   onNavigate: (path: string) => void;
+  viewerRole: UserRole;
+  isAuthenticated: boolean;
+}
+
+function roleToAudience(role: UserRole): DocsAudience {
+  return role;
 }
 
 const toneClass: Record<DocsTone, string> = {
@@ -234,14 +241,36 @@ function RunbookCard({ group }: { group: DocsRunbookGroup }) {
   );
 }
 
-const HelpCenter: React.FC<HelpCenterProps> = ({ pathname, onNavigate }) => {
+const HelpCenter: React.FC<HelpCenterProps> = ({ pathname, onNavigate, viewerRole, isAuthenticated }) => {
   const [query, setQuery] = useState('');
   const currentAudience = audienceFromDocsPath(pathname);
-  const currentSection = DOCS_SECTIONS[currentAudience];
+
+  const allowedAudiences = useMemo<DocsAudience[]>(
+    () => (isAuthenticated ? ['public', roleToAudience(viewerRole)] : ['public']),
+    [isAuthenticated, viewerRole],
+  );
+
+  useEffect(() => {
+    if (!allowedAudiences.includes(currentAudience)) {
+      const fallback = isAuthenticated ? docsPathForAudience(roleToAudience(viewerRole)) : '/docs';
+      onNavigate(fallback);
+    }
+  }, [allowedAudiences, currentAudience, isAuthenticated, onNavigate, viewerRole]);
+
+  const visibleSections = useMemo(
+    () => Object.values(DOCS_SECTIONS).filter((section) => allowedAudiences.includes(section.slug)),
+    [allowedAudiences],
+  );
+
+  const effectiveAudience: DocsAudience = allowedAudiences.includes(currentAudience) ? currentAudience : 'public';
+  const currentSection = DOCS_SECTIONS[effectiveAudience];
 
   const currentScreens = useMemo(() => getSectionScreens(currentSection), [currentSection]);
   const evidenceScreens = useMemo(() => getSectionEvidence(currentSection), [currentSection]);
-  const searchResults = useMemo(() => searchDocs(query), [query]);
+  const searchResults = useMemo(
+    () => searchDocs(query).filter((result) => allowedAudiences.includes(result.audience)),
+    [query, allowedAudiences],
+  );
 
   const capturedScreenCount = currentScreens.filter((screen) => getVisualCoverage(screen) === 'captured').length;
   const textOnlyCount = currentScreens.length - capturedScreenCount;
@@ -274,13 +303,13 @@ const HelpCenter: React.FC<HelpCenterProps> = ({ pathname, onNavigate }) => {
             </div>
 
             <nav className="flex max-w-full items-center gap-2 overflow-x-auto no-scrollbar" aria-label="Help center audiences">
-              {Object.values(DOCS_SECTIONS).map((section) => (
+              {visibleSections.map((section) => (
                 <button
                   key={section.slug}
                   type="button"
                   onClick={() => onNavigate(docsPathForAudience(section.slug))}
                   className={`rounded-full px-4 py-2 text-sm font-semibold transition-colors ${
-                    section.slug === currentAudience
+                    section.slug === effectiveAudience
                       ? 'bg-navy text-white'
                       : 'bg-page text-gray-600 hover:bg-gray-100 hover:text-ink'
                   }`}
@@ -306,11 +335,11 @@ const HelpCenter: React.FC<HelpCenterProps> = ({ pathname, onNavigate }) => {
             <div className="space-y-6 p-6">
               <div className="space-y-3">
                 <div className="micro-label text-gray-400">Browse docs</div>
-                {Object.values(DOCS_SECTIONS).map((section) => (
+                {visibleSections.map((section) => (
                   <SidebarSectionLink
                     key={section.slug}
                     section={section}
-                    current={section.slug === currentAudience}
+                    current={section.slug === effectiveAudience}
                     onNavigate={onNavigate}
                   />
                 ))}
@@ -381,7 +410,7 @@ const HelpCenter: React.FC<HelpCenterProps> = ({ pathname, onNavigate }) => {
                         />
                       </div>
                       <div className="mt-3 text-xs text-gray-500">
-                        Search across all docs pages, not just the current role.
+                        Search across the docs pages available to you.
                       </div>
                     </div>
                   </div>
@@ -420,7 +449,7 @@ const HelpCenter: React.FC<HelpCenterProps> = ({ pathname, onNavigate }) => {
                       </div>
                       {searchResults.length > 0 && (
                         <div className="rounded-full bg-page px-4 py-2 text-xs font-semibold uppercase tracking-[0.14em] text-gray-500">
-                          Cross-role search
+                          Scoped to your role
                         </div>
                       )}
                     </div>
