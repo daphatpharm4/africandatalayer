@@ -70,6 +70,8 @@ interface Props {
   nearbyEnrichCount?: number;
   assignmentZones?: AssignmentZone[];
   sheetSnap?: string;
+  viewportTopInsetPx?: number;
+  viewportBottomInsetPx?: number;
 }
 
 const createMarkerIcon = (color: string) =>
@@ -146,6 +148,27 @@ const AgentLocationMarker: React.FC = () => {
   );
 };
 
+const MapViewportPadding: React.FC<{
+  bounds: [[number, number], [number, number]] | undefined;
+  topInsetPx: number;
+  bottomInsetPx: number;
+  sheetSnap?: string;
+}> = ({ bounds, topInsetPx, bottomInsetPx, sheetSnap }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (!bounds) return;
+    const id = window.setTimeout(() => {
+      map.fitBounds(bounds as L.LatLngBoundsExpression, {
+        paddingTopLeft: [0, Math.max(0, topInsetPx)],
+        paddingBottomRight: [0, Math.max(0, bottomInsetPx)],
+        animate: false,
+      });
+    }, 220);
+    return () => window.clearTimeout(id);
+  }, [map, bounds, topInsetPx, bottomInsetPx, sheetSnap]);
+  return null;
+};
+
 const MapSizeSync: React.FC<{ active: boolean; sheetSnap?: string }> = ({ active, sheetSnap }) => {
   const map = useMap();
 
@@ -195,6 +218,8 @@ const HomeMap: React.FC<Props> = ({
   nearbyEnrichCount = 0,
   assignmentZones = [],
   sheetSnap,
+  viewportTopInsetPx = 0,
+  viewportBottomInsetPx = 0,
 }) => {
   const [showHeatmap, setShowHeatmap] = useState(false);
 
@@ -226,6 +251,12 @@ const HomeMap: React.FC<Props> = ({
           maxZoom={20}
         />
         <MapSizeSync active sheetSnap={sheetSnap} />
+        <MapViewportPadding
+          bounds={mapBounds}
+          topInsetPx={viewportTopInsetPx}
+          bottomInsetPx={viewportBottomInsetPx}
+          sheetSnap={sheetSnap}
+        />
         <AgentLocationMarker />
         {assignmentZones.map((zone) => (
           <Rectangle

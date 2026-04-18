@@ -119,6 +119,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
   const listContentTopInset = isLowEndDevice ? (isAdmin ? '15rem' : '12rem') : (isAdmin ? '11.75rem' : '8.75rem');
+  const listContentTopInsetPx = isLowEndDevice ? (isAdmin ? 240 : 192) : (isAdmin ? 188 : 140);
+  const mapBottomChromePx = 80 + 88 + 4; // bottom nav + peek sheet + small offset
   const mapScopeOptions: Array<{ value: MapScope; label: string }> = [
     { value: 'bonamoussadi', label: t('Bonamoussadi', 'Bonamoussadi') },
     { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
@@ -688,14 +690,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       </header>
 
       <div
-        className="absolute inset-x-0 flex flex-col overflow-hidden"
-        style={{
-          top: listContentTopInset,
-          bottom:
-            viewMode === 'map'
-              ? 'calc(var(--bottom-nav-height) + var(--safe-bottom, 0px) + 5.75rem)'
-              : '0px',
-        }}
+        className="absolute inset-x-0 bottom-0 flex flex-col overflow-hidden"
+        style={{ top: viewMode === 'list' ? listContentTopInset : '0px' }}
       >
         {viewMode === 'map' && (
           <Suspense
@@ -726,6 +722,8 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               nearbyEnrichCount={nearbyEnrichCount}
               assignmentZones={assignmentZones}
               sheetSnap={sheetSnap}
+              viewportTopInsetPx={listContentTopInsetPx}
+              viewportBottomInsetPx={mapBottomChromePx}
             />
           </Suspense>
         )}
