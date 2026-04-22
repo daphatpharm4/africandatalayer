@@ -2,12 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Award,
-  BadgeCheck,
   BookOpen,
   Calendar,
   Gift,
   Settings as SettingsIcon,
-  TrendingUp,
   Trash2,
   Wallet
 } from 'lucide-react';
@@ -22,9 +20,10 @@ import {
   computeContributionSummary,
   countActivitiesInCurrentWeek,
   formatContributionHistoryDate,
+  getStartOfCurrentWeek,
   mapQueuedItemsToContributionActivities,
 } from '../../lib/shared/contributionMetrics';
-import BadgeGrid, { computeBadges } from '../BadgeSystem';
+import { computeBadges } from '../BadgeSystem';
 import DailyProgressWidget from '../DailyProgressWidget';
 import StreakTracker from '../StreakTracker';
 import KpiTile from '../shared/KpiTile';
@@ -168,6 +167,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   }, []); // language removed: API data is language-independent; translations handled in render
 
   const badges = useMemo(() => computeBadges(ownEvents), [ownEvents]);
+  const earnedBadgeCount = useMemo(() => badges.filter((badge) => badge.earned).length, [badges]);
 
   useEffect(() => {
     let cancelled = false;
@@ -230,6 +230,99 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const pointsThisWeek = useMemo(() => {
     return countActivitiesInCurrentWeek(ownEvents);
   }, [ownEvents]);
+
+  const weekRows = useMemo(() => {
+    const weekStart = getStartOfCurrentWeek();
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const weeklyEvents = ownEvents.filter((event) => {
+      const createdAt = new Date(event.createdAt);
+      return !Number.isNaN(createdAt.getTime()) && createdAt >= weekStart && createdAt < weekEnd;
+    });
+    const verifiedCount = weeklyEvents.filter((event) => {
+      const details = (event.details ?? {}) as Record<string, unknown>;
+      const reviewStatus = typeof details.reviewStatus === 'string' ? details.reviewStatus.trim().toLowerCase() : '';
+      const reviewDecision = typeof details.reviewDecision === 'string' ? details.reviewDecision.trim().toLowerCase() : '';
+      return (
+        details.reviewerApproved === true ||
+        reviewStatus === 'auto_approved' ||
+        reviewStatus === 'verified' ||
+        reviewDecision === 'approved'
+      );
+    }).length;
+    const xpEarned = weeklyEvents.reduce((total, event) => total + getEffectiveEventXp(event), 0);
+    const weekdayLabels = [
+      t('Monday', 'Lundi'),
+      t('Tuesday', 'Mardi'),
+      t('Wednesday', 'Mercredi'),
+      t('Thursday', 'Jeudi'),
+      t('Friday', 'Vendredi'),
+      t('Saturday', 'Samedi'),
+      t('Sunday', 'Dimanche'),
+    ];
+    const bestDayFallback = t('No activity yet', 'Aucune activité pour le moment');
+    let bestDay = bestDayFallback;
+    if (weeklyEvents.length > 0) {
+      const dayCounts = new Map<number, number>();
+      for (const event of weeklyEvents) {
+        const createdAt = new Date(event.createdAt);
+        if (Number.isNaN(createdAt.getTime())) continue;
+        const dayIndex = (createdAt.getDay() + 6) % 7;
+        dayCounts.set(dayIndex, (dayCounts.get(dayIndex) ?? 0) + 1);
+      }
+      const bestEntry = Array.from(dayCounts.entries()).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+      if (bestEntry) {
+        bestDay = weekdayLabels[bestEntry[0]] ?? bestDayFallback;
+      }
+    }
+
+    return [
+      {
+        label: t('Submissions', 'Soumissions'),
+        value: `${weeklyEvents.length}`,
+      },
+      {
+        label: t('Verified', 'Vérifiées'),
+        value: `${verifiedCount}`,
+      },
+      {
+        label: t('XP earned', 'XP gagnées'),
+        value: `${xpEarned} XP`,
+      },
+      {
+        label: t('Best day', 'Meilleur jour'),
+        value: bestDay,
+      },
+    ];
+  }, [language, ownEvents]);
+
+  const badgeChipClassName = (badgeId: string, earned: boolean) => {
+    if (!earned) {
+      return 'border border-gray-200 bg-gray-50 text-gray-500';
+    }
+
+    switch (badgeId) {
+      case 'first_steps':
+      case 'trust_elite':
+        return 'border border-forest/10 bg-forest-wash text-forest';
+      case 'explorer':
+      case 'urban_validator':
+        return 'border border-navy/10 bg-navy-wash text-navy';
+      case 'specialist':
+      case 'data_champion':
+        return 'border border-terra/10 bg-terra-wash text-terra-dark';
+      case 'quality_star':
+        return 'border border-gold/20 bg-gold-wash text-amber-900';
+      case 'night_owl':
+        return 'border border-streak/10 bg-streak-wash text-streak';
+      case 'rain_walker':
+        return 'border border-forest/10 bg-forest-wash text-forest';
+      case 'streak_master':
+        return 'border border-terra/10 bg-terra-wash text-terra-dark';
+      default:
+        return 'border border-gray-200 bg-gray-50 text-gray-600';
+    }
+  };
 
   const visibleHistory = showAllHistory ? history : history.slice(0, historyPreviewLimit);
   const canToggleHistory = history.length > historyPreviewLimit;
@@ -867,34 +960,49 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
           );
         })()}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="card p-4 space-y-3">
-            <div className="flex items-center space-x-2 text-forest">
-              <BadgeCheck size={16} />
-              <span className="micro-label">{t('Trust Score', 'Score de confiance')}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold text-gray-900">98%</span>
-              <div className="mt-2 h-1 w-full bg-gray-50 rounded-full overflow-hidden">
-                <div className="h-full bg-forest rounded-full transition-all duration-1000" style={{ width: '98%' }} />
-              </div>
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="micro-label-wide text-gray-400">{t('Badges', 'Badges')}</div>
+            <div className="text-[11px] font-semibold text-gray-500">
+              {earnedBadgeCount}/{badges.length} {t('earned', 'obtenus')}
             </div>
           </div>
-          <div className="card p-4 space-y-3">
-            <div className="flex items-center space-x-2 text-navy">
-              <TrendingUp size={16} />
-              <span className="micro-label">{t('This Week', 'Cette semaine')}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold text-gray-900">{pointsThisWeek}</span>
-              <p className="text-xs font-medium text-gray-500">{t('submissions', 'soumissions')}</p>
-            </div>
-          </div>
-        </div>
+          <ul className="flex flex-wrap gap-2">
+            {badges.map((badge) => {
+              const Icon = badge.icon;
+              const label = language === 'fr' ? badge.labelFr : badge.labelEn;
+              const description = language === 'fr' ? badge.descriptionFr : badge.descriptionEn;
+              const stateLabel = badge.earned ? t('earned', 'obtenu') : t('locked', 'verrouillé');
+              return (
+                <li
+                  key={badge.id}
+                  title={description}
+                  aria-label={`${label}: ${stateLabel}. ${description}`}
+                  className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-semibold ${badgeChipClassName(badge.id, badge.earned)}`}
+                >
+                  <Icon size={12} className="shrink-0" aria-hidden="true" />
+                  <span className="whitespace-nowrap">{label}</span>
+                  <span className="sr-only">, {stateLabel}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
 
-        <div className="card p-4">
-          <BadgeGrid badges={badges} language={language} />
-        </div>
+        <section className="space-y-2">
+          <div className="micro-label-wide text-gray-400">{t('This week', 'Cette semaine')}</div>
+          <dl className="card-soft p-4">
+            {weekRows.map((row, index) => (
+              <div
+                key={row.label}
+                className={`flex items-center justify-between py-2 ${index < weekRows.length - 1 ? 'border-b border-gray-100' : ''}`}
+              >
+                <dt className="text-[13px] text-gray-500">{row.label}</dt>
+                <dd className="text-[13px] font-bold text-gray-900">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
