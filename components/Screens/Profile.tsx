@@ -27,6 +27,7 @@ import {
 import BadgeGrid, { computeBadges } from '../BadgeSystem';
 import DailyProgressWidget from '../DailyProgressWidget';
 import StreakTracker from '../StreakTracker';
+import KpiTile from '../shared/KpiTile';
 import ProfileAvatar from '../shared/ProfileAvatar';
 import ScreenHeader from '../shared/ScreenHeader';
 
@@ -264,6 +265,9 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
         } as const)[trustTier]
       : t('Unrated', 'Non évalué'));
   const rank = profileHero?.rank;
+  const pointsTotal = ownEvents.length;
+  const rankDisplay = typeof rank === 'number' ? `#${rank}` : t('N/A', 'N/D');
+  const streakDisplay = `${contributionSummary.streakDays}${language === 'fr' ? ' j' : 'd'}`;
   const xpProgress = xpTarget > 0 ? Math.min(100, (xpCurrent / xpTarget) * 100) : 0;
   const heroLocation = userLocation || mapScopeLabel(activeMapScope);
   const heroSubtitle = isLoading
@@ -506,6 +510,13 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
               {loadError === 'LOAD_FAILED' ? t('Couldn\'t load your profile. Go back and try again.', 'Impossible de charger votre profil. Revenez et réessayez.') : loadError}
             </div>
           )}
+        </section>
+
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <KpiTile label={t('Points', 'Points')} value={pointsTotal} tone="navy" />
+          <KpiTile label={t('XP', 'XP')} value={xpCurrent} tone="terra" />
+          <KpiTile label={t('Streak', 'Série')} value={streakDisplay} tone="streak" />
+          <KpiTile label={t('Rank', 'Rang')} value={rankDisplay} tone="amber" />
         </section>
 
         <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
