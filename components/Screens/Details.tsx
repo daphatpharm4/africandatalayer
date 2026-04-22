@@ -9,7 +9,7 @@ import {
   RefreshCw,
   ShieldCheck,
 } from 'lucide-react';
-import VerticalIcon from '../shared/VerticalIcon';
+import TrustBadge from '../shared/TrustBadge';
 import {
   categoryLabel as getCategoryLabel,
   LEGACY_CATEGORY_MAP,
@@ -31,6 +31,37 @@ interface Props {
   language: 'en' | 'fr';
 }
 
+const DETAIL_TONE_BY_VERTICAL: Record<string, { chip: string; photo: string }> = {
+  pharmacy: {
+    chip: 'bg-forest-wash text-forest-dark',
+    photo: 'border-forest/20 bg-gradient-to-br from-forest-wash to-forest/10',
+  },
+  mobile_money: {
+    chip: 'bg-navy-wash text-navy',
+    photo: 'border-navy/20 bg-gradient-to-br from-navy-wash to-navy/10',
+  },
+  fuel_station: {
+    chip: 'bg-terra-wash text-terra-dark',
+    photo: 'border-terra/20 bg-gradient-to-br from-terra-wash to-terra/10',
+  },
+  alcohol_outlet: {
+    chip: 'bg-red-50 text-danger',
+    photo: 'border-danger/20 bg-gradient-to-br from-red-50 to-danger/10',
+  },
+  billboard: {
+    chip: 'bg-gold-wash text-amber-900',
+    photo: 'border-gold/30 bg-gradient-to-br from-gold-wash to-gold/10',
+  },
+  transport_road: {
+    chip: 'bg-gray-100 text-gray-700',
+    photo: 'border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100',
+  },
+  census_proxy: {
+    chip: 'bg-gray-100 text-gray-700',
+    photo: 'border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100',
+  },
+};
+
 const Details: React.FC<Props> = ({
   point,
   onBack,
@@ -49,6 +80,30 @@ const Details: React.FC<Props> = ({
     ? getCategoryLabel(verticalId, language)
     : point.type;
   const translatedGap = (gap: string) => getEnrichFieldLabel(gap, language);
+  const gaps = point.gaps ?? [];
+  const hasPhoto = typeof point.photoUrl === 'string' && point.photoUrl.trim() !== '';
+  const contributorTier = typeof point.contributorTrust === 'string'
+    ? point.contributorTrust.toLowerCase()
+    : undefined;
+  const contributorTierBadge =
+    contributorTier === 'gold' ||
+    contributorTier === 'silver' ||
+    contributorTier === 'bronze'
+      ? contributorTier
+      : null;
+  const detailTone = DETAIL_TONE_BY_VERTICAL[verticalId] ?? DETAIL_TONE_BY_VERTICAL.mobile_money;
+  const availabilityLabel =
+    point.availability === 'High'
+      ? t('High', 'Élevée')
+      : point.availability === 'Low'
+        ? t('Low', 'Faible')
+        : t('Out', 'Rupture');
+  const availabilityClassName =
+    point.availability === 'High'
+      ? 'bg-forest-wash text-forest-dark'
+      : point.availability === 'Low'
+        ? 'bg-gold-wash text-amber-900'
+        : 'bg-red-50 text-danger';
 
   const resolveFieldValue = (fieldKey: string): unknown => {
     const typed = point[fieldKey as keyof DataPoint];
@@ -75,8 +130,9 @@ const Details: React.FC<Props> = ({
       return entries.length > 0 ? entries.join(', ') : undefined;
     }
     if (typeof raw === 'number' && spec) {
-      if (fieldKey === 'price' || fieldKey === 'fuelPrice')
+      if (fieldKey === 'price' || fieldKey === 'fuelPrice') {
         return `${raw} XAF/L`;
+      }
       return String(raw);
     }
     if (
@@ -90,27 +146,52 @@ const Details: React.FC<Props> = ({
     return String(raw);
   };
 
-  const knownFields: Array<{ label: string; value?: string }> = [
-    { label: t('Category', 'Catégorie'), value: categoryLabelText },
-    { label: t('Address', 'Adresse'), value: point.location },
-  ];
+  const infoRows: Array<{
+    key: string;
+    label: string;
+    value: React.ReactNode;
+  }> = [];
+
+  const addInfoRow = (key: string, label: string, value: React.ReactNode) => {
+    if (value === undefined || value === null || value === '') return;
+    infoRows.push({ key, label, value });
+  };
+
+  addInfoRow('location', t('Location', 'Localisation'), point.location);
+  addInfoRow('last-updated', t('Last updated', 'Dernière mise à jour'), point.lastUpdated);
+  addInfoRow('trust-score', t('Trust score', 'Score de confiance'), `${point.trustScore} / 100`);
+
+  if (contributorTierBadge) {
+    addInfoRow(
+      'contributor-tier',
+      t('Contributor tier', 'Niveau de contributeur'),
+      <TrustBadge tier={contributorTierBadge} language={language} />,
+    );
+  } else if (point.contributorTrust) {
+    addInfoRow(
+      'contributor-tier',
+      t('Contributor tier', 'Niveau de contributeur'),
+      point.contributorTrust,
+    );
+  }
+
+  if (typeof point.price === 'number') {
+    addInfoRow(
+      'price',
+      t('Price', 'Prix'),
+      `${point.price.toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')} ${point.currency ?? 'XAF'}`,
+    );
+  }
 
   if (vertical) {
     for (const fieldKey of vertical.enrichableFields) {
+      if (infoRows.some((row) => row.key === fieldKey)) continue;
       const formatted = formatFieldValue(resolveFieldValue(fieldKey), fieldKey);
       if (formatted) {
-        knownFields.push({
-          label: getEnrichFieldLabel(fieldKey, language),
-          value: formatted,
-        });
+        addInfoRow(fieldKey, getEnrichFieldLabel(fieldKey, language), formatted);
       }
     }
   }
-
-  const visibleKnownFields = knownFields.filter(
-    (field) => field.value !== undefined && field.value !== '',
-  );
-  const gaps = point.gaps ?? [];
 
   const stalenessThreshold = vertical?.stalenessThresholdDays ?? 7;
   const staleDays = (() => {
@@ -166,47 +247,67 @@ const Details: React.FC<Props> = ({
         className="space-y-4 px-4 pb-10 pt-4"
         style={{ paddingBottom: 'calc(var(--floating-cta-offset) + 8rem)' }}
       >
-        <section className="card-pill border-gray-100 px-5 py-5">
-          <div className="flex items-start justify-between gap-3">
+        {hasPhoto ? (
+          <img
+            src={point.photoUrl}
+            loading="lazy"
+            className="h-[200px] w-full rounded-[20px] object-cover"
+            alt={t('User submitted photo', 'Photo soumise par utilisateur')}
+          />
+        ) : (
+          <div className={`flex h-[200px] flex-col items-center justify-center gap-2 rounded-[20px] border ${detailTone.photo}`}>
+            <Camera size={36} className="text-gray-400" aria-hidden="true" />
+            <span className="text-xs font-medium text-gray-400">
+              {t('Field photo', 'Photo terrain')}
+            </span>
+          </div>
+        )}
+
+        <section className="card-soft p-4">
+          <div className="mb-3 flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="micro-label-wide text-gray-400">
-                {t('What we know', 'Ce qu\'on sait')}
-              </p>
-              {point.name && point.name !== categoryLabelText && (
-                <h2 className="mt-2 text-base font-bold leading-tight text-gray-900">
-                  {point.name}
-                </h2>
-              )}
-            </div>
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-navy-wash text-navy">
-              <VerticalIcon name={vertical?.icon ?? 'pill'} size={16} />
-            </div>
-          </div>
-
-          <div className="mt-4 space-y-4">
-            {visibleKnownFields.length === 0 && (
-              <p className="text-sm leading-6 text-gray-500">
-                {t(
-                  'No known fields captured yet.',
-                  'Aucun champ connu capturé pour le moment.',
-                )}
-              </p>
-            )}
-
-            {visibleKnownFields.map((field, index) => (
-              <div
-                key={field.label}
-                className={`space-y-1.5 ${index < visibleKnownFields.length - 1 ? 'border-b border-gray-100 pb-3' : ''}`}
-              >
-                <p className="text-[0.78rem] font-semibold uppercase tracking-[0.08em] text-gray-400">
-                  {field.label}
-                </p>
-                <p className="text-[0.97rem] font-semibold leading-6 text-gray-900">
-                  {String(field.value)}
-                </p>
+              <div className="mb-1 text-lg font-bold leading-tight text-ink-dark">
+                {point.name || categoryLabelText}
               </div>
-            ))}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className={`micro-label rounded-full px-2 py-0.5 ${detailTone.chip}`}>
+                  {categoryLabelText}
+                </span>
+                {point.verified && (
+                  <span className="micro-label rounded-full bg-forest-wash px-2 py-0.5 text-forest-dark">
+                    {t('Verified', 'Vérifié')}
+                  </span>
+                )}
+              </div>
+            </div>
+            <span className={`micro-label shrink-0 rounded-full px-2 py-0.5 ${availabilityClassName}`}>
+              {availabilityLabel}
+            </span>
           </div>
+          {infoRows.length > 0 ? (
+            <dl className="flex flex-col gap-2.5">
+              {infoRows.map((row, index) => (
+                <div
+                  key={row.key}
+                  className={`flex flex-col gap-1 pb-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-4 ${index < infoRows.length - 1 ? 'border-b border-gray-50' : ''}`}
+                >
+                  <dt className="min-w-0 text-xs font-medium text-gray-400">
+                    {row.label}
+                  </dt>
+                  <dd className="min-w-0 text-left text-[13px] font-semibold text-ink-dark break-words sm:flex-1 sm:text-right">
+                    {row.value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          ) : (
+            <p className="text-sm leading-6 text-gray-500">
+              {t(
+                'No known fields captured yet.',
+                'Aucun champ connu capturé pour le moment.',
+              )}
+            </p>
+          )}
         </section>
 
         <section className="rounded-[28px] border border-terra/10 bg-terra-wash px-5 py-5 shadow-sm">
@@ -305,27 +406,6 @@ const Details: React.FC<Props> = ({
           </button>
         )}
 
-        {point.photoUrl && (
-          <section className="card overflow-hidden">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-              <div className="flex items-center gap-2 text-gray-500">
-                <Camera size={14} />
-                <span className="micro-label text-gray-400">
-                  {t('Field photo', 'Photo terrain')}
-                </span>
-              </div>
-              <span className="text-xs font-semibold text-gray-500">
-                {t('Field photo', 'Photo terrain')}
-              </span>
-            </div>
-            <img
-              src={point.photoUrl}
-              loading="lazy"
-              className="h-40 w-full object-cover sm:h-52"
-              alt={t('User submitted photo', 'Photo soumise par utilisateur')}
-            />
-          </section>
-        )}
       </div>
 
       <div
