@@ -6,7 +6,6 @@ import {
   BookOpen,
   Calendar,
   Gift,
-  MapPin,
   Settings as SettingsIcon,
   TrendingUp,
   Trash2,
@@ -233,6 +232,45 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
 
   const visibleHistory = showAllHistory ? history : history.slice(0, historyPreviewLimit);
   const canToggleHistory = history.length > historyPreviewLimit;
+  type ProfileHeroProfile = UserProfile & {
+    displayName?: string;
+    xp?: number;
+    xpTarget?: number;
+    level?: number;
+    tier?: string;
+    rank?: number;
+    initial?: string;
+  };
+  const profileHero = profile as ProfileHeroProfile | null;
+  const displayName =
+    profileHero?.displayName ??
+    profileHero?.name ??
+    profileHero?.phone ??
+    profileHero?.email ??
+    t('Contributor', 'Contributeur');
+  const initial = (profileHero?.initial ?? displayName.trim().charAt(0).toUpperCase() ?? 'A') || 'A';
+  const xpCurrent = profileHero?.xp ?? profileHero?.XP ?? 0;
+  const level = profileHero?.level ?? Math.max(1, Math.floor(xpCurrent / 250) + 1);
+  const xpTarget = profileHero?.xpTarget ?? Math.max(level * 250, 250);
+  const trustTier = profileHero?.trustTier;
+  const tierLabel = profileHero?.tier
+    ?? (trustTier
+      ? ({
+          new: t('New', 'Nouveau'),
+          standard: t('Silver', 'Argent'),
+          trusted: t('Trusted', 'Fiable'),
+          elite: t('Elite', 'Élite'),
+          restricted: t('Restricted', 'Restreint'),
+        } as const)[trustTier]
+      : t('Unrated', 'Non évalué'));
+  const rank = profileHero?.rank;
+  const xpProgress = xpTarget > 0 ? Math.min(100, (xpCurrent / xpTarget) * 100) : 0;
+  const heroLocation = userLocation || mapScopeLabel(activeMapScope);
+  const heroSubtitle = isLoading
+    ? t('Loading profile', 'Chargement du profil')
+    : profileHero
+      ? `${roleLabel(resolveRole(profileHero))} · ${heroLocation}`
+      : t('Profile unavailable', 'Profil indisponible');
 
   useEffect(() => {
     let cancelled = false;
@@ -426,67 +464,79 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
       />
 
       <div className="p-4 pb-24 space-y-6">
-        <div className="flex flex-col items-center py-4 text-center">
-          <div className="relative mb-4">
-            <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl bg-navy-light overflow-hidden">
-              <ProfileAvatar preset={activeAvatarPreset} alt={t('Profile avatar', 'Avatar du profil')} className="w-full h-full" />
+        <section className="route-grid relative -mx-4 -mt-4 overflow-hidden bg-navy px-5 pb-8 pt-5 text-white">
+          <div className="relative flex items-start gap-3.5">
+            <div className="flex h-[60px] w-[60px] items-center justify-center rounded-full border-[3px] border-white/20 bg-gradient-to-br from-terra to-navy text-lg font-bold text-white shadow-lg shadow-navy/30">
+              {initial}
             </div>
-            <div className="absolute -bottom-1 -right-1 p-1 bg-forest rounded-full border-2 border-white">
-              <BadgeCheck size={14} className="text-white" />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-xl font-bold leading-tight">{isLoading ? t('Loading profile', 'Chargement du profil') : displayName}</h2>
+                <span className="micro-label rounded-full bg-gold/20 px-2 py-0.5 text-gold">{tierLabel}</span>
+                <span className="micro-label rounded-full bg-white/10 px-2 py-0.5 text-white/70">
+                  {t('Level', 'Niveau')} {level}
+                </span>
+              </div>
+
+              <div className="mt-1 flex items-center gap-2 text-sm text-white/70">
+                <span>{heroSubtitle}</span>
+              </div>
             </div>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900">
-            {isLoading ? (
-              <span className="inline-block h-4 w-40 rounded-full bg-gray-200 animate-pulse"></span>
-            ) : (
-              profile?.name || profile?.phone || profile?.email || t('Contributor', 'Contributeur')
+            {typeof rank === 'number' && (
+              <div className="text-[22px] font-extrabold text-gold">#{rank}</div>
             )}
-          </h2>
-          {!isLoading && (
-            <div className="flex items-center justify-center micro-label text-gray-400 mt-1 space-x-2">
-              <MapPin size={12} />
-              <span>{userLocation || t('Location not set', 'Position non définie')}</span>
-            </div>
-          )}
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-center gap-3">
-              {avatarOptions.map((option) => {
-                const isSelected = option.preset === activeAvatarPreset;
-                return (
-                  <button
-                    key={option.preset}
-                    type="button"
-                    aria-pressed={isSelected}
-                    disabled={!profile || isSavingAvatar}
-                    onClick={() => handleAvatarSelect(option.preset)}
-                    className={`rounded-2xl border p-1.5 transition-all ${
-                      isSelected
-                        ? 'border-navy bg-white shadow-md'
-                        : 'border-navy-border bg-white/80 hover:border-navy-border'
-                    } ${!profile || isSavingAvatar ? 'cursor-not-allowed opacity-70' : ''}`}
-                    title={option.label}
-                  >
-                    <div className="h-12 w-12 overflow-hidden rounded-xl">
-                      <ProfileAvatar preset={option.preset} alt={option.label} className="h-full w-full" />
-                    </div>
-                    <span className="sr-only">{option.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {isSavingAvatar && <div className="micro-label text-gray-400">{t('Saving...', 'Enregistrement...')}</div>}
-            {avatarSaveError && <div className="micro-label text-red-500">{avatarSaveError}</div>}
           </div>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between gap-3 text-xs font-medium uppercase tracking-wide text-white/70">
+              <span>{t('Level', 'Niveau')}</span>
+              <span>{xpCurrent} / {xpTarget} XP</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-gold to-amber transition-[width] duration-300"
+                style={{ width: `${xpProgress}%` }}
+              />
+            </div>
+          </div>
+
           {loadError && (
-            <div className="mt-2 micro-label text-red-500">
+            <div className="mt-3 micro-label text-white/70">
               {loadError === 'LOAD_FAILED' ? t('Couldn\'t load your profile. Go back and try again.', 'Impossible de charger votre profil. Revenez et réessayez.') : loadError}
             </div>
           )}
-          <div className="mt-4">
-            <span className="px-4 py-1.5 bg-navy-light text-navy micro-label rounded-full border border-navy-border shadow-sm">
-              {t('Senior Contributor', 'Contributeur senior')}
-            </span>
+        </section>
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+          <div className="micro-label-wide mb-3 text-gray-400">{t('Avatar', 'Avatar')}</div>
+          <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+            {avatarOptions.map((option) => {
+              const isSelected = option.preset === activeAvatarPreset;
+              return (
+                <button
+                  key={option.preset}
+                  type="button"
+                  aria-pressed={isSelected}
+                  disabled={!profile || isSavingAvatar}
+                  onClick={() => handleAvatarSelect(option.preset)}
+                  className={`shrink-0 rounded-2xl border p-1.5 transition-all ${
+                    isSelected
+                      ? 'border-navy bg-white shadow-md'
+                      : 'border-navy-border bg-white/80 hover:border-navy-border'
+                  } ${!profile || isSavingAvatar ? 'cursor-not-allowed opacity-70' : ''}`}
+                  title={option.label}
+                >
+                  <div className="h-12 w-12 overflow-hidden rounded-xl">
+                    <ProfileAvatar preset={option.preset} alt={option.label} className="h-full w-full" />
+                  </div>
+                  <span className="sr-only">{option.label}</span>
+                </button>
+              );
+            })}
           </div>
+          {isSavingAvatar && <div className="micro-label mt-2 text-gray-400">{t('Saving...', 'Enregistrement...')}</div>}
+          {avatarSaveError && <div className="micro-label mt-2 text-red-500">{avatarSaveError}</div>}
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
