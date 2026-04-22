@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   Camera,
   Clock,
+  CheckCircle,
   MapPin,
   PlusCircle,
   RefreshCw,
@@ -110,6 +111,31 @@ const Details: React.FC<Props> = ({
     if (typed !== undefined && typed !== null) return typed;
     return (point.details as Record<string, unknown> | undefined)?.[fieldKey];
   };
+
+  const gpsCoordinates = point.coordinates;
+  const gpsAccuracy = (() => {
+    const raw =
+      resolveFieldValue('gpsAccuracyMeters') ??
+      resolveFieldValue('gpsAccuracyM') ??
+      resolveFieldValue('accuracy');
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (typeof raw === 'string' && raw.trim() !== '') {
+      const parsed = Number(raw);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  })();
+  const gpsReadout = gpsCoordinates
+    ? `${Math.abs(gpsCoordinates.latitude).toFixed(4)}°${gpsCoordinates.latitude >= 0 ? 'N' : 'S'}, ${Math.abs(gpsCoordinates.longitude).toFixed(4)}°${gpsCoordinates.longitude >= 0 ? 'E' : 'W'} · ±${Math.round(gpsAccuracy ?? 5)}m`
+    : point.location;
+  const gpsTitle = gpsCoordinates
+    ? t('GPS Validated', 'GPS validé')
+    : t('GPS location', 'Localisation GPS');
+  const primaryCtaLabel = !isAuthenticated
+    ? t('Sign in to contribute', 'Connectez-vous pour contribuer')
+    : gaps.length === 0
+      ? t('Update this point · +15 XP', 'Mettre à jour · +15 XP')
+      : t('Complete this point · +15 XP', 'Compléter · +15 XP');
 
   const formatFieldValue = (
     raw: unknown,
@@ -345,19 +371,20 @@ const Details: React.FC<Props> = ({
           )}
         </section>
 
-        <section className="card flex items-start gap-3 px-4 py-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-navy-wash text-navy">
-            <MapPin size={18} />
+        <div className="card-soft mb-3 flex items-center gap-3 p-3.5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-navy-wash">
+            <MapPin size={18} className="text-navy" />
           </div>
-          <div className="min-w-0">
-            <p className="text-sm font-bold text-gray-900">
-              {t('GPS location', 'Localisation GPS')}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-gray-500">
-              {point.location}
-            </p>
+          <div className="flex-1 min-w-0">
+            <div className="text-[13px] font-semibold text-ink-dark">
+              {gpsTitle}
+            </div>
+            <div className="mt-0.5 text-[11px] text-gray-400">
+              {gpsReadout}
+            </div>
           </div>
-        </section>
+          {gpsCoordinates && <CheckCircle size={18} className="shrink-0 text-forest" />}
+        </div>
 
         <section className="grid grid-cols-2 gap-3">
           <div className="card px-4 py-4">
@@ -413,21 +440,17 @@ const Details: React.FC<Props> = ({
         style={{ bottom: 'var(--floating-cta-offset)' }}
       >
         <button
+          type="button"
           onClick={isAuthenticated ? onEnrich : onAuth}
-          className="flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[1.35rem] bg-navy px-4 py-4 text-base font-semibold text-white shadow-[0_18px_32px_rgba(15,43,70,0.18)] transition-all active:scale-95"
+          className="btn-cta w-full"
         >
           <ShieldCheck size={20} />
-          <span>
-            {isAuthenticated
-              ? gaps.length === 0
-                ? t('Update this point', 'Mettre ce point à jour')
-                : t('Complete this point', 'Compléter ce point')
-              : t('Sign in to contribute', 'Connectez-vous pour contribuer')}
-          </span>
+          <span>{primaryCtaLabel}</span>
         </button>
         <button
+          type="button"
           onClick={isAuthenticated ? onAddNew : onAuth}
-          className="flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[1.35rem] bg-terra px-4 py-4 text-base font-semibold text-white shadow-[0_18px_32px_rgba(200,107,74,0.2)] transition-all active:scale-95"
+          className="btn-ghost w-full"
         >
           <PlusCircle size={20} />
           <span>{t('Add a new point', 'Ajouter un nouveau point')}</span>
