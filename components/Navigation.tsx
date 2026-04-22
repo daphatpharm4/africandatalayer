@@ -8,6 +8,8 @@ import {
   User,
   TrendingUp,
   LayoutDashboard,
+  CheckSquare,
+  Users,
 } from 'lucide-react';
 
 type UserRole = 'agent' | 'admin' | 'client';
@@ -52,18 +54,16 @@ const Navigation: React.FC<Props> = ({
     },
   ];
 
+  const adminNav = [
+    { id: Screen.ADMIN, label: t('Queue', 'File'), icon: CheckSquare },
+    { id: Screen.DELTA_DASHBOARD, label: t('Analytics', 'Analyses'), icon: BarChart2 },
+    { id: Screen.AGENT_PERFORMANCE, label: t('Agents', 'Agents'), icon: Users },
+  ];
+
   const clientNav = [
-    {
-      id: Screen.DELTA_DASHBOARD,
-      label: t('Dashboard', 'Tableau'),
-      icon: LayoutDashboard,
-    },
+    { id: Screen.INVESTOR_DASHBOARD, label: t('Dashboard', 'Tableau'), icon: LayoutDashboard },
     { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
-    {
-      id: Screen.ANALYTICS,
-      label: t('Insights', 'Analyses'),
-      icon: TrendingUp,
-    },
+    { id: Screen.CLIENT_INSIGHTS, label: t('Insights', 'Analyses'), icon: TrendingUp },
     {
       id: isAuthenticated ? Screen.PROFILE : Screen.AUTH,
       label: isAuthenticated
@@ -73,7 +73,7 @@ const Navigation: React.FC<Props> = ({
     },
   ];
 
-  const navItems = userRole === 'client' ? clientNav : agentNav;
+  const navItems = isAdmin ? adminNav : userRole === 'client' ? clientNav : agentNav;
 
   return (
     <nav
