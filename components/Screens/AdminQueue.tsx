@@ -1,7 +1,6 @@
 import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
-  ArrowLeft,
   Camera,
   ChevronLeft,
   ChevronRight,
@@ -1387,7 +1386,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   </div>
                 </div>
 
-                <div className="shrink-0 border-b border-gray-100 bg-white py-2.5">
+                <div className="border-b border-gray-100 bg-white py-2.5">
                   <FilterChipRow<AdminRiskFilter>
                     chips={[
                       { id: 'all',      label: `${t('All', 'Tous')} (${reviewData.stats.all})` },
