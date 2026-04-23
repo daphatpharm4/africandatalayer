@@ -11,7 +11,10 @@ import {
   X,
 } from 'lucide-react';
 import ProfileAvatar from '../shared/ProfileAvatar';
+import RiskBadge, { type RiskLevel } from '../shared/RiskBadge';
 import ScreenHeader from '../shared/ScreenHeader';
+import TrustBadge, { type TrustTier as TrustBadgeTier } from '../shared/TrustBadge';
+import VerticalIcon from '../shared/VerticalIcon';
 import FilterChipRow from '../shared/FilterChipRow';
 import { coerceAvatarPreset } from '../../shared/avatarPresets';
 import { apiFetch, apiJson } from '../../lib/client/api';
@@ -38,7 +41,7 @@ import type {
   SubmissionLocation,
   SubmissionPhotoMetadata,
 } from '../../shared/types';
-import { categoryLabel as getCategoryLabel, VERTICAL_IDS } from '../../shared/verticals';
+import { categoryLabel as getCategoryLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
 
 interface Props {
   onBack: () => void;
@@ -1545,6 +1548,21 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     const gpsChipTone = group.summary.hasSubmissionMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200';
                     const ipChipTone = group.summary.hasIpMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200';
 
+                    // Map riskBucket → RiskBadge level
+                    const riskLevel: RiskLevel =
+                      group.summary.riskBucket === 'flagged' ? 'high'
+                      : group.summary.riskBucket === 'pending' ? 'medium'
+                      : 'low';
+
+                    // Map trustTier → TrustBadge tier
+                    const trustBadgeTier: TrustBadgeTier =
+                      group.summary.trustTier === 'elite' ? 'gold'
+                      : group.summary.trustTier === 'trusted' ? 'silver'
+                      : 'bronze';
+
+                    // Vertical config for icon tile
+                    const verticalConfig = VERTICALS[group.category];
+
                     return (
                       <div
                         key={group.pointId}
@@ -1568,30 +1586,38 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                             className={`flex flex-1 gap-3 text-left ${focusRingClass}`}
                             style={isSelected ? { viewTransitionName: `admin-review-point-${group.pointId}` } : undefined}
                           >
-                            <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gray-100 shrink-0 flex items-center justify-center">
+                            {/* Photo thumbnail (80×80) — icon tile fallback when no preview */}
+                            <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center"
+                              style={{ backgroundColor: preview ? undefined : (verticalConfig?.bgColor ?? '#f2f6fa') }}
+                            >
                               {preview ? (
                                 <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" loading="lazy" />
+                              ) : verticalConfig ? (
+                                <VerticalIcon name={verticalConfig.icon} size={26} style={{ color: verticalConfig.color }} />
                               ) : (
                                 <Camera size={18} className="text-gray-300" />
                               )}
                             </div>
                             <div className="min-w-0 flex-1 space-y-2">
+                              {/* Row 1: name + RiskBadge + match-state chip */}
                               <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex items-center gap-2 flex-wrap">
                                   <div className="text-sm font-bold text-gray-900 truncate">{group.siteName ?? unnamedLabel}</div>
-                                  <div className="text-[11px] text-gray-500">
-                                    {categoryLabelLocal(group.category, language)} • {reviewStatusLabel(group.summary.reviewStatus, language)}
-                                  </div>
+                                  <RiskBadge level={riskLevel} language={language} />
                                 </div>
-                                <span className={`micro-label px-2 py-1 rounded-lg border ${matchStateClass(getMatchState(group.latestEvent.fraudCheck))}`}>
+                                <span className={`micro-label px-2 py-1 rounded-lg border shrink-0 ${matchStateClass(getMatchState(group.latestEvent.fraudCheck))}`}>
                                   {matchStateLabel(getMatchState(group.latestEvent.fraudCheck), language)}
                                 </span>
                               </div>
 
+                              {/* Row 2: category + review status */}
+                              <div className="text-[11px] text-gray-500">
+                                {categoryLabelLocal(group.category, language)} • {reviewStatusLabel(group.summary.reviewStatus, language)}
+                              </div>
+
+                              {/* Row 3: forensic chips */}
                               <div className="flex flex-wrap gap-2">
-                                <span className={`rounded-full border px-2 py-1 micro-label ${trustTierClass(group.summary.trustTier)}`}>
-                                  {trustTierLabel(group.summary.trustTier, language)}
-                                </span>
+                                <TrustBadge tier={trustBadgeTier} language={language} />
                                 <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-1 micro-label text-gray-600">
                                   {t('Risk', 'Risque')} {group.summary.riskScore}
                                 </span>
@@ -1614,6 +1640,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                                 )}
                               </div>
 
+                              {/* Row 4: contributors + timestamp */}
                               <div className="flex items-center justify-between gap-3 text-[11px] text-gray-500">
                                 <div className="flex items-center gap-1 min-w-0">
                                   <Users size={12} className="shrink-0" />
