@@ -8,6 +8,7 @@ import {
   Route,
   ShieldCheck,
   Signal,
+  Star,
   Target,
   Zap,
 } from 'lucide-react';
@@ -2731,6 +2732,18 @@ const ContributionFlow: React.FC<Props> = ({
       totalMissing: currentCompletion.missing.length,
     };
   }, [draftClientExif?.capturedAt, draftClientExif?.latitude, draftClientExif?.longitude, postCreateSeedPoint, vertical]);
+  const footerStatusLabel = isSubmitting
+    ? t('Saving handoff', 'Enregistrement de la remise')
+    : isResolvingDedup
+      ? t('Resolving duplicate', 'Résolution du doublon')
+      : dedupCheck
+        ? t('Duplicate check pending', 'Contrôle de doublon en attente')
+        : t('Ready to submit', 'Prêt à envoyer');
+  const footerModeLabel = isEnrichMode
+    ? t('Enrichment handoff', 'Remise enrichissement')
+    : isBatchMode
+      ? t('Batch handoff', 'Remise lot')
+      : t('Capture handoff', 'Remise capture');
 
   if (submitted) {
     if (showLevelUp) {
@@ -2892,6 +2905,36 @@ const ContributionFlow: React.FC<Props> = ({
         {renderConsentBlock()}
         {renderQualityPreview()}
 
+        {currentStep === 3 && (
+          <div className="pt-5 text-center">
+            <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-forest-wash">
+              <CheckCircle size={44} className="text-forest" />
+            </div>
+            <div className="mb-1.5 text-[22px] font-bold text-ink-dark">
+              {t('Ready to submit', 'Prêt à envoyer')}
+            </div>
+            <div className="mb-6 text-sm text-gray-500">
+              {t(
+                `1 ${getCategoryLabel(vertical, 'en')} point · GPS verified · Photo attached`,
+                `1 point ${getCategoryLabel(vertical, 'fr')} · GPS vérifié · Photo jointe`,
+              )}
+            </div>
+            <div
+              className="mb-6 flex items-center gap-3 rounded-2xl border p-3.5"
+              style={{
+                background: 'linear-gradient(135deg,#f4c31722,#fef9e7)',
+                borderColor: 'rgba(244,195,23,0.3)',
+              }}
+            >
+              <Star size={24} className="fill-gold text-gold" />
+              <div className="text-left">
+                <div className="text-[15px] font-bold text-ink-dark">+{xpBreakdown.totalXp} XP</div>
+                <div className="text-[11px] text-gray-400">{t('First submission in this zone', 'Première contribution dans cette zone')}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {errorMessage && (
           <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
             {errorMessage}
@@ -2976,29 +3019,56 @@ const ContributionFlow: React.FC<Props> = ({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 p-6 pt-2 bg-page border-t border-gray-100">
-        <div className="mb-3 px-1">
-          <div className="rounded-2xl border border-terra/10 bg-white px-4 py-3 text-xs text-gray-600 shadow-sm">
-            {isBatchMode
-              ? t('Batch mode trades navigation for throughput. Keep proof quality high.', 'Le mode lot reduit la navigation pour augmenter le debit. Gardez une preuve de qualite.')
-              : t('Strong evidence now means less review friction later.', 'Une preuve solide maintenant signifie moins de friction pendant la revue.')}
+      <div className="sticky bottom-0 z-20 border-t border-gray-100 bg-page/95 px-6 pb-6 pt-3 backdrop-blur">
+        <div className="rounded-2xl border border-navy-border bg-white px-4 py-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2 micro-label-wide text-gray-500">
+                <ShieldCheck size={12} />
+                <span>{footerModeLabel}</span>
+              </div>
+              <div className="text-sm font-bold text-gray-900">
+                {isBatchMode
+                  ? t('Keep capture quality high before handing off.', 'Maintenez la qualité avant la remise.')
+                  : t('Review proof, then hand off in one tap.', 'Vérifiez la preuve puis envoyez en un geste.')}
+              </div>
+              <div className="text-xs text-gray-500">
+                {t('Step', 'Étape')} {currentStep + 1}/{STEPS.length} · {footerStatusLabel}
+              </div>
+            </div>
+            <div className="shrink-0 rounded-full bg-navy-wash px-3 py-1.5 text-[11px] font-semibold text-navy">
+              {isEnrichMode ? t('Enrich', 'Enrichir') : t('Create', 'Créer')}
+            </div>
           </div>
         </div>
-        <button
-          onClick={handleSubmit}
-          disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
-          className="motion-pressable button-breathe w-full h-14 bg-navy text-white rounded-xl font-bold uppercase text-xs tracking-widest shadow-lg flex items-center justify-center space-x-2 disabled:opacity-70"
-          style={{ boxShadow: 'var(--shadow-lift)' }}
-        >
-          {isSubmitting ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              <span>{t('Saving', 'Enregistrement')}</span>
-            </>
-          ) : (
-            <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Créer point')}</span>
+        <div className={`mt-3 grid gap-3 ${currentStep === STEPS.length - 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+          <button
+            type="button"
+            onClick={handleBackPress}
+            className="motion-pressable flex h-14 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-800 shadow-sm"
+          >
+            <ArrowLeft size={16} />
+            <span>{t('Back', 'Retour')}</span>
+          </button>
+          {currentStep === STEPS.length - 1 && (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
+              className="motion-pressable button-breathe flex h-14 items-center justify-center gap-2 rounded-xl bg-navy text-white text-xs font-bold uppercase tracking-widest shadow-lg disabled:opacity-70"
+              style={{ boxShadow: 'var(--shadow-lift)' }}
+            >
+              {isSubmitting ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <span>{t('Saving', 'Enregistrement')}</span>
+                </>
+              ) : (
+                <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Créer point')}</span>
+              )}
+            </button>
           )}
-        </button>
+        </div>
       </div>
     </div>
   );
