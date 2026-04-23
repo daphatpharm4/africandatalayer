@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Download, Minus, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Download, ShieldCheck } from 'lucide-react';
 import { MapContainer, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import ScreenHeader from '../shared/ScreenHeader';
 import KpiTile from '../shared/KpiTile';
@@ -495,7 +495,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         )}
 
         {/* Summary Cards */}
-        <div className="mb-3.5 grid grid-cols-2 gap-2">
+        <div className="mb-3.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <KpiTile label={t('Total Points', 'Points totaux')} value={summaryTotalPoints} tone="navy" />
           <KpiTile label={t('vs Last Week', 'vs semaine passée')} value={summaryWoW !== null ? `${summaryWoW >= 0 ? '+' : ''}${summaryWoW}%` : '--'} tone="forest" />
           <KpiTile label={t('Alerts', 'Alertes')} value={filteredAnomalies.length} tone="amber" />
