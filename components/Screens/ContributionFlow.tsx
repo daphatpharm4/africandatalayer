@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Award,
   Camera,
+  CheckCircle,
   MapPin,
   Route,
   ShieldCheck,
@@ -70,6 +71,12 @@ const roadBlockageOptions = ['flooding', 'construction', 'accident', 'debris', '
 const buildingTypeOptions = ['residential', 'commercial', 'mixed', 'industrial', 'institutional', 'religious'];
 const occupancyStatusOptions = ['occupied', 'partially_occupied', 'vacant', 'under_construction'];
 const openingHourPresets = ['08:00 - 20:00', '09:00 - 19:00', '24/7'];
+const STEPS = [
+  { key: 'photo', en: 'Photo', fr: 'Photo' },
+  { key: 'details', en: 'Details', fr: 'Détails' },
+  { key: 'location', en: 'Location', fr: 'Position' },
+  { key: 'submit', en: 'Submit', fr: 'Envoyer' },
+] as const;
 
 const PHOTO_GUIDE_CONFIG: Record<string, { frameLabel: { en: string; fr: string }; tips: Array<{ en: string; fr: string }> }> = {
   pharmacy: {
@@ -860,6 +867,16 @@ const ContributionFlow: React.FC<Props> = ({
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
     return { latitude, longitude };
   };
+
+  const currentStep = (() => {
+    const hasPhoto = Boolean(photoPreview || draftImageBase64);
+    const hasDetails = Boolean(siteName.trim());
+    const hasLocation = Boolean(location || parseManualLocation());
+    if (!hasPhoto) return 0;
+    if (!hasDetails) return 1;
+    if (!hasLocation) return 2;
+    return 3;
+  })();
 
   const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -2484,29 +2501,39 @@ const ContributionFlow: React.FC<Props> = ({
           <ShieldCheck size={12} />
           <span>{t('Live photo + GPS mandatory', 'Photo live + GPS obligatoires')}</span>
         </div>
-        {(() => {
-          const steps = [
-            { label: t('Type', 'Type'), done: Boolean(vertical) },
-            { label: t('Photo', 'Photo'), done: Boolean(photoPreview) },
-            { label: t('GPS', 'GPS'), done: Boolean(location) },
-            { label: t('Details', 'Détails'), done: Boolean(siteName) },
-          ];
-          return (
-            <div className="flex items-center gap-1.5 mb-4">
-              {steps.map((step, i) => (
-                <React.Fragment key={step.label}>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full transition-colors ${step.done ? 'bg-forest' : 'bg-gray-200'}`} />
-                    <span className={`micro-label ${step.done ? 'text-forest' : 'text-gray-300'}`}>
-                      {step.label}
+        <div className="shrink-0 border-b border-gray-100 bg-white px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            {STEPS.map((stepLabel, i) => {
+              const done = i < currentStep;
+              const active = i === currentStep;
+              return (
+                <React.Fragment key={stepLabel.key}>
+                  <div className="flex items-center gap-1">
+                    <div
+                      className={`flex h-[22px] w-[22px] items-center justify-center rounded-full transition-colors ${
+                        done || active ? 'bg-navy' : 'bg-gray-200'
+                      }`}
+                    >
+                      {done ? (
+                        <CheckCircle size={12} className="text-white" />
+                      ) : (
+                        <span className={`text-[10px] font-bold ${active ? 'text-white' : 'text-gray-400'}`}>
+                          {i + 1}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-semibold ${active ? 'text-navy' : 'text-gray-400'}`}>
+                      {t(stepLabel.en, stepLabel.fr)}
                     </span>
                   </div>
-                  {i < steps.length - 1 && <div className={`flex-1 h-px ${steps[i].done ? 'bg-forest' : 'bg-gray-200'}`} />}
+                  {i < STEPS.length - 1 && (
+                    <div className={`h-0.5 flex-1 rounded-full transition-colors ${done ? 'bg-navy' : 'bg-gray-200'}`} />
+                  )}
                 </React.Fragment>
-              ))}
-            </div>
-          );
-        })()}
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>
