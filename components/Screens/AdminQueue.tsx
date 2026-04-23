@@ -7,12 +7,13 @@ import {
   ChevronRight,
   Clock3,
   MapPin,
-  ShieldCheck,
   Trash2,
   Users,
   X,
 } from 'lucide-react';
 import ProfileAvatar from '../shared/ProfileAvatar';
+import ScreenHeader from '../shared/ScreenHeader';
+import FilterChipRow from '../shared/FilterChipRow';
 import { coerceAvatarPreset } from '../../shared/avatarPresets';
 import { apiFetch, apiJson } from '../../lib/client/api';
 import { fetchIpReports, updateIpReport } from '../../lib/client/legal';
@@ -1256,13 +1257,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       className="flex flex-col h-full bg-page overflow-y-auto overflow-x-hidden no-scrollbar"
       style={{ scrollPaddingBottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 1rem)' }}
     >
-      <div className="sticky top-0 z-30 bg-ink text-white px-4 h-14 flex items-center justify-between">
-        <button onClick={onBack} className={`p-2 -ml-2 hover:text-terra transition-colors ${focusRingClass}`} aria-label={t('Go back', 'Retour')}>
-          <ArrowLeft size={20} />
-        </button>
-        <h1 className="text-xs font-bold uppercase tracking-[0.2em]">{t('Submission Forensics', 'Analyse forensique')}</h1>
-        <ShieldCheck size={18} className="text-terra" />
-      </div>
+      <ScreenHeader
+        title="African Data Layer"
+        subtitle={t('Admin · Submission Queue', 'Admin · File de soumissions')}
+        language={language}
+        onBack={onBack}
+        trailing={<span className="micro-label rounded-full bg-navy-wash px-2 py-0.5 text-navy">Admin</span>}
+        routeGrid
+      />
 
       <div className="p-4 pb-24 space-y-4">
         <div className="card p-2">
@@ -1385,24 +1387,17 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
-                  {([
-                    ['all', `${t('All', 'Tous')} (${reviewData.stats.all})`],
-                    ['flagged', `${t('Flagged', 'Signalés')} (${reviewData.stats.flagged})`],
-                    ['pending', `${t('Pending', 'En attente')} (${reviewData.stats.pending})`],
-                    ['low_risk', `${t('Low risk', 'Faible risque')} (${reviewData.stats.lowRisk})`],
-                  ] as Array<[AdminRiskFilter, string]>).map(([filter, label]) => (
-                    <button
-                      key={filter}
-                      type="button"
-                      onClick={() => changeRiskFilter(filter)}
-                      className={`h-10 rounded-xl border micro-label ${focusRingClass} ${
-                        riskFilter === filter ? 'bg-navy text-white border-navy' : 'bg-page text-gray-600 border-gray-100'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
+                <div className="shrink-0 border-b border-gray-100 bg-white py-2.5">
+                  <FilterChipRow<AdminRiskFilter>
+                    chips={[
+                      { id: 'all',      label: `${t('All', 'Tous')} (${reviewData.stats.all})` },
+                      { id: 'flagged',  label: `${t('High Risk', 'Risque élevé')} (${reviewData.stats.flagged})` },
+                      { id: 'pending',  label: `${t('Medium', 'Moyen')} (${reviewData.stats.pending})` },
+                      { id: 'low_risk', label: `${t('Low Risk', 'Faible risque')} (${reviewData.stats.lowRisk})` },
+                    ]}
+                    active={riskFilter}
+                    onChange={changeRiskFilter}
+                  />
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr),220px] gap-2">
