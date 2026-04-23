@@ -54,7 +54,7 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
                   {t('Data client · Bonamoussadi', 'Client data · Bonamoussadi')}
                 </div>
                 <span className="micro-label mt-1.5 inline-block rounded-full bg-white/10 px-2 py-0.5 text-[9px] text-white/70">
-                  Client
+                  {t('Client', 'Client')}
                 </span>
               </div>
             </section>
