@@ -1554,11 +1554,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       : group.summary.riskBucket === 'pending' ? 'medium'
                       : 'low';
 
-                    // Map trustTier → TrustBadge tier
-                    const trustBadgeTier: TrustBadgeTier =
+                    // Map trustTier → TrustBadge tier. Only elite/trusted/standard/new
+                    // render as gold/silver/bronze. 'restricted' and null suppress the
+                    // badge; the red trustTierClass chip elsewhere already signals revoked trust.
+                    const trustBadgeTier: TrustBadgeTier | null =
                       group.summary.trustTier === 'elite' ? 'gold'
                       : group.summary.trustTier === 'trusted' ? 'silver'
-                      : 'bronze';
+                      : group.summary.trustTier === 'standard' || group.summary.trustTier === 'new' ? 'bronze'
+                      : null;
 
                     // Vertical config for icon tile
                     const verticalConfig = VERTICALS[group.category];
@@ -1587,8 +1590,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                             style={isSelected ? { viewTransitionName: `admin-review-point-${group.pointId}` } : undefined}
                           >
                             {/* Photo thumbnail (80×80) — icon tile fallback when no preview */}
-                            <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center"
-                              style={{ backgroundColor: preview ? undefined : (verticalConfig?.bgColor ?? '#f2f6fa') }}
+                            <div
+                              aria-hidden={!preview}
+                              className={`w-20 h-20 rounded-2xl overflow-hidden shrink-0 flex items-center justify-center ${!preview && !verticalConfig ? 'bg-navy-wash' : ''}`}
+                              style={!preview && verticalConfig ? { backgroundColor: verticalConfig.bgColor } : undefined}
                             >
                               {preview ? (
                                 <img src={preview} alt={t('submission', 'soumission')} className="h-full w-full object-cover" loading="lazy" />
@@ -1617,7 +1622,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
                               {/* Row 3: forensic chips */}
                               <div className="flex flex-wrap gap-2">
-                                <TrustBadge tier={trustBadgeTier} language={language} />
+                                {trustBadgeTier && <TrustBadge tier={trustBadgeTier} language={language} />}
                                 <span className="rounded-full border border-gray-200 bg-gray-100 px-2 py-1 micro-label text-gray-600">
                                   {t('Risk', 'Risque')} {group.summary.riskScore}
                                 </span>
