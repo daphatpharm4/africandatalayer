@@ -857,13 +857,15 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
             hidden={false}
             isLowEndDevice={isLowEndDevice}
           >
-            <MissionCards
-              cards={missionCards as MissionCard[]}
-              sheetSnap={sheetSnap}
-              activeAssignment={activeAssignment}
-              showAgentWidgets={showAgentWidgets}
-              language={language}
-            />
+            <div className="-mx-4 shrink-0 border-t border-gray-100 bg-white px-4 py-3">
+              <MissionCards
+                cards={missionCards as MissionCard[]}
+                sheetSnap={sheetSnap}
+                activeAssignment={activeAssignment}
+                showAgentWidgets={showAgentWidgets}
+                language={language}
+              />
+            </div>
           </BottomSheet>
         )}
 
