@@ -18,6 +18,7 @@ import { apiJson, buildUrl } from '../../lib/client/api';
 import ExportPanel from '../ExportPanel';
 import { categoryLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
 import VerticalIcon from '../shared/VerticalIcon';
+import WeeklyBarChart from '../shared/WeeklyBarChart';
 import { BONAMOUSSADI_CENTER, bonamoussadiLeafletBounds } from '../../shared/geofence';
 import type {
   TrendDataPoint,
@@ -250,6 +251,12 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       .reverse()
       .slice(-12);
   })();
+
+  const weeklyCounts = useMemo(() => {
+    const recent = deltaBreakdown.slice(-7);
+    const pad = Array<number>(Math.max(0, 7 - recent.length)).fill(0);
+    return [...pad, ...recent.map((d) => d.new + d.changed + d.unchanged)];
+  }, [deltaBreakdown]);
 
   // Price trend (fuel only)
   const showPriceTrend = selectedVertical === 'fuel_station';
@@ -588,6 +595,14 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               {categoryLabel(vid, language)}
             </button>
           ))}
+        </div>
+
+        {/* Weekly submissions chart */}
+        <div className="micro-label mb-2.5 text-gray-400">
+          {t('Recent weekly submissions', 'Soumissions hebdomadaires récentes')}
+        </div>
+        <div className="card-soft p-4">
+          <WeeklyBarChart values={weeklyCounts} highlightIndex={6} />
         </div>
 
         <ExportPanel
