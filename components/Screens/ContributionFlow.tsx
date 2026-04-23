@@ -1700,33 +1700,73 @@ const ContributionFlow: React.FC<Props> = ({
 
   const renderPhotoBlock = () => {
     const guide = PHOTO_GUIDE_CONFIG[vertical];
-    return (
-    <div className="space-y-3">
-      <h4 className="text-sm font-bold text-gray-900">{t('Live Camera Proof', 'Preuve caméra en direct')}</h4>
-      <p className="text-xs text-gray-500">{t('Camera capture only. Gallery uploads are blocked.', 'Capture caméra uniquement. Import galerie bloqué.')}</p>
-      <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
-        {photoPreview ? (
-          <img src={photoPreview} alt={t('Captured photo', 'Photo capturée')} className="absolute inset-0 h-full w-full object-cover" />
-        ) : (
+    const hasCapturedPhoto = Boolean(photoPreview || draftImageBase64);
+    const capturedPhotoSrc = photoPreview ?? draftImageBase64;
+    const gpsStatus = location
+      ? `${t('GPS locked', 'GPS verrouillé')}${gpsAccuracy !== null ? ` · ±${Math.round(gpsAccuracy)}m` : ''}`
+      : t('GPS pending. Capture a photo, then wait for a lock or retry location.', 'GPS en attente. Capturez une photo, puis attendez le verrouillage ou réessayez la position.');
+    const gpsDetail = location
+      ? `${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°${assignment?.zoneLabel ? ` · ${assignment.zoneLabel}` : ''}`
+      : assignment?.zoneLabel
+        ? `${t('Zone', 'Zone')} · ${assignment.zoneLabel}`
+        : t('GPS unavailable', 'GPS indisponible');
+    const captureSurfaceClassName = `relative mb-4 flex h-60 w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-[20px] border-2 border-dashed text-center transition-all ${
+      hasCapturedPhoto
+        ? 'border-terra bg-gradient-to-br from-terra-wash to-gold-wash'
+        : 'border-gray-300 bg-gray-100'
+    }`;
+    const captureSurfaceContent = (
+      <>
+        {hasCapturedPhoto && capturedPhotoSrc && (
           <>
-            {guide && (
-              <div className="absolute inset-4 border-2 border-dashed border-white/60 rounded-xl flex items-center justify-center pointer-events-none z-[1]">
-                <span className="micro-label text-white/80 bg-black/20 px-3 py-1 rounded-full">
-                  {language === 'fr' ? guide.frameLabel.fr : guide.frameLabel.en}
-                </span>
-              </div>
-            )}
-            <Camera size={46} className="mb-4 opacity-40" />
-            <p className="text-xs font-bold uppercase tracking-widest opacity-60">{t('Live capture required', 'Capture live requise')}</p>
+            <img
+              src={capturedPhotoSrc}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent" />
           </>
         )}
+        {guide && !hasCapturedPhoto && (
+          <div className="relative z-10 rounded-full border border-white/70 bg-white/90 px-3 py-1 micro-label text-gray-600 shadow-sm">
+            {language === 'fr' ? guide.frameLabel.fr : guide.frameLabel.en}
+          </div>
+        )}
+        <div className="relative z-10 flex flex-col items-center gap-3 px-5">
+          {hasCapturedPhoto ? (
+            <>
+              <CheckCircle size={40} className="text-terra" />
+              <span className="text-sm font-semibold text-white">{t('Photo captured', 'Photo capturée')}</span>
+              <span className="text-[11px] text-white/75">
+                {draftClientExif?.capturedAt || draftClientExif?.latitude || draftClientExif?.longitude
+                  ? t('EXIF metadata extracted', 'Métadonnées EXIF extraites')
+                  : t('Photo stored for verification', 'Photo enregistrée pour vérification')}
+              </span>
+            </>
+          ) : (
+            <>
+              <Camera size={40} className="text-gray-500" />
+              <span className="text-sm font-semibold text-gray-700">{t('Tap to capture', 'Appuyez pour capturer')}</span>
+              <span className="text-[11px] text-gray-400">{t('Photo required for verification', 'Photo requise pour vérification')}</span>
+            </>
+          )}
+        </div>
+      </>
+    );
+    return (
+      <div className="space-y-3">
+        <div className="micro-label-wide mb-3 text-gray-400">
+          {t('Step 1 — Capture photo', 'Étape 1 — Capturer la photo')}
+        </div>
         {isNative() ? (
           <button
             type="button"
             onClick={() => void takeNativePhoto()}
-            className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
+            className={captureSurfaceClassName}
+            aria-label={hasCapturedPhoto ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
           >
-            {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
+            {captureSurfaceContent}
           </button>
         ) : (
           <>
@@ -1740,29 +1780,51 @@ const ContributionFlow: React.FC<Props> = ({
             />
             <label
               htmlFor="capture-photo"
-              className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
+              className={`${captureSurfaceClassName} cursor-pointer`}
             >
-              {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
+              {captureSurfaceContent}
             </label>
           </>
         )}
-      </div>
-      {photoError && (
-        <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
-          {photoError}
+        <div className="mt-[-0.25rem] text-[11px] font-medium text-gray-500">
+          {hasCapturedPhoto ? (
+            <span>{t('Tap to retake if the frame changed.', 'Appuyez pour reprendre si le cadrage a changé.')}</span>
+          ) : (
+            <span>{t('Camera capture only. Gallery uploads are blocked.', 'Capture caméra uniquement. Import galerie bloqué.')}</span>
+          )}
         </div>
-      )}
-      {guide && (
-        <ul className="space-y-1 px-1">
-          {guide.tips.map((tip, i) => (
-            <li key={i} className="text-xs text-gray-500 flex items-start space-x-2">
-              <span className="text-gray-300 mt-0.5">•</span>
-              <span>{language === 'fr' ? tip.fr : tip.en}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+        <div className="card-soft flex items-start gap-3 p-3">
+          <div className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full ${location ? 'bg-forest-wash text-forest' : 'bg-gray-100 text-gray-500'}`}>
+            {location ? <CheckCircle size={15} /> : <MapPin size={15} />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-gray-900">{gpsStatus}</span>
+              {assignment?.zoneLabel && (
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 micro-label text-gray-500">
+                  {assignment.zoneLabel}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-gray-500">{gpsDetail}</p>
+          </div>
+        </div>
+        {photoError && (
+          <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
+            {photoError}
+          </div>
+        )}
+        {guide && (
+          <ul className="space-y-1 px-1">
+            {guide.tips.map((tip, i) => (
+              <li key={i} className="flex items-start space-x-2 text-xs text-gray-500">
+                <span className="mt-0.5 text-gray-300">•</span>
+                <span>{language === 'fr' ? tip.fr : tip.en}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     );
   };
 
