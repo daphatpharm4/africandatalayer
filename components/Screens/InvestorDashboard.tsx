@@ -2,9 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   CheckCircle2,
+  MapPin,
   Printer,
   ShieldCheck,
   Signal,
+  TrendingDown,
   TrendingUp,
   Wifi,
   Zap,
@@ -24,6 +26,8 @@ import {
   Legend,
 } from 'recharts';
 import ScreenHeader from '../shared/ScreenHeader';
+import VerticalIcon from '../shared/VerticalIcon';
+import WeeklyBarChart from '../shared/WeeklyBarChart';
 import KpiCard from '../investor/KpiCard';
 import TrustGauge from '../investor/TrustGauge';
 import BrandLogo from '../BrandLogo';
@@ -310,6 +314,43 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
   // Active verticals count
   const activeVerticals = new Set(latestByVertical.map((s) => s.vertical_id)).size;
 
+  const verticalRows = useMemo(() => {
+    const dates = [...new Set(snapshots.map((s) => s.snapshot_date))].sort().reverse();
+    const latestD = dates[0];
+    const prevD = dates[1] ?? null;
+    return VERTICAL_IDS
+      .map((vid) => {
+        const curr = snapshots.find((s) => s.vertical_id === vid && s.snapshot_date === latestD)?.total_points ?? 0;
+        const prev = prevD
+          ? (snapshots.find((s) => s.vertical_id === vid && s.snapshot_date === prevD)?.total_points ?? 0)
+          : 0;
+        const vert = VERTICALS[vid];
+        return { id: vid, label: categoryPluralLabel(vid, language), current: curr, delta: curr - prev, color: vert.color, bgColor: vert.bgColor };
+      })
+      .filter((v) => v.current > 0);
+  }, [snapshots, language]);
+
+  const maxVertical = useMemo(() => Math.max(...verticalRows.map((v) => v.current), 1), [verticalRows]);
+
+  const weeklyPoints = useMemo(() => {
+    const recent = velocityTrend.slice(-7);
+    const pad = Array<number>(Math.max(0, 7 - recent.length)).fill(0);
+    return [...pad, ...recent.map((w) => w.events)];
+  }, [velocityTrend]);
+
+  const topZones = useMemo(
+    () =>
+      [...verticalRows]
+        .sort((a, b) => b.current - a.current)
+        .slice(0, 5)
+        .map((v) => ({
+          name: v.label,
+          points: v.current,
+          coveragePct: Math.round((v.current / Math.max(totalPoints, 1)) * 100),
+        })),
+    [verticalRows, totalPoints],
+  );
+
   const formattedDate = latestDate
     ? new Date(latestDate).toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' })
     : '--';
@@ -380,6 +421,83 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
             </div>
           </div>
         </section>
+
+        {/* Per-vertical coverage */}
+        {verticalRows.length > 0 && (
+          <section className="px-4 pt-4">
+            <div className="micro-label mb-2.5 text-gray-400">
+              {t('Coverage by vertical', 'Couverture par vertical')}
+            </div>
+            <div className="card-soft mb-3.5 p-3.5">
+              {verticalRows.map((v) => {
+                const isPos = v.delta >= 0;
+                return (
+                  <div key={v.id} className="mb-3 last:mb-0">
+                    <div className="mb-1 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <div
+                          className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-lg"
+                          style={{ background: v.bgColor }}
+                        >
+                          <VerticalIcon name={v.id} size={14} />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-700">{v.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-ink-dark">{v.current}</span>
+                        <span className={`flex items-center gap-0.5 text-[11px] font-semibold ${isPos ? 'text-forest-dark' : 'text-red-800'}`}>
+                          {isPos ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                          {isPos ? '+' : ''}{v.delta}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${(v.current / maxVertical) * 100}%`, background: v.color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Weekly submissions chart */}
+        <section className="px-4">
+          <div className="micro-label mb-2.5 text-gray-400">
+            {t('Daily submissions — This week', 'Contributions journalières — Cette semaine')}
+          </div>
+          <div className="card-soft mb-3.5 p-4">
+            <WeeklyBarChart values={weeklyPoints} highlightIndex={6} showValues />
+          </div>
+        </section>
+
+        {/* Top zones */}
+        {topZones.length > 0 && (
+          <section className="px-4 pb-4">
+            <div className="micro-label mb-2.5 text-gray-400">
+              {t('Top verticals by coverage', 'Verticals principaux')}
+            </div>
+            <div className="card-soft px-3.5 py-2.5">
+              {topZones.map((z, i) => (
+                <div
+                  key={z.name}
+                  className={`flex items-center gap-2.5 py-2 ${i < topZones.length - 1 ? 'border-b border-gray-50' : ''}`}
+                >
+                  <span className="w-5 text-xs font-bold text-gray-300">{i + 1}</span>
+                  <MapPin size={12} className="text-gray-400" />
+                  <span className="flex-1 text-xs font-semibold text-gray-700">{z.name}</span>
+                  <span className="text-[11px] font-bold text-navy">{z.points} {t('pts', 'pts')}</span>
+                  <div className="h-1 w-12 overflow-hidden rounded-full bg-gray-100">
+                    <div className="h-full rounded-full bg-navy" style={{ width: `${z.coveragePct}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ---------- KPI RIBBON ---------- */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
