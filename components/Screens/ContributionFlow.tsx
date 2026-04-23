@@ -11,9 +11,11 @@ import {
   Target,
   Zap,
 } from 'lucide-react';
+import { Circle, CircleMarker, MapContainer, TileLayer } from 'react-leaflet';
 import { isNative } from '../../lib/client/native';
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Geolocation as CapGeolocation } from '@capacitor/geolocation';
+import { isWithinBonamoussadi } from '../../shared/geofence';
 import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
 import {
   calculateSubmissionRewardBreakdown,
@@ -862,9 +864,12 @@ const ContributionFlow: React.FC<Props> = ({
     const latRaw = manualLatitude.trim();
     const lngRaw = manualLongitude.trim();
     if (!latRaw && !lngRaw) return null;
+    if (!latRaw || !lngRaw) return null;
     const latitude = Number(latRaw);
     const longitude = Number(lngRaw);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    if (latitude < -90 || latitude > 90) return null;
+    if (longitude < -180 || longitude > 180) return null;
     return { latitude, longitude };
   };
 
@@ -1637,35 +1642,115 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const renderCommonLocationBlock = () => (
-    <div className="card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <MapPin size={16} className="text-navy" />
-            <span className="text-xs font-bold text-gray-900">{t('GPS Location', 'Localisation GPS')}</span>
-          </div>
+    <div className="space-y-3">
+      {(() => {
+        const resolvedLocation = location ?? parseManualLocation();
+        const hasLiveGpsLock = Boolean(location);
+        return (
+          <>
+      <div className="flex items-center justify-between gap-3">
+        <div className="micro-label-wide text-gray-400">
+          {t('Step 3 — Confirm location', 'Étape 3 — Confirmer la position')}
+        </div>
         <button onClick={retryLocation} className="motion-pressable micro-label text-navy">
           {t('Retry', 'Réessayer')}
         </button>
       </div>
-      <p className="text-[11px] text-gray-500">
-        {location
-          ? `GPS: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`
-          : t('GPS unavailable. Retry or enter coordinates manually.', 'GPS indisponible. Réessayez ou saisissez les coordonnées.')}
-      </p>
-      {location && gpsAccuracy !== null && (() => {
-        const dots = gpsAccuracy <= 10 ? 5 : gpsAccuracy <= 25 ? 4 : gpsAccuracy <= 50 ? 3 : gpsAccuracy <= 100 ? 2 : 1;
-        const label = dots >= 5 ? t('Excellent', 'Excellent') : dots >= 4 ? t('Good', 'Bon') : dots >= 3 ? t('Fair', 'Correct') : t('Poor', 'Faible');
-        return (
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center space-x-1">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className={`w-2 h-2 rounded-full ${i <= dots ? 'bg-forest' : 'bg-gray-200'}`} />
-              ))}
+      <div className="relative mb-3.5 h-[200px] overflow-hidden rounded-[20px] bg-[#e8eff7]">
+        {resolvedLocation ? (
+          <MapContainer
+            key={`${resolvedLocation.latitude.toFixed(6)}:${resolvedLocation.longitude.toFixed(6)}`}
+            center={[resolvedLocation.latitude, resolvedLocation.longitude]}
+            zoom={17}
+            zoomControl={false}
+            dragging={false}
+            scrollWheelZoom={false}
+            doubleClickZoom={false}
+            touchZoom={false}
+            boxZoom={false}
+            keyboard={false}
+            className="h-full w-full"
+            style={{ background: '#e8eff7' }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {hasLiveGpsLock && gpsAccuracy !== null && (
+              <Circle
+                center={[resolvedLocation.latitude, resolvedLocation.longitude]}
+                radius={Math.max(gpsAccuracy, 18)}
+                pathOptions={{ color: '#0f3d5e', fillColor: '#0f3d5e', fillOpacity: 0.12, weight: 1 }}
+              />
+            )}
+            <CircleMarker
+              center={[resolvedLocation.latitude, resolvedLocation.longitude]}
+              radius={6}
+              pathOptions={{ color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 1, weight: 2 }}
+            />
+          </MapContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center px-6 text-center">
+            <div className="max-w-[220px]">
+              <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/80 text-navy shadow-sm">
+                <Route size={18} />
+              </div>
+              <div className="text-sm font-bold text-navy">
+                {t('Waiting for GPS lock', 'En attente du verrouillage GPS')}
+              </div>
+              <div className="mt-1 text-[11px] leading-4 text-slate-600">
+                {t('Retry GPS or enter coordinates manually to continue.', 'Réessayez le GPS ou saisissez les coordonnées manuellement pour continuer.')}
+              </div>
             </div>
-            <span className="micro-label text-gray-400">{label} ({Math.round(gpsAccuracy)}m)</span>
           </div>
-        );
-      })()}
+        )}
+        {resolvedLocation && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-[10px] bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-navy shadow-sm">
+            {resolvedLocation.latitude.toFixed(4)}°, {resolvedLocation.longitude.toFixed(4)}°
+            {hasLiveGpsLock && gpsAccuracy !== null
+              ? ` · ±${Math.round(gpsAccuracy)}m`
+              : ` · ${t('Manual entry', 'Saisie manuelle')}`}
+          </div>
+        )}
+      </div>
+      <div className="card-soft flex flex-col gap-2 p-3.5">
+        {(() => {
+          const zonePass = Boolean(resolvedLocation) && isWithinBonamoussadi(resolvedLocation);
+          const speed = lastPosition?.coords.speed ?? null;
+          const velocityPass = speed === null || speed <= 5;
+          const dedupPass = !dedupCheck?.shouldPrompt;
+          const validationRows: Array<{ key: string; value: string; pass: boolean }> = [
+            {
+              key: t('Zone', 'Zone'),
+              value: resolvedLocation ? (zonePass ? t('Inside Bonamoussadi', 'Dans Bonamoussadi') : t('Outside Bonamoussadi', 'Hors Bonamoussadi')) : t('Pending', 'En attente'),
+              pass: zonePass,
+            },
+            {
+              key: t('Velocity check', 'Vitesse'),
+              value: speed === null
+                ? t('Pending', 'En attente')
+                : `${speed.toFixed(1)} m/s${velocityPass ? ` · ${t('stable', 'stable')}` : ` · ${t('moving fast', 'trop rapide')}`}`,
+              pass: velocityPass,
+            },
+            {
+              key: t('Duplicate scan', 'Doublon'),
+              value: dedupCheck
+                ? (dedupPass ? t('Clear', 'Aucun doublon') : t('Flagged', 'Signalé'))
+                : t('Ready', 'Prêt'),
+              pass: dedupPass,
+            },
+          ];
+
+          return validationRows.map(({ key, value, pass }) => (
+            <div key={key} className="flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-400">{key}</span>
+              <span className={`text-xs font-semibold ${pass ? 'text-forest' : value === t('Pending', 'En attente') ? 'text-gray-400' : 'text-danger'}`}>
+                {value}
+              </span>
+            </div>
+          ));
+        })()}
+      </div>
       {!location && (
         <button
           onClick={() => setShowManualLocation((prev) => !prev)}
@@ -1695,6 +1780,9 @@ const ContributionFlow: React.FC<Props> = ({
           {locationError}
         </div>
       )}
+          </>
+        );
+      })()}
     </div>
   );
 
