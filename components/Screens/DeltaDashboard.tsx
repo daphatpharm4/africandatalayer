@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Download, Minus, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { MapContainer, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import ScreenHeader from '../shared/ScreenHeader';
+import KpiTile from '../shared/KpiTile';
 import {
   LineChart,
   Line,
@@ -494,34 +495,11 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('Points', 'Points')}</span>
-            <span className="text-lg font-bold text-gray-900">{summaryTotalPoints}</span>
-          </div>
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('WoW', 'WoW')}</span>
-            <div className="flex items-center justify-center space-x-0.5">
-              {summaryWoW !== null ? (
-                <>
-                  {summaryWoW > 0 ? <TrendingUp size={12} className="text-green-500" /> : summaryWoW < 0 ? <TrendingDown size={12} className="text-red-500" /> : <Minus size={12} className="text-gray-400" />}
-                  <span className={`text-sm font-bold ${summaryWoW > 0 ? 'text-green-600' : summaryWoW < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                    {summaryWoW > 0 ? '+' : ''}{summaryWoW}%
-                  </span>
-                </>
-              ) : (
-                <span className="text-sm text-gray-400">--</span>
-              )}
-            </div>
-          </div>
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('Complete', 'Complet')}</span>
-            <span className="text-sm font-bold text-gray-900">{summaryCompletion}%</span>
-          </div>
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('Alerts', 'Alertes')}</span>
-            <span className={`text-sm font-bold ${filteredAnomalies.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>{filteredAnomalies.length}</span>
-          </div>
+        <div className="mb-3.5 grid grid-cols-2 gap-2">
+          <KpiTile label={t('Total Points', 'Points totaux')} value={summaryTotalPoints} tone="navy" />
+          <KpiTile label={t('vs Last Week', 'vs semaine passée')} value={summaryWoW !== null ? `${summaryWoW >= 0 ? '+' : ''}${summaryWoW}%` : '--'} tone="forest" />
+          <KpiTile label={t('Alerts', 'Alertes')} value={filteredAnomalies.length} tone="amber" />
+          <KpiTile label={t('Completion', 'Complet')} value={`${summaryCompletion}%`} tone="navy" />
         </div>
 
         {/* Vertical Tabs */}

@@ -1,0 +1,5 @@
+[    1221ms] [INFO] Redirecting navigation app.africandatalayer.com -> www.app.africandatalayer.com because the server presented a certificate valid for www.app.africandatalayer.com but not for app.africandatalayer.com. To disable such redirects launch Chrome with the following flag: --disable-features=SSLCommonNameMismatchHandling @ https://www.app.africandatalayer.com/:0
+[    1489ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ https://www.app.africandatalayer.com/assets/index-BcsrcLXL.js:49
+[    1490ms] [LOG] [API] GET /api/auth/session @ https://www.app.africandatalayer.com/assets/index-BcsrcLXL.js:49
+[    3874ms] [LOG] [API] GET /api/auth/session → 200 @ https://www.app.africandatalayer.com/assets/index-BcsrcLXL.js:49
+[    3875ms] [LOG] [AUTH] getSession: response no user @ https://www.app.africandatalayer.com/assets/index-BcsrcLXL.js:49
