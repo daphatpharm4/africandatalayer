@@ -1887,85 +1887,144 @@ const ContributionFlow: React.FC<Props> = ({
   );
 
   const renderCreateFields = () => {
+    const verticalLabel = getCategoryLabel(vertical, language);
+    const createCardClass = 'space-y-3';
+    const createStepLabelClass = 'micro-label-wide mb-3 text-gray-400';
+    const createFieldLabelClass = 'mb-1.5 block text-xs font-semibold text-gray-700';
+    const createTextInputClass = 'h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-[15px] outline-none focus:border-navy';
+    const createSelectClass = 'h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-[15px] outline-none focus:border-navy';
+    const createToggleClass = (active: boolean) => {
+      if (!active) {
+        return 'min-h-[44px] flex-1 rounded-xl border-[1.5px] border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors';
+      }
+      return 'min-h-[44px] flex-1 rounded-xl border-[1.5px] border-navy bg-navy px-3 py-2 text-xs font-semibold text-white transition-colors';
+    };
+
     if (vertical === 'pharmacy') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Pharmacy', 'Créer une pharmacie')}</h4>
-          <div className="flex items-center gap-2">
-            <input
-              value={siteName}
-              onChange={(event) => setSiteName(event.target.value)}
-              placeholder={t('Pharmacy name', 'Nom de la pharmacie')}
-              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            />
-            <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Open now', 'Ouvert maintenant')}</span>
-            <button
-              onClick={() => setIsOpenNow((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isOpenNow ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Pharmacy name', 'Nom de la pharmacie')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  value={siteName}
+                  onChange={(event) => setSiteName(event.target.value)}
+                  placeholder={t('Pharmacy name', 'Nom de la pharmacie')}
+                  className={`${createTextInputClass} flex-1 min-w-0`}
+                />
+                <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+              </div>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Open now', 'Ouvert maintenant')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenNow(true)}
+                  className={createToggleClass(isOpenNow)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOpenNow(false)}
+                  className={createToggleClass(!isOpenNow)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       );
     }
     if (vertical === 'mobile_money') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Kiosk', 'Créer un kiosque')}</h4>
-          <div className="flex flex-wrap gap-2">
-            {providerOptions.map((provider) => (
-              <button
-                key={provider}
-                onClick={() => setProviders((prev) => toggleListValue(prev, provider))}
-                className={`px-3 py-2 min-h-[44px] rounded-full micro-label ${providers.includes(provider) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
-              >
-                {provider}
-              </button>
-            ))}
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className={createFieldLabelClass}>{t('Provider', 'Opérateur')}</span>
+              <div className="flex flex-wrap gap-2">
+                {providerOptions.map((provider) => (
+                  <button
+                    key={provider}
+                    type="button"
+                    onClick={() => setProviders((prev) => toggleListValue(prev, provider))}
+                    className={`min-h-[44px] rounded-xl border-[1.5px] px-3 py-2 text-xs font-semibold transition-colors ${
+                      providers.includes(provider) ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-700'
+                    }`}
+                  >
+                    {provider}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       );
     }
     if (vertical === 'fuel_station') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Fuel Station', 'Créer une station-service')}</h4>
-          <div className="flex items-center gap-2">
-            <input
-              value={siteName}
-              onChange={(event) => setSiteName(event.target.value)}
-              placeholder={t('Fuel station name', 'Nom de la station-service')}
-              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            />
-            <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
-            <button
-              onClick={() => setHasFuelAvailable((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${hasFuelAvailable ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
-          </div>
-          <div className="space-y-2">
-            <span className="micro-label text-gray-400">{t('Fuel prices (XAF)', 'Prix carburant (XAF)')}</span>
-            {fuelTypeOptions.map((fuel) => (
-              <div key={fuel} className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-gray-600 w-14">{fuel}</span>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Fuel station name', 'Nom de la station-service')}</label>
+              <div className="flex items-center gap-2">
                 <input
-                  type="number"
-                  value={fuelPrices[fuel] ?? ''}
-                  onChange={(event) => setFuelPrices((prev) => ({ ...prev, [fuel]: event.target.value }))}
-                  placeholder={t('Price', 'Prix')}
-                  className="flex-1 h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+                  value={siteName}
+                  onChange={(event) => setSiteName(event.target.value)}
+                  placeholder={t('Fuel station name', 'Nom de la station-service')}
+                  className={`${createTextInputClass} flex-1 min-w-0`}
                 />
+                <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
               </div>
-            ))}
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Fuel available', 'Carburant disponible')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHasFuelAvailable(true)}
+                  className={createToggleClass(hasFuelAvailable)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHasFuelAvailable(false)}
+                  className={createToggleClass(!hasFuelAvailable)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Fuel prices (XAF)', 'Prix carburant (XAF)')}</span>
+              <div className="flex flex-col gap-3">
+                {fuelTypeOptions.map((fuel) => (
+                  <div key={fuel} className="flex items-end gap-3">
+                    <span className="text-xs font-semibold text-gray-700 w-14 shrink-0">{fuel}</span>
+                    <input
+                      type="number"
+                      value={fuelPrices[fuel] ?? ''}
+                      onChange={(event) => setFuelPrices((prev) => ({ ...prev, [fuel]: event.target.value }))}
+                      placeholder={t('Price', 'Prix')}
+                      className={`${createTextInputClass} flex-1 min-w-0`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -1973,31 +2032,51 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'alcohol_outlet') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Alcohol Outlet', 'Créer un point de vente d\'alcool')}</h4>
-          <input
-            value={siteName}
-            onChange={(event) => setSiteName(event.target.value)}
-            placeholder={t('Outlet name', 'Nom du point de vente')}
-            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <select
-            value={outletType}
-            onChange={(event) => setOutletType(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {outletTypeOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Formal / licensed', 'Formel / licencié')}</span>
-            <button
-              onClick={() => setIsFormal((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isFormal ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {isFormal ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Outlet name', 'Nom du point de vente')}</label>
+              <input
+                value={siteName}
+                onChange={(event) => setSiteName(event.target.value)}
+                placeholder={t('Outlet name', 'Nom du point de vente')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Outlet type', 'Type de point de vente')}</label>
+              <select
+                value={outletType}
+                onChange={(event) => setOutletType(event.target.value)}
+                className={createSelectClass}
+              >
+                {outletTypeOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Formal / licensed', 'Formel / licencié')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFormal(true)}
+                  className={createToggleClass(isFormal)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFormal(false)}
+                  className={createToggleClass(!isFormal)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -2005,37 +2084,60 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'billboard') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Billboard', 'Créer un panneau')}</h4>
-          <input
-            value={siteName}
-            onChange={(event) => setSiteName(event.target.value)}
-            placeholder={t('Billboard description', 'Description du panneau')}
-            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <select
-            value={billboardType}
-            onChange={(event) => setBillboardType(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {billboardTypeOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <input
-            value={advertiserBrand}
-            onChange={(event) => setAdvertiserBrand(event.target.value)}
-            placeholder={t('Advertiser brand (optional)', 'Marque annonceur (optionnel)')}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Occupied', 'Occupé')}</span>
-            <button
-              onClick={() => setIsOccupied((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isOccupied ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {isOccupied ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Billboard description', 'Description du panneau')}</label>
+              <input
+                value={siteName}
+                onChange={(event) => setSiteName(event.target.value)}
+                placeholder={t('Billboard description', 'Description du panneau')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Billboard type', 'Type de panneau')}</label>
+              <select
+                value={billboardType}
+                onChange={(event) => setBillboardType(event.target.value)}
+                className={createSelectClass}
+              >
+                {billboardTypeOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Advertiser brand (optional)', 'Marque annonceur (optionnel)')}</label>
+              <input
+                value={advertiserBrand}
+                onChange={(event) => setAdvertiserBrand(event.target.value)}
+                placeholder={t('Advertiser brand (optional)', 'Marque annonceur (optionnel)')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Occupied', 'Occupé')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOccupied(true)}
+                  className={createToggleClass(isOccupied)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOccupied(false)}
+                  className={createToggleClass(!isOccupied)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -2043,95 +2145,137 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'transport_road') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Road Segment', 'Créer un segment routier')}</h4>
-          <div className="flex items-center gap-2">
-            <input
-              value={roadName}
-              onChange={(event) => setRoadName(event.target.value)}
-              placeholder={t('Road name', 'Nom de route')}
-              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            />
-            <VoiceMicButton language={language} onResult={(text) => setRoadName((prev) => prev ? `${prev} ${text}` : text)} />
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
           </div>
-          <select
-            value={roadCondition}
-            onChange={(event) => setRoadCondition(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {roadConditionOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <select
-            value={roadSurface}
-            onChange={(event) => setRoadSurface(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {roadSurfaceOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Blocked', 'Bloqué')}</span>
-            <button
-              onClick={() => setRoadBlocked((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${roadBlocked ? 'bg-terra text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {roadBlocked ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Road name', 'Nom de route')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  value={roadName}
+                  onChange={(event) => setRoadName(event.target.value)}
+                  placeholder={t('Road name', 'Nom de route')}
+                  className={`${createTextInputClass} flex-1 min-w-0`}
+                />
+                <VoiceMicButton language={language} onResult={(text) => setRoadName((prev) => prev ? `${prev} ${text}` : text)} />
+              </div>
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Road condition', 'État de la route')}</label>
+              <select
+                value={roadCondition}
+                onChange={(event) => setRoadCondition(event.target.value)}
+                className={createSelectClass}
+              >
+                {roadConditionOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Surface type', 'Type de surface')}</label>
+              <select
+                value={roadSurface}
+                onChange={(event) => setRoadSurface(event.target.value)}
+                className={createSelectClass}
+              >
+                {roadSurfaceOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Blocked', 'Bloqué')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRoadBlocked(true)}
+                  className={createToggleClass(roadBlocked)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoadBlocked(false)}
+                  className={createToggleClass(!roadBlocked)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
+            {roadBlocked && (
+              <div>
+                <label className={createFieldLabelClass}>{t('Blockage type', 'Type de blocage')}</label>
+                <select
+                  value={blockageType}
+                  onChange={(event) => setBlockageType(event.target.value)}
+                  className={createSelectClass}
+                >
+                  {roadBlockageOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-          {roadBlocked && (
-            <select
-              value={blockageType}
-              onChange={(event) => setBlockageType(event.target.value)}
-              className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            >
-              {roadBlockageOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          )}
         </div>
       );
     }
 
     return (
-      <div className="card p-4 space-y-4">
-        <h4 className="text-sm font-bold text-gray-900">{t('Create Building', 'Créer un bâtiment')}</h4>
-        <select
-          value={buildingType}
-          onChange={(event) => setBuildingType(event.target.value)}
-          className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-        >
-          {buildingTypeOptions.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-        <select
-          value={occupancyStatus}
-          onChange={(event) => setOccupancyStatus(event.target.value)}
-          className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-        >
-          {occupancyStatusOptions.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            type="number"
-            value={storeyCount}
-            onChange={(event) => setStoreyCount(event.target.value)}
-            placeholder={t('Storeys', 'Étages')}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <input
-            type="number"
-            value={estimatedUnits}
-            onChange={(event) => setEstimatedUnits(event.target.value)}
-            placeholder={t('Estimated units', 'Unités estimées')}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
+      <div className={createCardClass}>
+        <div className={createStepLabelClass}>
+          {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+        </div>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className={createFieldLabelClass}>{t('Building type', 'Type de bâtiment')}</label>
+            <select
+              value={buildingType}
+              onChange={(event) => setBuildingType(event.target.value)}
+              className={createSelectClass}
+            >
+              {buildingTypeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={createFieldLabelClass}>{t('Occupancy status', 'Statut d\'occupation')}</label>
+            <select
+              value={occupancyStatus}
+              onChange={(event) => setOccupancyStatus(event.target.value)}
+              className={createSelectClass}
+            >
+              {occupancyStatusOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Storeys', 'Étages')}</label>
+              <input
+                type="number"
+                value={storeyCount}
+                onChange={(event) => setStoreyCount(event.target.value)}
+                placeholder={t('Storeys', 'Étages')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Estimated units', 'Unités estimées')}</label>
+              <input
+                type="number"
+                value={estimatedUnits}
+                onChange={(event) => setEstimatedUnits(event.target.value)}
+                placeholder={t('Estimated units', 'Unités estimées')}
+                className={createTextInputClass}
+              />
+            </div>
+          </div>
         </div>
       </div>
     );
