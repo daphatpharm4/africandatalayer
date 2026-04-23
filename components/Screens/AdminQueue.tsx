@@ -2,22 +2,20 @@ import React, { startTransition, useEffect, useMemo, useRef, useState } from 're
 import {
   AlertTriangle,
   Camera,
+  Check,
   ChevronLeft,
   ChevronRight,
   Clock3,
   MapPin,
-  Trash2,
   Users,
   X,
 } from 'lucide-react';
-import ProfileAvatar from '../shared/ProfileAvatar';
 import RiskBadge, { type RiskLevel } from '../shared/RiskBadge';
 import ScreenHeader from '../shared/ScreenHeader';
 import TrustBadge, { type TrustTier as TrustBadgeTier } from '../shared/TrustBadge';
 import VerticalIcon from '../shared/VerticalIcon';
 import FilterChipRow from '../shared/FilterChipRow';
-import { coerceAvatarPreset } from '../../shared/avatarPresets';
-import { apiFetch, apiJson } from '../../lib/client/api';
+import { apiJson } from '../../lib/client/api';
 import { fetchIpReports, updateIpReport } from '../../lib/client/legal';
 import type { IpReport } from '../../shared/types';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
@@ -32,7 +30,6 @@ import type {
   AssignmentPlannerContext,
   AutomationLeadPriority,
   AutomationLeadStatus,
-  ClientDeviceInfo,
   CollectionAssignment,
   LeadCandidate,
   SubmissionCategory,
@@ -83,14 +80,6 @@ function exifStatusLabel(status: SubmissionPhotoMetadata['exifStatus'] | null | 
   if (status === 'missing') return language === 'fr' ? 'EXIF absent' : 'EXIF missing';
   if (status === 'unsupported_format') return language === 'fr' ? 'Format non supporté' : 'Unsupported format';
   if (status === 'parse_error') return language === 'fr' ? 'Erreur de lecture EXIF' : 'EXIF parse error';
-  return language === 'fr' ? 'Indisponible' : 'Unavailable';
-}
-
-function exifSourceLabel(source: SubmissionPhotoMetadata['exifSource'] | null | undefined, language: 'en' | 'fr'): string {
-  if (source === 'upload_buffer') return language === 'fr' ? 'Upload initial' : 'Initial upload';
-  if (source === 'remote_url') return language === 'fr' ? 'Photo distante' : 'Remote photo';
-  if (source === 'client_fallback') return language === 'fr' ? 'Fallback client' : 'Client fallback';
-  if (source === 'none') return language === 'fr' ? 'Aucune source' : 'No source';
   return language === 'fr' ? 'Indisponible' : 'Unavailable';
 }
 
@@ -216,33 +205,6 @@ function automationPriorityLabel(priority: AutomationLeadPriority, language: 'en
   }
 }
 
-function getClientDevice(item: AdminSubmissionEventLike): ClientDeviceInfo | null {
-  const details = item.details;
-  if (!details.clientDevice || typeof details.clientDevice !== 'object') return null;
-  const raw = details.clientDevice;
-  if (typeof raw.deviceId !== 'string' || !raw.deviceId.trim()) return null;
-  return {
-    deviceId: raw.deviceId.trim(),
-    platform: typeof raw.platform === 'string' ? raw.platform.trim() : undefined,
-    userAgent: typeof raw.userAgent === 'string' ? raw.userAgent.trim() : undefined,
-    deviceMemoryGb: typeof raw.deviceMemoryGb === 'number' && Number.isFinite(raw.deviceMemoryGb) ? raw.deviceMemoryGb : null,
-    hardwareConcurrency:
-      typeof raw.hardwareConcurrency === 'number' && Number.isFinite(raw.hardwareConcurrency) ? raw.hardwareConcurrency : null,
-    isLowEnd: raw.isLowEnd === true,
-  };
-}
-
-interface AdminSubmissionEventLike {
-  details: SubmissionDetails;
-}
-
-function isReadOnlySubmission(item: AdminSubmissionGroup['events'][number]): boolean {
-  const source = typeof item.event.source === 'string' ? item.event.source.trim().toLowerCase() : '';
-  if (source === 'legacy_submission' || source === 'osm_overpass') return true;
-  if (item.event.id.startsWith('legacy-event-')) return true;
-  return false;
-}
-
 function getAutomationLeadName(lead: LeadCandidate, language: 'en' | 'fr'): string {
   const details = lead.normalizedDetails as SubmissionDetails;
   const direct =
@@ -316,69 +278,32 @@ function queueAccentClass(group: AdminSubmissionGroup): string {
   return 'border-l-forest';
 }
 
-const DetailMetadataBlock: React.FC<{
-  label: string;
-  metadata: SubmissionPhotoMetadata | null;
-  thresholdKm: number;
-  unavailable: string;
-  language: 'en' | 'fr';
-}> = ({ label, metadata, thresholdKm, unavailable, language }) => {
-  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
-  const status = metadata?.submissionGpsMatch;
-  const statusText =
-    status === true ? t('Match', 'OK') : status === false ? t('Mismatch', 'Écart') : t('Unavailable', 'Indisponible');
-  const statusClass = status === true ? 'text-forest' : status === false ? 'text-terra' : 'text-gray-500';
-  const exifStatusText = metadata ? exifStatusLabel(metadata.exifStatus, language) : unavailable;
-  const exifReasonText = metadata?.exifReason ?? unavailable;
-  const exifSourceText = metadata ? exifSourceLabel(metadata.exifSource, language) : unavailable;
-
-  return (
-    <div className="rounded-2xl border border-gray-100 bg-page p-4 space-y-2">
-      <div className="micro-label text-navy">{label}</div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('EXIF Status', 'Statut EXIF')}</span>
-        <span className="text-gray-800">{exifStatusText}</span>
-      </div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('EXIF Source', 'Source EXIF')}</span>
-        <span className="text-gray-800">{exifSourceText}</span>
-      </div>
-      <div className="text-[11px]">
-        <div className="text-gray-500">{t('EXIF Reason', 'Raison EXIF')}</div>
-        <div className="text-gray-800 break-words">{exifReasonText}</div>
-      </div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('Photo EXIF GPS', 'GPS EXIF photo')}</span>
-        <span className="text-gray-800">{formatLocation(metadata?.gps, unavailable)}</span>
-      </div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('Capture Time', 'Heure de capture')}</span>
-        <span className="text-gray-800">{formatDate(metadata?.capturedAt, unavailable, language)}</span>
-      </div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('Device', 'Appareil')}</span>
-        <span className="text-gray-800">
-          {metadata?.deviceMake || metadata?.deviceModel ? `${metadata?.deviceMake ?? ''} ${metadata?.deviceModel ?? ''}`.trim() : unavailable}
-        </span>
-      </div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('Distance to Submission GPS', 'Distance au GPS soumis')}</span>
-        <span className="text-gray-800">{formatDistance(metadata?.submissionDistanceKm, unavailable)}</span>
-      </div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('Distance to IP GPS', 'Distance au GPS IP')}</span>
-        <span className="text-gray-800">{formatDistance(metadata?.ipDistanceKm, unavailable)}</span>
-      </div>
-      <div className="flex items-center justify-between text-[11px]">
-        <span className="text-gray-500">{t('Submission GPS Match', 'Correspondance GPS soumission')}</span>
-        <span className={statusClass}>{statusText}</span>
-      </div>
-      <div className="micro-label text-gray-400">
-        {t('Threshold', 'Seuil')}: {thresholdKm} km
-      </div>
-    </div>
-  );
-};
+function formatFraudFlag(flag: string, language: 'en' | 'fr'): string {
+  const labels: Record<string, { en: string; fr: string }> = {
+    gps_mismatch: { en: 'GPS mismatch', fr: 'Écart GPS' },
+    ip_photo_mismatch: { en: 'IP mismatch', fr: 'Écart IP' },
+    gps_mock_detected: { en: 'Mock GPS', fr: 'GPS simulé' },
+    mock_location_detected: { en: 'Mock GPS', fr: 'GPS simulé' },
+    poor_gps_accuracy: { en: 'Low GPS accuracy', fr: 'GPS peu précis' },
+    low_end_device: { en: 'Low-end device', fr: 'Appareil entrée de gamme' },
+    low_exif_trust: { en: 'Low EXIF trust', fr: 'Confiance EXIF faible' },
+    exif_missing: { en: 'EXIF missing', fr: 'EXIF absent' },
+    exif_fallback_recovered: { en: 'Recovered EXIF fallback', fr: 'EXIF récupéré via fallback' },
+    exif_parse_error: { en: 'EXIF parse error', fr: 'Erreur lecture EXIF' },
+    exif_unsupported_format: { en: 'Unsupported EXIF format', fr: 'Format EXIF non supporté' },
+    high_user_velocity: { en: 'High user velocity', fr: 'Vélocité utilisateur élevée' },
+    high_device_velocity: { en: 'High device velocity', fr: 'Vélocité appareil élevée' },
+    high_ip_velocity: { en: 'High IP velocity', fr: 'Vélocité IP élevée' },
+    impossible_travel: { en: 'Impossible travel', fr: 'Déplacement impossible' },
+    suspicious_ip_org: { en: 'Suspicious IP network', fr: 'Réseau IP suspect' },
+    restricted_agent: { en: 'Restricted agent', fr: 'Agent restreint' },
+  };
+  const known = labels[flag];
+  if (known) return language === 'fr' ? known.fr : known.en;
+  const humanized = flag.replace(/_/g, ' ').trim();
+  if (!humanized) return language === 'fr' ? 'Indisponible' : 'Unavailable';
+  return `${humanized.charAt(0).toUpperCase()}${humanized.slice(1)}`;
+}
 
 const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -434,7 +359,6 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [userFilter, setUserFilter] = useState('');
   const [actionMessage, setActionMessage] = useState('');
   const [deleteError, setDeleteError] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isApplyingDecision, setIsApplyingDecision] = useState(false);
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
   const [ipReports, setIpReports] = useState<IpReport[]>([]);
@@ -830,49 +754,6 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         groups: buildAdminSubmissionGroups(updatedEvents),
       };
     });
-  };
-
-  const handleDeleteSelected = async () => {
-    if (!selectedGroup) return;
-    const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
-    if (hasReadOnly) {
-      setDeleteError(t('This point contains read-only events that cannot be deleted.', 'Ce point contient des événements en lecture seule qui ne peuvent pas être supprimés.'));
-      return;
-    }
-
-    const eventCount = selectedGroup.events.length;
-    const confirmed = window.confirm(
-      eventCount > 1
-        ? t(`Delete all ${eventCount} events for this point permanently?`, `Supprimer définitivement les ${eventCount} événements de ce point ?`)
-        : t('Delete this submission event permanently?', 'Supprimer définitivement cet événement de soumission ?'),
-    );
-    if (!confirmed) return;
-
-    setIsDeleting(true);
-    setDeleteError('');
-    setActionMessage('');
-    try {
-      for (const event of selectedGroup.events) {
-        const response = await apiFetch(`/api/submissions/${encodeURIComponent(event.event.id)}?view=event`, {
-          method: 'DELETE',
-        });
-        if (!response.ok) {
-          const message = (await response.text()) || t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
-          setDeleteError(message);
-          return;
-        }
-      }
-
-      reviewCacheRef.current.clear();
-      await fetchReviewQueue(reviewPage, { force: true });
-      setActionMessage(t('Point deleted successfully.', 'Point supprimé avec succès.'));
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : t('Unable to delete submission.', 'Impossible de supprimer la soumission.');
-      setDeleteError(message);
-    } finally {
-      setIsDeleting(false);
-    }
   };
 
   const handleReviewDecision = async (group: AdminSubmissionGroup, decision: ReviewDecision) => {
@@ -1691,235 +1572,221 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
               <div className="order-1 lg:order-2">
                 {!isLoadingReview && selectedGroup && (() => {
-                  const hasReadOnly = selectedGroup.events.some(isReadOnlySubmission);
+                  const latestDetails = selectedGroup.latestEvent.event.details as SubmissionDetails;
                   const latestFraudCheck = selectedGroup.latestEvent.fraudCheck ?? null;
-                  const latestDevice = getClientDevice({ details: selectedGroup.latestEvent.event.details as SubmissionDetails });
-                  const contributors = [...new Map(selectedGroup.events.map((event) => [event.user.id, event.user])).values()];
+                  const latestGpsIntegrity = latestDetails.gpsIntegrity ?? null;
+                  const verticalConfig = VERTICALS[selectedGroup.category];
+                  const verticalBg = verticalConfig?.bgColor ?? 'rgba(15,43,70,0.08)';
+                  const verticalColor = verticalConfig?.color ?? '#0f2b46';
+                  const submissionName =
+                    (typeof latestDetails.siteName === 'string' && latestDetails.siteName.trim()) ||
+                    (typeof latestDetails.name === 'string' && latestDetails.name.trim()) ||
+                    (typeof latestDetails.roadName === 'string' && latestDetails.roadName.trim()) ||
+                    (typeof latestDetails.brand === 'string' && latestDetails.brand.trim()) ||
+                    selectedGroup.siteName ||
+                    unnamedLabel;
+                  const photoUrl =
+                    selectedGroup.latestEvent.event.photoUrl ??
+                    selectedGroup.allPhotos.find(
+                      (photo) =>
+                        photo.createdAt === selectedGroup.latestEvent.event.createdAt && !photo.eventType.includes('(secondary)'),
+                    )?.url ??
+                    null;
+                  const riskLevel: RiskLevel =
+                    selectedGroup.summary.riskBucket === 'flagged'
+                      ? 'high'
+                      : selectedGroup.summary.riskBucket === 'pending'
+                        ? 'medium'
+                        : 'low';
+                  const trustBadgeTier: TrustBadgeTier | null =
+                    selectedGroup.summary.trustTier === 'elite'
+                      ? 'gold'
+                      : selectedGroup.summary.trustTier === 'trusted'
+                        ? 'silver'
+                        : selectedGroup.summary.trustTier === 'standard' || selectedGroup.summary.trustTier === 'new'
+                          ? 'bronze'
+                          : null;
+                  const reviewFlags = Array.isArray(latestDetails.reviewFlags)
+                    ? latestDetails.reviewFlags.filter((flag): flag is string => typeof flag === 'string' && flag.trim().length > 0)
+                    : [];
+                  const exifStatus = latestFraudCheck?.primaryPhoto?.exifStatus ?? null;
+                  const exifMatch =
+                    latestFraudCheck?.primaryPhoto
+                      ? `${matchStateLabel(getMatchState(latestFraudCheck), language)} · ${exifStatusLabel(exifStatus, language)}`
+                      : unavailableLabel;
+                  const velocitySignals =
+                    latestDetails.velocitySignals && typeof latestDetails.velocitySignals === 'object'
+                      ? latestDetails.velocitySignals as Record<string, unknown>
+                      : null;
+                  const velocitySamples = [velocitySignals?.user15m, velocitySignals?.device15m, velocitySignals?.ip15m].filter(
+                    (value): value is number => typeof value === 'number' && Number.isFinite(value),
+                  );
+                  const velocityCheck =
+                    reviewFlags.includes('impossible_travel')
+                      ? t('Blocked', 'Bloqué')
+                      : reviewFlags.some((flag) => flag.includes('velocity'))
+                        ? t('Flagged', 'Signalé')
+                        : velocitySamples.length > 0
+                          ? language === 'fr'
+                            ? `OK · ${Math.max(...velocitySamples)}/15 min`
+                            : `Pass · ${Math.max(...velocitySamples)}/15m`
+                          : unavailableLabel;
+                  const forensicRows: Array<[string, string]> = [
+                    [t('Submitted by', 'Soumis par'), selectedGroup.latestEvent.user.name],
+                    [t('Time', 'Heure'), formatDate(selectedGroup.latestEvent.event.createdAt, unavailableLabel, language)],
+                    [
+                      t('GPS', 'GPS'),
+                      formatLocation(latestFraudCheck?.effectiveLocation ?? selectedGroup.latestEvent.event.location, unavailableLabel),
+                    ],
+                    [
+                      t('Accuracy', 'Précision'),
+                      typeof latestGpsIntegrity?.gpsAccuracyMeters === 'number' && Number.isFinite(latestGpsIntegrity.gpsAccuracyMeters)
+                        ? `${latestGpsIntegrity.gpsAccuracyMeters.toFixed(0)} m`
+                        : unavailableLabel,
+                    ],
+                    [t('EXIF match', 'Correspondance EXIF'), exifMatch],
+                    [t('Velocity check', 'Contrôle vélocité'), velocityCheck],
+                  ];
+                  const fraudFlagKeys = new Set(reviewFlags);
+                  if (latestFraudCheck?.primaryPhoto?.submissionGpsMatch === false) fraudFlagKeys.add('gps_mismatch');
+                  if (latestFraudCheck?.primaryPhoto?.ipGpsMatch === false) fraudFlagKeys.add('ip_photo_mismatch');
+                  if (
+                    latestDetails.clientDevice &&
+                    typeof latestDetails.clientDevice === 'object' &&
+                    latestDetails.clientDevice.isLowEnd === true
+                  ) {
+                    fraudFlagKeys.add('low_end_device');
+                  }
+                  if (latestGpsIntegrity?.mockLocationDetected) fraudFlagKeys.add('mock_location_detected');
+                  if (
+                    typeof latestGpsIntegrity?.gpsAccuracyMeters === 'number' &&
+                    Number.isFinite(latestGpsIntegrity.gpsAccuracyMeters) &&
+                    latestGpsIntegrity.gpsAccuracyMeters > 75
+                  ) {
+                    fraudFlagKeys.add('poor_gps_accuracy');
+                  }
+                  if (exifStatus && exifStatus !== 'ok') fraudFlagKeys.add(`exif_${exifStatus}`);
+                  const submission = {
+                    id: selectedGroup.latestEvent.event.id,
+                    photoUrl,
+                    siteName: submissionName,
+                    verticalLabel: categoryLabelLocal(selectedGroup.category, language),
+                    riskLevel,
+                    trustBadgeTier,
+                    fraudFlags: Array.from(new Set(Array.from(fraudFlagKeys).map((flag) => formatFraudFlag(flag, language)))),
+                  };
 
                   return (
                     <div
-                      className="card p-4 space-y-4"
+                      className="card overflow-hidden"
                       style={{ viewTransitionName: `admin-review-point-${selectedGroup.pointId}` }}
                     >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div>
-                          <div className="micro-label-wide text-gray-400">{t('Point detail', 'Détail du point')}</div>
-                          <h2 id="admin-review-detail-title" className="mt-1 text-xl font-bold text-gray-900">
-                            {selectedGroup.siteName ?? unnamedLabel}
-                          </h2>
-                          <div className="mt-1 text-xs text-gray-500">
-                            {categoryLabelLocal(selectedGroup.category, language)} • {reviewStatusLabel(selectedGroup.summary.reviewStatus, language)} • {selectedGroup.pointId}
+                      <ScreenHeader
+                        title={t('Review Submission', 'Réviser la soumission')}
+                        subtitle={submission.id}
+                        language={language}
+                        onBack={() => setSelectedPointId(null)}
+                      />
+
+                      <div className="max-h-[70vh] overflow-y-auto p-4 space-y-4 lg:max-h-[calc(100vh-8rem)]">
+                        <div
+                          className="relative overflow-hidden rounded-2xl border border-gray-100"
+                          style={{ background: `linear-gradient(160deg, ${verticalBg} 0%, rgba(15,43,70,0.05) 100%)` }}
+                        >
+                          <div className="absolute right-3 top-3 z-10">
+                            <RiskBadge level={submission.riskLevel} language={language} />
                           </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedPointId(null)}
-                          className={`h-10 w-10 rounded-full border border-gray-100 text-gray-500 hover:text-gray-900 flex items-center justify-center ${focusRingClass}`}
-                          aria-label={t('Clear selection', 'Annuler la sélection')}
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-
-                      <div className="flex flex-wrap gap-2">
-                        <span className={`rounded-full border px-3 py-1 micro-label ${trustTierClass(selectedGroup.summary.trustTier)}`}>
-                          {t('Trust', 'Confiance')}: {trustTierLabel(selectedGroup.summary.trustTier, language)}
-                        </span>
-                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 micro-label text-gray-600">
-                          {t('Risk score', 'Score risque')}: {selectedGroup.summary.riskScore}
-                        </span>
-                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 micro-label text-gray-600">
-                          {t('Evidence', 'Preuves')}: {selectedGroup.summary.evidenceCount}
-                        </span>
-                        <span className="rounded-full border border-gray-200 bg-gray-100 px-3 py-1 micro-label text-gray-600">
-                          {t('Age', 'Âge')}: {formatAgeFromHours(selectedGroup.summary.staleHours, language)}
-                        </span>
-                        <span className={`rounded-full border px-3 py-1 micro-label ${selectedGroup.summary.hasSubmissionMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                          {t('Submission gap', 'Écart GPS')}: {formatDistance(selectedGroup.summary.submissionDistanceKm, unavailableLabel)}
-                        </span>
-                        <span className={`rounded-full border px-3 py-1 micro-label ${selectedGroup.summary.hasIpMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200'}`}>
-                          {t('IP drift', 'Dérive IP')}: {formatDistance(selectedGroup.summary.ipDistanceKm, unavailableLabel)}
-                        </span>
-                        {selectedGroup.summary.isLowEndDevice && (
-                          <span className="rounded-full border border-gold-wash bg-gold-wash px-3 py-1 micro-label text-amber-700">
-                            {t('Low-end device', 'Appareil entrée de gamme')}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex flex-wrap gap-2" aria-label={t('Review actions', 'Actions de revue')}>
-                        <button
-                          type="button"
-                          onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
-                          disabled={isApplyingDecision}
-                          className={`h-10 px-3 rounded-xl micro-label ${focusRingClass} ${
-                            isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-forest-wash text-forest'
-                          }`}
-                        >
-                          {t('Approve', 'Approuver')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleReviewDecision(selectedGroup, 'flagged')}
-                          disabled={isApplyingDecision}
-                          className={`h-10 px-3 rounded-xl micro-label ${focusRingClass} ${
-                            isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-terra-wash text-terra'
-                          }`}
-                        >
-                          {t('Hold', 'Mettre en attente')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
-                          disabled={isApplyingDecision}
-                          className={`h-10 px-3 rounded-xl micro-label ${focusRingClass} ${
-                            isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600'
-                          }`}
-                        >
-                          {t('Reject', 'Rejeter')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleDeleteSelected}
-                          disabled={isDeleting || hasReadOnly}
-                          className={`h-10 px-3 rounded-xl micro-label flex items-center space-x-2 ${focusRingClass} ${
-                            isDeleting || hasReadOnly
-                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                              : 'bg-red-50 border border-red-100 text-red-600 hover:bg-red-100'
-                          }`}
-                        >
-                          <Trash2 size={14} />
-                          <span>
-                            {isDeleting
-                              ? t('Deleting...', 'Suppression...')
-                              : hasReadOnly
-                                ? t('Cannot delete', 'Suppression impossible')
-                                : t('Delete point', 'Supprimer point')}
-                          </span>
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 text-[11px]" aria-labelledby="admin-review-detail-title">
-                        <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
-                          <div className="micro-label text-gray-400">{t('Contributors', 'Contributeurs')}</div>
-                          {contributors.map((user) => (
-                            <div key={user.id} className="flex items-start gap-2">
-                              <ProfileAvatar preset={coerceAvatarPreset(user.avatarPreset)} alt={user.name} className="w-8 h-8 shrink-0" />
-                              <div className="space-y-0.5">
-                                <div className="text-gray-900 font-semibold">{user.name}</div>
-                                <div className="text-gray-600">{user.email ?? unavailableLabel}</div>
-                                <div className="text-[11px] text-gray-500">
-                                  {t('Trust', 'Confiance')}: {typeof user.trustScore === 'number' ? user.trustScore : '--'} • {trustTierLabel(user.trustTier ?? null, language)}
-                                </div>
-                                {user.suspendedUntil && (
-                                  <div className="text-[11px] text-terra-dark">
-                                    {t('Suspended until', 'Suspendu jusqu’au')}: {formatDate(user.suspendedUntil, unavailableLabel, language)}
-                                  </div>
-                                )}
-                              </div>
+                          {submission.photoUrl ? (
+                            <img
+                              src={submission.photoUrl}
+                              alt={submission.siteName}
+                              className="h-64 w-full object-cover sm:h-72"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="flex h-64 flex-col items-center justify-center gap-2 sm:h-72">
+                              <Camera size={28} className="text-gray-400" />
+                              <span className="text-xs text-gray-500">{t('Field photo', 'Photo terrain')}</span>
                             </div>
-                          ))}
+                          )}
                         </div>
 
-                        <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                          <div className="micro-label text-gray-400">{t('Point metadata', 'Métadonnées du point')}</div>
-                          <div>{t('Category', 'Catégorie')}: {categoryLabelLocal(selectedGroup.category, language)}</div>
-                          <div>Point ID: {selectedGroup.pointId}</div>
-                          <div>{t('Events', 'Événements')}: {selectedGroup.events.length}</div>
-                          <div>{t('Contributors', 'Contributeurs')}: {selectedGroup.summary.contributorCount}</div>
-                          <div>{t('Review status', 'Statut revue')}: {reviewStatusLabel(selectedGroup.summary.reviewStatus, language)}</div>
-                        </div>
-
-                        <div className="rounded-2xl border border-gray-100 p-3 space-y-2">
-                          <div className="micro-label text-gray-400">{t('Geo risk timeline', 'Chronologie géo-risque')}</div>
-                          {selectedGroup.events.map((event, index) => {
-                            const device = getClientDevice({ details: event.event.details as SubmissionDetails });
-                            return (
-                              <div
-                                key={event.event.id}
-                                className={`p-2 rounded-xl ${index === selectedGroup.events.length - 1 ? 'bg-forest-wash border border-forest-wash' : 'bg-gray-50 border border-gray-100'}`}
+                        <div className="rounded-2xl border border-gray-100 bg-white p-4 space-y-4">
+                          <div className="space-y-3">
+                            <div className="text-xl font-bold text-gray-900">{submission.siteName}</div>
+                            <div className="flex flex-wrap gap-2">
+                              <span
+                                className="rounded-full px-3 py-1 micro-label"
+                                style={{ background: verticalBg, color: verticalColor }}
                               >
-                                <div className="flex items-center justify-between">
-                                  <span className="micro-label text-navy">
-                                    {event.event.eventType === 'CREATE_EVENT' ? t('Create', 'Création') : t('Enrich', 'Enrichissement')}
-                                  </span>
-                                  <span className="text-[11px] text-gray-500">{formatDate(event.event.createdAt, unavailableLabel, language)}</span>
-                                </div>
-                                <div className="text-gray-600 mt-1">{t('By', 'Par')}: {event.user.name}</div>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  <span className={`rounded-full border px-2 py-1 micro-label ${matchStateClass(getMatchState(event.fraudCheck))}`}>
-                                    {matchStateLabel(getMatchState(event.fraudCheck), language)}
-                                  </span>
-                                  <span className="rounded-full border border-gray-200 bg-white px-2 py-1 micro-label text-gray-600">
-                                    {formatDistance(event.fraudCheck?.primaryPhoto?.submissionDistanceKm ?? null, unavailableLabel)}
-                                  </span>
-                                  {device && (
-                                    <span className="rounded-full border border-gray-200 bg-white px-2 py-1 micro-label text-gray-600">
-                                      {device.platform ?? t('Unknown device', 'Appareil inconnu')}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                          <div className="micro-label text-gray-400">{t('Location', 'Localisation')}</div>
-                          <div>{t('Submission GPS', 'GPS soumis')}: {formatLocation(latestFraudCheck?.submissionLocation, unavailableLabel)}</div>
-                          <div>{t('Effective GPS', 'GPS effectif')}: {formatLocation(latestFraudCheck?.effectiveLocation, unavailableLabel)}</div>
-                          <div>{t('IP GPS', 'GPS IP')}: {formatLocation(latestFraudCheck?.ipLocation, unavailableLabel)}</div>
-                        </div>
-
-                        <div className="rounded-2xl border border-gray-100 p-3 space-y-1">
-                          <div className="micro-label text-gray-400">{t('Client device', 'Appareil client')}</div>
-                          <div>{t('Device ID', 'Device ID')}: {latestDevice?.deviceId ?? unavailableLabel}</div>
-                          <div>{t('Platform', 'Plateforme')}: {latestDevice?.platform ?? unavailableLabel}</div>
-                          <div>
-                            {t('Low-end flag', 'Indicateur entrée de gamme')}:{' '}
-                            {latestDevice ? (latestDevice.isLowEnd === true ? t('Yes', 'Oui') : t('No', 'Non')) : unavailableLabel}
+                                {submission.verticalLabel}
+                              </span>
+                              {submission.trustBadgeTier && <TrustBadge tier={submission.trustBadgeTier} language={language} />}
+                              {!submission.trustBadgeTier && selectedGroup.summary.trustTier === 'restricted' && (
+                                <span className={`rounded-full border px-3 py-1 micro-label ${trustTierClass(selectedGroup.summary.trustTier)}`}>
+                                  {t('Trust', 'Confiance')}: {trustTierLabel(selectedGroup.summary.trustTier, language)}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="xl:col-span-2 space-y-2">
-                          <div className="micro-label text-gray-400">
-                            {t('All photos', 'Toutes les photos')} ({selectedGroup.allPhotos.length})
-                          </div>
-                          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                            {selectedGroup.allPhotos.length === 0 && (
-                              <div className="col-span-full rounded-2xl border border-gray-100 bg-gray-50 h-28 flex items-center justify-center">
-                                <div className="micro-label text-gray-400 text-center px-2">
-                                  {t('No photos available', 'Aucune photo disponible')}
-                                </div>
-                              </div>
-                            )}
-                            {selectedGroup.allPhotos.map((photo, index) => (
-                              <div key={`${photo.url}-${index}`} className="space-y-1">
-                                <div className="rounded-2xl border border-gray-100 overflow-hidden bg-gray-50 h-28 flex items-center justify-center">
-                                  <img src={photo.url} alt={`${t('Photo', 'Photo')} ${index + 1}`} className="h-full w-full object-cover" loading="lazy" />
-                                </div>
-                                <div className="text-[11px] text-gray-500 text-center">{photo.eventType}</div>
+                          <div className="divide-y divide-gray-100">
+                            {forensicRows.map(([key, value]) => (
+                              <div key={key} className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
+                                <span className="micro-label text-gray-400">{key}</span>
+                                <span className="text-right text-sm text-gray-700">{value}</span>
                               </div>
                             ))}
                           </div>
                         </div>
 
-                        <div className="xl:col-span-2 space-y-3">
-                          <div className="micro-label text-gray-400">{t('Photo EXIF metadata', 'Métadonnées EXIF des photos')}</div>
-                          {selectedGroup.allPhotos.length === 0 && <div className="text-[11px] text-gray-500">{unavailableLabel}</div>}
-                          {selectedGroup.allPhotos.map((photo, index) => (
-                            <DetailMetadataBlock
-                              key={`${photo.url}-${index}`}
-                              label={`${t('Photo', 'Photo')} ${index + 1} — ${photo.eventType}`}
-                              metadata={photo.metadata}
-                              thresholdKm={latestFraudCheck?.submissionMatchThresholdKm ?? 1}
-                              unavailable={unavailableLabel}
-                              language={language}
-                            />
-                          ))}
-                          <div className="micro-label text-gray-400">
-                            {t('IP match threshold', 'Seuil correspondance IP')}: {latestFraudCheck?.ipMatchThresholdKm ?? 50} km
+                        {submission.fraudFlags.length > 0 && (
+                          <div className="rounded-2xl border border-red-100 bg-red-50 p-4 space-y-3">
+                            <div className="flex items-center gap-2 text-red-700">
+                              <AlertTriangle size={16} />
+                              <span className="micro-label">{t('Fraud flags', 'Signaux de fraude')}</span>
+                            </div>
+                            <div className="space-y-2">
+                              {submission.fraudFlags.map((flag) => (
+                                <div
+                                  key={flag}
+                                  className="flex items-center gap-2 text-sm font-medium text-red-700"
+                                >
+                                  <AlertTriangle size={14} className="shrink-0" />
+                                  {flag}
+                                </div>
+                              ))}
+                            </div>
                           </div>
+                        )}
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label={t('Review actions', 'Actions de revue')}>
+                          <button
+                            type="button"
+                            onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
+                            disabled={isApplyingDecision}
+                            className={`flex h-11 items-center justify-center gap-2 rounded-2xl border px-4 micro-label ${focusRingClass} ${
+                              isApplyingDecision
+                                ? 'border-gray-100 bg-gray-100 text-gray-400'
+                                : 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100'
+                            }`}
+                          >
+                            <X size={16} />
+                            <span>{t('Reject', 'Rejeter')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
+                            disabled={isApplyingDecision}
+                            className={`flex h-11 items-center justify-center gap-2 rounded-2xl border px-4 micro-label ${focusRingClass} ${
+                              isApplyingDecision
+                                ? 'border-gray-100 bg-gray-100 text-gray-400'
+                                : 'border-forest-wash bg-forest-wash text-forest'
+                            }`}
+                          >
+                            <Check size={16} />
+                            <span>{t('Approve', 'Approuver')}</span>
+                          </button>
                         </div>
                       </div>
                     </div>
