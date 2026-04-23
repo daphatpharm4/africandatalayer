@@ -10,7 +10,6 @@ import {
   isWithinBonamoussadi
 } from '../../shared/geofence';
 import {
-  ChevronDown,
   Map as MapIcon,
   MapPin,
   Plus,
@@ -20,6 +19,7 @@ import {
   User
 } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
+import VerticalPickerBar from '../shared/VerticalPickerBar';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
@@ -126,6 +126,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
     { value: 'global', label: t('Worldwide', 'Monde entier') },
   ];
+  const toggleCategoryPicker = () => setIsVerticalPickerOpen((prev) => !prev);
 
   useEffect(() => {
     if (!isVerticalPickerOpen) return;
@@ -166,7 +167,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const mapLockLabel =
     mapScope === 'bonamoussadi'
       ? t('Zone active', 'Zone active')
-      : t('Full access', 'Acces complet');
+      : t('Full access', 'Accès complet');
 
   const formatTimeAgo = (iso: string) => {
     const created = new Date(iso).getTime();
@@ -572,64 +573,53 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       data-testid="screen-home"
       className="relative h-full min-h-0 bg-page overflow-x-hidden"
     >
-      <header className="route-grid absolute top-0 left-0 right-0 z-20 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 shadow-[0_4px_24px_rgba(15,43,70,0.08)] backdrop-blur-xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
+      <header className="route-grid absolute top-0 left-0 right-0 z-20 border-b border-gray-100 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 backdrop-blur-xl">
+        <div className="mb-2.5 flex items-start justify-between gap-3">
           <div className="min-w-0 flex flex-col">
             <div className="flex items-center gap-2">
-              <BrandLogo size={18} className="shrink-0" />
-              <h2 className="min-w-0 text-base font-bold leading-tight text-ink sm:text-lg">{t('African Data Layer', 'African Data Layer')}</h2>
-              {isAdmin && (
-                <span className="px-2 py-0.5 rounded-full bg-navy-light text-navy micro-label">
-                  {t('Admin', 'Admin')}
-                </span>
-              )}
-              {userRole === 'client' && (
-                <span className="px-2 py-0.5 rounded-full bg-terra-wash text-terra micro-label">
-                  {t('Client', 'Client')}
-                </span>
-              )}
+              <BrandLogo size={20} className="shrink-0" />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="min-w-0 text-[15px] font-bold leading-tight text-ink-dark">
+                    {t('African Data Layer', 'African Data Layer')}
+                  </div>
+                  {isAdmin && (
+                    <span className="micro-label rounded-full bg-navy-wash px-2 py-0.5 text-navy">
+                      {t('Admin', 'Admin')}
+                    </span>
+                  )}
+                  {userRole === 'client' && (
+                    <span className="micro-label rounded-full bg-terra-wash px-2 py-0.5 text-terra">
+                      {t('Client', 'Client')}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] font-medium leading-4 text-gray-500">
+                  {mapLockLabel} · {selectedCityLabel}
+                </div>
+              </div>
             </div>
-            <span className="mt-1 text-xs font-medium leading-4 text-gray-500">
-              {mapLockLabel} - {selectedCityLabel}
-            </span>
           </div>
           <button
+            type="button"
             onClick={isAuthenticated ? onProfile : onAuth}
-            className="motion-pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-navy/10 bg-navy-wash text-navy"
+            className="motion-pressable flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-navy/10 bg-navy-wash text-navy"
             aria-label={isAuthenticated ? t('Profile', 'Profil') : t('Sign in', 'Connexion')}
           >
-            <User size={18} />
+            <User size={17} />
           </button>
         </div>
 
-        {isLowEndDevice && (
-          <div className="mb-3 rounded-2xl border border-navy-border bg-navy-wash px-3 py-2 text-[11px] font-semibold leading-4 text-navy">
-            {t('Lite mode is on to keep map movement smooth on this phone.', 'Le mode allégé est activé pour garder la carte fluide sur ce téléphone.')}
-          </div>
-        )}
-
-        <div ref={verticalPickerRef} className="relative mb-2">
-          {(() => {
-            const vid = LEGACY_CATEGORY_MAP[activeCategory] ?? activeCategory;
-            const verticalColor = VERTICALS[vid]?.color ?? '#0f2b46';
-            return (
-            <button
-              onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
-              aria-expanded={isVerticalPickerOpen}
-              aria-haspopup="listbox"
-              className="motion-pressable flex h-12 w-full items-center justify-between rounded-2xl bg-gray-100 px-4 text-sm font-semibold text-navy"
-              style={{ borderLeft: `3px solid ${verticalColor}` }}
-            >
-              <span className="min-w-0 truncate text-left flex items-center gap-2">
-                <VerticalIcon name={VERTICALS[vid]?.icon ?? 'pill'} size={14} />
-                {t('Category', 'Catégorie')} : {categoryLabel(activeCategory)}
-              </span>
-              <ChevronDown size={14} className={`transition-transform ${isVerticalPickerOpen ? 'rotate-180' : ''}`} />
-            </button>
-            );
-          })()}
+        <div ref={verticalPickerRef} className="relative">
+          <VerticalPickerBar
+            active={activeCategory}
+            onToggle={toggleCategoryPicker}
+            language={language}
+            ariaControls="home-vertical-picker-list"
+            ariaExpanded={isVerticalPickerOpen}
+          />
           {isVerticalPickerOpen && (
-            <div className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg" role="listbox" aria-label={t('Category', 'Catégorie')}>
+            <div id="home-vertical-picker-list" className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg" role="listbox" aria-label={t('Category', 'Catégorie')}>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {selectableCategories.map((category) => {
                   const verticalId = LEGACY_CATEGORY_MAP[category] ?? category;
@@ -659,8 +649,14 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           )}
         </div>
 
+        {isLowEndDevice && (
+          <div className="mt-3 rounded-2xl border border-navy-border bg-navy-wash px-3 py-2 text-[11px] font-semibold leading-4 text-navy">
+            {t('Lite mode is on to keep map movement smooth on this phone.', 'Le mode allégé est activé pour garder la carte fluide sur ce téléphone.')}
+          </div>
+        )}
+
         {isAdmin && (
-          <div data-testid="home-map-scope-toggle" className="space-y-2">
+          <div data-testid="home-map-scope-toggle" className="mt-3 space-y-2">
             <div className="micro-label text-gray-400">{t('Map Scope', 'Portée de la carte')}</div>
             <div className="grid grid-cols-3 gap-2">
               {mapScopeOptions.map((scope) => {

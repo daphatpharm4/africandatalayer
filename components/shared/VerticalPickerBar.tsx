@@ -9,6 +9,8 @@ interface VerticalPickerBarProps {
   active: Category;
   onToggle: () => void;
   language: Language;
+  ariaControls?: string;
+  ariaExpanded?: boolean;
 }
 
 const ACCENT_CLASS: Record<Category, string> = {
@@ -21,7 +23,7 @@ const ACCENT_CLASS: Record<Category, string> = {
   [Category.CENSUS_PROXY]: 'border-l-gray-600',
 };
 
-function VerticalPickerBar({ active, onToggle, language }: VerticalPickerBarProps) {
+function VerticalPickerBar({ active, onToggle, language, ariaControls, ariaExpanded }: VerticalPickerBarProps) {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const normalizedCategory = normalizeCategoryAlias(active) ?? null;
   const label = normalizedCategory ? categoryLabel(normalizedCategory, language) : active;
@@ -31,6 +33,9 @@ function VerticalPickerBar({ active, onToggle, language }: VerticalPickerBarProp
     <button
       type="button"
       onClick={onToggle}
+      aria-controls={ariaControls}
+      aria-expanded={ariaExpanded}
+      aria-haspopup="listbox"
       className={`motion-pressable flex h-12 w-full items-center gap-2 rounded-2xl border-l-[3px] bg-gray-100 pl-3 pr-4 text-navy ${accentClass}`}
     >
       <span className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold">
