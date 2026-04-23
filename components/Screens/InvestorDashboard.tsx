@@ -26,6 +26,7 @@ import {
 import ScreenHeader from '../shared/ScreenHeader';
 import KpiCard from '../investor/KpiCard';
 import TrustGauge from '../investor/TrustGauge';
+import BrandLogo from '../BrandLogo';
 import { apiJson } from '../../lib/client/api';
 import { categoryPluralLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
 import type { LeaderboardEntry } from '../../shared/types';
@@ -348,30 +349,37 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
       />
 
       <div className="p-4 pb-24 space-y-4 print:p-8 print:pb-4">
-        {/* ---------- HERO BANNER ---------- */}
-        <div className="rounded-[32px] bg-gradient-to-br from-navy via-navy-mid to-navy-mid text-white p-6 shadow-sm print:rounded-xl">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <div className="micro-label-wide text-white/60">{t('Africa Forward Summit', 'Africa Forward Summit')} — Nairobi 2026</div>
-              <h2 className="mt-2 text-2xl font-extrabold lg:text-3xl">African Data Layer</h2>
-              <p className="mt-1 text-sm text-white/80 max-w-lg">
-                {t(
-                  'Decision-grade, fraud-verified street-level infrastructure intelligence for African cities.',
-                  'Intelligence d\'infrastructure de terrain, vérifiée anti-fraude, pour les villes africaines.',
-                )}
-              </p>
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              <div className="rounded-3xl bg-white/15 px-4 py-3 text-right">
-                <div className="micro-label text-white/60">{t('Pilot Zone', 'Zone pilote')}</div>
-                <div className="text-sm font-bold">Bonamoussadi, Douala</div>
+        {/* Hero */}
+        <section className="route-grid shrink-0 bg-navy px-4 pb-5 pt-4 text-white">
+          <div className="mb-3.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <BrandLogo size={20} />
+              <div>
+                <div className="text-[15px] font-bold leading-tight">African Data Layer</div>
+                <div className="text-[11px] text-white/50">
+                  {t('Client Dashboard', 'Tableau client')} · {formattedDate}
+                </div>
               </div>
-              {fromCache && (
-                <span className="text-[10px] text-white/40 print:hidden">{t('Showing cached data', 'Données en cache')}</span>
+            </div>
+            <span className="micro-label rounded-full bg-white/10 px-2.5 py-0.5 text-white/70">Client</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.08] p-3.5">
+              <div className="micro-label mb-1 text-[9px] text-white/50">{t('Total Points', 'Points totaux')}</div>
+              <div className="text-[28px] font-extrabold leading-none">{totalPoints.toLocaleString()}</div>
+              {avgWoW !== null && (
+                <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-green-400">
+                  <TrendingUp size={11} /> {avgWoW >= 0 ? '+' : ''}{avgWoW}% {t('this week', 'cette semaine')}
+                </div>
               )}
             </div>
+            <div className="rounded-[14px] border border-gold/20 bg-gold/15 p-3.5">
+              <div className="micro-label mb-1 text-[9px] text-gold/70">{t('Coverage', 'Couverture')}</div>
+              <div className="text-[28px] font-extrabold leading-none text-gold">{avgCompletionRate}%</div>
+              <div className="mt-1 text-[11px] font-medium text-white/50">Bonamoussadi</div>
+            </div>
           </div>
-        </div>
+        </section>
 
         {/* ---------- KPI RIBBON ---------- */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
