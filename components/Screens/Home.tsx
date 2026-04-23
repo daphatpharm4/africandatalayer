@@ -118,15 +118,23 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
-  const listContentTopInset = isLowEndDevice ? (isAdmin ? '15rem' : '12rem') : (isAdmin ? '11.75rem' : '8.75rem');
-  const listContentTopInsetPx = isLowEndDevice ? (isAdmin ? 240 : 192) : (isAdmin ? 188 : 140);
+  const listContentTopInset = isLowEndDevice ? (isAdmin ? '18.5rem' : '15rem') : (isAdmin ? '15rem' : '11.75rem');
+  const listContentTopInsetPx = isLowEndDevice ? (isAdmin ? 296 : 240) : (isAdmin ? 240 : 188);
   const mapBottomChromePx = 80 + 88 + 4; // bottom nav + peek sheet + small offset
   const mapScopeOptions: Array<{ value: MapScope; label: string }> = [
     { value: 'bonamoussadi', label: t('Bonamoussadi', 'Bonamoussadi') },
     { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
     { value: 'global', label: t('Worldwide', 'Monde entier') },
   ];
+  const viewModeTabs: Array<{ value: 'map' | 'list'; label: string }> = [
+    { value: 'map', label: t('Map', 'Carte') },
+    { value: 'list', label: t('List', 'Liste') },
+  ];
   const toggleCategoryPicker = () => setIsVerticalPickerOpen((prev) => !prev);
+  const setViewModeWithTransition = (next: 'map' | 'list') => {
+    if (viewMode === next) return;
+    void runViewTransition(() => setViewMode(next));
+  };
 
   useEffect(() => {
     if (!isVerticalPickerOpen) return;
@@ -683,6 +691,28 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
           </div>
         )}
 
+        <div className="mt-3" aria-label={t('View mode', 'Mode de vue')}>
+          <div className="flex gap-2">
+            {viewModeTabs.map((tab) => {
+              const active = viewMode === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  type="button"
+                  aria-pressed={active}
+                  aria-label={tab.label}
+                  onClick={() => setViewModeWithTransition(tab.value)}
+                  className={`motion-pressable flex h-9 flex-1 items-center justify-center rounded-xl text-xs font-semibold ${
+                    active ? 'bg-navy text-white' : 'bg-white text-gray-500 shadow-sm'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
       </header>
 
       <div
@@ -743,18 +773,10 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
             className="surface-reveal flex-1 relative z-10 bg-page overflow-y-auto no-scrollbar min-h-0"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            <div className="sticky top-0 z-20 bg-page border-b border-gray-100 px-4 py-2 flex items-center justify-between">
+            <div className="sticky top-0 z-20 bg-page border-b border-gray-100 px-4 py-2">
               <span className="text-sm font-semibold text-gray-700">
                 {filteredPoints.length} {t('points', 'points')}
               </span>
-              <button
-                type="button"
-                onClick={() => void runViewTransition(() => setViewMode('map'))}
-                className="motion-pressable flex items-center gap-1.5 rounded-xl border border-forest/20 bg-forest-wash px-3 py-2 text-xs font-semibold text-forest"
-              >
-                <MapIcon size={14} />
-                {t('Map', 'Carte')}
-              </button>
             </div>
             <div className="p-4 space-y-3 pb-24 pt-4">
               {isLoadingPoints && (
