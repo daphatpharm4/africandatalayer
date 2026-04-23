@@ -2732,6 +2732,39 @@ const ContributionFlow: React.FC<Props> = ({
       totalMissing: currentCompletion.missing.length,
     };
   }, [draftClientExif?.capturedAt, draftClientExif?.latitude, draftClientExif?.longitude, postCreateSeedPoint, vertical]);
+
+  const previewXp = useMemo(() => {
+    try {
+      const details = isEnrichMode
+        ? { ...seedPointDetails, ...(buildEnrichDetails() as Record<string, unknown>) }
+        : buildCreateDetails();
+      const previewPayload: SubmissionInput = {
+        eventType: isEnrichMode ? 'ENRICH_EVENT' : 'CREATE_EVENT',
+        category: vertical,
+        pointId: isEnrichMode ? (effectiveSeedPoint?.id ?? 'preview-point') : 'preview-point',
+        location: location ?? parseManualLocation() ?? effectiveSeedPoint?.coordinates,
+        details,
+        imageBase64: draftImageBase64 ?? undefined,
+        clientExif: draftClientExif,
+      };
+      const previewPoint = buildPreviewPointFromPayload(previewPayload);
+      return calculateXp(previewPayload, previewPoint).totalXp;
+    } catch {
+      return 5;
+    }
+  }, [
+    isEnrichMode,
+    seedPointDetails,
+    buildEnrichDetails,
+    buildCreateDetails,
+    vertical,
+    effectiveSeedPoint,
+    location,
+    parseManualLocation,
+    draftImageBase64,
+    draftClientExif,
+  ]);
+
   const footerStatusLabel = isSubmitting
     ? t('Saving handoff', 'Enregistrement de la remise')
     : isResolvingDedup
@@ -2914,22 +2947,26 @@ const ContributionFlow: React.FC<Props> = ({
               {t('Ready to submit', 'Prêt à envoyer')}
             </div>
             <div className="mb-6 text-sm text-gray-500">
-              {t(
-                `1 ${getCategoryLabel(vertical, 'en')} point · GPS verified · Photo attached`,
-                `1 point ${getCategoryLabel(vertical, 'fr')} · GPS vérifié · Photo jointe`,
-              )}
+              {(() => {
+                const hasPhoto = Boolean(photoPreview || draftImageBase64);
+                const summaryParts = [
+                  `1 ${getCategoryLabel(vertical, 'en')} point`,
+                  location ? 'GPS verified' : null,
+                  hasPhoto ? 'Photo attached' : null,
+                ].filter(Boolean).join(' · ');
+                const summaryPartsFr = [
+                  `1 point ${getCategoryLabel(vertical, 'fr')}`,
+                  location ? 'GPS vérifié' : null,
+                  hasPhoto ? 'Photo jointe' : null,
+                ].filter(Boolean).join(' · ');
+                return t(summaryParts, summaryPartsFr);
+              })()}
             </div>
-            <div
-              className="mb-6 flex items-center gap-3 rounded-2xl border p-3.5"
-              style={{
-                background: 'linear-gradient(135deg,#f4c31722,#fef9e7)',
-                borderColor: 'rgba(244,195,23,0.3)',
-              }}
-            >
+            <div className="mb-6 flex items-center gap-3 rounded-2xl border border-gold/30 bg-gradient-to-br from-gold/10 to-gold-wash p-3.5">
               <Star size={24} className="fill-gold text-gold" />
               <div className="text-left">
-                <div className="text-[15px] font-bold text-ink-dark">+{xpBreakdown.totalXp} XP</div>
-                <div className="text-[11px] text-gray-400">{t('First submission in this zone', 'Première contribution dans cette zone')}</div>
+                <div className="text-[15px] font-bold text-ink-dark">+{previewXp} XP</div>
+                <div className="text-[11px] text-gray-400">{t('Estimated XP reward', 'Récompense XP estimée')}</div>
               </div>
             </div>
           </div>
