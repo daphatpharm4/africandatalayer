@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Download, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Download, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { MapContainer, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import ScreenHeader from '../shared/ScreenHeader';
 import KpiTile from '../shared/KpiTile';
@@ -16,7 +16,8 @@ import {
 } from 'recharts';
 import { apiJson, buildUrl } from '../../lib/client/api';
 import ExportPanel from '../ExportPanel';
-import { categoryLabel, VERTICAL_IDS } from '../../shared/verticals';
+import { categoryLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
+import VerticalIcon from '../shared/VerticalIcon';
 import { BONAMOUSSADI_CENTER, bonamoussadiLeafletBounds } from '../../shared/geofence';
 import type {
   TrendDataPoint,
@@ -204,6 +205,24 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
 
   const summaryWoW = latestStats?.week_over_week_growth ?? null;
   const summaryCompletion = latestStats?.completion_rate ?? 0;
+
+  const verticalStats = useMemo(() => {
+    if (!latestDate) return [];
+    const dates = [...new Set(stats.map((s) => s.snapshot_date))].sort().reverse();
+    const latestD = dates[0];
+    const prevD = dates[1] ?? null;
+    return VERTICAL_IDS
+      .map((vid) => {
+        const current = stats.find((s) => s.vertical_id === vid && s.snapshot_date === latestD)?.total_points ?? 0;
+        const previous = prevD
+          ? (stats.find((s) => s.vertical_id === vid && s.snapshot_date === prevD)?.total_points ?? 0)
+          : 0;
+        return { verticalId: vid, current, previous, label: categoryLabel(vid, language) };
+      })
+      .filter((d) => d.current > 0);
+  }, [stats, latestDate, language]);
+
+  const maxVal = useMemo(() => Math.max(...verticalStats.map((d) => d.current), 1), [verticalStats]);
 
   // Delta breakdown for stacked bar chart
   const deltaBreakdown = (() => {
@@ -501,6 +520,52 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           <KpiTile label={t('Alerts', 'Alertes')} value={filteredAnomalies.length} tone="amber" />
           <KpiTile label={t('Completion', 'Complet')} value={`${summaryCompletion}%`} tone="navy" />
         </div>
+
+        {/* Per-vertical bars */}
+        {verticalStats.length > 0 && (
+          <>
+            <div className="micro-label mb-2.5 text-gray-400">
+              {t('By Vertical — Current week', 'Par vertical — Cette semaine')}
+            </div>
+            <div className="card-soft mb-3 p-4">
+              <div className="flex flex-col gap-2.5">
+                {verticalStats.map((d) => {
+                  const delta = d.current - d.previous;
+                  const pct = Math.round((d.current / maxVal) * 100);
+                  const vertical = VERTICALS[d.verticalId];
+                  return (
+                    <div key={d.verticalId}>
+                      <div className="mb-1 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                            style={{ background: vertical?.bgColor }}
+                          >
+                            <VerticalIcon name={d.verticalId} size={12} />
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700">{d.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-ink-dark">{d.current}</span>
+                          <span className={`flex items-center gap-0.5 text-[11px] font-semibold ${delta >= 0 ? 'text-forest-dark' : 'text-red-800'}`}>
+                            {delta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                            {delta >= 0 ? '+' : ''}{delta}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full transition-[width] duration-500"
+                          style={{ width: `${pct}%`, background: vertical?.color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Vertical Tabs */}
         <div className="flex overflow-x-auto space-x-2 no-scrollbar pb-1">
