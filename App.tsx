@@ -492,6 +492,7 @@ const App: React.FC = () => {
             language={language}
             onLanguageChange={setLanguage}
             navigateTo={(screen) => navigateTo(screen)}
+            userRole={userRole}
             onLogout={async () => {
               try {
                 await signOut();
