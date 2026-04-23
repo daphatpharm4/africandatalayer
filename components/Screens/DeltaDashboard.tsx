@@ -226,9 +226,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const maxVal = useMemo(() => Math.max(...verticalStats.map((d) => d.current), 1), [verticalStats]);
 
   // Delta breakdown for stacked bar chart
-  const deltaBreakdown = (() => {
+  const deltaBreakdown = useMemo(() => {
     if (selectedVertical === 'all') {
-      // Aggregate per date
       const byDate = new Map<string, { date: string; new: number; removed: number; changed: number; unchanged: number }>();
       for (const s of stats) {
         const existing = byDate.get(s.snapshot_date) ?? { date: s.snapshot_date, new: 0, removed: 0, changed: 0, unchanged: 0 };
@@ -250,7 +249,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       }))
       .reverse()
       .slice(-12);
-  })();
+  }, [stats, filteredStats, selectedVertical]);
 
   const weeklyCounts = useMemo(() => {
     const recent = deltaBreakdown.slice(-7);
