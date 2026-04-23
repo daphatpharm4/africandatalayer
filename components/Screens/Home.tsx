@@ -10,8 +10,7 @@ import {
   isWithinBonamoussadi
 } from '../../shared/geofence';
 import {
-  Map as MapIcon,
-  MapPin,
+  ChevronRight,
   Plus,
   Route,
   Sparkles,
@@ -309,6 +308,16 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     }
     const operator = point.operator || point.provider || point.providers?.[0];
     return operator ? `${t('Opérateur', 'Opérateur')}: ${operator}` : t('Operateur indisponible', 'Operateur indisponible');
+  };
+
+  const getListCardTone = (point: DataPoint) => {
+    if (point.type === Category.PHARMACY) return 'bg-forest-wash text-forest-dark';
+    if (point.type === Category.FUEL) return 'bg-terra-wash text-terra-dark';
+    if (point.type === Category.MOBILE_MONEY) return 'bg-navy-wash text-navy';
+    if (point.type === Category.ALCOHOL_OUTLET) return 'bg-red-50 text-red-800';
+    if (point.type === Category.BILLBOARD) return 'bg-gold-wash text-amber-900';
+    if (point.type === Category.TRANSPORT_ROAD) return 'bg-gray-100 text-gray-700';
+    return 'bg-slate-100 text-slate-700';
   };
 
   const formatPharmacyOpenStatus = (point: DataPoint) => {
@@ -770,64 +779,73 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         {viewMode === 'list' && (
           <div
             data-testid="home-list-view"
-            className="surface-reveal flex-1 relative z-10 bg-page overflow-y-auto no-scrollbar min-h-0"
+            className="surface-reveal no-scrollbar relative z-10 flex-1 overflow-y-auto bg-page min-h-0"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            <div className="sticky top-0 z-20 bg-page border-b border-gray-100 px-4 py-2">
-              <span className="text-sm font-semibold text-gray-700">
-                {filteredPoints.length} {t('points', 'points')}
-              </span>
-            </div>
-            <div className="p-4 space-y-3 pb-24 pt-4">
+            <div className="flex flex-col gap-2.5 p-4 pb-24">
+              <div className="text-[13px] font-semibold text-gray-700">
+                {filteredPoints.length} {categoryLabel(activeCategory).toLowerCase()} {t('points', 'points')}
+              </div>
               {isLoadingPoints && (
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+                <div className="card-soft p-4 text-xs text-gray-500">
                   {t('Loading data points...', 'Chargement des points de données...')}
                 </div>
               )}
               {pointsLoadError && !isLoadingPoints && (
-                <div className="rounded-2xl border border-terra/20 bg-white p-4 shadow-sm">
+                <div className="card-soft border border-terra/20 p-4">
                   <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
                   <button
                     type="button"
                     onClick={() => void loadPoints()}
-                    className="mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
+                    className="motion-pressable mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
                   >
                     {t('Try again', 'Réessayer')}
                   </button>
                 </div>
               )}
-              {filteredPoints.map((point) => (
-                <button
-                  key={point.id}
-                  onClick={() => onSelectPoint(point)}
-                  className="motion-pressable flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm"
-                >
-                  {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
-                    <div className="shrink-0 rounded-xl p-3" style={{ backgroundColor: v?.bgColor ?? '#f9fafb', color: v?.color ?? '#1f2933' }}>
-                      <VerticalIcon name={v?.icon ?? 'pill'} size={20} />
+              {filteredPoints.map((point) => {
+                const locationLabel = point.location || t('Location unavailable', 'Localisation indisponible');
+                const updatedLabel = point.lastUpdated;
+                const verticalId = LEGACY_CATEGORY_MAP[point.type] ?? point.type;
+                const vertical = VERTICALS[verticalId];
+
+                return (
+                  <button
+                    key={point.id}
+                    type="button"
+                    onClick={() => onSelectPoint(point)}
+                    className="card-soft motion-pressable flex w-full items-center gap-3 p-3.5 text-left"
+                  >
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${getListCardTone(point)}`}>
+                      <VerticalIcon name={vertical?.icon ?? 'pill'} size={18} />
                     </div>
-                  ); })()}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <h4 className="min-w-0 text-sm font-semibold text-gray-900">{point.name}</h4>
-                      {typeof point.price === 'number' && <span className="shrink-0 text-sm font-bold text-gray-900">{point.price} {point.currency}</span>}
-                    </div>
-                    <p className="text-xs text-gray-500 truncate mt-1">{formatExplorerPrimaryMeta(point)}</p>
-                    {point.type === Category.PHARMACY && (
-                      <p className="micro-label text-gray-500 mt-1">{formatPharmacyOpenStatus(point)}</p>
-                    )}
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-gray-500">{t('Updated', 'Mis à jour')} {point.lastUpdated}</span>
-                      {point.verified && (
-                        <span className="micro-label px-1.5 py-0.5 bg-forest-wash text-forest rounded-full">{t('Verified', 'Vérifié')}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <h4 className="min-w-0 truncate text-[13px] font-semibold leading-tight text-ink-dark">{point.name}</h4>
+                        {typeof point.price === 'number' && (
+                          <span className="shrink-0 whitespace-nowrap text-xs font-bold text-ink-dark">
+                            {point.price.toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')} {point.currency ?? 'XAF'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] text-gray-500">{locationLabel}</p>
+                      <p className="mt-1 truncate text-[11px] text-gray-500">{formatExplorerPrimaryMeta(point)}</p>
+                      {point.type === Category.PHARMACY && (
+                        <p className="micro-label mt-1 text-gray-500">{formatPharmacyOpenStatus(point)}</p>
                       )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">{t('Updated', 'Mis à jour')} {updatedLabel}</span>
+                        {point.verified && (
+                          <span className="micro-label rounded-full bg-forest-wash px-1.5 py-0.5 text-forest-dark">
+                            {t('Verified', 'Vérifié')}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
-                    <MapPin size={16} style={{ color: v?.color ?? '#d1d5db' }} />
-                  ); })()}
-                </button>
-              ))}
+                    <ChevronRight size={14} className="shrink-0 text-gray-400" aria-hidden="true" />
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
