@@ -4,11 +4,18 @@
 
 ### Users
 
-**Field Agents** (primary): Community members in Cameroonian cities (starting with Bonamoussadi, Douala) who collect infrastructure and price data on foot. They work in variable conditions — bright sunlight, intermittent connectivity, low-end Android devices. They need the app to be fast, forgiving, and rewarding.
+**Field Agents** (primary): Community members in Cameroonian cities who collect infrastructure and price data on foot. Variable conditions — bright sunlight, intermittent connectivity, low-end Android devices. Need the app to be fast, forgiving, and rewarding.
 
 **Admins**: Review submissions for fraud, manage assignments, monitor data quality. Need information density and forensic detail without clutter.
 
-**Clients/Investors**: Consume aggregated data through dashboards. Need clarity, trust signals, and exportable insights.
+**Clients** (multi-segment): Investors, NGOs, and FMCG/local businesses — all consuming the same underlying dataset but with different data literacy levels and analytical goals. Need clarity, trust signals, and exportable insights. UI must not assume a single buyer archetype.
+
+### Role Emotional Registers
+
+Same palette, different emotional density:
+- **Agent**: Energetic, celebratory, momentum-driven. Every action should feel like forward progress.
+- **Admin**: Clinical, information-dense, forensic. Reward is accuracy, not excitement.
+- **Client**: Premium, data-forward, authoritative. Dashboard surfaces should feel like a trusted intelligence product.
 
 ### Brand Personality
 
@@ -49,6 +56,10 @@
 
 5. **Progressive disclosure**: Start simple, reveal complexity through interaction. An agent's first day should feel approachable; their 100th day should feel powerful.
 
+6. **Stats as identity**: Profile surfaces are performance dashboards, not social profiles. The letter-initial in a gradient circle is sufficient identity — no avatar picker, no customization. Identity comes from the data: XP, tier, streak, submission count.
+
+7. **Geography-agnostic foundations**: UI must not hard-code city names as structural assumptions. "Bonamoussadi" is a content value passed as data, not a design constraint baked into layouts, copy, or component logic. The platform must scale to Yaoundé, Bafoussam, and beyond without structural changes.
+
 ### Accessibility Standards
 
 - **Target**: WCAG 2.1 AA compliance
@@ -61,9 +72,21 @@
 
 **Component patterns** (defined in `index.css` `@layer components`):
 - `.card` / `.card-pill` — standard containers (`rounded-2xl` / `rounded-[28px]`)
+- `.card-soft` — muted white card with light border, used in settings-style lists
 - `.btn-primary` (navy), `.btn-cta` (terracotta), `.btn-ghost` — all `h-14 rounded-2xl` with `active:scale-95`
 - `.screen-shell` / `.screen-header` — page layout scaffolding
 - `.stat-tile` — colored background stat blocks
+
+**Shared primitives added during design handoff** (`components/shared/`):
+- `KpiTile` — labeled metric tile with optional delta indicator; used in admin/client dashboards
+- `WeeklyBarChart` — 7-day Recharts bar chart with navy/terra palette; used in DeltaDashboard + InvestorDashboard
+- `FilterChipRow` — horizontal scrollable chip row; used in client Home map header
+- `RiskBadge` — color-coded risk level pill; used in AdminQueue submission cards
+- `TrustBadge` — trust tier display badge; used in AdminQueue + AgentPerformance
+- `StatusBar` — submission status indicator strip; used in AdminQueue
+- `VerticalPickerBar` — horizontal scrollable vertical/category selector; used in ContributionFlow step 1
+
+**Identity pattern**: Profile hero = letter-initial in navy→terra gradient circle. No avatar picker. No customization surface. Identity = performance data (XP, tier, streak, submissions).
 
 **Spacing rhythm**: `p-3`/`p-4`/`p-6` padding, `gap-2`/`gap-3` flex gaps, `rounded-xl`/`rounded-2xl` borders.
 
