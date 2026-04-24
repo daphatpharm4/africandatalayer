@@ -50,6 +50,9 @@ const config = {
           DEFAULT: '#c53030',
         },
       },
+      fontFamily: {
+        display: ['Sora', 'system-ui', 'sans-serif'],
+      },
     },
   },
   plugins: [],
