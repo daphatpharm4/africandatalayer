@@ -407,7 +407,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-[14px] border border-white/10 bg-white/[0.08] p-3.5">
               <div className="micro-label mb-1 text-[9px] text-white/50">{t('Total Points', 'Points totaux')}</div>
-              <div className="text-[28px] font-extrabold leading-none">{totalPoints.toLocaleString()}</div>
+              <div className="font-display text-[28px] font-extrabold leading-none">{totalPoints.toLocaleString()}</div>
               {avgWoW !== null && (
                 <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-green-400">
                   <TrendingUp size={11} /> {avgWoW >= 0 ? '+' : ''}{avgWoW}% {t('this week', 'cette semaine')}
@@ -416,7 +416,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
             </div>
             <div className="rounded-[14px] border border-gold/20 bg-gold/15 p-3.5">
               <div className="micro-label mb-1 text-[9px] text-gold/70">{t('Coverage', 'Couverture')}</div>
-              <div className="text-[28px] font-extrabold leading-none text-gold">{avgCompletionRate}%</div>
+              <div className="font-display text-[28px] font-extrabold leading-none text-gold">{avgCompletionRate}%</div>
               <div className="mt-1 text-[11px] font-medium text-white/50">{t('Bonamoussadi', 'Bonamoussadi')}</div>
             </div>
           </div>
