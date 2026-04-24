@@ -574,7 +574,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         )}
 
         {/* Vertical Tabs */}
-        <div className="flex overflow-x-auto space-x-2 no-scrollbar pb-1">
+        <div className="relative">
+          <div className="flex overflow-x-auto space-x-2 no-scrollbar pb-1 pr-8">
           <button
             onClick={() => setSelectedVertical('all')}
             className={`flex-shrink-0 px-3 py-1.5 rounded-xl micro-label transition-colors ${
@@ -594,6 +595,8 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               {categoryLabel(vid, language)}
             </button>
           ))}
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-page to-transparent" />
         </div>
 
         {/* Weekly submissions chart */}
