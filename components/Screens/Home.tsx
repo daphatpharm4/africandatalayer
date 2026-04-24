@@ -10,16 +10,18 @@ import {
   isWithinBonamoussadi
 } from '../../shared/geofence';
 import {
-  ChevronDown,
-  Map as MapIcon,
-  MapPin,
+  ChevronRight,
+  Filter,
   Plus,
   Route,
   Sparkles,
   Target,
-  User
+  User,
+  X
 } from 'lucide-react';
+import FilterChipRow from '../shared/FilterChipRow';
 import VerticalIcon from '../shared/VerticalIcon';
+import VerticalPickerBar from '../shared/VerticalPickerBar';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { apiJson } from '../../lib/client/api';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
@@ -118,14 +120,23 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
-  const listContentTopInset = isLowEndDevice ? (isAdmin ? '15rem' : '12rem') : (isAdmin ? '11.75rem' : '8.75rem');
-  const listContentTopInsetPx = isLowEndDevice ? (isAdmin ? 240 : 192) : (isAdmin ? 188 : 140);
+  const listContentTopInset = isLowEndDevice ? (isAdmin ? '18.5rem' : '15rem') : (isAdmin ? '15rem' : '11.75rem');
+  const listContentTopInsetPx = isLowEndDevice ? (isAdmin ? 296 : 240) : (isAdmin ? 240 : 188);
   const mapBottomChromePx = 80 + 88 + 4; // bottom nav + peek sheet + small offset
   const mapScopeOptions: Array<{ value: MapScope; label: string }> = [
     { value: 'bonamoussadi', label: t('Bonamoussadi', 'Bonamoussadi') },
     { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
     { value: 'global', label: t('Worldwide', 'Monde entier') },
   ];
+  const viewModeTabs: Array<{ value: 'map' | 'list'; label: string }> = [
+    { value: 'map', label: t('Map', 'Carte') },
+    { value: 'list', label: t('List', 'Liste') },
+  ];
+  const toggleCategoryPicker = () => setIsVerticalPickerOpen((prev) => !prev);
+  const setViewModeWithTransition = (next: 'map' | 'list') => {
+    if (viewMode === next) return;
+    void runViewTransition(() => setViewMode(next));
+  };
 
   useEffect(() => {
     if (!isVerticalPickerOpen) return;
@@ -166,7 +177,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const mapLockLabel =
     mapScope === 'bonamoussadi'
       ? t('Zone active', 'Zone active')
-      : t('Full access', 'Acces complet');
+      : t('Full access', 'Accès complet');
 
   const formatTimeAgo = (iso: string) => {
     const created = new Date(iso).getTime();
@@ -300,6 +311,16 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
     }
     const operator = point.operator || point.provider || point.providers?.[0];
     return operator ? `${t('Opérateur', 'Opérateur')}: ${operator}` : t('Operateur indisponible', 'Operateur indisponible');
+  };
+
+  const getListCardTone = (point: DataPoint) => {
+    if (point.type === Category.PHARMACY) return 'bg-forest-wash text-forest-dark';
+    if (point.type === Category.FUEL) return 'bg-terra-wash text-terra-dark';
+    if (point.type === Category.MOBILE_MONEY) return 'bg-navy-wash text-navy';
+    if (point.type === Category.ALCOHOL_OUTLET) return 'bg-red-50 text-red-800';
+    if (point.type === Category.BILLBOARD) return 'bg-gold-wash text-amber-900';
+    if (point.type === Category.TRANSPORT_ROAD) return 'bg-gray-100 text-gray-700';
+    return 'bg-slate-100 text-slate-700';
   };
 
   const formatPharmacyOpenStatus = (point: DataPoint) => {
@@ -572,122 +593,155 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
       data-testid="screen-home"
       className="relative h-full min-h-0 bg-page overflow-x-hidden"
     >
-      <header className="route-grid absolute top-0 left-0 right-0 z-20 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 shadow-[0_4px_24px_rgba(15,43,70,0.08)] backdrop-blur-xl">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0 flex flex-col">
-            <div className="flex items-center gap-2">
-              <BrandLogo size={18} className="shrink-0" />
-              <h2 className="min-w-0 text-base font-bold leading-tight text-ink sm:text-lg">{t('African Data Layer', 'African Data Layer')}</h2>
-              {isAdmin && (
-                <span className="px-2 py-0.5 rounded-full bg-navy-light text-navy micro-label">
-                  {t('Admin', 'Admin')}
-                </span>
-              )}
-              {userRole === 'client' && (
-                <span className="px-2 py-0.5 rounded-full bg-terra-wash text-terra micro-label">
-                  {t('Client', 'Client')}
-                </span>
-              )}
-            </div>
-            <span className="mt-1 text-xs font-medium leading-4 text-gray-500">
-              {mapLockLabel} - {selectedCityLabel}
-            </span>
-          </div>
-          <button
-            onClick={isAuthenticated ? onProfile : onAuth}
-            className="motion-pressable flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-navy/10 bg-navy-wash text-navy"
-            aria-label={isAuthenticated ? t('Profile', 'Profil') : t('Sign in', 'Connexion')}
-          >
-            <User size={18} />
-          </button>
-        </div>
-
-        {isLowEndDevice && (
-          <div className="mb-3 rounded-2xl border border-navy-border bg-navy-wash px-3 py-2 text-[11px] font-semibold leading-4 text-navy">
-            {t('Lite mode is on to keep map movement smooth on this phone.', 'Le mode allégé est activé pour garder la carte fluide sur ce téléphone.')}
-          </div>
-        )}
-
-        <div ref={verticalPickerRef} className="relative mb-2">
-          {(() => {
-            const vid = LEGACY_CATEGORY_MAP[activeCategory] ?? activeCategory;
-            const verticalColor = VERTICALS[vid]?.color ?? '#0f2b46';
-            return (
+      {userRole === 'client' ? (
+        <header className="route-grid shrink-0 border-b border-gray-100 bg-white px-4 pb-3 pt-2.5 absolute top-0 left-0 right-0 z-20">
+          <div className="mb-2.5 flex items-center justify-between">
+            <div className="text-[15px] font-bold text-ink-dark">{t('Map Explorer', 'Explorateur')}</div>
             <button
-              onClick={() => setIsVerticalPickerOpen((prev) => !prev)}
-              aria-expanded={isVerticalPickerOpen}
-              aria-haspopup="listbox"
-              className="motion-pressable flex h-12 w-full items-center justify-between rounded-2xl bg-gray-100 px-4 text-sm font-semibold text-navy"
-              style={{ borderLeft: `3px solid ${verticalColor}` }}
+              type="button"
+              onClick={() => setIsVerticalPickerOpen((v) => !v)}
+              className="flex h-[34px] items-center gap-1 rounded-[10px] border border-gray-200 bg-white px-3 text-xs font-semibold text-gray-700 motion-pressable"
             >
-              <span className="min-w-0 truncate text-left flex items-center gap-2">
-                <VerticalIcon name={VERTICALS[vid]?.icon ?? 'pill'} size={14} />
-                {t('Category', 'Catégorie')} : {categoryLabel(activeCategory)}
-              </span>
-              <ChevronDown size={14} className={`transition-transform ${isVerticalPickerOpen ? 'rotate-180' : ''}`} />
+              <Filter size={13} />
+              {t('Filter', 'Filtrer')}
             </button>
-            );
-          })()}
-          {isVerticalPickerOpen && (
-            <div className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg" role="listbox" aria-label={t('Category', 'Catégorie')}>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {selectableCategories.map((category) => {
-                  const verticalId = LEGACY_CATEGORY_MAP[category] ?? category;
-                  const vertical = VERTICALS[verticalId];
-                  const isActive = activeCategory === category;
+          </div>
+          <FilterChipRow
+            chips={selectableCategories.map((cat) => ({ id: cat, label: categoryLabel(cat) }))}
+            active={activeCategory}
+            onChange={onCategoryChange}
+          />
+        </header>
+      ) : (
+        <header className="route-grid absolute top-0 left-0 right-0 z-20 border-b border-gray-100 bg-white/95 px-[var(--screen-gutter)] pt-4 pb-3 backdrop-blur-xl">
+          <div className="mb-2.5 flex items-start justify-between gap-3">
+            <div className="min-w-0 flex flex-col">
+              <div className="flex items-center gap-2">
+                <BrandLogo size={20} className="shrink-0" />
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="min-w-0 text-[15px] font-bold leading-tight text-ink-dark">
+                      {t('African Data Layer', 'African Data Layer')}
+                    </div>
+                    {isAdmin && (
+                      <span className="micro-label rounded-full bg-navy-wash px-2 py-0.5 text-navy">
+                        {t('Admin', 'Admin')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] font-medium leading-4 text-gray-500">
+                    {mapLockLabel} · {selectedCityLabel}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={isAuthenticated ? onProfile : onAuth}
+              className="motion-pressable flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-navy/10 bg-navy-wash text-navy"
+              aria-label={isAuthenticated ? t('Profile', 'Profil') : t('Sign in', 'Connexion')}
+            >
+              <User size={17} />
+            </button>
+          </div>
+
+          <div ref={verticalPickerRef} className="relative">
+            <VerticalPickerBar
+              active={activeCategory}
+              onToggle={toggleCategoryPicker}
+              language={language}
+              ariaControls="home-vertical-picker-list"
+              ariaExpanded={isVerticalPickerOpen}
+            />
+            {isVerticalPickerOpen && (
+              <div id="home-vertical-picker-list" className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg" role="listbox" aria-label={t('Category', 'Catégorie')}>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {selectableCategories.map((category) => {
+                    const verticalId = LEGACY_CATEGORY_MAP[category] ?? category;
+                    const vertical = VERTICALS[verticalId];
+                    const isActive = activeCategory === category;
+                    return (
+                      <button
+                        key={category}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          onCategoryChange(category);
+                          setIsVerticalPickerOpen(false);
+                        }}
+                        className={`motion-pressable flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold ${
+                          isActive ? 'bg-navy text-white border-navy' : 'bg-gray-50 text-gray-600 border-gray-100'
+                        }`}
+                      >
+                        <VerticalIcon name={vertical?.icon ?? 'pill'} size={12} />
+                        {categoryLabel(category)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {isLowEndDevice && (
+            <div className="mt-3 rounded-2xl border border-navy-border bg-navy-wash px-3 py-2 text-[11px] font-semibold leading-4 text-navy">
+              {t('Lite mode is on to keep map movement smooth on this phone.', 'Le mode allégé est activé pour garder la carte fluide sur ce téléphone.')}
+            </div>
+          )}
+
+          {isAdmin && (
+            <div data-testid="home-map-scope-toggle" className="mt-3 space-y-2">
+              <div className="micro-label text-gray-400">{t('Map Scope', 'Portée de la carte')}</div>
+              <div className="grid grid-cols-3 gap-2">
+                {mapScopeOptions.map((scope) => {
+                  const isActive = mapScope === scope.value;
                   return (
                     <button
-                      key={category}
+                      key={scope.value}
                       type="button"
-                      role="option"
-                      aria-selected={isActive}
+                      data-testid={`home-map-scope-${scope.value}`}
+                      aria-pressed={isActive}
                       onClick={() => {
-                        onCategoryChange(category);
-                        setIsVerticalPickerOpen(false);
+                        if (isActive) return;
+                        void runViewTransition(() => setMapScope(scope.value));
                       }}
-                      className={`motion-pressable flex min-h-[44px] items-center justify-center gap-2 rounded-xl border px-3 text-xs font-semibold ${
-                        isActive ? 'bg-navy text-white border-navy' : 'bg-gray-50 text-gray-600 border-gray-100'
+                      className={`motion-pressable min-h-[44px] rounded-xl border px-3 text-xs font-semibold ${
+                        isActive ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-600'
                       }`}
                     >
-                      <VerticalIcon name={vertical?.icon ?? 'pill'} size={12} />
-                      {categoryLabel(category)}
+                      {scope.label}
                     </button>
                   );
                 })}
               </div>
             </div>
           )}
-        </div>
 
-        {isAdmin && (
-          <div data-testid="home-map-scope-toggle" className="space-y-2">
-            <div className="micro-label text-gray-400">{t('Map Scope', 'Portée de la carte')}</div>
-            <div className="grid grid-cols-3 gap-2">
-              {mapScopeOptions.map((scope) => {
-                const isActive = mapScope === scope.value;
+          <div className="mt-3" aria-label={t('View mode', 'Mode de vue')}>
+            <div className="flex gap-2">
+              {viewModeTabs.map((tab) => {
+                const active = viewMode === tab.value;
                 return (
                   <button
-                    key={scope.value}
+                    key={tab.value}
                     type="button"
-                    data-testid={`home-map-scope-${scope.value}`}
-                    aria-pressed={isActive}
-                    onClick={() => {
-                      if (isActive) return;
-                      void runViewTransition(() => setMapScope(scope.value));
-                    }}
-                    className={`motion-pressable min-h-[44px] rounded-xl border px-3 text-xs font-semibold ${
-                      isActive ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-600'
+                    aria-pressed={active}
+                    aria-label={tab.label}
+                    onClick={() => setViewModeWithTransition(tab.value)}
+                    className={`motion-pressable flex h-9 flex-1 items-center justify-center rounded-xl text-xs font-semibold ${
+                      active ? 'bg-navy text-white' : 'bg-white text-gray-500 shadow-sm'
                     }`}
                   >
-                    {scope.label}
+                    <span>{tab.label}</span>
                   </button>
                 );
               })}
             </div>
           </div>
-        )}
 
-      </header>
+        </header>
+      )}
 
       <div
         className="absolute inset-x-0 bottom-0 flex flex-col overflow-hidden"
@@ -724,13 +778,46 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               sheetSnap={sheetSnap}
               viewportTopInsetPx={listContentTopInsetPx}
               viewportBottomInsetPx={mapBottomChromePx}
+              userRole={userRole}
             />
           </Suspense>
+        )}
+        {viewMode === 'map' && userRole === 'client' && (
+          <div className="pointer-events-none absolute bottom-3 left-3 z-30">
+            <div className="rounded-2xl bg-white/96 px-3.5 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.12)]">
+              <div className="flex items-center gap-2">
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-lg"
+                  style={{ background: VERTICALS[LEGACY_CATEGORY_MAP[activeCategory] ?? activeCategory]?.bgColor }}
+                >
+                  <VerticalIcon name={LEGACY_CATEGORY_MAP[activeCategory] ?? activeCategory} size={14} />
+                </div>
+                <div>
+                  <div className="text-[13px] font-bold text-ink-dark">
+                    {filteredPoints.length} {t('points', 'points')}
+                  </div>
+                  <div className="text-[10px] text-gray-500">
+                    {categoryLabel(activeCategory)} · {t('Bonamoussadi', 'Bonamoussadi')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
         {viewMode === 'map' && pointsLoadError && !isLoadingPoints && (
           <div className="pointer-events-none absolute inset-x-4 top-4 z-30 flex justify-center">
             <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-terra/20 bg-white/96 p-3 shadow-lg backdrop-blur-sm">
-              <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                <button
+                  type="button"
+                  onClick={() => setPointsLoadError('')}
+                  className="shrink-0 rounded-full p-2.5 text-gray-400 transition-colors hover:text-gray-600"
+                  aria-label={t('Dismiss', 'Fermer')}
+                >
+                  <X size={14} />
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => void loadPoints()}
@@ -744,72 +831,83 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         {viewMode === 'list' && (
           <div
             data-testid="home-list-view"
-            className="surface-reveal flex-1 relative z-10 bg-page overflow-y-auto no-scrollbar min-h-0"
+            className="surface-reveal no-scrollbar relative z-10 flex-1 overflow-y-auto bg-page min-h-0"
             style={{ WebkitOverflowScrolling: 'touch' }}
           >
-            <div className="sticky top-0 z-20 bg-page border-b border-gray-100 px-4 py-2 flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-700">
-                {filteredPoints.length} {t('points', 'points')}
-              </span>
-              <button
-                type="button"
-                onClick={() => void runViewTransition(() => setViewMode('map'))}
-                className="motion-pressable flex items-center gap-1.5 rounded-xl border border-forest/20 bg-forest-wash px-3 py-2 text-xs font-semibold text-forest"
-              >
-                <MapIcon size={14} />
-                {t('Map', 'Carte')}
-              </button>
-            </div>
-            <div className="p-4 space-y-3 pb-24 pt-4">
+            <div className="flex flex-col gap-2.5 p-4 pb-24">
+              <div className="text-[13px] font-semibold text-gray-700">
+                {filteredPoints.length} {categoryLabel(activeCategory).toLowerCase()} {t('points', 'points')}
+              </div>
               {isLoadingPoints && (
-                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm text-xs text-gray-500">
+                <div className="card-soft p-4 text-xs text-gray-500">
                   {t('Loading data points...', 'Chargement des points de données...')}
                 </div>
               )}
               {pointsLoadError && !isLoadingPoints && (
-                <div className="rounded-2xl border border-terra/20 bg-white p-4 shadow-sm">
-                  <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                <div className="card-soft border border-terra/20 p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => setPointsLoadError('')}
+                      className="shrink-0 rounded-full p-2.5 text-gray-400 transition-colors hover:text-gray-600"
+                      aria-label={t('Dismiss', 'Fermer')}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void loadPoints()}
-                    className="mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
+                    className="motion-pressable mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
                   >
                     {t('Try again', 'Réessayer')}
                   </button>
                 </div>
               )}
-              {filteredPoints.map((point) => (
-                <button
-                  key={point.id}
-                  onClick={() => onSelectPoint(point)}
-                  className="motion-pressable flex w-full items-center gap-3 rounded-2xl border border-gray-100 bg-white p-4 text-left shadow-sm"
-                >
-                  {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
-                    <div className="shrink-0 rounded-xl p-3" style={{ backgroundColor: v?.bgColor ?? '#f9fafb', color: v?.color ?? '#1f2933' }}>
-                      <VerticalIcon name={v?.icon ?? 'pill'} size={20} />
+              {filteredPoints.map((point) => {
+                const locationLabel = point.location || t('Location unavailable', 'Localisation indisponible');
+                const updatedLabel = point.lastUpdated;
+                const verticalId = LEGACY_CATEGORY_MAP[point.type] ?? point.type;
+                const vertical = VERTICALS[verticalId];
+
+                return (
+                  <button
+                    key={point.id}
+                    type="button"
+                    onClick={() => onSelectPoint(point)}
+                    className="card-soft motion-pressable flex w-full items-center gap-3 p-3.5 text-left"
+                  >
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${getListCardTone(point)}`}>
+                      <VerticalIcon name={vertical?.icon ?? 'pill'} size={18} />
                     </div>
-                  ); })()}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <h4 className="min-w-0 text-sm font-semibold text-gray-900">{point.name}</h4>
-                      {typeof point.price === 'number' && <span className="shrink-0 text-sm font-bold text-gray-900">{point.price} {point.currency}</span>}
-                    </div>
-                    <p className="text-xs text-gray-500 truncate mt-1">{formatExplorerPrimaryMeta(point)}</p>
-                    {point.type === Category.PHARMACY && (
-                      <p className="micro-label text-gray-500 mt-1">{formatPharmacyOpenStatus(point)}</p>
-                    )}
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-gray-500">{t('Updated', 'Mis à jour')} {point.lastUpdated}</span>
-                      {point.verified && (
-                        <span className="micro-label px-1.5 py-0.5 bg-forest-wash text-forest rounded-full">{t('Verified', 'Vérifié')}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <h4 className="min-w-0 truncate text-[13px] font-semibold leading-tight text-ink-dark">{point.name}</h4>
+                        {typeof point.price === 'number' && (
+                          <span className="shrink-0 whitespace-nowrap text-xs font-bold text-ink-dark">
+                            {point.price.toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')} {point.currency ?? 'XAF'}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] text-gray-500">{locationLabel}</p>
+                      <p className="mt-1 truncate text-[11px] text-gray-500">{formatExplorerPrimaryMeta(point)}</p>
+                      {point.type === Category.PHARMACY && (
+                        <p className="micro-label mt-1 text-gray-500">{formatPharmacyOpenStatus(point)}</p>
                       )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">{t('Updated', 'Mis à jour')} {updatedLabel}</span>
+                        {point.verified && (
+                          <span className="micro-label rounded-full bg-forest-wash px-1.5 py-0.5 text-forest-dark">
+                            {t('Verified', 'Vérifié')}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  {(() => { const vid = LEGACY_CATEGORY_MAP[point.type] ?? point.type; const v = VERTICALS[vid]; return (
-                    <MapPin size={16} style={{ color: v?.color ?? '#d1d5db' }} />
-                  ); })()}
-                </button>
-              ))}
+                    <ChevronRight size={14} className="shrink-0 text-gray-400" aria-hidden="true" />
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -821,13 +919,15 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
             hidden={false}
             isLowEndDevice={isLowEndDevice}
           >
-            <MissionCards
-              cards={missionCards as MissionCard[]}
-              sheetSnap={sheetSnap}
-              activeAssignment={activeAssignment}
-              showAgentWidgets={showAgentWidgets}
-              language={language}
-            />
+            <div className="-mx-4 shrink-0 border-t border-gray-100 bg-white px-4 py-3">
+              <MissionCards
+                cards={missionCards as MissionCard[]}
+                sheetSnap={sheetSnap}
+                activeAssignment={activeAssignment}
+                showAgentWidgets={showAgentWidgets}
+                language={language}
+              />
+            </div>
           </BottomSheet>
         )}
 

@@ -8,6 +8,8 @@ import {
   User,
   TrendingUp,
   LayoutDashboard,
+  CheckSquare,
+  Users,
 } from 'lucide-react';
 
 type UserRole = 'agent' | 'admin' | 'client';
@@ -52,28 +54,32 @@ const Navigation: React.FC<Props> = ({
     },
   ];
 
-  const clientNav = [
-    {
-      id: Screen.DELTA_DASHBOARD,
-      label: t('Dashboard', 'Tableau'),
-      icon: LayoutDashboard,
-    },
+  const adminNav = [
+    { id: Screen.ADMIN, label: t('Queue', 'File'), icon: CheckSquare },
     { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
+    { id: Screen.DELTA_DASHBOARD, label: t('Analytics', 'Analyses'), icon: BarChart2 },
+    { id: Screen.AGENT_PERFORMANCE, label: t('Agents', 'Agents'), icon: Users },
     {
-      id: Screen.ANALYTICS,
-      label: t('Insights', 'Analyses'),
-      icon: TrendingUp,
+      id: isAuthenticated ? Screen.PROFILE : Screen.AUTH,
+      label: isAuthenticated ? t('Profile', 'Profil') : t('Sign In', 'Connexion'),
+      icon: User,
     },
+  ];
+
+  const clientNav = [
+    { id: Screen.INVESTOR_DASHBOARD, label: t('Dashboard', 'Tableau'), icon: LayoutDashboard },
+    { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
+    { id: Screen.CLIENT_INSIGHTS, label: t('Insights', 'Analyses'), icon: TrendingUp },
     {
       id: isAuthenticated ? Screen.PROFILE : Screen.AUTH,
       label: isAuthenticated
-        ? t('Account', 'Compte')
+        ? t('Profile', 'Profil')
         : t('Sign In', 'Connexion'),
       icon: User,
     },
   ];
 
-  const navItems = userRole === 'client' ? clientNav : agentNav;
+  const navItems = isAdmin ? adminNav : userRole === 'client' ? clientNav : agentNav;
 
   return (
     <nav

@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Award,
   Camera,
+  CheckCircle,
   MapPin,
   Route,
   ShieldCheck,
@@ -10,9 +11,11 @@ import {
   Target,
   Zap,
 } from 'lucide-react';
+import { Circle, CircleMarker, MapContainer, TileLayer } from 'react-leaflet';
 import { isNative } from '../../lib/client/native';
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { Geolocation as CapGeolocation } from '@capacitor/geolocation';
+import { isWithinBonamoussadi } from '../../shared/geofence';
 import { categoryLabel as getCategoryLabel, VERTICALS } from '../../shared/verticals';
 import {
   calculateSubmissionRewardBreakdown,
@@ -70,6 +73,12 @@ const roadBlockageOptions = ['flooding', 'construction', 'accident', 'debris', '
 const buildingTypeOptions = ['residential', 'commercial', 'mixed', 'industrial', 'institutional', 'religious'];
 const occupancyStatusOptions = ['occupied', 'partially_occupied', 'vacant', 'under_construction'];
 const openingHourPresets = ['08:00 - 20:00', '09:00 - 19:00', '24/7'];
+const STEPS = [
+  { key: 'photo', en: 'Photo', fr: 'Photo' },
+  { key: 'details', en: 'Details', fr: 'Détails' },
+  { key: 'location', en: 'Location', fr: 'Position' },
+  { key: 'submit', en: 'Submit', fr: 'Envoyer' },
+] as const;
 
 const PHOTO_GUIDE_CONFIG: Record<string, { frameLabel: { en: string; fr: string }; tips: Array<{ en: string; fr: string }> }> = {
   pharmacy: {
@@ -855,11 +864,24 @@ const ContributionFlow: React.FC<Props> = ({
     const latRaw = manualLatitude.trim();
     const lngRaw = manualLongitude.trim();
     if (!latRaw && !lngRaw) return null;
+    if (!latRaw || !lngRaw) return null;
     const latitude = Number(latRaw);
     const longitude = Number(lngRaw);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    if (latitude < -90 || latitude > 90) return null;
+    if (longitude < -180 || longitude > 180) return null;
     return { latitude, longitude };
   };
+
+  const currentStep = (() => {
+    const hasPhoto = Boolean(photoPreview || draftImageBase64);
+    const hasDetails = Boolean(siteName.trim());
+    const hasLocation = Boolean(location || parseManualLocation());
+    if (!hasPhoto) return 0;
+    if (!hasDetails) return 1;
+    if (!hasLocation) return 2;
+    return 3;
+  })();
 
   const handlePhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1620,35 +1642,115 @@ const ContributionFlow: React.FC<Props> = ({
   };
 
   const renderCommonLocationBlock = () => (
-    <div className="card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <MapPin size={16} className="text-navy" />
-            <span className="text-xs font-bold text-gray-900">{t('GPS Location', 'Localisation GPS')}</span>
-          </div>
+    <div className="space-y-3">
+      {(() => {
+        const resolvedLocation = location ?? parseManualLocation();
+        const hasLiveGpsLock = Boolean(location);
+        return (
+          <>
+      <div className="flex items-center justify-between gap-3">
+        <div className="micro-label-wide text-gray-400">
+          {t('Step 3 — Confirm location', 'Étape 3 — Confirmer la position')}
+        </div>
         <button onClick={retryLocation} className="motion-pressable micro-label text-navy">
           {t('Retry', 'Réessayer')}
         </button>
       </div>
-      <p className="text-[11px] text-gray-500">
-        {location
-          ? `GPS: ${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°`
-          : t('GPS unavailable. Retry or enter coordinates manually.', 'GPS indisponible. Réessayez ou saisissez les coordonnées.')}
-      </p>
-      {location && gpsAccuracy !== null && (() => {
-        const dots = gpsAccuracy <= 10 ? 5 : gpsAccuracy <= 25 ? 4 : gpsAccuracy <= 50 ? 3 : gpsAccuracy <= 100 ? 2 : 1;
-        const label = dots >= 5 ? t('Excellent', 'Excellent') : dots >= 4 ? t('Good', 'Bon') : dots >= 3 ? t('Fair', 'Correct') : t('Poor', 'Faible');
-        return (
-          <div className="flex items-center space-x-2">
-            <div className="flex items-center space-x-1">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className={`w-2 h-2 rounded-full ${i <= dots ? 'bg-forest' : 'bg-gray-200'}`} />
-              ))}
+      <div className="relative mb-3.5 h-[200px] overflow-hidden rounded-[20px]" style={{ background: '#e8eff7' }}>
+        {resolvedLocation ? (
+          <MapContainer
+            key={`${resolvedLocation.latitude.toFixed(6)}:${resolvedLocation.longitude.toFixed(6)}`}
+            center={[resolvedLocation.latitude, resolvedLocation.longitude]}
+            zoom={17}
+            zoomControl={false}
+            dragging={false}
+            scrollWheelZoom={false}
+            doubleClickZoom={false}
+            touchZoom={false}
+            boxZoom={false}
+            keyboard={false}
+            className="h-full w-full"
+            style={{ background: '#e8eff7' }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {hasLiveGpsLock && gpsAccuracy !== null && (
+              <Circle
+                center={[resolvedLocation.latitude, resolvedLocation.longitude]}
+                radius={Math.max(gpsAccuracy, 18)}
+                pathOptions={{ color: '#0f3d5e', fillColor: '#0f3d5e', fillOpacity: 0.12, weight: 1 }}
+              />
+            )}
+            <CircleMarker
+              center={[resolvedLocation.latitude, resolvedLocation.longitude]}
+              radius={6}
+              pathOptions={{ color: '#f59e0b', fillColor: '#f59e0b', fillOpacity: 1, weight: 2 }}
+            />
+          </MapContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center px-6 text-center">
+            <div className="max-w-[220px]">
+              <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/80 text-navy shadow-sm">
+                <Route size={18} />
+              </div>
+              <div className="text-sm font-bold text-navy">
+                {t('Waiting for GPS lock', 'En attente du verrouillage GPS')}
+              </div>
+              <div className="mt-1 text-[11px] leading-4 text-slate-600">
+                {t('Retry GPS or enter coordinates manually to continue.', 'Réessayez le GPS ou saisissez les coordonnées manuellement pour continuer.')}
+              </div>
             </div>
-            <span className="micro-label text-gray-400">{label} ({Math.round(gpsAccuracy)}m)</span>
           </div>
-        );
-      })()}
+        )}
+        {resolvedLocation && (
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-[10px] bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-navy shadow-sm">
+            {resolvedLocation.latitude.toFixed(4)}°, {resolvedLocation.longitude.toFixed(4)}°
+            {hasLiveGpsLock && gpsAccuracy !== null
+              ? ` · ±${Math.round(gpsAccuracy)}m`
+              : ` · ${t('Manual entry', 'Saisie manuelle')}`}
+          </div>
+        )}
+      </div>
+      <div className="card-soft flex flex-col gap-2 p-3.5">
+        {(() => {
+          const zonePass = Boolean(resolvedLocation) && isWithinBonamoussadi(resolvedLocation);
+          const speed = lastPosition?.coords.speed ?? null;
+          const velocityPass = speed === null || speed <= 5;
+          const dedupPass = !dedupCheck?.shouldPrompt;
+          const validationRows: Array<{ key: string; value: string; pass: boolean }> = [
+            {
+              key: t('Zone', 'Zone'),
+              value: resolvedLocation ? (zonePass ? t('Inside Bonamoussadi', 'Dans Bonamoussadi') : t('Outside Bonamoussadi', 'Hors Bonamoussadi')) : t('Pending', 'En attente'),
+              pass: zonePass,
+            },
+            {
+              key: t('Velocity check', 'Vitesse'),
+              value: speed === null
+                ? t('Pending', 'En attente')
+                : `${speed.toFixed(1)} m/s${velocityPass ? ` · ${t('stable', 'stable')}` : ` · ${t('moving fast', 'trop rapide')}`}`,
+              pass: velocityPass,
+            },
+            {
+              key: t('Duplicate scan', 'Doublon'),
+              value: dedupCheck
+                ? (dedupPass ? t('Clear', 'Aucun doublon') : t('Flagged', 'Signalé'))
+                : t('Ready', 'Prêt'),
+              pass: dedupPass,
+            },
+          ];
+
+          return validationRows.map(({ key, value, pass }) => (
+            <div key={key} className="flex items-center justify-between gap-3">
+              <span className="text-xs text-gray-400">{key}</span>
+              <span className={`text-xs font-semibold ${pass ? 'text-forest' : value === t('Pending', 'En attente') ? 'text-gray-400' : 'text-danger'}`}>
+                {value}
+              </span>
+            </div>
+          ));
+        })()}
+      </div>
       {!location && (
         <button
           onClick={() => setShowManualLocation((prev) => !prev)}
@@ -1678,38 +1780,81 @@ const ContributionFlow: React.FC<Props> = ({
           {locationError}
         </div>
       )}
+          </>
+        );
+      })()}
     </div>
   );
 
   const renderPhotoBlock = () => {
     const guide = PHOTO_GUIDE_CONFIG[vertical];
-    return (
-    <div className="space-y-3">
-      <h4 className="text-sm font-bold text-gray-900">{t('Live Camera Proof', 'Preuve caméra en direct')}</h4>
-      <p className="text-xs text-gray-500">{t('Camera capture only. Gallery uploads are blocked.', 'Capture caméra uniquement. Import galerie bloqué.')}</p>
-      <div className="aspect-square w-full rounded-2xl bg-gray-50 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 relative overflow-hidden">
-        {photoPreview ? (
-          <img src={photoPreview} alt={t('Captured photo', 'Photo capturée')} className="absolute inset-0 h-full w-full object-cover" />
-        ) : (
+    const hasCapturedPhoto = Boolean(photoPreview || draftImageBase64);
+    const capturedPhotoSrc = photoPreview ?? draftImageBase64;
+    const gpsStatus = location
+      ? `${t('GPS locked', 'GPS verrouillé')}${gpsAccuracy !== null ? ` · ±${Math.round(gpsAccuracy)}m` : ''}`
+      : t('GPS pending. Capture a photo, then wait for a lock or retry location.', 'GPS en attente. Capturez une photo, puis attendez le verrouillage ou réessayez la position.');
+    const gpsDetail = location
+      ? `${location.latitude.toFixed(4)}°, ${location.longitude.toFixed(4)}°${assignment?.zoneLabel ? ` · ${assignment.zoneLabel}` : ''}`
+      : assignment?.zoneLabel
+        ? `${t('Zone', 'Zone')} · ${assignment.zoneLabel}`
+        : t('GPS unavailable', 'GPS indisponible');
+    const captureSurfaceClassName = `relative mb-4 flex h-60 w-full flex-col items-center justify-center gap-3 overflow-hidden rounded-[20px] border-2 border-dashed text-center transition-all ${
+      hasCapturedPhoto
+        ? 'border-terra bg-gradient-to-br from-terra-wash to-gold-wash'
+        : 'border-gray-300 bg-gray-100'
+    }`;
+    const captureSurfaceContent = (
+      <>
+        {hasCapturedPhoto && capturedPhotoSrc && (
           <>
-            {guide && (
-              <div className="absolute inset-4 border-2 border-dashed border-white/60 rounded-xl flex items-center justify-center pointer-events-none z-[1]">
-                <span className="micro-label text-white/80 bg-black/20 px-3 py-1 rounded-full">
-                  {language === 'fr' ? guide.frameLabel.fr : guide.frameLabel.en}
-                </span>
-              </div>
-            )}
-            <Camera size={46} className="mb-4 opacity-40" />
-            <p className="text-xs font-bold uppercase tracking-widest opacity-60">{t('Live capture required', 'Capture live requise')}</p>
+            <img
+              src={capturedPhotoSrc}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/45 via-transparent to-transparent" />
           </>
         )}
+        {guide && !hasCapturedPhoto && (
+          <div className="relative z-10 rounded-full border border-white/70 bg-white/90 px-3 py-1 micro-label text-gray-600 shadow-sm">
+            {language === 'fr' ? guide.frameLabel.fr : guide.frameLabel.en}
+          </div>
+        )}
+        <div className="relative z-10 flex flex-col items-center gap-3 px-5">
+          {hasCapturedPhoto ? (
+            <>
+              <CheckCircle size={40} className="text-terra" />
+              <span className="text-sm font-semibold text-white">{t('Photo captured', 'Photo capturée')}</span>
+              <span className="text-[11px] text-white/75">
+                {draftClientExif?.capturedAt || draftClientExif?.latitude || draftClientExif?.longitude
+                  ? t('EXIF metadata extracted', 'Métadonnées EXIF extraites')
+                  : t('Photo stored for verification', 'Photo enregistrée pour vérification')}
+              </span>
+            </>
+          ) : (
+            <>
+              <Camera size={40} className="text-gray-500" />
+              <span className="text-sm font-semibold text-gray-700">{t('Tap to capture', 'Appuyez pour capturer')}</span>
+              <span className="text-[11px] text-gray-400">{t('Photo required for verification', 'Photo requise pour vérification')}</span>
+            </>
+          )}
+        </div>
+      </>
+    );
+    return (
+      <div className="space-y-3">
+        <div className="micro-label-wide mb-3 text-gray-400">
+          {t('Step 1 — Capture photo', 'Étape 1 — Capturer la photo')}
+        </div>
         {isNative() ? (
           <button
             type="button"
             onClick={() => void takeNativePhoto()}
-            className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
+            className={captureSurfaceClassName}
+            aria-label={hasCapturedPhoto ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
           >
-            {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
+            {captureSurfaceContent}
           </button>
         ) : (
           <>
@@ -1723,29 +1868,51 @@ const ContributionFlow: React.FC<Props> = ({
             />
             <label
               htmlFor="capture-photo"
-              className="relative z-10 mt-6 inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 micro-label text-gray-600 shadow-sm hover:bg-gray-50"
+              className={`${captureSurfaceClassName} cursor-pointer`}
             >
-              {photoPreview ? t('Retake Photo', 'Reprendre photo') : t('Capture Photo', 'Capturer photo')}
+              {captureSurfaceContent}
             </label>
           </>
         )}
-      </div>
-      {photoError && (
-        <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
-          {photoError}
+        <div className="mt-[-0.25rem] text-[11px] font-medium text-gray-500">
+          {hasCapturedPhoto ? (
+            <span>{t('Tap to retake if the frame changed.', 'Appuyez pour reprendre si le cadrage a changé.')}</span>
+          ) : (
+            <span>{t('Camera capture only. Gallery uploads are blocked.', 'Capture caméra uniquement. Import galerie bloqué.')}</span>
+          )}
         </div>
-      )}
-      {guide && (
-        <ul className="space-y-1 px-1">
-          {guide.tips.map((tip, i) => (
-            <li key={i} className="text-xs text-gray-500 flex items-start space-x-2">
-              <span className="text-gray-300 mt-0.5">•</span>
-              <span>{language === 'fr' ? tip.fr : tip.en}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+        <div className="card-soft flex items-start gap-3 p-3">
+          <div className={`mt-0.5 flex h-8 w-8 items-center justify-center rounded-full ${location ? 'bg-forest-wash text-forest' : 'bg-gray-100 text-gray-500'}`}>
+            {location ? <CheckCircle size={15} /> : <MapPin size={15} />}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-gray-900">{gpsStatus}</span>
+              {assignment?.zoneLabel && (
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 micro-label text-gray-500">
+                  {assignment.zoneLabel}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-[11px] text-gray-500">{gpsDetail}</p>
+          </div>
+        </div>
+        {photoError && (
+          <div className="rounded-xl border border-red-100 bg-red-50 p-3 micro-label text-red-600">
+            {photoError}
+          </div>
+        )}
+        {guide && (
+          <ul className="space-y-1 px-1">
+            {guide.tips.map((tip, i) => (
+              <li key={i} className="flex items-start space-x-2 text-xs text-gray-500">
+                <span className="mt-0.5 text-gray-300">•</span>
+                <span>{language === 'fr' ? tip.fr : tip.en}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     );
   };
 
@@ -1808,85 +1975,144 @@ const ContributionFlow: React.FC<Props> = ({
   );
 
   const renderCreateFields = () => {
+    const verticalLabel = getCategoryLabel(vertical, language);
+    const createCardClass = 'space-y-3';
+    const createStepLabelClass = 'micro-label-wide mb-3 text-gray-400';
+    const createFieldLabelClass = 'mb-1.5 block text-xs font-semibold text-gray-700';
+    const createTextInputClass = 'h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-[15px] outline-none focus:border-navy';
+    const createSelectClass = 'h-12 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-[15px] outline-none focus:border-navy';
+    const createToggleClass = (active: boolean) => {
+      if (!active) {
+        return 'min-h-[44px] flex-1 rounded-xl border-[1.5px] border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors';
+      }
+      return 'min-h-[44px] flex-1 rounded-xl border-[1.5px] border-navy bg-navy px-3 py-2 text-xs font-semibold text-white transition-colors';
+    };
+
     if (vertical === 'pharmacy') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Pharmacy', 'Créer une pharmacie')}</h4>
-          <div className="flex items-center gap-2">
-            <input
-              value={siteName}
-              onChange={(event) => setSiteName(event.target.value)}
-              placeholder={t('Pharmacy name', 'Nom de la pharmacie')}
-              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            />
-            <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Open now', 'Ouvert maintenant')}</span>
-            <button
-              onClick={() => setIsOpenNow((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isOpenNow ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {isOpenNow ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Pharmacy name', 'Nom de la pharmacie')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  value={siteName}
+                  onChange={(event) => setSiteName(event.target.value)}
+                  placeholder={t('Pharmacy name', 'Nom de la pharmacie')}
+                  className={`${createTextInputClass} flex-1 min-w-0`}
+                />
+                <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+              </div>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Open now', 'Ouvert maintenant')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOpenNow(true)}
+                  className={createToggleClass(isOpenNow)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOpenNow(false)}
+                  className={createToggleClass(!isOpenNow)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       );
     }
     if (vertical === 'mobile_money') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Kiosk', 'Créer un kiosque')}</h4>
-          <div className="flex flex-wrap gap-2">
-            {providerOptions.map((provider) => (
-              <button
-                key={provider}
-                onClick={() => setProviders((prev) => toggleListValue(prev, provider))}
-                className={`px-3 py-2 min-h-[44px] rounded-full micro-label ${providers.includes(provider) ? 'bg-navy text-white' : 'bg-gray-50 text-gray-500'}`}
-              >
-                {provider}
-              </button>
-            ))}
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <span className={createFieldLabelClass}>{t('Provider', 'Opérateur')}</span>
+              <div className="flex flex-wrap gap-2">
+                {providerOptions.map((provider) => (
+                  <button
+                    key={provider}
+                    type="button"
+                    onClick={() => setProviders((prev) => toggleListValue(prev, provider))}
+                    className={`min-h-[44px] rounded-xl border-[1.5px] px-3 py-2 text-xs font-semibold transition-colors ${
+                      providers.includes(provider) ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-700'
+                    }`}
+                  >
+                    {provider}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       );
     }
     if (vertical === 'fuel_station') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Fuel Station', 'Créer une station-service')}</h4>
-          <div className="flex items-center gap-2">
-            <input
-              value={siteName}
-              onChange={(event) => setSiteName(event.target.value)}
-              placeholder={t('Fuel station name', 'Nom de la station-service')}
-              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            />
-            <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
           </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Fuel available', 'Carburant disponible')}</span>
-            <button
-              onClick={() => setHasFuelAvailable((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${hasFuelAvailable ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {hasFuelAvailable ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
-          </div>
-          <div className="space-y-2">
-            <span className="micro-label text-gray-400">{t('Fuel prices (XAF)', 'Prix carburant (XAF)')}</span>
-            {fuelTypeOptions.map((fuel) => (
-              <div key={fuel} className="flex items-center gap-3">
-                <span className="text-xs font-semibold text-gray-600 w-14">{fuel}</span>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Fuel station name', 'Nom de la station-service')}</label>
+              <div className="flex items-center gap-2">
                 <input
-                  type="number"
-                  value={fuelPrices[fuel] ?? ''}
-                  onChange={(event) => setFuelPrices((prev) => ({ ...prev, [fuel]: event.target.value }))}
-                  placeholder={t('Price', 'Prix')}
-                  className="flex-1 h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
+                  value={siteName}
+                  onChange={(event) => setSiteName(event.target.value)}
+                  placeholder={t('Fuel station name', 'Nom de la station-service')}
+                  className={`${createTextInputClass} flex-1 min-w-0`}
                 />
+                <VoiceMicButton language={language} onResult={(text) => setSiteName((prev) => prev ? `${prev} ${text}` : text)} />
               </div>
-            ))}
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Fuel available', 'Carburant disponible')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHasFuelAvailable(true)}
+                  className={createToggleClass(hasFuelAvailable)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHasFuelAvailable(false)}
+                  className={createToggleClass(!hasFuelAvailable)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Fuel prices (XAF)', 'Prix carburant (XAF)')}</span>
+              <div className="flex flex-col gap-3">
+                {fuelTypeOptions.map((fuel) => (
+                  <div key={fuel} className="flex items-end gap-3">
+                    <span className="text-xs font-semibold text-gray-700 w-14 shrink-0">{fuel}</span>
+                    <input
+                      type="number"
+                      value={fuelPrices[fuel] ?? ''}
+                      onChange={(event) => setFuelPrices((prev) => ({ ...prev, [fuel]: event.target.value }))}
+                      placeholder={t('Price', 'Prix')}
+                      className={`${createTextInputClass} flex-1 min-w-0`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -1894,31 +2120,51 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'alcohol_outlet') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Alcohol Outlet', 'Créer un point de vente d\'alcool')}</h4>
-          <input
-            value={siteName}
-            onChange={(event) => setSiteName(event.target.value)}
-            placeholder={t('Outlet name', 'Nom du point de vente')}
-            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <select
-            value={outletType}
-            onChange={(event) => setOutletType(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {outletTypeOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Formal / licensed', 'Formel / licencié')}</span>
-            <button
-              onClick={() => setIsFormal((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isFormal ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {isFormal ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Outlet name', 'Nom du point de vente')}</label>
+              <input
+                value={siteName}
+                onChange={(event) => setSiteName(event.target.value)}
+                placeholder={t('Outlet name', 'Nom du point de vente')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Outlet type', 'Type de point de vente')}</label>
+              <select
+                value={outletType}
+                onChange={(event) => setOutletType(event.target.value)}
+                className={createSelectClass}
+              >
+                {outletTypeOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Formal / licensed', 'Formel / licencié')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsFormal(true)}
+                  className={createToggleClass(isFormal)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFormal(false)}
+                  className={createToggleClass(!isFormal)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -1926,37 +2172,60 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'billboard') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Billboard', 'Créer un panneau')}</h4>
-          <input
-            value={siteName}
-            onChange={(event) => setSiteName(event.target.value)}
-            placeholder={t('Billboard description', 'Description du panneau')}
-            className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <select
-            value={billboardType}
-            onChange={(event) => setBillboardType(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {billboardTypeOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <input
-            value={advertiserBrand}
-            onChange={(event) => setAdvertiserBrand(event.target.value)}
-            placeholder={t('Advertiser brand (optional)', 'Marque annonceur (optionnel)')}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Occupied', 'Occupé')}</span>
-            <button
-              onClick={() => setIsOccupied((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${isOccupied ? 'bg-forest text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {isOccupied ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+          </div>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Billboard description', 'Description du panneau')}</label>
+              <input
+                value={siteName}
+                onChange={(event) => setSiteName(event.target.value)}
+                placeholder={t('Billboard description', 'Description du panneau')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Billboard type', 'Type de panneau')}</label>
+              <select
+                value={billboardType}
+                onChange={(event) => setBillboardType(event.target.value)}
+                className={createSelectClass}
+              >
+                {billboardTypeOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Advertiser brand (optional)', 'Marque annonceur (optionnel)')}</label>
+              <input
+                value={advertiserBrand}
+                onChange={(event) => setAdvertiserBrand(event.target.value)}
+                placeholder={t('Advertiser brand (optional)', 'Marque annonceur (optionnel)')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Occupied', 'Occupé')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOccupied(true)}
+                  className={createToggleClass(isOccupied)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsOccupied(false)}
+                  className={createToggleClass(!isOccupied)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       );
@@ -1964,95 +2233,137 @@ const ContributionFlow: React.FC<Props> = ({
 
     if (vertical === 'transport_road') {
       return (
-        <div className="card p-4 space-y-4">
-          <h4 className="text-sm font-bold text-gray-900">{t('Create Road Segment', 'Créer un segment routier')}</h4>
-          <div className="flex items-center gap-2">
-            <input
-              value={roadName}
-              onChange={(event) => setRoadName(event.target.value)}
-              placeholder={t('Road name', 'Nom de route')}
-              className="flex-1 h-12 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            />
-            <VoiceMicButton language={language} onResult={(text) => setRoadName((prev) => prev ? `${prev} ${text}` : text)} />
+        <div className={createCardClass}>
+          <div className={createStepLabelClass}>
+            {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
           </div>
-          <select
-            value={roadCondition}
-            onChange={(event) => setRoadCondition(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {roadConditionOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <select
-            value={roadSurface}
-            onChange={(event) => setRoadSurface(event.target.value)}
-            className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          >
-            {roadSurfaceOptions.map((option) => (
-              <option key={option} value={option}>{option}</option>
-            ))}
-          </select>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-600">{t('Blocked', 'Bloqué')}</span>
-            <button
-              onClick={() => setRoadBlocked((prev) => !prev)}
-              className={`px-4 py-2 min-h-[44px] rounded-full micro-label ${roadBlocked ? 'bg-terra text-white' : 'bg-gray-100 text-gray-500'}`}
-            >
-              {roadBlocked ? t('Yes', 'Oui') : t('No', 'Non')}
-            </button>
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Road name', 'Nom de route')}</label>
+              <div className="flex items-center gap-2">
+                <input
+                  value={roadName}
+                  onChange={(event) => setRoadName(event.target.value)}
+                  placeholder={t('Road name', 'Nom de route')}
+                  className={`${createTextInputClass} flex-1 min-w-0`}
+                />
+                <VoiceMicButton language={language} onResult={(text) => setRoadName((prev) => prev ? `${prev} ${text}` : text)} />
+              </div>
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Road condition', 'État de la route')}</label>
+              <select
+                value={roadCondition}
+                onChange={(event) => setRoadCondition(event.target.value)}
+                className={createSelectClass}
+              >
+                {roadConditionOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Surface type', 'Type de surface')}</label>
+              <select
+                value={roadSurface}
+                onChange={(event) => setRoadSurface(event.target.value)}
+                className={createSelectClass}
+              >
+                {roadSurfaceOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <span className={createFieldLabelClass}>{t('Blocked', 'Bloqué')}</span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRoadBlocked(true)}
+                  className={createToggleClass(roadBlocked)}
+                >
+                  {t('Yes', 'Oui')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRoadBlocked(false)}
+                  className={createToggleClass(!roadBlocked)}
+                >
+                  {t('No', 'Non')}
+                </button>
+              </div>
+            </div>
+            {roadBlocked && (
+              <div>
+                <label className={createFieldLabelClass}>{t('Blockage type', 'Type de blocage')}</label>
+                <select
+                  value={blockageType}
+                  onChange={(event) => setBlockageType(event.target.value)}
+                  className={createSelectClass}
+                >
+                  {roadBlockageOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
-          {roadBlocked && (
-            <select
-              value={blockageType}
-              onChange={(event) => setBlockageType(event.target.value)}
-              className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-            >
-              {roadBlockageOptions.map((option) => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-          )}
         </div>
       );
     }
 
     return (
-      <div className="card p-4 space-y-4">
-        <h4 className="text-sm font-bold text-gray-900">{t('Create Building', 'Créer un bâtiment')}</h4>
-        <select
-          value={buildingType}
-          onChange={(event) => setBuildingType(event.target.value)}
-          className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-        >
-          {buildingTypeOptions.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-        <select
-          value={occupancyStatus}
-          onChange={(event) => setOccupancyStatus(event.target.value)}
-          className="w-full h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-        >
-          {occupancyStatusOptions.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            type="number"
-            value={storeyCount}
-            onChange={(event) => setStoreyCount(event.target.value)}
-            placeholder={t('Storeys', 'Étages')}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
-          <input
-            type="number"
-            value={estimatedUnits}
-            onChange={(event) => setEstimatedUnits(event.target.value)}
-            placeholder={t('Estimated units', 'Unités estimées')}
-            className="h-11 bg-gray-50 border border-gray-100 rounded-xl px-3 text-xs"
-          />
+      <div className={createCardClass}>
+        <div className={createStepLabelClass}>
+          {t(`Step 2 — ${verticalLabel} details`, `Étape 2 — Détails ${verticalLabel}`)}
+        </div>
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className={createFieldLabelClass}>{t('Building type', 'Type de bâtiment')}</label>
+            <select
+              value={buildingType}
+              onChange={(event) => setBuildingType(event.target.value)}
+              className={createSelectClass}
+            >
+              {buildingTypeOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={createFieldLabelClass}>{t('Occupancy status', 'Statut d\'occupation')}</label>
+            <select
+              value={occupancyStatus}
+              onChange={(event) => setOccupancyStatus(event.target.value)}
+              className={createSelectClass}
+            >
+              {occupancyStatusOptions.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={createFieldLabelClass}>{t('Storeys', 'Étages')}</label>
+              <input
+                type="number"
+                value={storeyCount}
+                onChange={(event) => setStoreyCount(event.target.value)}
+                placeholder={t('Storeys', 'Étages')}
+                className={createTextInputClass}
+              />
+            </div>
+            <div>
+              <label className={createFieldLabelClass}>{t('Estimated units', 'Unités estimées')}</label>
+              <input
+                type="number"
+                value={estimatedUnits}
+                onChange={(event) => setEstimatedUnits(event.target.value)}
+                placeholder={t('Estimated units', 'Unités estimées')}
+                className={createTextInputClass}
+              />
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -2484,29 +2795,39 @@ const ContributionFlow: React.FC<Props> = ({
           <ShieldCheck size={12} />
           <span>{t('Live photo + GPS mandatory', 'Photo live + GPS obligatoires')}</span>
         </div>
-        {(() => {
-          const steps = [
-            { label: t('Type', 'Type'), done: Boolean(vertical) },
-            { label: t('Photo', 'Photo'), done: Boolean(photoPreview) },
-            { label: t('GPS', 'GPS'), done: Boolean(location) },
-            { label: t('Details', 'Détails'), done: Boolean(siteName) },
-          ];
-          return (
-            <div className="flex items-center gap-1.5 mb-4">
-              {steps.map((step, i) => (
-                <React.Fragment key={step.label}>
-                  <div className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full transition-colors ${step.done ? 'bg-forest' : 'bg-gray-200'}`} />
-                    <span className={`micro-label ${step.done ? 'text-forest' : 'text-gray-300'}`}>
-                      {step.label}
+        <div className="shrink-0 border-b border-gray-100 bg-white px-4 py-2.5">
+          <div className="flex items-center gap-1.5">
+            {STEPS.map((stepLabel, i) => {
+              const done = i < currentStep;
+              const active = i === currentStep;
+              return (
+                <React.Fragment key={stepLabel.key}>
+                  <div className="flex items-center gap-1">
+                    <div
+                      className={`flex h-[22px] w-[22px] items-center justify-center rounded-full transition-colors ${
+                        done || active ? 'bg-navy' : 'bg-gray-200'
+                      }`}
+                    >
+                      {done ? (
+                        <CheckCircle size={12} className="text-white" />
+                      ) : (
+                        <span className={`text-[10px] font-bold ${active ? 'text-white' : 'text-gray-400'}`}>
+                          {i + 1}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`text-[10px] font-semibold ${active ? 'text-navy' : 'text-gray-400'}`}>
+                      {t(stepLabel.en, stepLabel.fr)}
                     </span>
                   </div>
-                  {i < steps.length - 1 && <div className={`flex-1 h-px ${steps[i].done ? 'bg-forest' : 'bg-gray-200'}`} />}
+                  {i < STEPS.length - 1 && (
+                    <div className={`h-0.5 flex-1 rounded-full transition-colors ${done ? 'bg-navy' : 'bg-gray-200'}`} />
+                  )}
                 </React.Fragment>
-              ))}
-            </div>
-          );
-        })()}
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 p-6 overflow-y-auto no-scrollbar space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>

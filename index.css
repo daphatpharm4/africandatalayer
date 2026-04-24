@@ -141,12 +141,16 @@
 
   /* Wider micro label variant (used in section headers) */
   .micro-label-wide {
-    @apply text-[11px] font-semibold uppercase tracking-[0.2em] leading-4;
+    @apply text-[11px] font-semibold uppercase tracking-[0.20em];
   }
 
   /* Card — the standard container */
   .card {
     @apply rounded-2xl border border-gray-100 shadow-sm bg-white;
+  }
+
+  .card-soft {
+    @apply rounded-2xl border border-gray-100 bg-white shadow-sm;
   }
 
   /* Pill card — rounder variant used for widgets */
@@ -188,7 +192,45 @@
 
   /* Stat tile — colored background with micro label + large number */
   .stat-tile {
-    @apply rounded-2xl p-3;
+    @apply rounded-[14px] p-3 text-center;
+  }
+
+  .risk-low {
+    @apply bg-forest-wash text-forest-dark;
+  }
+
+  .risk-medium {
+    @apply bg-amber-wash text-amber;
+  }
+
+  .risk-high {
+    @apply bg-red-100 text-red-800;
+  }
+
+  .tier-gold {
+    @apply bg-gold-wash text-amber;
+  }
+
+  .tier-silver {
+    @apply bg-gray-100 text-gray-600;
+  }
+
+  .tier-bronze {
+    @apply bg-terra-wash text-terra;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-3 font-semibold;
+    min-height: 32px;
+    font-size: 11px;
+  }
+
+  .chip-active {
+    @apply border-navy bg-navy text-white;
+  }
+
+  .chip-idle {
+    @apply border-gray-200 bg-white text-gray-500;
   }
 }
 

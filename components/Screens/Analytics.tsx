@@ -924,11 +924,16 @@ const Analytics: React.FC<Props> = ({
                 </div>
               )}
               {!isLoadingLeaderboard && leaderboard.length === 0 && (
-                <div className="rounded-[1.35rem] border border-gray-100 bg-page p-4 micro-label text-gray-400">
-                  {t(
-                    'No contributor data yet.',
-                    'Pas encore de données contributeur.',
-                  )}
+                <div className="rounded-[1.35rem] border border-gray-100 bg-page px-4 py-5">
+                  <p className="text-[13px] font-semibold text-gray-700">
+                    {t('No contributors yet.', 'Aucun contributeur pour l\'instant.')}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                    {t(
+                      'Score = verified submissions × average quality. Submit your first capture to appear here.',
+                      'Score = soumissions vérifiées × qualité moyenne. Faites votre première capture pour apparaître ici.',
+                    )}
+                  </p>
                 </div>
               )}
               {!isLoadingLeaderboard &&
@@ -1039,11 +1044,16 @@ const Analytics: React.FC<Props> = ({
                 </div>
               )}
               {!isLoadingLeaderboard && leaderboard.length === 0 && (
-                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                  {t(
-                    'No contributor data yet.',
-                    'Pas encore de données contributeur.',
-                  )}
+                <div className="rounded-2xl border border-gray-100 bg-page px-4 py-5">
+                  <p className="text-[13px] font-semibold text-gray-700">
+                    {t('No contributors yet.', 'Aucun contributeur pour l\'instant.')}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                    {t(
+                      'Score = verified submissions × average quality. Submit your first capture to appear here.',
+                      'Score = soumissions vérifiées × qualité moyenne. Faites votre première capture pour apparaître ici.',
+                    )}
+                  </p>
                 </div>
               )}
               {!isLoadingLeaderboard &&
@@ -1120,11 +1130,16 @@ const Analytics: React.FC<Props> = ({
                 </div>
               )}
               {!isLoadingLeaderboard && clientTopContributors.length === 0 && (
-                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
-                  {t(
-                    'No contributor data yet.',
-                    'Pas encore de données contributeur.',
-                  )}
+                <div className="rounded-2xl border border-gray-100 bg-page px-4 py-5">
+                  <p className="text-[13px] font-semibold text-gray-700">
+                    {t('No contributors yet.', 'Aucun contributeur pour l\'instant.')}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                    {t(
+                      'Agent rankings appear once submissions are verified.',
+                      'Les classements apparaissent une fois les soumissions vérifiées.',
+                    )}
+                  </p>
                 </div>
               )}
               {!isLoadingLeaderboard &&

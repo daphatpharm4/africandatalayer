@@ -2,19 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Award,
-  BadgeCheck,
   BookOpen,
   Calendar,
   Gift,
-  MapPin,
   Settings as SettingsIcon,
-  TrendingUp,
   Trash2,
   Wallet
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listQueueItems, listSyncErrorRecords, subscribeQueueSnapshot, type QueueItem, type SyncErrorRecord } from '../../lib/client/offlineQueue';
-import { AVATAR_PRESETS, coerceAvatarPreset, encodeAvatarPresetImage, type AvatarPreset } from '../../shared/avatarPresets';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile, UserRole } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 import { getEffectiveEventXp } from '../../shared/xp';
@@ -23,12 +19,13 @@ import {
   computeContributionSummary,
   countActivitiesInCurrentWeek,
   formatContributionHistoryDate,
+  getStartOfCurrentWeek,
   mapQueuedItemsToContributionActivities,
 } from '../../lib/shared/contributionMetrics';
-import BadgeGrid, { computeBadges } from '../BadgeSystem';
+import { computeBadges } from '../BadgeSystem';
 import DailyProgressWidget from '../DailyProgressWidget';
 import StreakTracker from '../StreakTracker';
-import ProfileAvatar from '../shared/ProfileAvatar';
+import KpiTile from '../shared/KpiTile';
 import ScreenHeader from '../shared/ScreenHeader';
 
 interface Props {
@@ -58,8 +55,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
   const [assignmentError, setAssignmentError] = useState('');
   const [isUpdatingAssignmentId, setIsUpdatingAssignmentId] = useState<string | null>(null);
-  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
-  const [avatarSaveError, setAvatarSaveError] = useState('');
   const [accountLookupInput, setAccountLookupInput] = useState('');
   const [managedAccount, setManagedAccount] = useState<UserProfile | null>(null);
   const [managedRole, setManagedRole] = useState<UserRole>('agent');
@@ -90,7 +85,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   };
   const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
   const isMapUnlocked = activeMapScope !== 'bonamoussadi';
-  const activeAvatarPreset = coerceAvatarPreset(profile?.avatarPreset ?? profile?.image);
   const managedAccountRole = resolveRole(managedAccount);
   const hasManagedAccessChanges = Boolean(managedAccount) && managedRole !== managedAccountRole;
 
@@ -168,6 +162,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   }, []); // language removed: API data is language-independent; translations handled in render
 
   const badges = useMemo(() => computeBadges(ownEvents), [ownEvents]);
+  const earnedBadgeCount = useMemo(() => badges.filter((badge) => badge.earned).length, [badges]);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,26 +208,147 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   }, [assignments]);
   const dailyTarget = activeAssignment?.pointsExpected && activeAssignment.pointsExpected > 0 ? activeAssignment.pointsExpected : 10;
 
-  const avatarOptions = useMemo(
-    () =>
-      AVATAR_PRESETS.map((preset) => ({
-        preset,
-        label:
-          preset === 'baobab'
-            ? t('Baobab', 'Baobab')
-            : preset === 'sunrise'
-              ? t('Sunrise', 'Aurore')
-              : t('Lagoon', 'Lagon'),
-      })),
-    [language]
-  );
-
   const pointsThisWeek = useMemo(() => {
     return countActivitiesInCurrentWeek(ownEvents);
   }, [ownEvents]);
 
+  const weekRows = useMemo(() => {
+    const weekStart = getStartOfCurrentWeek();
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    const weeklyEvents = ownEvents.filter((event) => {
+      const createdAt = new Date(event.createdAt);
+      return !Number.isNaN(createdAt.getTime()) && createdAt >= weekStart && createdAt < weekEnd;
+    });
+    const verifiedCount = weeklyEvents.filter((event) => {
+      const details = (event.details ?? {}) as Record<string, unknown>;
+      const reviewStatus = typeof details.reviewStatus === 'string' ? details.reviewStatus.trim().toLowerCase() : '';
+      const reviewDecision = typeof details.reviewDecision === 'string' ? details.reviewDecision.trim().toLowerCase() : '';
+      return (
+        details.reviewerApproved === true ||
+        reviewStatus === 'auto_approved' ||
+        reviewStatus === 'verified' ||
+        reviewDecision === 'approved'
+      );
+    }).length;
+    const xpEarned = weeklyEvents.reduce((total, event) => total + getEffectiveEventXp(event), 0);
+    const weekdayLabels = [
+      t('Monday', 'Lundi'),
+      t('Tuesday', 'Mardi'),
+      t('Wednesday', 'Mercredi'),
+      t('Thursday', 'Jeudi'),
+      t('Friday', 'Vendredi'),
+      t('Saturday', 'Samedi'),
+      t('Sunday', 'Dimanche'),
+    ];
+    const bestDayFallback = t('No activity yet', 'Aucune activité pour le moment');
+    let bestDay = bestDayFallback;
+    if (weeklyEvents.length > 0) {
+      const dayCounts = new Map<number, number>();
+      for (const event of weeklyEvents) {
+        const createdAt = new Date(event.createdAt);
+        if (Number.isNaN(createdAt.getTime())) continue;
+        const dayIndex = (createdAt.getDay() + 6) % 7;
+        dayCounts.set(dayIndex, (dayCounts.get(dayIndex) ?? 0) + 1);
+      }
+      const bestEntry = Array.from(dayCounts.entries()).sort((a, b) => b[1] - a[1] || a[0] - b[0])[0];
+      if (bestEntry) {
+        bestDay = weekdayLabels[bestEntry[0]] ?? bestDayFallback;
+      }
+    }
+
+    return [
+      {
+        label: t('Submissions', 'Soumissions'),
+        value: `${weeklyEvents.length}`,
+      },
+      {
+        label: t('Verified', 'Vérifiées'),
+        value: `${verifiedCount}`,
+      },
+      {
+        label: t('XP earned', 'XP gagnées'),
+        value: `${xpEarned} XP`,
+      },
+      {
+        label: t('Best day', 'Meilleur jour'),
+        value: bestDay,
+      },
+    ];
+  }, [language, ownEvents]);
+
+  const badgeChipClassName = (badgeId: string, earned: boolean) => {
+    if (!earned) {
+      return 'border border-gray-200 bg-gray-50 text-gray-500';
+    }
+
+    switch (badgeId) {
+      case 'first_steps':
+      case 'trust_elite':
+        return 'border border-forest/10 bg-forest-wash text-forest';
+      case 'explorer':
+      case 'urban_validator':
+        return 'border border-navy/10 bg-navy-wash text-navy';
+      case 'specialist':
+      case 'data_champion':
+        return 'border border-terra/10 bg-terra-wash text-terra-dark';
+      case 'quality_star':
+        return 'border border-gold/20 bg-gold-wash text-amber-900';
+      case 'night_owl':
+        return 'border border-streak/10 bg-streak-wash text-streak';
+      case 'rain_walker':
+        return 'border border-forest/10 bg-forest-wash text-forest';
+      case 'streak_master':
+        return 'border border-terra/10 bg-terra-wash text-terra-dark';
+      default:
+        return 'border border-gray-200 bg-gray-50 text-gray-600';
+    }
+  };
+
   const visibleHistory = showAllHistory ? history : history.slice(0, historyPreviewLimit);
   const canToggleHistory = history.length > historyPreviewLimit;
+  type ProfileHeroProfile = UserProfile & {
+    displayName?: string;
+    xp?: number;
+    xpTarget?: number;
+    level?: number;
+    tier?: string;
+    rank?: number;
+    initial?: string;
+  };
+  const profileHero = profile as ProfileHeroProfile | null;
+  const displayName =
+    profileHero?.displayName ??
+    profileHero?.name ??
+    profileHero?.phone ??
+    profileHero?.email ??
+    t('Contributor', 'Contributeur');
+  const initial = (profileHero?.initial ?? displayName.trim().charAt(0).toUpperCase() ?? 'A') || 'A';
+  const xpCurrent = profileHero?.xp ?? profileHero?.XP ?? 0;
+  const level = profileHero?.level ?? Math.max(1, Math.floor(xpCurrent / 250) + 1);
+  const xpTarget = profileHero?.xpTarget ?? Math.max(level * 250, 250);
+  const trustTier = profileHero?.trustTier;
+  const tierLabel = profileHero?.tier
+    ?? (trustTier
+      ? ({
+          new: t('New', 'Nouveau'),
+          standard: t('Silver', 'Argent'),
+          trusted: t('Trusted', 'Fiable'),
+          elite: t('Elite', 'Élite'),
+          restricted: t('Restricted', 'Restreint'),
+        } as const)[trustTier]
+      : t('Unrated', 'Non évalué'));
+  const rank = profileHero?.rank;
+  const pointsTotal = ownEvents.length;
+  const rankDisplay = typeof rank === 'number' ? `#${rank}` : t('N/A', 'N/D');
+  const streakDisplay = `${contributionSummary.streakDays}${language === 'fr' ? ' j' : 'd'}`;
+  const xpProgress = xpTarget > 0 ? Math.min(100, (xpCurrent / xpTarget) * 100) : 0;
+  const heroLocation = userLocation || mapScopeLabel(activeMapScope);
+  const heroSubtitle = isLoading
+    ? t('Loading profile', 'Chargement du profil')
+    : profileHero
+      ? `${roleLabel(resolveRole(profileHero))} · ${heroLocation}`
+      : t('Profile unavailable', 'Profil indisponible');
 
   useEffect(() => {
     let cancelled = false;
@@ -313,34 +429,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
       setAssignmentError(message);
     } finally {
       setIsUpdatingAssignmentId(null);
-    }
-  };
-
-  const handleAvatarSelect = async (preset: AvatarPreset) => {
-    if (!profile || isSavingAvatar) return;
-    if (activeAvatarPreset === preset) return;
-
-    const previousProfile = profile;
-    setAvatarSaveError('');
-    setProfile({ ...profile, avatarPreset: preset, image: encodeAvatarPresetImage(preset) });
-
-    try {
-      setIsSavingAvatar(true);
-      const updated = await apiJson<UserProfile>('/api/user', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatarPreset: preset }),
-      });
-      setProfile(updated);
-    } catch (error) {
-      setProfile(previousProfile);
-      const message =
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : t('Unable to update avatar.', 'Impossible de mettre a jour l\'avatar.');
-      setAvatarSaveError(message);
-    } finally {
-      setIsSavingAvatar(false);
     }
   };
 
@@ -426,68 +514,56 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
       />
 
       <div className="p-4 pb-24 space-y-6">
-        <div className="flex flex-col items-center py-4 text-center">
-          <div className="relative mb-4">
-            <div className="w-24 h-24 rounded-full border-4 border-white shadow-xl bg-navy-light overflow-hidden">
-              <ProfileAvatar preset={activeAvatarPreset} alt={t('Profile avatar', 'Avatar du profil')} className="w-full h-full" />
+        <section className="route-grid relative -mx-4 -mt-4 overflow-hidden bg-navy px-5 pb-8 pt-5 text-white">
+          <div className="relative flex items-start gap-3.5">
+            <div className="flex h-[60px] w-[60px] items-center justify-center rounded-full border-[3px] border-white/20 bg-gradient-to-br from-terra to-navy text-lg font-bold text-white shadow-lg shadow-navy/30">
+              {initial}
             </div>
-            <div className="absolute -bottom-1 -right-1 p-1 bg-forest rounded-full border-2 border-white">
-              <BadgeCheck size={14} className="text-white" />
+
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="truncate text-xl font-bold leading-tight">{isLoading ? t('Loading profile', 'Chargement du profil') : displayName}</h2>
+                <span className="micro-label rounded-full bg-gold/20 px-2 py-0.5 text-gold">{tierLabel}</span>
+                <span className="micro-label rounded-full bg-white/10 px-2 py-0.5 text-white/70">
+                  {t('Level', 'Niveau')} {level}
+                </span>
+              </div>
+
+              <div className="mt-1 flex items-center gap-2 text-sm text-white/70">
+                <span>{heroSubtitle}</span>
+              </div>
             </div>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900">
-            {isLoading ? (
-              <span className="inline-block h-4 w-40 rounded-full bg-gray-200 animate-pulse"></span>
-            ) : (
-              profile?.name || profile?.phone || profile?.email || t('Contributor', 'Contributeur')
+            {typeof rank === 'number' && (
+              <div className="text-[22px] font-extrabold text-gold">#{rank}</div>
             )}
-          </h2>
-          {!isLoading && (
-            <div className="flex items-center justify-center micro-label text-gray-400 mt-1 space-x-2">
-              <MapPin size={12} />
-              <span>{userLocation || t('Location not set', 'Position non définie')}</span>
-            </div>
-          )}
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-center gap-3">
-              {avatarOptions.map((option) => {
-                const isSelected = option.preset === activeAvatarPreset;
-                return (
-                  <button
-                    key={option.preset}
-                    type="button"
-                    aria-pressed={isSelected}
-                    disabled={!profile || isSavingAvatar}
-                    onClick={() => handleAvatarSelect(option.preset)}
-                    className={`rounded-2xl border p-1.5 transition-all ${
-                      isSelected
-                        ? 'border-navy bg-white shadow-md'
-                        : 'border-navy-border bg-white/80 hover:border-navy-border'
-                    } ${!profile || isSavingAvatar ? 'cursor-not-allowed opacity-70' : ''}`}
-                    title={option.label}
-                  >
-                    <div className="h-12 w-12 overflow-hidden rounded-xl">
-                      <ProfileAvatar preset={option.preset} alt={option.label} className="h-full w-full" />
-                    </div>
-                    <span className="sr-only">{option.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {isSavingAvatar && <div className="micro-label text-gray-400">{t('Saving...', 'Enregistrement...')}</div>}
-            {avatarSaveError && <div className="micro-label text-red-500">{avatarSaveError}</div>}
           </div>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between gap-3 text-xs font-medium uppercase tracking-wide text-white/70">
+              <span>{t('Level', 'Niveau')}</span>
+              <span>{xpCurrent} / {xpTarget} XP</span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/15">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-gold to-amber transition-[width] duration-300"
+                style={{ width: `${xpProgress}%` }}
+              />
+            </div>
+          </div>
+
           {loadError && (
-            <div className="mt-2 micro-label text-red-500">
+            <div className="mt-3 micro-label text-white/70">
               {loadError === 'LOAD_FAILED' ? t('Couldn\'t load your profile. Go back and try again.', 'Impossible de charger votre profil. Revenez et réessayez.') : loadError}
             </div>
           )}
-          <div className="mt-4">
-            <span className="px-4 py-1.5 bg-navy-light text-navy micro-label rounded-full border border-navy-border shadow-sm">
-              {t('Senior Contributor', 'Contributeur senior')}
-            </span>
-          </div>
-        </div>
+        </section>
+
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <KpiTile label={t('Points', 'Points')} value={pointsTotal} tone="navy" />
+          <KpiTile label={t('XP', 'XP')} value={xpCurrent} tone="terra" />
+          <KpiTile label={t('Streak', 'Série')} value={streakDisplay} tone="streak" />
+          <KpiTile label={t('Rank', 'Rang')} value={rankDisplay} tone="amber" />
+        </section>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
@@ -806,34 +882,49 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
           );
         })()}
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="card p-4 space-y-3">
-            <div className="flex items-center space-x-2 text-forest">
-              <BadgeCheck size={16} />
-              <span className="micro-label">{t('Trust Score', 'Score de confiance')}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold text-gray-900">98%</span>
-              <div className="mt-2 h-1 w-full bg-gray-50 rounded-full overflow-hidden">
-                <div className="h-full bg-forest rounded-full transition-all duration-1000" style={{ width: '98%' }} />
-              </div>
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="micro-label-wide text-gray-400">{t('Badges', 'Badges')}</div>
+            <div className="text-[11px] font-semibold text-gray-500">
+              {earnedBadgeCount}/{badges.length} {t('earned', 'obtenus')}
             </div>
           </div>
-          <div className="card p-4 space-y-3">
-            <div className="flex items-center space-x-2 text-navy">
-              <TrendingUp size={16} />
-              <span className="micro-label">{t('This Week', 'Cette semaine')}</span>
-            </div>
-            <div className="flex flex-col">
-              <span className="text-2xl font-bold text-gray-900">{pointsThisWeek}</span>
-              <p className="text-xs font-medium text-gray-500">{t('submissions', 'soumissions')}</p>
-            </div>
-          </div>
-        </div>
+          <ul className="flex flex-wrap gap-2">
+            {badges.map((badge) => {
+              const Icon = badge.icon;
+              const label = language === 'fr' ? badge.labelFr : badge.labelEn;
+              const description = language === 'fr' ? badge.descriptionFr : badge.descriptionEn;
+              const stateLabel = badge.earned ? t('earned', 'obtenu') : t('locked', 'verrouillé');
+              return (
+                <li
+                  key={badge.id}
+                  title={description}
+                  aria-label={`${label}: ${stateLabel}. ${description}`}
+                  className={`inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 py-2 text-[11px] font-semibold ${badgeChipClassName(badge.id, badge.earned)}`}
+                >
+                  <Icon size={12} className="shrink-0" aria-hidden="true" />
+                  <span className="whitespace-nowrap">{label}</span>
+                  <span className="sr-only">, {stateLabel}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
 
-        <div className="card p-4">
-          <BadgeGrid badges={badges} language={language} />
-        </div>
+        <section className="space-y-2">
+          <div className="micro-label-wide text-gray-400">{t('This week', 'Cette semaine')}</div>
+          <dl className="card-soft p-4">
+            {weekRows.map((row, index) => (
+              <div
+                key={row.label}
+                className={`flex items-center justify-between py-2 ${index < weekRows.length - 1 ? 'border-b border-gray-100' : ''}`}
+              >
+                <dt className="text-[13px] text-gray-500">{row.label}</dt>
+                <dd className="text-[13px] font-bold text-gray-900">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between px-1">
