@@ -16,7 +16,8 @@ import {
   Route,
   Sparkles,
   Target,
-  User
+  User,
+  X
 } from 'lucide-react';
 import FilterChipRow from '../shared/FilterChipRow';
 import VerticalIcon from '../shared/VerticalIcon';
@@ -806,7 +807,17 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         {viewMode === 'map' && pointsLoadError && !isLoadingPoints && (
           <div className="pointer-events-none absolute inset-x-4 top-4 z-30 flex justify-center">
             <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-terra/20 bg-white/96 p-3 shadow-lg backdrop-blur-sm">
-              <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                <button
+                  type="button"
+                  onClick={() => setPointsLoadError('')}
+                  className="shrink-0 rounded-full p-1 text-gray-400 transition-colors hover:text-gray-600"
+                  aria-label={t('Dismiss', 'Fermer')}
+                >
+                  <X size={14} />
+                </button>
+              </div>
               <button
                 type="button"
                 onClick={() => void loadPoints()}
@@ -834,7 +845,17 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               )}
               {pointsLoadError && !isLoadingPoints && (
                 <div className="card-soft border border-terra/20 p-4">
-                  <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => setPointsLoadError('')}
+                      className="shrink-0 rounded-full p-1 text-gray-400 transition-colors hover:text-gray-600"
+                      aria-label={t('Dismiss', 'Fermer')}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => void loadPoints()}
