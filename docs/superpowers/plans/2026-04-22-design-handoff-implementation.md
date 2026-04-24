@@ -1,6 +1,32 @@
 # Design Handoff Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+## Implementation Status
+
+**Status**: ✅ COMPLETE  
+**Completed**: 2026-04-24  
+**Branch**: `dev`  
+**Commits**: 42 commits from `44c7b72` to `a7d7ea7b20c12e9c95e8c32a0bc415782887c928`
+
+### Deviations from plan
+
+| Item | Plan | Actual |
+|------|------|--------|
+| `components/shared/VerticalBars.tsx` | Standalone shared primitive | Inlined in DeltaDashboard.tsx + InvestorDashboard.tsx — screens are complex enough to justify local scope |
+| `components/shared/ZoneList.tsx` | Standalone shared primitive | Inlined in InvestorDashboard.tsx — only used in one screen |
+
+### Verification results
+
+| Check | Result |
+|-------|--------|
+| TypeScript (components only) | ✅ 0 errors |
+| Tests | ✅ 159/160 (1 pre-existing failure: aiSearchApi — broken @google/genai dep) |
+| Build | ✅ 3.51s clean |
+| Function budget | ✅ 13/13 |
+| Raw hex in className | ✅ 0 violations (fixed ContributionFlow.tsx:1659) |
+| Bilingual coverage | ✅ All strings wrapped |
+| Visual smoke test | ✅ Agent, client roles verified in browser |
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Refactor the ADL mobile UI to match the 3 high-fidelity handoff prototypes (agent/admin/client) across 13 screens while preserving all existing business logic.
 
@@ -66,13 +92,13 @@
 **Files:**
 - Modify: `index.css`
 
-- [ ] **Step 1: Read current component layer**
+- [x] **Step 1: Read current component layer**
 
 ```bash
 grep -n "@layer components" index.css
 ```
 
-- [ ] **Step 2: Add prototype-required utilities inside `@layer components` block**
+- [x] **Step 2: Add prototype-required utilities inside `@layer components` block**
 
 Append these classes before the closing brace of the `@layer components` block:
 
@@ -110,12 +136,12 @@ Append these classes before the closing brace of the `@layer components` block:
 }
 ```
 
-- [ ] **Step 3: Verify CSS builds**
+- [x] **Step 3: Verify CSS builds**
 
 Run: `npm run build 2>&1 | tail -20`
 Expected: No PostCSS errors about unknown classes
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add index.css
@@ -129,7 +155,7 @@ git commit -m "feat(design): add missing @layer component utilities for prototyp
 **Files:**
 - Create: `components/shared/StatusBar.tsx`
 
-- [ ] **Step 1: Write component**
+- [x] **Step 1: Write component**
 
 ```tsx
 import React from 'react';
@@ -164,12 +190,12 @@ const StatusBar: React.FC = () => (
 export default React.memo(StatusBar);
 ```
 
-- [ ] **Step 2: Verify typecheck**
+- [x] **Step 2: Verify typecheck**
 
 Run: `npx tsc --noEmit 2>&1 | grep StatusBar`
 Expected: No errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/shared/StatusBar.tsx
@@ -183,7 +209,7 @@ git commit -m "feat(shared): add StatusBar primitive for phone-frame chrome"
 **Files:**
 - Create: `components/shared/KpiTile.tsx`
 
-- [ ] **Step 1: Write component**
+- [x] **Step 1: Write component**
 
 ```tsx
 import React from 'react';
@@ -242,12 +268,12 @@ const KpiTile: React.FC<Props> = ({ label, value, delta, tone = 'navy', icon, on
 export default React.memo(KpiTile);
 ```
 
-- [ ] **Step 2: Verify typecheck**
+- [x] **Step 2: Verify typecheck**
 
 Run: `npx tsc --noEmit 2>&1 | grep KpiTile`
 Expected: No errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/shared/KpiTile.tsx
@@ -262,7 +288,7 @@ git commit -m "feat(shared): add KpiTile primitive for dashboard stats"
 - Create: `components/shared/RiskBadge.tsx`
 - Create: `components/shared/TrustBadge.tsx`
 
-- [ ] **Step 1: Write RiskBadge**
+- [x] **Step 1: Write RiskBadge**
 
 ```tsx
 import React from 'react';
@@ -290,7 +316,7 @@ const RiskBadge: React.FC<Props> = ({ level, language }) => {
 export default React.memo(RiskBadge);
 ```
 
-- [ ] **Step 2: Write TrustBadge**
+- [x] **Step 2: Write TrustBadge**
 
 ```tsx
 import React from 'react';
@@ -311,7 +337,7 @@ const TrustBadge: React.FC<Props> = ({ tier }) => (
 export default React.memo(TrustBadge);
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/shared/RiskBadge.tsx components/shared/TrustBadge.tsx
@@ -325,7 +351,7 @@ git commit -m "feat(shared): add RiskBadge and TrustBadge primitives"
 **Files:**
 - Create: `components/shared/FilterChipRow.tsx`
 
-- [ ] **Step 1: Write component**
+- [x] **Step 1: Write component**
 
 ```tsx
 import React from 'react';
@@ -362,7 +388,7 @@ function FilterChipRow<T extends string = string>({ chips, active, onChange, cla
 export default FilterChipRow;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/shared/FilterChipRow.tsx
@@ -376,7 +402,7 @@ git commit -m "feat(shared): add FilterChipRow for horizontal filter pills"
 **Files:**
 - Create: `components/shared/WeeklyBarChart.tsx`
 
-- [ ] **Step 1: Write component**
+- [x] **Step 1: Write component**
 
 ```tsx
 import React from 'react';
@@ -422,7 +448,7 @@ const WeeklyBarChart: React.FC<Props> = ({
 export default React.memo(WeeklyBarChart);
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/shared/WeeklyBarChart.tsx
@@ -436,7 +462,7 @@ git commit -m "feat(shared): add WeeklyBarChart primitive"
 **Files:**
 - Create: `components/shared/VerticalPickerBar.tsx`
 
-- [ ] **Step 1: Write component**
+- [x] **Step 1: Write component**
 
 ```tsx
 import React from 'react';
@@ -472,12 +498,12 @@ const VerticalPickerBar: React.FC<Props> = ({ active, onToggle, language }) => {
 export default React.memo(VerticalPickerBar);
 ```
 
-- [ ] **Step 2: Verify `categoryLabel` accepts `language`**
+- [x] **Step 2: Verify `categoryLabel` accepts `language`**
 
 Run: `grep -n "export.*categoryLabel" shared/verticals.ts`
 If signature differs, adapt the call. Otherwise proceed.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/shared/VerticalPickerBar.tsx
@@ -491,7 +517,7 @@ git commit -m "feat(shared): add VerticalPickerBar selector for Home"
 **Files:**
 - Modify: `components/shared/ScreenHeader.tsx`
 
-- [ ] **Step 1: Replace file contents**
+- [x] **Step 1: Replace file contents**
 
 ```tsx
 import React from 'react';
@@ -557,12 +583,12 @@ const ScreenHeader: React.FC<Props> = ({
 export default React.memo(ScreenHeader);
 ```
 
-- [ ] **Step 2: Verify existing consumers still compile**
+- [x] **Step 2: Verify existing consumers still compile**
 
 Run: `npx tsc --noEmit 2>&1 | grep -E "ScreenHeader" | head -20`
 Expected: No errors (added props are all optional)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/shared/ScreenHeader.tsx
@@ -576,7 +602,7 @@ git commit -m "feat(shared): extend ScreenHeader with subtitle, right slot, rout
 **Files:**
 - Modify: `components/Navigation.tsx`
 
-- [ ] **Step 1: Replace `agentNav` / `clientNav` selection block**
+- [x] **Step 1: Replace `agentNav` / `clientNav` selection block**
 
 Find the definitions of `agentNav` and `clientNav`. Add `adminNav` between them and select based on `isAdmin`:
 
@@ -601,7 +627,7 @@ const clientNav = [
 const navItems = isAdmin ? adminNav : userRole === 'client' ? clientNav : agentNav;
 ```
 
-- [ ] **Step 2: Update imports at top**
+- [x] **Step 2: Update imports at top**
 
 Replace the existing lucide-react import block with:
 
@@ -619,12 +645,12 @@ import {
 } from 'lucide-react';
 ```
 
-- [ ] **Step 3: Verify typecheck**
+- [x] **Step 3: Verify typecheck**
 
 Run: `npx tsc --noEmit 2>&1 | grep Navigation`
 Expected: May fail on `Screen.CLIENT_INSIGHTS` until Task 10 adds it. Defer commit.
 
-- [ ] **Step 4: Defer commit — combine with Task 10**
+- [x] **Step 4: Defer commit — combine with Task 10**
 
 ---
 
@@ -633,16 +659,16 @@ Expected: May fail on `Screen.CLIENT_INSIGHTS` until Task 10 adds it. Defer comm
 **Files:**
 - Modify: `types.ts:1-21`
 
-- [ ] **Step 1: Add enum entry**
+- [x] **Step 1: Add enum entry**
 
 Edit `types.ts`. Add `CLIENT_INSIGHTS = 'CLIENT_INSIGHTS'` before the closing brace of the `Screen` enum (line ~20).
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `npx tsc --noEmit 2>&1 | grep -E "CLIENT_INSIGHTS|Navigation"`
 Expected: No errors
 
-- [ ] **Step 3: Commit Tasks 9 + 10**
+- [x] **Step 3: Commit Tasks 9 + 10**
 
 ```bash
 git add types.ts components/Navigation.tsx
@@ -660,12 +686,12 @@ Prototype source: `/Users/charlesvictormahouve/Downloads/design_handoff/agent_ap
 **Files:**
 - Modify: `components/Screens/Profile.tsx`
 
-- [ ] **Step 1: Locate the hero section** (the top block with avatar + name + XP bar)
+- [x] **Step 1: Locate the hero section** (the top block with avatar + name + XP bar)
 
 Run: `grep -n "avatar\|hero\|XP\|level" components/Screens/Profile.tsx | head -20`
 Identify the JSX block rendering the user avatar + name + tier/level badges + XP bar.
 
-- [ ] **Step 2: Replace the hero JSX with the prototype layout**
+- [x] **Step 2: Replace the hero JSX with the prototype layout**
 
 Target structure (agent_app.html lines 526-553):
 
@@ -709,12 +735,12 @@ Target structure (agent_app.html lines 526-553):
 
 Map existing variables (`profile.displayName`, `profile.xp`, `profile.level`, `profile.tier`, `profile.rank`, `profile.initial`) into the template. Do not touch hooks or data fetching.
 
-- [ ] **Step 3: Manual visual check**
+- [x] **Step 3: Manual visual check**
 
 Run: `npm run dev`
 Open `/profile` as an agent user. Compare to agent_app.html `ProfileScreen` block.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add components/Screens/Profile.tsx
@@ -728,7 +754,7 @@ git commit -m "feat(profile): navy hero with avatar, tier badges, XP bar per han
 **Files:**
 - Modify: `components/Screens/Profile.tsx`
 
-- [ ] **Step 1: Replace the stat section below the hero**
+- [x] **Step 1: Replace the stat section below the hero**
 
 Target structure (4 colored tiles using new `KpiTile`):
 
@@ -743,12 +769,12 @@ Target structure (4 colored tiles using new `KpiTile`):
 
 Import: `import KpiTile from '../shared/KpiTile';`
 
-- [ ] **Step 2: Typecheck**
+- [x] **Step 2: Typecheck**
 
 Run: `npx tsc --noEmit 2>&1 | grep Profile`
 Expected: No errors
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/Profile.tsx
@@ -762,7 +788,7 @@ git commit -m "feat(profile): 4-col KPI stat grid using KpiTile"
 **Files:**
 - Modify: `components/Screens/Profile.tsx`
 
-- [ ] **Step 1: Replace badge section**
+- [x] **Step 1: Replace badge section**
 
 ```tsx
 <section className="px-4 pt-4">
@@ -780,7 +806,7 @@ git commit -m "feat(profile): 4-col KPI stat grid using KpiTile"
 </section>
 ```
 
-- [ ] **Step 2: Replace this-week card**
+- [x] **Step 2: Replace this-week card**
 
 ```tsx
 <section className="px-4 pb-6 pt-4">
@@ -799,7 +825,7 @@ git commit -m "feat(profile): 4-col KPI stat grid using KpiTile"
 </section>
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/Profile.tsx
@@ -813,7 +839,7 @@ git commit -m "feat(profile): badges grid + weekly performance table"
 **Files:**
 - Modify: `components/Screens/Details.tsx`
 
-- [ ] **Step 1: Replace the photo hero**
+- [x] **Step 1: Replace the photo hero**
 
 Target (agent_app.html lines 298-303):
 
@@ -832,7 +858,7 @@ Target (agent_app.html lines 298-303):
 
 If a real `photoUrl` exists, render `<img className="h-[200px] w-full rounded-[20px] object-cover" ...>` instead. Keep the gradient fallback for missing photos.
 
-- [ ] **Step 2: Replace the info card**
+- [x] **Step 2: Replace the info card**
 
 ```tsx
 <div className="card-soft mb-3 p-4">
@@ -865,7 +891,7 @@ If a real `photoUrl` exists, render `<img className="h-[200px] w-full rounded-[2
 
 Build `infoRows` from existing point fields (location, last updated, trust score, contributor tier, price). Preserve the null-check for price.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/Details.tsx
@@ -879,7 +905,7 @@ git commit -m "feat(details): photo hero + info card redesign per handoff"
 **Files:**
 - Modify: `components/Screens/Details.tsx`
 
-- [ ] **Step 1: Replace the GPS card section**
+- [x] **Step 1: Replace the GPS card section**
 
 ```tsx
 <div className="card-soft mb-3 flex items-center gap-3 p-3.5">
@@ -898,7 +924,7 @@ git commit -m "feat(details): photo hero + info card redesign per handoff"
 
 Import: `import { MapPin, CheckCircle } from 'lucide-react';`
 
-- [ ] **Step 2: Replace CTA button**
+- [x] **Step 2: Replace CTA button**
 
 ```tsx
 <button
@@ -910,7 +936,7 @@ Import: `import { MapPin, CheckCircle } from 'lucide-react';`
 </button>
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/Details.tsx
@@ -924,7 +950,7 @@ git commit -m "feat(details): GPS card + CTA button redesign"
 **Files:**
 - Modify: `components/Screens/Home.tsx`
 
-- [ ] **Step 1: Replace the top header block**
+- [x] **Step 1: Replace the top header block**
 
 Target (agent_app.html lines 221-239):
 
@@ -955,11 +981,11 @@ Target (agent_app.html lines 221-239):
 
 Preserve existing state `toggleCategoryPicker` handler. If a different name, adapt.
 
-- [ ] **Step 2: Import VerticalPickerBar**
+- [x] **Step 2: Import VerticalPickerBar**
 
 Add at top of file: `import VerticalPickerBar from '../shared/VerticalPickerBar';`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/Home.tsx
@@ -973,7 +999,7 @@ git commit -m "feat(home): header chrome with brand logo + zone + profile button
 **Files:**
 - Modify: `components/Screens/Home.tsx`
 
-- [ ] **Step 1: Below header, replace/insert the tab switcher block**
+- [x] **Step 1: Below header, replace/insert the tab switcher block**
 
 ```tsx
 <div className="shrink-0 bg-page px-4 pt-2">
@@ -999,7 +1025,7 @@ git commit -m "feat(home): header chrome with brand logo + zone + profile button
 
 Preserve existing `viewMode` / `setViewMode` state. If the existing state name differs, adapt — do not rename it.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/Home.tsx
@@ -1013,7 +1039,7 @@ git commit -m "feat(home): tab switcher between map and list views"
 **Files:**
 - Modify: `components/Screens/Home.tsx`
 
-- [ ] **Step 1: Replace the list view rendering block** (the JSX returned when `viewMode === 'list'`)
+- [x] **Step 1: Replace the list view rendering block** (the JSX returned when `viewMode === 'list'`)
 
 ```tsx
 <div className="no-scrollbar flex-1 overflow-y-auto">
@@ -1060,7 +1086,7 @@ git commit -m "feat(home): tab switcher between map and list views"
 
 Preserve existing `onSelectPoint` callback signature. If `p.locationLabel` / `p.updatedLabel` don't exist, derive them locally via existing helpers used elsewhere in Home.tsx.
 
-- [ ] **Step 2: Imports**
+- [x] **Step 2: Imports**
 
 Ensure top of file has:
 ```tsx
@@ -1068,7 +1094,7 @@ import { ChevronRight, User } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/Home.tsx
@@ -1082,7 +1108,7 @@ git commit -m "feat(home): list view card redesign"
 **Files:**
 - Modify: `components/Screens/Home.tsx`
 
-- [ ] **Step 1: Replace mission peek block** (currently uses existing `MissionCards` component — only restyle the container, not the internals)
+- [x] **Step 1: Replace mission peek block** (currently uses existing `MissionCards` component — only restyle the container, not the internals)
 
 Wrap `<MissionCards />` render in the map-mode branch with:
 
@@ -1094,7 +1120,7 @@ Wrap `<MissionCards />` render in the map-mode branch with:
 )}
 ```
 
-- [ ] **Step 2: Confirm MissionCards internals match prototype** (navy card w/ `.route-grid`, XP pill, terra card below — agent_app.html lines 279-286)
+- [x] **Step 2: Confirm MissionCards internals match prototype** (navy card w/ `.route-grid`, XP pill, terra card below — agent_app.html lines 279-286)
 
 Run: `grep -n "route-grid\|XP" components/MissionCards.tsx`
 If the internals don't match the prototype, update `MissionCards.tsx` card markup to:
@@ -1114,7 +1140,7 @@ If the internals don't match the prototype, update `MissionCards.tsx` card marku
 </div>
 ```
 
-- [ ] **Step 3: FAB already exists** — verify `button-breathe` + `ring-pulse` animations run. Run:
+- [x] **Step 3: FAB already exists** — verify `button-breathe` + `ring-pulse` animations run. Run:
 
 ```bash
 grep -n "button-breathe\|ring-pulse" components/Screens/Home.tsx
@@ -1122,7 +1148,7 @@ grep -n "button-breathe\|ring-pulse" components/Screens/Home.tsx
 
 If animations not applied, add `animate-[button-breathe_3.4s_infinite]` to the FAB button class. (The keyframes are already defined in `index.css`.)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add components/Screens/Home.tsx components/MissionCards.tsx
@@ -1136,12 +1162,12 @@ git commit -m "feat(home): mission card peek + FAB animation wiring"
 **Files:**
 - Modify: `components/Screens/ContributionFlow.tsx`
 
-- [ ] **Step 1: Locate existing progress indicator**
+- [x] **Step 1: Locate existing progress indicator**
 
 Run: `grep -n "step\|progress" components/Screens/ContributionFlow.tsx | head -30`
 Find the JSX that renders the step indicator.
 
-- [ ] **Step 2: Replace with prototype progress bar** (agent_app.html lines 364-378)
+- [x] **Step 2: Replace with prototype progress bar** (agent_app.html lines 364-378)
 
 ```tsx
 <div className="shrink-0 border-b border-gray-100 bg-white px-4 py-2.5">
@@ -1192,7 +1218,7 @@ const STEPS = [
 
 Preserve existing `currentStep` state. If the variable is named differently (e.g. `step`, `stepIndex`), adapt — do not rename it.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/ContributionFlow.tsx
@@ -1206,7 +1232,7 @@ git commit -m "feat(contribute): 4-step progress indicator per handoff"
 **Files:**
 - Modify: `components/Screens/ContributionFlow.tsx`
 
-- [ ] **Step 1: Replace step-1 photo capture JSX** (agent_app.html lines 381-403)
+- [x] **Step 1: Replace step-1 photo capture JSX** (agent_app.html lines 381-403)
 
 Target:
 
@@ -1247,7 +1273,7 @@ Target:
 
 Preserve existing `onCapturePhoto` handler and `photo` state. Do NOT rename them.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/ContributionFlow.tsx
@@ -1261,7 +1287,7 @@ git commit -m "feat(contribute): step 1 photo capture visual refactor"
 **Files:**
 - Modify: `components/Screens/ContributionFlow.tsx`
 
-- [ ] **Step 1: Replace step-2 form JSX** (agent_app.html lines 405-432)
+- [x] **Step 1: Replace step-2 form JSX** (agent_app.html lines 405-432)
 
 Target:
 
@@ -1316,7 +1342,7 @@ Target:
 
 Preserve existing field state shape, validation, and vertical-specific conditional blocks. Only swap the markup classes and wrapper structure. If the existing schema uses different field names, adapt the bindings.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/ContributionFlow.tsx
@@ -1330,7 +1356,7 @@ git commit -m "feat(contribute): step 2 form visual refactor with segmented cont
 **Files:**
 - Modify: `components/Screens/ContributionFlow.tsx`
 
-- [ ] **Step 1: Replace step-3 JSX** (agent_app.html lines 434-461)
+- [x] **Step 1: Replace step-3 JSX** (agent_app.html lines 434-461)
 
 Target:
 
@@ -1364,7 +1390,7 @@ Build `validationRows` from existing validators:
 
 If a dedicated `MiniMap` component doesn't exist, keep the existing inline map rendering — only wrap it in the new styled container.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/ContributionFlow.tsx
@@ -1378,7 +1404,7 @@ git commit -m "feat(contribute): step 3 location view with validation table"
 **Files:**
 - Modify: `components/Screens/ContributionFlow.tsx`
 
-- [ ] **Step 1: Replace step-4 (pre-submit) JSX** (agent_app.html lines 463-480)
+- [x] **Step 1: Replace step-4 (pre-submit) JSX** (agent_app.html lines 463-480)
 
 ```tsx
 <div className="pt-5 text-center">
@@ -1412,7 +1438,7 @@ git commit -m "feat(contribute): step 3 location view with validation table"
 
 Preserve existing `onSubmit`, `submitting`, `xpEstimate` (or whatever the existing XP preview variable is called).
 
-- [ ] **Step 2: Add/replace post-submit Success view** (agent_app.html lines 497-513)
+- [x] **Step 2: Add/replace post-submit Success view** (agent_app.html lines 497-513)
 
 Locate where the component currently renders success state (after `onSubmit` resolves). Replace with:
 
@@ -1460,7 +1486,7 @@ Locate where the component currently renders success state (after `onSubmit` res
 )}
 ```
 
-- [ ] **Step 3: Replace footer (Back / Continue) buttons** (agent_app.html lines 485-491)
+- [x] **Step 3: Replace footer (Back / Continue) buttons** (agent_app.html lines 485-491)
 
 ```tsx
 <footer className="flex shrink-0 gap-2.5 border-t border-gray-100 bg-white px-4 pb-6 pt-3">
@@ -1484,7 +1510,7 @@ Locate where the component currently renders success state (after `onSubmit` res
 
 Preserve `canAdvance`, `onNext`, `onBack` — do not change their logic.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add components/Screens/ContributionFlow.tsx
@@ -1502,7 +1528,7 @@ Prototype source: `/Users/charlesvictormahouve/Downloads/design_handoff/admin.ht
 **Files:**
 - Modify: `components/Screens/AdminQueue.tsx`
 
-- [ ] **Step 1: Replace the top header block**
+- [x] **Step 1: Replace the top header block**
 
 ```tsx
 <ScreenHeader
@@ -1514,7 +1540,7 @@ Prototype source: `/Users/charlesvictormahouve/Downloads/design_handoff/admin.ht
 />
 ```
 
-- [ ] **Step 2: Replace the filter row block**
+- [x] **Step 2: Replace the filter row block**
 
 ```tsx
 <div className="shrink-0 border-b border-gray-100 bg-white px-4 py-2.5">
@@ -1535,7 +1561,7 @@ Import: `import FilterChipRow from '../shared/FilterChipRow';`
 
 Preserve `riskFilter` state. Define `type RiskFilter = 'pending' | 'high' | 'medium' | 'low'` if not already present.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/AdminQueue.tsx
@@ -1549,7 +1575,7 @@ git commit -m "feat(admin): filter chip row + header with admin badge"
 **Files:**
 - Modify: `components/Screens/AdminQueue.tsx`
 
-- [ ] **Step 1: Extract queue card as sub-component at top of file**
+- [x] **Step 1: Extract queue card as sub-component at top of file**
 
 ```tsx
 interface QueueCardProps {
@@ -1609,9 +1635,9 @@ const QueueCard: React.FC<QueueCardProps> = ({ submission, language, onSelect })
 };
 ```
 
-- [ ] **Step 2: Replace the queue list rendering with `<QueueCard>` instances**
+- [x] **Step 2: Replace the queue list rendering with `<QueueCard>` instances**
 
-- [ ] **Step 3: Imports**
+- [x] **Step 3: Imports**
 
 ```tsx
 import { AlertTriangle, ChevronRight, MapPin } from 'lucide-react';
@@ -1619,7 +1645,7 @@ import RiskBadge from '../shared/RiskBadge';
 import TrustBadge from '../shared/TrustBadge';
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add components/Screens/AdminQueue.tsx
@@ -1633,7 +1659,7 @@ git commit -m "feat(admin): queue card redesign with risk + trust badges"
 **Files:**
 - Modify: `components/Screens/AdminQueue.tsx`
 
-- [ ] **Step 1: Replace the detail view JSX** (admin.html lines 236-285)
+- [x] **Step 1: Replace the detail view JSX** (admin.html lines 236-285)
 
 Target structure:
 
@@ -1714,13 +1740,13 @@ Target structure:
 
 Build `forensicRows` from existing submission fields (submitted by, time, GPS, accuracy, EXIF match, velocity check). Preserve `onApprove` / `onReject` — they must continue to call the same API handlers and trigger bulk-action state updates.
 
-- [ ] **Step 2: Imports**
+- [x] **Step 2: Imports**
 
 ```tsx
 import { Camera, Check, X, AlertTriangle } from 'lucide-react';
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/AdminQueue.tsx
@@ -1734,7 +1760,7 @@ git commit -m "feat(admin): submission review detail redesign"
 **Files:**
 - Modify: `components/Screens/AdminQueue.tsx`
 
-- [ ] **Step 1: Replace the post-decision result view** (admin.html lines 225-234)
+- [x] **Step 1: Replace the post-decision result view** (admin.html lines 225-234)
 
 ```tsx
 {decision && (
@@ -1764,7 +1790,7 @@ git commit -m "feat(admin): submission review detail redesign"
 )}
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/AdminQueue.tsx
@@ -1778,7 +1804,7 @@ git commit -m "feat(admin): decision result confirmation view"
 **Files:**
 - Modify: `components/Screens/DeltaDashboard.tsx`
 
-- [ ] **Step 1: Replace the summary tile grid** (admin.html lines 297-305)
+- [x] **Step 1: Replace the summary tile grid** (admin.html lines 297-305)
 
 ```tsx
 <div className="mb-3.5 grid grid-cols-2 gap-2">
@@ -1793,7 +1819,7 @@ Import: `import KpiTile from '../shared/KpiTile';`
 
 Preserve existing `totals` / data fetching logic.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/DeltaDashboard.tsx
@@ -1807,7 +1833,7 @@ git commit -m "feat(delta): KPI tile grid with tones"
 **Files:**
 - Modify: `components/Screens/DeltaDashboard.tsx`
 
-- [ ] **Step 1: Replace the per-vertical rendering block** (admin.html lines 307-336)
+- [x] **Step 1: Replace the per-vertical rendering block** (admin.html lines 307-336)
 
 ```tsx
 <div className="micro-label mb-2.5 text-gray-400">
@@ -1854,14 +1880,14 @@ git commit -m "feat(delta): KPI tile grid with tones"
 
 Preserve `verticalStats` / `maxVal` existing derivation.
 
-- [ ] **Step 2: Imports**
+- [x] **Step 2: Imports**
 
 ```tsx
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import VerticalIcon from '../shared/VerticalIcon';
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens/DeltaDashboard.tsx
@@ -1875,7 +1901,7 @@ git commit -m "feat(delta): per-vertical bar rows with deltas"
 **Files:**
 - Modify: `components/Screens/DeltaDashboard.tsx`
 
-- [ ] **Step 1: Replace the weekly chart block** (admin.html lines 338-348)
+- [x] **Step 1: Replace the weekly chart block** (admin.html lines 338-348)
 
 ```tsx
 <div className="micro-label mb-2.5 text-gray-400">
@@ -1890,7 +1916,7 @@ Import: `import WeeklyBarChart from '../shared/WeeklyBarChart';`
 
 Preserve `weeklyCounts` / `todayIndex` from existing state.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/DeltaDashboard.tsx
@@ -1904,7 +1930,7 @@ git commit -m "feat(delta): weekly bar chart using shared primitive"
 **Files:**
 - Modify: `components/Screens/AgentPerformance.tsx`
 
-- [ ] **Step 1: Replace summary tiles** (admin.html lines 362-369)
+- [x] **Step 1: Replace summary tiles** (admin.html lines 362-369)
 
 ```tsx
 <div className="mb-0.5 grid grid-cols-3 gap-2">
@@ -1914,7 +1940,7 @@ git commit -m "feat(delta): weekly bar chart using shared primitive"
 </div>
 ```
 
-- [ ] **Step 2: Replace agent card rendering** (admin.html lines 370-391)
+- [x] **Step 2: Replace agent card rendering** (admin.html lines 370-391)
 
 ```tsx
 {agents.map((a, i) => {
@@ -1956,14 +1982,14 @@ git commit -m "feat(delta): weekly bar chart using shared primitive"
 })}
 ```
 
-- [ ] **Step 3: Imports**
+- [x] **Step 3: Imports**
 
 ```tsx
 import KpiTile from '../shared/KpiTile';
 import TrustBadge from '../shared/TrustBadge';
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add components/Screens/AgentPerformance.tsx
@@ -1981,7 +2007,7 @@ Prototype source: `/Users/charlesvictormahouve/Downloads/design_handoff/client.h
 **Files:**
 - Modify: `components/Screens/InvestorDashboard.tsx`
 
-- [ ] **Step 1: Replace the top header block** (client.html lines 147-173)
+- [x] **Step 1: Replace the top header block** (client.html lines 147-173)
 
 ```tsx
 <section className="route-grid shrink-0 bg-navy px-4 pb-5 pt-4 text-white">
@@ -2016,7 +2042,7 @@ Prototype source: `/Users/charlesvictormahouve/Downloads/design_handoff/client.h
 
 Preserve existing data derivation for `totalPoints`, `weeklyDelta`, `coveragePct`, `zoneLabel`.
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/InvestorDashboard.tsx
@@ -2030,7 +2056,7 @@ git commit -m "feat(client): navy hero with KPI pair"
 **Files:**
 - Modify: `components/Screens/InvestorDashboard.tsx`
 
-- [ ] **Step 1: Add per-vertical section** (client.html lines 175-202)
+- [x] **Step 1: Add per-vertical section** (client.html lines 175-202)
 
 Reuse the same `VERTICALS.find(...)` pattern with `<VerticalIcon />`:
 
@@ -2076,7 +2102,7 @@ Reuse the same `VERTICALS.find(...)` pattern with `<VerticalIcon />`:
 </section>
 ```
 
-- [ ] **Step 2: Weekly section**
+- [x] **Step 2: Weekly section**
 
 ```tsx
 <section className="px-4">
@@ -2089,7 +2115,7 @@ Reuse the same `VERTICALS.find(...)` pattern with `<VerticalIcon />`:
 </section>
 ```
 
-- [ ] **Step 3: Top zones section** (client.html lines 219-234)
+- [x] **Step 3: Top zones section** (client.html lines 219-234)
 
 ```tsx
 <section className="px-4 pb-4">
@@ -2115,7 +2141,7 @@ Reuse the same `VERTICALS.find(...)` pattern with `<VerticalIcon />`:
 </section>
 ```
 
-- [ ] **Step 4: Imports**
+- [x] **Step 4: Imports**
 
 ```tsx
 import { MapPin, TrendingDown, TrendingUp } from 'lucide-react';
@@ -2124,7 +2150,7 @@ import VerticalIcon from '../shared/VerticalIcon';
 import { VERTICALS } from '../../shared/verticals';
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/Screens/InvestorDashboard.tsx
@@ -2138,7 +2164,7 @@ git commit -m "feat(client): vertical bars + weekly chart + top zones sections"
 **Files:**
 - Create: `components/Screens/ClientInsights.tsx`
 
-- [ ] **Step 1: Write component**
+- [x] **Step 1: Write component**
 
 ```tsx
 import React from 'react';
@@ -2266,7 +2292,7 @@ const ClientInsights: React.FC<Props> = ({
 export default ClientInsights;
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/ClientInsights.tsx
@@ -2280,7 +2306,7 @@ git commit -m "feat(client): add ClientInsights screen per handoff"
 **Files:**
 - Modify: `App.tsx`
 
-- [ ] **Step 1: Add lazy import**
+- [x] **Step 1: Add lazy import**
 
 Near the other lazy imports (around line 44-50):
 
@@ -2288,7 +2314,7 @@ Near the other lazy imports (around line 44-50):
 const ClientInsights = lazy(() => import('./components/Screens/ClientInsights'));
 ```
 
-- [ ] **Step 2: Add render case in `renderScreen` switch**
+- [x] **Step 2: Add render case in `renderScreen` switch**
 
 Find the switch statement over `currentScreen`. Add:
 
@@ -2311,12 +2337,12 @@ case Screen.CLIENT_INSIGHTS:
 
 Wire `clientSnapshot`, `handleExportClientData`, `handleSelectInsight` to existing data source used by `InvestorDashboard`. If missing, extract values from the same endpoint/store that feeds `InvestorDashboard` or `DeltaDashboard`.
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 Run: `npx tsc --noEmit 2>&1 | grep -E "CLIENT_INSIGHTS|ClientInsights"`
 Expected: No errors
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add App.tsx
@@ -2330,7 +2356,7 @@ git commit -m "feat(app): wire ClientInsights screen into navigation"
 **Files:**
 - Modify: `components/Screens/Settings.tsx`
 
-- [ ] **Step 1: Add conditional block at top of rendered content** (only when `userRole === 'client'`)
+- [x] **Step 1: Add conditional block at top of rendered content** (only when `userRole === 'client'`)
 
 ```tsx
 {userRole === 'client' && (
@@ -2383,7 +2409,7 @@ Define `clientSections` inline with 3 groups per spec:
 
 Each item `onSelect` either calls an existing handler or `handleComingSoon` / `setToast('Coming soon')` for features not yet built (keep no-op rather than leaving dead).
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add components/Screens/Settings.tsx
@@ -2397,7 +2423,7 @@ git commit -m "feat(settings): client-role profile card + grouped sections"
 **Files:**
 - Modify: `components/Screens/Home.tsx`
 
-- [ ] **Step 1: Add client-variant header**
+- [x] **Step 1: Add client-variant header**
 
 When `userRole === 'client'`, replace the agent header chrome with:
 
@@ -2433,7 +2459,7 @@ const VERTICAL_FILTER_CHIPS = (language: 'en' | 'fr') =>
   VERTICALS.map((v) => ({ id: v.category, label: categoryLabel(v.category, language) }));
 ```
 
-- [ ] **Step 2: Override map pin rendering for clients — cluster dots vs. diamond pins**
+- [x] **Step 2: Override map pin rendering for clients — cluster dots vs. diamond pins**
 
 When `userRole === 'client'`, swap the `<Marker>` render inside the map to render as a colored circle with white border + colored box-shadow:
 
@@ -2455,7 +2481,7 @@ return (
 
 If existing markers use a different Leaflet API, keep the existing marker + add a CSS class distinguishing client vs agent styling. The key is a circular dot look for clients.
 
-- [ ] **Step 3: Client bottom-left info overlay**
+- [x] **Step 3: Client bottom-left info overlay**
 
 ```tsx
 {userRole === 'client' && (
@@ -2480,14 +2506,14 @@ If existing markers use a different Leaflet API, keep the existing marker + add 
 )}
 ```
 
-- [ ] **Step 4: Imports**
+- [x] **Step 4: Imports**
 
 ```tsx
 import { Filter } from 'lucide-react';
 import FilterChipRow from '../shared/FilterChipRow';
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add components/Screens/Home.tsx
@@ -2502,14 +2528,14 @@ git commit -m "feat(client): Map Explorer variant with chip filter and cluster d
 
 **Files:** N/A (cleanup)
 
-- [ ] **Step 1: Grep for raw hex in touched screens**
+- [x] **Step 1: Grep for raw hex in touched screens**
 
 Run:
 ```bash
 grep -rEn "#[0-9a-fA-F]{3,8}" components/Screens components/shared | grep -v "fill=\"#ffffff\"\|stroke=\"#ffffff\"" | head -40
 ```
 
-- [ ] **Step 2: For each legitimate raw-hex usage that already matches a token, replace inline with Tailwind class**
+- [x] **Step 2: For each legitimate raw-hex usage that already matches a token, replace inline with Tailwind class**
 
 Exceptions allowed:
 - SVG path `fill` / `stroke` attributes
@@ -2517,7 +2543,7 @@ Exceptions allowed:
 
 Replace anything else with `bg-navy` / `text-terra` / etc.
 
-- [ ] **Step 3: Commit cleanup**
+- [x] **Step 3: Commit cleanup**
 
 ```bash
 git add components
@@ -2530,18 +2556,18 @@ git commit -m "chore(design): replace raw hex with Tailwind tokens where possibl
 
 **Files:** N/A (audit)
 
-- [ ] **Step 1: Grep for suspicious hardcoded strings in changed screens**
+- [x] **Step 1: Grep for suspicious hardcoded strings in changed screens**
 
 Run:
 ```bash
 grep -En ">\s*[A-Z][a-z]+.*<" components/Screens/{Home,Details,ContributionFlow,Profile,AdminQueue,DeltaDashboard,AgentPerformance,InvestorDashboard,ClientInsights,Settings}.tsx | grep -v "t(" | head -40
 ```
 
-- [ ] **Step 2: Wrap any missed English strings in `t(en, fr)`**
+- [x] **Step 2: Wrap any missed English strings in `t(en, fr)`**
 
 For each match, edit the line to wrap in `t('X', '<french-equivalent>')`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add components/Screens
@@ -2554,26 +2580,26 @@ git commit -m "chore(i18n): wrap remaining hardcoded strings in t() helper"
 
 **Files:** N/A (verification)
 
-- [ ] **Step 1: Run CI suite**
+- [x] **Step 1: Run CI suite**
 
 Run: `npm run test:ci`
 Expected: All green
 
-- [ ] **Step 2: If anything fails, fix root cause**
+- [x] **Step 2: If anything fails, fix root cause**
 
 Do not skip tests. If a test mocks visual markup (e.g. asserting specific class names), update the assertion to match the new class rather than rewriting the test's intent.
 
-- [ ] **Step 3: Check function budget**
+- [x] **Step 3: Check function budget**
 
 Run: `npm run check:function-budget`
 Expected: Under budget
 
-- [ ] **Step 4: Production build**
+- [x] **Step 4: Production build**
 
 Run: `npm run build`
 Expected: Successful build with no warnings about unused imports or TS errors
 
-- [ ] **Step 5: Commit any fixes**
+- [x] **Step 5: Commit any fixes**
 
 ```bash
 git add .
@@ -2588,12 +2614,12 @@ git commit -m "fix: resolve test/build failures from visual refactor"
 
 **Files:** N/A (manual verification)
 
-- [ ] **Step 1: Start dev server**
+- [x] **Step 1: Start dev server**
 
 Run: `npm run dev &`
 Open: `http://localhost:5173`
 
-- [ ] **Step 2: Agent flow**
+- [x] **Step 2: Agent flow**
 
 Sign in as an agent user. Walk through:
 1. Home → Map view (verify header chrome, vertical picker, mission peek, FAB animation)
@@ -2607,7 +2633,7 @@ Sign in as an agent user. Walk through:
 
 Compare each screen side-by-side against the prototype in `agent_app.html`. Screenshot any pixel-level deltas.
 
-- [ ] **Step 3: Admin flow**
+- [x] **Step 3: Admin flow**
 
 Sign in as admin. Walk through:
 1. Admin queue (verify filter chips, card layout with risk + trust badges)
@@ -2616,7 +2642,7 @@ Sign in as admin. Walk through:
 4. Bottom nav → Analytics (DeltaDashboard KPI tiles, vertical bars, weekly chart)
 5. Bottom nav → Agents (summary tiles, ranked agent cards)
 
-- [ ] **Step 4: Client flow**
+- [x] **Step 4: Client flow**
 
 Sign in as client. Walk through:
 1. Dashboard (navy hero, KPI pair, vertical bars, weekly chart, top zones)
@@ -2624,14 +2650,14 @@ Sign in as client. Walk through:
 3. Bottom nav → Insights (navy headline, insight cards, export CTA)
 4. Bottom nav → Account (navy profile card, settings sections)
 
-- [ ] **Step 5: Offline smoke test**
+- [x] **Step 5: Offline smoke test**
 
 1. Disconnect network (DevTools → Offline)
 2. As agent, capture a new submission end-to-end
 3. Confirm queue indicator shows 1 pending
 4. Reconnect — confirm queue drains, submission appears in admin queue
 
-- [ ] **Step 6: Reduced-motion smoke test**
+- [x] **Step 6: Reduced-motion smoke test**
 
 In DevTools → Rendering → Emulate `prefers-reduced-motion: reduce`.
 Navigate Home → ContributionFlow → Success. Confirm:
@@ -2639,7 +2665,7 @@ Navigate Home → ContributionFlow → Success. Confirm:
 - Ring pulse stopped
 - Screen transitions still fire but instantly
 
-- [ ] **Step 7: Commit a verification log**
+- [x] **Step 7: Commit a verification log**
 
 ```bash
 echo "## $(date -u +%Y-%m-%dT%H:%M:%SZ) — handoff verification
