@@ -812,7 +812,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                 <button
                   type="button"
                   onClick={() => setPointsLoadError('')}
-                  className="shrink-0 rounded-full p-1 text-gray-400 transition-colors hover:text-gray-600"
+                  className="shrink-0 rounded-full p-2.5 text-gray-400 transition-colors hover:text-gray-600"
                   aria-label={t('Dismiss', 'Fermer')}
                 >
                   <X size={14} />
@@ -850,7 +850,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                     <button
                       type="button"
                       onClick={() => setPointsLoadError('')}
-                      className="shrink-0 rounded-full p-1 text-gray-400 transition-colors hover:text-gray-600"
+                      className="shrink-0 rounded-full p-2.5 text-gray-400 transition-colors hover:text-gray-600"
                       aria-label={t('Dismiss', 'Fermer')}
                     >
                       <X size={14} />
