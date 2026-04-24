@@ -402,7 +402,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
                 </div>
               </div>
             </div>
-            <span className="micro-label rounded-full bg-white/10 px-2.5 py-0.5 text-white/70">Client</span>
+            <span className="micro-label rounded-full bg-white/10 px-2.5 py-0.5 text-white/70">{t('Client', 'Client')}</span>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-[14px] border border-white/10 bg-white/[0.08] p-3.5">
@@ -417,7 +417,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
             <div className="rounded-[14px] border border-gold/20 bg-gold/15 p-3.5">
               <div className="micro-label mb-1 text-[9px] text-gold/70">{t('Coverage', 'Couverture')}</div>
               <div className="text-[28px] font-extrabold leading-none text-gold">{avgCompletionRate}%</div>
-              <div className="mt-1 text-[11px] font-medium text-white/50">Bonamoussadi</div>
+              <div className="mt-1 text-[11px] font-medium text-white/50">{t('Bonamoussadi', 'Bonamoussadi')}</div>
             </div>
           </div>
         </section>
