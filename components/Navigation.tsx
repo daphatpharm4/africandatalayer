@@ -73,7 +73,7 @@ const Navigation: React.FC<Props> = ({
     {
       id: isAuthenticated ? Screen.PROFILE : Screen.AUTH,
       label: isAuthenticated
-        ? t('Account', 'Compte')
+        ? t('Profile', 'Profil')
         : t('Sign In', 'Connexion'),
       icon: User,
     },
