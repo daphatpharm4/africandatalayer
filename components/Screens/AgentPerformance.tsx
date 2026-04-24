@@ -135,8 +135,16 @@ const AgentPerformance: React.FC<Props> = ({ onBack, language }) => {
             </div>
           )}
           {!loading && agentRows.length === 0 && (
-            <div className="rounded-2xl border border-gray-100 bg-page p-4 text-xs text-gray-500">
-              {t('No agent performance data yet.', 'Pas encore de données de performance agents.')}
+            <div className="rounded-2xl border border-gray-100 bg-page px-4 py-5">
+              <p className="text-[13px] font-semibold text-gray-700">
+                {t('No agent data yet.', 'Aucune donnée agent pour l\'instant.')}
+              </p>
+              <p className="mt-1 text-[12px] leading-relaxed text-gray-500">
+                {t(
+                  'Rankings populate after submissions are approved in the review queue.',
+                  'Les classements se remplissent après approbation des soumissions dans la file de revue.',
+                )}
+              </p>
             </div>
           )}
           {!loading &&
