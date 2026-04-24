@@ -392,7 +392,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
       <div className="p-4 pb-24 space-y-4 print:p-8 print:pb-4">
         {/* Hero */}
         <section className="route-grid shrink-0 bg-navy px-4 pb-5 pt-4 text-white">
-          <div className="mb-3.5 flex items-center justify-between">
+          <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BrandLogo size={20} />
               <div>
@@ -404,20 +404,54 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
             </div>
             <span className="micro-label rounded-full bg-white/10 px-2.5 py-0.5 text-white/70">{t('Client', 'Client')}</span>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-[14px] border border-white/10 bg-white/[0.08] p-3.5">
-              <div className="micro-label mb-1 text-[9px] text-white/50">{t('Total Points', 'Points totaux')}</div>
-              <div className="font-display text-[28px] font-extrabold leading-none">{totalPoints.toLocaleString()}</div>
-              {avgWoW !== null && (
-                <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-green-400">
-                  <TrendingUp size={11} /> {avgWoW >= 0 ? '+' : ''}{avgWoW}% {t('this week', 'cette semaine')}
-                </div>
-              )}
+          {/* Narrative status line */}
+          <div className="mb-2.5 rounded-[14px] border border-white/10 bg-white/[0.08] px-3.5 py-3">
+            <div className="micro-label mb-1 text-[9px] text-white/50">
+              {t('Network status', 'Statut réseau')}
             </div>
-            <div className="rounded-[14px] border border-gold/20 bg-gold/15 p-3.5">
-              <div className="micro-label mb-1 text-[9px] text-gold/70">{t('Coverage', 'Couverture')}</div>
-              <div className="font-display text-[28px] font-extrabold leading-none text-gold">{avgCompletionRate}%</div>
-              <div className="mt-1 text-[11px] font-medium text-white/50">{t('Bonamoussadi', 'Bonamoussadi')}</div>
+            {totalPoints > 0 ? (
+              <>
+                <div className="font-display text-[17px] font-bold leading-snug text-white">
+                  {t('Active network', 'Réseau actif')} · {totalPoints.toLocaleString()} {t('points mapped', 'points cartographiés')}
+                </div>
+                {avgWoW !== null && (
+                  <div className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-green-400">
+                    <TrendingUp size={11} /> {avgWoW >= 0 ? '+' : ''}{avgWoW}% {t('this week', 'cette semaine')}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="font-display text-[17px] font-bold leading-snug text-white/60">
+                  {t('Awaiting first capture', 'En attente de la première capture')}
+                </div>
+                <div className="mt-0.5 text-[11px] text-white/40">
+                  {t('Field agents are being onboarded.', "Les agents terrain sont en cours d'intégration.")}
+                </div>
+              </>
+            )}
+          </div>
+          {/* Stats row */}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-[14px] border border-white/10 bg-white/[0.08] p-3">
+              <div className="micro-label mb-1 text-[9px] text-white/50">{t('Verified', 'Vérifiés')}</div>
+              <div className="font-display text-[22px] font-extrabold leading-none">
+                {kpi?.verification.verifiedPoints.toLocaleString() ?? '--'}
+              </div>
+              <div className="mt-0.5 text-[11px] text-white/40">
+                / {kpi?.verification.totalPoints.toLocaleString() ?? '--'} {t('total', 'total')}
+              </div>
+            </div>
+            <div className={`rounded-[14px] p-3 ${avgCompletionRate > 0 ? 'border border-gold/20 bg-gold/15' : 'border border-white/10 bg-white/[0.08]'}`}>
+              <div className={`micro-label mb-1 text-[9px] ${avgCompletionRate > 0 ? 'text-gold/70' : 'text-white/50'}`}>
+                {t('Coverage', 'Couverture')}
+              </div>
+              <div className={`font-display text-[22px] font-extrabold leading-none ${avgCompletionRate > 0 ? 'text-gold' : 'text-white/40'}`}>
+                {avgCompletionRate}%
+              </div>
+              <div className="mt-0.5 text-[11px] text-white/40">
+                {t('Bonamoussadi', 'Bonamoussadi')}
+              </div>
             </div>
           </div>
         </section>
