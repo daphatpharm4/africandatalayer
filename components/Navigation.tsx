@@ -56,8 +56,14 @@ const Navigation: React.FC<Props> = ({
 
   const adminNav = [
     { id: Screen.ADMIN, label: t('Queue', 'File'), icon: CheckSquare },
+    { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
     { id: Screen.DELTA_DASHBOARD, label: t('Analytics', 'Analyses'), icon: BarChart2 },
     { id: Screen.AGENT_PERFORMANCE, label: t('Agents', 'Agents'), icon: Users },
+    {
+      id: isAuthenticated ? Screen.PROFILE : Screen.AUTH,
+      label: isAuthenticated ? t('Profile', 'Profil') : t('Sign In', 'Connexion'),
+      icon: User,
+    },
   ];
 
   const clientNav = [
