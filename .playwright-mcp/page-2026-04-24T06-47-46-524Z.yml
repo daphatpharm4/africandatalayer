@@ -1,0 +1,72 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - button "Tout synchronisé. Prêt à capturer." [ref=e5] [cursor=pointer]:
+      - img [ref=e73]
+      - generic [ref=e9]: Tout synchronisé. Prêt à capturer.
+    - button "Actualiser" [ref=e76] [cursor=pointer]:
+      - img [ref=e77]
+  - main [ref=e16]:
+    - generic [ref=e397]:
+      - generic [ref=e398]:
+        - generic [ref=e399]:
+          - generic [ref=e400]: Explorateur
+          - button "Filtrer" [ref=e401] [cursor=pointer]:
+            - img [ref=e402]
+            - text: Filtrer
+        - generic [ref=e404]:
+          - button "Pharmacie" [ref=e405] [cursor=pointer]
+          - button "Station-service" [ref=e406] [cursor=pointer]
+          - button "Mobile money" [ref=e407] [cursor=pointer]
+          - button "Point de vente d'alcool" [ref=e408] [cursor=pointer]
+          - button "Panneau publicitaire" [ref=e409] [cursor=pointer]
+          - button "Segment routier" [ref=e410] [cursor=pointer]
+          - button "Batiment / Point de recensement" [ref=e411] [cursor=pointer]
+      - generic [ref=e412]:
+        - generic [ref=e413]:
+          - generic [ref=e414]:
+            - generic:
+              - generic:
+                - img
+              - button [ref=e415] [cursor=pointer]
+            - generic:
+              - generic [ref=e417]:
+                - button "Zoom in" [ref=e418] [cursor=pointer]: +
+                - button "Zoom out" [disabled] [ref=e419]: −
+              - generic [ref=e420]:
+                - link "Leaflet" [ref=e421] [cursor=pointer]:
+                  - /url: https://leafletjs.com
+                  - img [ref=e422]
+                  - text: Leaflet
+                - text: "| ©"
+                - link "OpenStreetMap" [ref=e426] [cursor=pointer]:
+                  - /url: https://www.openstreetmap.org/copyright
+                - text: ©
+                - link "CARTO" [ref=e427] [cursor=pointer]:
+                  - /url: https://carto.com/attributions
+          - generic [ref=e430]:
+            - paragraph [ref=e431]: Geofence Bonamoussadi
+            - paragraph [ref=e432]: Carte limitée à Bonamoussadi, Douala, Cameroun
+          - button "Afficher ou masquer la carte thermique" [ref=e434] [cursor=pointer]:
+            - img [ref=e435]
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: 0 points
+                - generic: Pharmacie · Bonamoussadi
+        - generic [ref=e439]:
+          - paragraph [ref=e440]: Impossible de charger les points. Réessayez ou revenez dans un instant.
+          - button "Réessayer" [ref=e441] [cursor=pointer]
+  - navigation "Navigation principale" [ref=e51]:
+    - button "Tableau" [ref=e202] [cursor=pointer]:
+      - img [ref=e203]
+      - generic [ref=e208]: Tableau
+    - button "Carte" [active] [ref=e209] [cursor=pointer]:
+      - img [ref=e53]
+      - generic [ref=e55]: Carte
+    - button "Analyses" [ref=e210] [cursor=pointer]:
+      - img [ref=e211]
+      - generic [ref=e214]: Analyses
+    - button "Connexion" [ref=e68] [cursor=pointer]:
+      - img [ref=e69]
+      - generic [ref=e72]: Connexion

@@ -1,0 +1,30 @@
+- main [ref=e4]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - img [ref=e9]
+        - generic [ref=e13]: ADL
+      - generic [ref=e14]: 2/5
+    - generic [ref=e51]:
+      - generic [ref=e52]:
+        - generic [ref=e53]: Capture live
+        - generic [ref=e54]: Preuve GPS
+        - generic [ref=e55]: Qualite recompensee
+      - generic [ref=e60]:
+        - img [ref=e61]
+        - img [ref=e64]
+      - generic [ref=e67]:
+        - paragraph [ref=e68]: Onboarding pret pour mission
+        - heading "Avant de commencer" [level=1] [ref=e69]
+        - paragraph [ref=e70]: Nous avons besoin de votre caméra et de votre position pour vérifier chaque capture. Seules les photos en direct sont acceptées.
+    - generic [ref=e32]:
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - generic [ref=e36]: Conçu pour le terrain
+          - generic [ref=e37]: Prêt en moins d'une minute
+        - generic [ref=e38]:
+          - generic [ref=e39]: Mode
+          - generic [ref=e40]: Preparation
+      - button "Autoriser les permissions" [active] [ref=e71] [cursor=pointer]:
+        - generic [ref=e48]: Autoriser les permissions
+        - img [ref=e49]
