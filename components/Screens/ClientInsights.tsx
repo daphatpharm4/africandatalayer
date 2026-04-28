@@ -41,7 +41,7 @@ const ClientInsights: React.FC<Props> = ({
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   return (
-    <div className="flex h-full flex-col bg-page">
+    <div data-testid="screen-client-insights" className="screen-shell flex h-full flex-col bg-page">
       <ScreenHeader
         title={t('Insights', 'Analyses')}
         language={language}

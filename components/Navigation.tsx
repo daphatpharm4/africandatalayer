@@ -7,6 +7,7 @@ import {
   Medal,
   User,
   TrendingUp,
+  LayoutDashboard,
   CheckSquare,
   Users,
 } from 'lucide-react';
@@ -82,8 +83,9 @@ const Navigation: React.FC<Props> = ({
       icon: BarChart2,
       multiline: true,
     },
+    { id: Screen.INVESTOR_DASHBOARD, label: t('Dashboard', 'Tableau'), icon: LayoutDashboard },
     { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
-    { id: Screen.ANALYTICS, label: t('Insights', 'Analyses'), icon: TrendingUp },
+    { id: Screen.CLIENT_INSIGHTS, label: t('Insights', 'Analyses'), icon: TrendingUp },
     {
       id: isAuthenticated ? Screen.PROFILE : Screen.AUTH,
       label: isAuthenticated

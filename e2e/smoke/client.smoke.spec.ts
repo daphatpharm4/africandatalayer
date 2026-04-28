@@ -16,6 +16,18 @@ test("client account nav keeps delta intelligence one tap away", async ({ page, 
 
   await gotoApp("/");
 
+  await expect(mainNavigation().getByRole("button", { name: /Delta Intelligence/i })).toBeVisible();
+  await expect(mainNavigation().getByRole("button", { name: /^Dashboard$/i })).toBeVisible();
+  await expect(mainNavigation().getByRole("button", { name: /^Map$/i })).toBeVisible();
+  await expect(mainNavigation().getByRole("button", { name: /^Insights$/i })).toBeVisible();
+  await expect(mainNavigation().getByRole("button", { name: /^Account$/i })).toBeVisible();
+
+  await mainNavigation().getByRole("button", { name: /^Dashboard$/i }).click();
+  await expect(page.getByTestId("screen-investor-dashboard")).toBeVisible();
+
+  await mainNavigation().getByRole("button", { name: /^Insights$/i }).click();
+  await expect(page.getByTestId("screen-client-insights")).toBeVisible();
+
   await mainNavigation().getByRole("button", { name: /^Account$/i }).click();
   await expect(page.getByTestId("screen-profile")).toBeVisible();
 
