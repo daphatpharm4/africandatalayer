@@ -452,12 +452,14 @@ const Analytics: React.FC<Props> = ({
         onBack={onBack}
         language={language}
         trailing={
-          <button
-            className="flex h-11 w-11 items-center justify-center text-gray-400"
-            aria-label={t('Share', 'Partager')}
-          >
-            <Share2 size={20} />
-          </button>
+          clientMode ? null : (
+            <button
+              className="flex h-11 w-11 items-center justify-center text-gray-400"
+              aria-label={t('Share', 'Partager')}
+            >
+              <Share2 size={20} />
+            </button>
+          )
         }
       />
 

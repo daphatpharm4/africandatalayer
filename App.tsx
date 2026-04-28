@@ -43,7 +43,6 @@ const AdminQueue = lazy(() => import('./components/Screens/AdminQueue'));
 const AgentPerformance = lazy(() => import('./components/Screens/AgentPerformance'));
 const DeltaDashboard = lazy(() => import('./components/Screens/DeltaDashboard'));
 const InvestorDashboard = lazy(() => import('./components/Screens/InvestorDashboard'));
-const ClientInsights = lazy(() => import('./components/Screens/ClientInsights'));
 const SubmissionQueue = lazy(() => import('./components/Screens/SubmissionQueue'));
 const PrivacyPolicy = lazy(() => import('./components/Screens/PrivacyPolicy'));
 const TermsOfUse = lazy(() => import('./components/Screens/TermsOfUse'));
