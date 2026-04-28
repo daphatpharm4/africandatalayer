@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Circle, MapContainer, Marker, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
+import { Circle, CircleMarker, MapContainer, Marker, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Layers, Navigation } from 'lucide-react';
 import { Category } from '../../types';
@@ -72,6 +72,7 @@ interface Props {
   sheetSnap?: string;
   viewportTopInsetPx?: number;
   viewportBottomInsetPx?: number;
+  userRole?: 'agent' | 'admin' | 'client';
 }
 
 const createMarkerIcon = (color: string) =>
@@ -220,6 +221,7 @@ const HomeMap: React.FC<Props> = ({
   sheetSnap,
   viewportTopInsetPx = 0,
   viewportBottomInsetPx = 0,
+  userRole = 'agent',
 }) => {
   const [showHeatmap, setShowHeatmap] = useState(false);
 
@@ -275,6 +277,30 @@ const HomeMap: React.FC<Props> = ({
         {showHeatmap && heatPoints.length > 0 && <HeatmapLayer points={heatPoints} />}
         {mapPointGroups.map((group) => {
           const singlePoint = group.points.length === 1 ? group.points[0] : null;
+
+          if (userRole === 'client') {
+            const groupType = group.points[0].type;
+            const verticalId = LEGACY_CATEGORY_MAP[groupType] ?? groupType;
+            return (
+              <CircleMarker
+                key={group.key}
+                center={[group.latitude, group.longitude]}
+                radius={8 + Math.min(group.points.length - 1, 5) * 0.4}
+                pathOptions={{
+                  color: '#ffffff',
+                  weight: 2,
+                  fillColor: VERTICALS[verticalId]?.color ?? '#0f2b46',
+                  fillOpacity: 0.85,
+                }}
+                eventHandlers={{
+                  click: () => {
+                    if (singlePoint) onSelectPoint(singlePoint);
+                  },
+                }}
+              />
+            );
+          }
+
           const icon = singlePoint
             ? getMarkerIconForType(singlePoint.type)
             : (() => {

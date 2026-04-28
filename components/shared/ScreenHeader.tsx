@@ -44,7 +44,7 @@ const ScreenHeader: React.FC<Props> = ({
         <div />
       )}
       <div className="min-w-0 text-center">
-        <div className={`truncate font-bold leading-tight ${isDark ? 'text-xs uppercase tracking-[0.16em]' : 'text-[15px]'}`}>
+        <div className={`truncate font-display font-bold leading-tight ${isDark ? 'text-xs uppercase tracking-[0.16em]' : 'text-[15px]'}`}>
           {title}
         </div>
         {subtitle && (

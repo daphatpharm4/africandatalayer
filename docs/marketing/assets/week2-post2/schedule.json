@@ -1,0 +1,47 @@
+{
+  "post_id": "adl-ig-week2-post2",
+  "platform": "instagram",
+  "account": "@africandatalayer",
+  "format": "carousel",
+  "scheduled_at_local": "2026-04-23T18:00:00+01:00",
+  "scheduled_at_utc": "2026-04-23T17:00:00Z",
+  "timezone": "Africa/Douala (WAT / UTC+1)",
+  "slides": [
+    "docs/marketing/assets/week2-post2/slide-01.png",
+    "docs/marketing/assets/week2-post2/slide-02.png",
+    "docs/marketing/assets/week2-post2/slide-03.png",
+    "docs/marketing/assets/week2-post2/slide-04.png",
+    "docs/marketing/assets/week2-post2/slide-05.png"
+  ],
+  "caption_en_path": "docs/marketing/instagram-week2-post2.md#caption-en-primary",
+  "caption_fr_path": "docs/marketing/instagram-week2-post2.md#caption-fr-mirror",
+  "hashtags": [
+    "#AfricanDataLayer",
+    "#ADL",
+    "#GroundTruth",
+    "#DataInfrastructure",
+    "#FieldData",
+    "#Douala",
+    "#Bonamoussadi",
+    "#Cameroon",
+    "#MadeInCameroon",
+    "#GovTech",
+    "#DataQuality",
+    "#UrbanMapping"
+  ],
+  "geotag": "Bonamoussadi, Douala, Cameroon",
+  "alt_text": {
+    "slide-01": "Navy background with headline 'Verified isn't a label. It's a pipeline.' and a gold ADL VERIFIED stamp.",
+    "slide-02": "Light card reading 'Inside pilot geofence. Velocity checked against prior submissions.' with a GPS pin icon.",
+    "slide-03": "Light card reading 'Captured on-device. Timestamp, device, capture angle. PII stripped, audit trail kept.' with a camera icon.",
+    "slide-04": "Light card reading 'Every point gets a number. Cross-checked against neighbors, agent trust tier, anomaly patterns.' with a star icon.",
+    "slide-05": "Terracotta background reading 'That's ground truth. Mapping Bonamoussadi, Douala — one audited point at a time.' with a DM MAP call to action."
+  },
+  "publish_status": "pending_manual",
+  "publish_notes": "No Meta Graph API creds in repo. Options: (1) paste slides + caption into Later/Buffer with this schedule. (2) wire /api/social/schedule endpoint to Meta Graph API. (3) publish manually at scheduled time.",
+  "story_crosspost": {
+    "frame_1": "Slide 1 recut 1080x1920 with 'Swipe the carousel ->' sticker linking to feed post.",
+    "frame_2": "Poll: 'Which step surprises you most?' GPS | EXIF | Risk score.",
+    "frame_3": "Question: 'What would you map in your neighborhood?'"
+  }
+}

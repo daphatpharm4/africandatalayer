@@ -46,6 +46,7 @@ interface Props {
 }
 
 type ReviewDecision = 'approved' | 'rejected' | 'flagged';
+type ReviewResult = Extract<ReviewDecision, 'approved' | 'rejected'>;
 type AutomationStatusFilter = '' | AutomationLeadStatus;
 type AutomationPriorityFilter = '' | AutomationLeadPriority;
 type AdminMode = 'review' | 'assignments' | 'automation' | 'ip-reports';
@@ -360,6 +361,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [actionMessage, setActionMessage] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [isApplyingDecision, setIsApplyingDecision] = useState(false);
+  const [decisionResult, setDecisionResult] = useState<{ decision: ReviewResult; submissionId: string } | null>(null);
+  const [allowEmptySelection, setAllowEmptySelection] = useState(false);
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
   const [ipReports, setIpReports] = useState<IpReport[]>([]);
   const [isLoadingIpReports, setIsLoadingIpReports] = useState(false);
@@ -638,10 +641,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       return;
     }
 
+    if (allowEmptySelection && selectedPointId === null) {
+      return;
+    }
+
     if (!selectedPointId || !reviewData.groups.some((group) => group.pointId === selectedPointId)) {
       setSelectedPointId(reviewData.groups[0]?.pointId ?? null);
     }
-  }, [reviewData.groups, selectedPointId]);
+  }, [allowEmptySelection, reviewData.groups, selectedPointId]);
 
   useEffect(() => {
     setDeleteError('');
@@ -649,9 +656,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, [selectedPointId]);
 
   useEffect(() => {
+    if (activeMode === 'review') return;
+    setDecisionResult(null);
+  }, [activeMode]);
+
+  useEffect(() => {
     if (activeMode !== 'review' || reviewData.groups.length === 0) return;
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (decisionResult) return;
       const target = event.target as HTMLElement | null;
       const isTypingTarget =
         target?.tagName === 'INPUT'
@@ -719,7 +732,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeMode, isApplyingDecision, reviewData.groups, reviewData.page, reviewData.totalPages, selectedPointId]);
+  }, [activeMode, decisionResult, isApplyingDecision, reviewData.groups, reviewData.page, reviewData.totalPages, selectedPointId]);
 
   const togglePlannerVertical = (vertical: SubmissionCategory) => {
     setPlannerVerticals((prev) => {
@@ -776,6 +789,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           : decision === 'rejected'
             ? t('Latest event rejected.', 'Dernier événement rejeté.')
             : t('Latest event put on hold.', 'Dernier événement mis en attente.'),
+      );
+      setDecisionResult(
+        decision === 'approved' || decision === 'rejected'
+          ? { decision, submissionId: group.latestEvent.event.id }
+          : null,
       );
     } catch (error) {
       const message =
@@ -1099,6 +1117,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
   const openMode = (mode: AdminMode) => {
     runViewTransition(() => {
+      setAllowEmptySelection(false);
+      setDecisionResult(null);
       setActiveMode(mode);
     });
   };
@@ -1106,6 +1126,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const changeRiskFilter = (nextFilter: AdminRiskFilter) => {
     reviewCacheRef.current.clear();
     runViewTransition(() => {
+      setAllowEmptySelection(false);
+      setDecisionResult(null);
       setRiskFilter(nextFilter);
       setReviewPage(1);
       setSelectedForBulk(new Set());
@@ -1115,6 +1137,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const changeUserFilter = (nextUserFilter: string) => {
     reviewCacheRef.current.clear();
     runViewTransition(() => {
+      setAllowEmptySelection(false);
+      setDecisionResult(null);
       setUserFilter(nextUserFilter);
       setReviewPage(1);
       setSelectedForBulk(new Set());
@@ -1124,12 +1148,16 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const goToPage = (page: number) => {
     if (page < 1 || page > reviewData.totalPages || page === reviewPage) return;
     runViewTransition(() => {
+      setAllowEmptySelection(false);
+      setDecisionResult(null);
       setReviewPage(page);
     });
   };
 
   const selectPoint = (pointId: string) => {
     runViewTransition(() => {
+      setAllowEmptySelection(false);
+      setDecisionResult(null);
       setSelectedPointId(pointId);
     });
   };
@@ -1571,7 +1599,51 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               </div>
 
               <div className="order-1 lg:order-2">
+                {!isLoadingReview && decisionResult && (
+                  <div className="card flex min-h-[420px] flex-col items-center justify-center bg-white px-8 text-center lg:min-h-[calc(100vh-8rem)]">
+                    <div className="flex w-full max-w-md flex-col items-center justify-center text-center">
+                      <div
+                        className="mb-5 flex h-20 w-20 items-center justify-center rounded-full"
+                        style={{
+                          background: decisionResult.decision === 'approved' ? '#eaf3ee' : '#fde8e8',
+                          boxShadow: `0 0 0 16px ${
+                            decisionResult.decision === 'approved' ? 'rgba(47,133,90,0.08)' : 'rgba(155,44,44,0.08)'
+                          }`,
+                        }}
+                      >
+                        {decisionResult.decision === 'approved' ? <Check size={44} className="text-forest" /> : <X size={44} className="text-red-800" />}
+                      </div>
+                      <div className="mb-2 text-xl font-bold text-ink-dark">
+                        {decisionResult.decision === 'approved' ? t('Approved', 'Approuvé') : t('Rejected', 'Rejeté')}
+                      </div>
+                      <div className="mb-8 text-[13px] leading-relaxed text-gray-500">
+                          {decisionResult.decision === 'approved'
+                            ? t(
+                                `Submission ${decisionResult.submissionId} is now marked approved.`,
+                                `La soumission ${decisionResult.submissionId} est maintenant marquée approuvée.`,
+                              )
+                            : t(
+                                `Submission ${decisionResult.submissionId} is now marked rejected.`,
+                                `La soumission ${decisionResult.submissionId} est maintenant marquée rejetée.`,
+                              )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDecisionResult(null);
+                          setAllowEmptySelection(true);
+                          setSelectedPointId(null);
+                        }}
+                        className={`flex h-11 w-full items-center justify-center rounded-2xl bg-navy px-4 micro-label text-white ${focusRingClass}`}
+                      >
+                        {t('Back to queue', 'Retour à la file')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {!isLoadingReview && selectedGroup && (() => {
+                  if (decisionResult) return null;
                   const latestDetails = selectedGroup.latestEvent.event.details as SubmissionDetails;
                   const latestFraudCheck = selectedGroup.latestEvent.fraudCheck ?? null;
                   const latestGpsIntegrity = latestDetails.gpsIntegrity ?? null;
@@ -1685,7 +1757,11 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         title={t('Review Submission', 'Réviser la soumission')}
                         subtitle={submission.id}
                         language={language}
-                        onBack={() => setSelectedPointId(null)}
+                        onBack={() => {
+                          setDecisionResult(null);
+                          setAllowEmptySelection(true);
+                          setSelectedPointId(null);
+                        }}
                       />
 
                       <div className="max-h-[70vh] overflow-y-auto p-4 space-y-4 lg:max-h-[calc(100vh-8rem)]">

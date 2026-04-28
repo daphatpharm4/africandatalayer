@@ -1657,7 +1657,7 @@ const ContributionFlow: React.FC<Props> = ({
           {t('Retry', 'Réessayer')}
         </button>
       </div>
-      <div className="relative mb-3.5 h-[200px] overflow-hidden rounded-[20px] bg-[#e8eff7]">
+      <div className="relative mb-3.5 h-[200px] overflow-hidden rounded-[20px]" style={{ background: '#e8eff7' }}>
         {resolvedLocation ? (
           <MapContainer
             key={`${resolvedLocation.latitude.toFixed(6)}:${resolvedLocation.longitude.toFixed(6)}`}

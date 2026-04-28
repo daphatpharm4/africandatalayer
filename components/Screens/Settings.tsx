@@ -15,9 +15,10 @@ interface Props {
   language: 'en' | 'fr';
   onLanguageChange: (language: 'en' | 'fr') => void;
   navigateTo: (screen: Screen) => void;
+  userRole?: 'agent' | 'admin' | 'client';
 }
 
-const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChange, navigateTo }) => {
+const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChange, navigateTo, userRole }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const [highContrast, setHighContrast] = useState(() => {
     try { return localStorage.getItem('adl_high_contrast') === '1'; } catch { return false; }
@@ -38,6 +39,77 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
       <ScreenHeader title={t('Settings', 'Paramètres')} onBack={onBack} language={language} />
 
       <div className="space-y-6 p-4 pb-24 sm:p-6 sm:pb-24">
+        {userRole === 'client' && (
+          <>
+            <section className="route-grid relative mx-4 my-4 flex items-center gap-3.5 overflow-hidden rounded-[20px] bg-navy p-5">
+              <div
+                className="relative flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full text-xl font-bold text-white"
+                style={{ background: 'linear-gradient(135deg,#c86b4a,#0f2b46)', border: '2px solid rgba(255,255,255,0.2)' }}
+              >
+                C
+              </div>
+              <div className="relative">
+                <div className="text-base font-bold text-white">{t('Your Organization', 'Votre organisation')}</div>
+                <div className="mt-0.5 text-[11px] text-white/50">
+                  {t('Data client · Bonamoussadi', 'Client data · Bonamoussadi')}
+                </div>
+                <span className="micro-label mt-1.5 inline-block rounded-full bg-white/10 px-2 py-0.5 text-[9px] text-white/70">
+                  {t('Client', 'Client')}
+                </span>
+              </div>
+            </section>
+
+            {[
+              {
+                id: 'data-access',
+                title: t('Data Access', 'Accès aux données'),
+                items: [
+                  { id: 'subscription', label: t('Active subscription', 'Abonnement actif'), onSelect: () => {} },
+                  { id: 'api-key', label: t('API key management', 'Gestion clé API'), onSelect: () => {} },
+                  { id: 'webhooks', label: t('Webhook endpoints', 'Points Webhook'), onSelect: () => {} },
+                ],
+              },
+              {
+                id: 'export',
+                title: t('Export', 'Export'),
+                items: [
+                  { id: 'csv', label: t('Download CSV', 'Télécharger CSV'), onSelect: () => {} },
+                  { id: 'geojson', label: t('Download GeoJSON', 'Télécharger GeoJSON'), onSelect: () => {} },
+                  { id: 'scheduled', label: t('Scheduled exports', 'Exports planifiés'), onSelect: () => {} },
+                ],
+              },
+              {
+                id: 'account',
+                title: t('Account', 'Compte'),
+                items: [
+                  { id: 'profile', label: t('Profile settings', 'Paramètres profil'), onSelect: () => {} },
+                  { id: 'billing', label: t('Billing', 'Facturation'), onSelect: () => {} },
+                  { id: 'signout', label: t('Sign out', 'Se déconnecter'), onSelect: onLogout },
+                ],
+              },
+            ].map((section) => (
+              <section key={section.id} className="px-4 pb-3.5">
+                <div className="micro-label mb-2 text-[10px] text-gray-400">{section.title}</div>
+                <div className="card-soft overflow-hidden">
+                  {section.items.map((item, i, arr) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={item.onSelect}
+                      className={`flex w-full items-center justify-between px-4 py-3 text-left motion-pressable ${
+                        i < arr.length - 1 ? 'border-b border-gray-50' : ''
+                      }`}
+                    >
+                      <span className="text-[13px] font-medium text-gray-700">{item.label}</span>
+                      <ChevronRight size={14} className="text-gray-400" />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </>
+        )}
+
         <div className="space-y-2">
           <h4 className="micro-label px-1 text-gray-400">{t('Language', 'Langue')}</h4>
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white divide-y divide-gray-50">

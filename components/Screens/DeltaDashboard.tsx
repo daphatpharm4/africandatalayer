@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Download, Minus, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Download, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { MapContainer, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import ScreenHeader from '../shared/ScreenHeader';
+import KpiTile from '../shared/KpiTile';
 import {
   LineChart,
   Line,
@@ -15,7 +16,9 @@ import {
 } from 'recharts';
 import { apiJson, buildUrl } from '../../lib/client/api';
 import ExportPanel from '../ExportPanel';
-import { categoryLabel, VERTICAL_IDS } from '../../shared/verticals';
+import { categoryLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
+import VerticalIcon from '../shared/VerticalIcon';
+import WeeklyBarChart from '../shared/WeeklyBarChart';
 import { BONAMOUSSADI_CENTER, bonamoussadiLeafletBounds } from '../../shared/geofence';
 import type {
   TrendDataPoint,
@@ -204,10 +207,27 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const summaryWoW = latestStats?.week_over_week_growth ?? null;
   const summaryCompletion = latestStats?.completion_rate ?? 0;
 
+  const verticalStats = useMemo(() => {
+    if (!latestDate) return [];
+    const dates = [...new Set(stats.map((s) => s.snapshot_date))].sort().reverse();
+    const latestD = dates[0];
+    const prevD = dates[1] ?? null;
+    return VERTICAL_IDS
+      .map((vid) => {
+        const current = stats.find((s) => s.vertical_id === vid && s.snapshot_date === latestD)?.total_points ?? 0;
+        const previous = prevD
+          ? (stats.find((s) => s.vertical_id === vid && s.snapshot_date === prevD)?.total_points ?? 0)
+          : 0;
+        return { verticalId: vid, current, previous, label: categoryLabel(vid, language) };
+      })
+      .filter((d) => d.current > 0);
+  }, [stats, latestDate, language]);
+
+  const maxVal = useMemo(() => Math.max(...verticalStats.map((d) => d.current), 1), [verticalStats]);
+
   // Delta breakdown for stacked bar chart
-  const deltaBreakdown = (() => {
+  const deltaBreakdown = useMemo(() => {
     if (selectedVertical === 'all') {
-      // Aggregate per date
       const byDate = new Map<string, { date: string; new: number; removed: number; changed: number; unchanged: number }>();
       for (const s of stats) {
         const existing = byDate.get(s.snapshot_date) ?? { date: s.snapshot_date, new: 0, removed: 0, changed: 0, unchanged: 0 };
@@ -229,7 +249,13 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
       }))
       .reverse()
       .slice(-12);
-  })();
+  }, [stats, filteredStats, selectedVertical]);
+
+  const weeklyCounts = useMemo(() => {
+    const recent = deltaBreakdown.slice(-7);
+    const pad = Array<number>(Math.max(0, 7 - recent.length)).fill(0);
+    return [...pad, ...recent.map((d) => d.new + d.changed + d.unchanged)];
+  }, [deltaBreakdown]);
 
   // Price trend (fuel only)
   const showPriceTrend = selectedVertical === 'fuel_station';
@@ -494,38 +520,62 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('Points', 'Points')}</span>
-            <span className="text-lg font-bold text-gray-900">{summaryTotalPoints}</span>
-          </div>
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('WoW', 'WoW')}</span>
-            <div className="flex items-center justify-center space-x-0.5">
-              {summaryWoW !== null ? (
-                <>
-                  {summaryWoW > 0 ? <TrendingUp size={12} className="text-green-500" /> : summaryWoW < 0 ? <TrendingDown size={12} className="text-red-500" /> : <Minus size={12} className="text-gray-400" />}
-                  <span className={`text-sm font-bold ${summaryWoW > 0 ? 'text-green-600' : summaryWoW < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                    {summaryWoW > 0 ? '+' : ''}{summaryWoW}%
-                  </span>
-                </>
-              ) : (
-                <span className="text-sm text-gray-400">--</span>
-              )}
-            </div>
-          </div>
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('Complete', 'Complet')}</span>
-            <span className="text-sm font-bold text-gray-900">{summaryCompletion}%</span>
-          </div>
-          <div className="card p-3 text-center">
-            <span className="micro-label text-gray-400 block">{t('Alerts', 'Alertes')}</span>
-            <span className={`text-sm font-bold ${filteredAnomalies.length > 0 ? 'text-red-600' : 'text-gray-900'}`}>{filteredAnomalies.length}</span>
-          </div>
+        <div className="mb-3.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <KpiTile label={t('Total Points', 'Points totaux')} value={summaryTotalPoints} tone="navy" />
+          <KpiTile label={t('vs Last Week', 'vs semaine passée')} value={summaryWoW !== null ? `${summaryWoW >= 0 ? '+' : ''}${summaryWoW}%` : '--'} tone="forest" />
+          <KpiTile label={t('Alerts', 'Alertes')} value={filteredAnomalies.length} tone="amber" />
+          <KpiTile label={t('Completion', 'Complet')} value={`${summaryCompletion}%`} tone="navy" />
         </div>
 
+        {/* Per-vertical bars */}
+        {verticalStats.length > 0 && (
+          <>
+            <div className="micro-label mb-2.5 text-gray-400">
+              {t('By Vertical — Current week', 'Par vertical — Cette semaine')}
+            </div>
+            <div className="card-soft mb-3 p-4">
+              <div className="flex flex-col gap-2.5">
+                {verticalStats.map((d) => {
+                  const delta = d.current - d.previous;
+                  const pct = Math.round((d.current / maxVal) * 100);
+                  const vertical = VERTICALS[d.verticalId];
+                  return (
+                    <div key={d.verticalId}>
+                      <div className="mb-1 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <div
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md"
+                            style={{ background: vertical?.bgColor }}
+                          >
+                            <VerticalIcon name={d.verticalId} size={12} />
+                          </div>
+                          <span className="text-xs font-semibold text-gray-700">{d.label}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-ink-dark">{d.current}</span>
+                          <span className={`flex items-center gap-0.5 text-[11px] font-semibold ${delta >= 0 ? 'text-forest-dark' : 'text-red-800'}`}>
+                            {delta >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                            {delta >= 0 ? '+' : ''}{delta}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full transition-[width] duration-500"
+                          style={{ width: `${pct}%`, background: vertical?.color }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
         {/* Vertical Tabs */}
-        <div className="flex overflow-x-auto space-x-2 no-scrollbar pb-1">
+        <div className="relative">
+          <div className="flex overflow-x-auto space-x-2 no-scrollbar pb-1 pr-8">
           <button
             onClick={() => setSelectedVertical('all')}
             className={`flex-shrink-0 px-3 py-1.5 rounded-xl micro-label transition-colors ${
@@ -545,6 +595,16 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               {categoryLabel(vid, language)}
             </button>
           ))}
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-page to-transparent" />
+        </div>
+
+        {/* Weekly submissions chart */}
+        <div className="micro-label mb-2.5 text-gray-400">
+          {t('Recent weekly submissions', 'Soumissions hebdomadaires récentes')}
+        </div>
+        <div className="card-soft p-4">
+          <WeeklyBarChart values={weeklyCounts} highlightIndex={6} />
         </div>
 
         <ExportPanel

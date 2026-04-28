@@ -43,6 +43,7 @@ const AdminQueue = lazy(() => import('./components/Screens/AdminQueue'));
 const AgentPerformance = lazy(() => import('./components/Screens/AgentPerformance'));
 const DeltaDashboard = lazy(() => import('./components/Screens/DeltaDashboard'));
 const InvestorDashboard = lazy(() => import('./components/Screens/InvestorDashboard'));
+const ClientInsights = lazy(() => import('./components/Screens/ClientInsights'));
 const SubmissionQueue = lazy(() => import('./components/Screens/SubmissionQueue'));
 const PrivacyPolicy = lazy(() => import('./components/Screens/PrivacyPolicy'));
 const TermsOfUse = lazy(() => import('./components/Screens/TermsOfUse'));
@@ -415,11 +416,17 @@ const App: React.FC = () => {
         );
       case Screen.AUTH: {
         const hasAuthenticated = (() => { try { return localStorage.getItem('adl_has_authenticated') === 'true'; } catch { return false; } })();
+        const splashAuthHint = (() => {
+          try {
+            const v = sessionStorage.getItem('adl_auth_initial_mode');
+            return v === 'signin' || v === 'signup' ? v : null;
+          } catch { return null; }
+        })();
         return (
           <Auth
             language={language}
             onBack={goBack}
-            initialMode={hasAuthenticated ? 'signin' : 'signup'}
+            initialMode={splashAuthHint ?? (hasAuthenticated ? 'signin' : 'signup')}
             navigateTo={(screen) => navigateTo(screen)}
             onComplete={async () => {
               await refreshSession();
@@ -491,6 +498,7 @@ const App: React.FC = () => {
             language={language}
             onLanguageChange={setLanguage}
             navigateTo={(screen) => navigateTo(screen)}
+            userRole={userRole}
             onLogout={async () => {
               try {
                 await signOut();
@@ -517,6 +525,25 @@ const App: React.FC = () => {
         return <DeltaDashboard language={language} onBack={goBack} />;
       case Screen.INVESTOR_DASHBOARD:
         return <InvestorDashboard language={language} onBack={goBack} />;
+      case Screen.CLIENT_INSIGHTS:
+        return (
+          <ClientInsights
+            language={language}
+            onBack={goBack}
+            monthLabel={new Date().toLocaleDateString(
+              language === 'fr' ? 'fr-FR' : 'en-US',
+              { month: 'long', year: 'numeric' },
+            )}
+            totalPoints={0}
+            weeklyDelta={0}
+            headline={language === 'fr' ? 'Analyses clients' : 'Client Insights'}
+            body={language === 'fr'
+              ? 'Les analyses détaillées arrivent bientôt.'
+              : 'Detailed insights coming soon.'}
+            insights={[]}
+            onExport={() => {}}
+          />
+        );
       case Screen.PRIVACY_POLICY:
         return <PrivacyPolicy language={language} onBack={goBack} />;
       case Screen.TERMS_OF_USE:

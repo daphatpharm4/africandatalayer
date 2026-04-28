@@ -11,7 +11,6 @@ import {
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 import { clearSyncErrorRecords, listQueueItems, listSyncErrorRecords, subscribeQueueSnapshot, type QueueItem, type SyncErrorRecord } from '../../lib/client/offlineQueue';
-import { AVATAR_PRESETS, coerceAvatarPreset, encodeAvatarPresetImage, type AvatarPreset } from '../../shared/avatarPresets';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile, UserRole } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 import { getEffectiveEventXp } from '../../shared/xp';
@@ -27,7 +26,6 @@ import { computeBadges } from '../BadgeSystem';
 import DailyProgressWidget from '../DailyProgressWidget';
 import StreakTracker from '../StreakTracker';
 import KpiTile from '../shared/KpiTile';
-import ProfileAvatar from '../shared/ProfileAvatar';
 import ScreenHeader from '../shared/ScreenHeader';
 
 interface Props {
@@ -57,8 +55,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(true);
   const [assignmentError, setAssignmentError] = useState('');
   const [isUpdatingAssignmentId, setIsUpdatingAssignmentId] = useState<string | null>(null);
-  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
-  const [avatarSaveError, setAvatarSaveError] = useState('');
   const [accountLookupInput, setAccountLookupInput] = useState('');
   const [managedAccount, setManagedAccount] = useState<UserProfile | null>(null);
   const [managedRole, setManagedRole] = useState<UserRole>('agent');
@@ -89,7 +85,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   };
   const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
   const isMapUnlocked = activeMapScope !== 'bonamoussadi';
-  const activeAvatarPreset = coerceAvatarPreset(profile?.avatarPreset ?? profile?.image);
   const managedAccountRole = resolveRole(managedAccount);
   const hasManagedAccessChanges = Boolean(managedAccount) && managedRole !== managedAccountRole;
 
@@ -212,20 +207,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     return active[0] ?? null;
   }, [assignments]);
   const dailyTarget = activeAssignment?.pointsExpected && activeAssignment.pointsExpected > 0 ? activeAssignment.pointsExpected : 10;
-
-  const avatarOptions = useMemo(
-    () =>
-      AVATAR_PRESETS.map((preset) => ({
-        preset,
-        label:
-          preset === 'baobab'
-            ? t('Baobab', 'Baobab')
-            : preset === 'sunrise'
-              ? t('Sunrise', 'Aurore')
-              : t('Lagoon', 'Lagon'),
-      })),
-    [language]
-  );
 
   const pointsThisWeek = useMemo(() => {
     return countActivitiesInCurrentWeek(ownEvents);
@@ -451,34 +432,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     }
   };
 
-  const handleAvatarSelect = async (preset: AvatarPreset) => {
-    if (!profile || isSavingAvatar) return;
-    if (activeAvatarPreset === preset) return;
-
-    const previousProfile = profile;
-    setAvatarSaveError('');
-    setProfile({ ...profile, avatarPreset: preset, image: encodeAvatarPresetImage(preset) });
-
-    try {
-      setIsSavingAvatar(true);
-      const updated = await apiJson<UserProfile>('/api/user', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatarPreset: preset }),
-      });
-      setProfile(updated);
-    } catch (error) {
-      setProfile(previousProfile);
-      const message =
-        error instanceof Error && error.message.trim()
-          ? error.message
-          : t('Unable to update avatar.', 'Impossible de mettre a jour l\'avatar.');
-      setAvatarSaveError(message);
-    } finally {
-      setIsSavingAvatar(false);
-    }
-  };
-
   const handleLookupAccount = async () => {
     if (isLookingUpAccount) return;
     const identifier = accountLookupInput.trim();
@@ -611,37 +564,6 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
           <KpiTile label={t('Streak', 'Série')} value={streakDisplay} tone="streak" />
           <KpiTile label={t('Rank', 'Rang')} value={rankDisplay} tone="amber" />
         </section>
-
-        <div className="rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
-          <div className="micro-label-wide mb-3 text-gray-400">{t('Avatar', 'Avatar')}</div>
-          <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
-            {avatarOptions.map((option) => {
-              const isSelected = option.preset === activeAvatarPreset;
-              return (
-                <button
-                  key={option.preset}
-                  type="button"
-                  aria-pressed={isSelected}
-                  disabled={!profile || isSavingAvatar}
-                  onClick={() => handleAvatarSelect(option.preset)}
-                  className={`shrink-0 rounded-2xl border p-1.5 transition-all ${
-                    isSelected
-                      ? 'border-navy bg-white shadow-md'
-                      : 'border-navy-border bg-white/80 hover:border-navy-border'
-                  } ${!profile || isSavingAvatar ? 'cursor-not-allowed opacity-70' : ''}`}
-                  title={option.label}
-                >
-                  <div className="h-12 w-12 overflow-hidden rounded-xl">
-                    <ProfileAvatar preset={option.preset} alt={option.label} className="h-full w-full" />
-                  </div>
-                  <span className="sr-only">{option.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {isSavingAvatar && <div className="micro-label mt-2 text-gray-400">{t('Saving...', 'Enregistrement...')}</div>}
-          {avatarSaveError && <div className="micro-label mt-2 text-red-500">{avatarSaveError}</div>}
-        </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button
