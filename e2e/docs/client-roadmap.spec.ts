@@ -26,7 +26,7 @@ test("@docs client roadmap captures reporting, drilldown, and account surfaces",
   await captureRolePage(page, adlRole, "05-client-map-explorer.png");
 
   await mainNavigation().getByRole("button", { name: /^Insights$/i }).click();
-  await expect(page.getByTestId("screen-client-insights")).toBeVisible();
+  await expect(page.getByTestId("screen-analytics")).toBeVisible();
   await captureRolePage(page, adlRole, "06-client-insights.png");
 
   await mainNavigation().getByRole("button", { name: /^Dashboard$/i }).click();
@@ -35,8 +35,8 @@ test("@docs client roadmap captures reporting, drilldown, and account surfaces",
 
   await gotoApp("/");
   await mainNavigation().getByRole("button", { name: /^Account$/i }).click();
-  await expect(page.getByTestId("screen-profile")).toBeVisible();
-  await captureRolePage(page, adlRole, "08-client-profile-dashboard.png");
+  await expect(page.getByTestId("screen-client-account")).toBeVisible();
+  await captureRolePage(page, adlRole, "08-client-account.png");
 
   await page.getByLabel(/Open settings/i).click();
   await expect(page.getByTestId("screen-settings")).toBeVisible();
