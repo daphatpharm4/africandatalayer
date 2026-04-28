@@ -416,11 +416,17 @@ const App: React.FC = () => {
         );
       case Screen.AUTH: {
         const hasAuthenticated = (() => { try { return localStorage.getItem('adl_has_authenticated') === 'true'; } catch { return false; } })();
+        const splashAuthHint = (() => {
+          try {
+            const v = sessionStorage.getItem('adl_auth_initial_mode');
+            return v === 'signin' || v === 'signup' ? v : null;
+          } catch { return null; }
+        })();
         return (
           <Auth
             language={language}
             onBack={goBack}
-            initialMode={hasAuthenticated ? 'signin' : 'signup'}
+            initialMode={splashAuthHint ?? (hasAuthenticated ? 'signin' : 'signup')}
             navigateTo={(screen) => navigateTo(screen)}
             onComplete={async () => {
               await refreshSession();
