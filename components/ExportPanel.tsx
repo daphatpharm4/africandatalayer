@@ -35,7 +35,7 @@ const ExportPanel: React.FC<Props> = ({
     <div className="card-pill p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="micro-label-wide text-gray-400">
+          <div className="micro-label-wide text-ink-muted">
             {t('Export Workflow', 'Workflow export')}
           </div>
           <h4 className="mt-1 text-lg font-bold text-gray-900">
@@ -46,12 +46,12 @@ const ExportPanel: React.FC<Props> = ({
           type="button"
           onClick={() => onExport('pdf')}
           disabled={!canExport}
-          className={`h-10 w-10 rounded-2xl flex items-center justify-center ${
-            canExport ? 'bg-navy text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          className={`h-11 w-11 rounded-2xl flex items-center justify-center ${
+            canExport ? 'bg-navy text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
           }`}
           aria-label={t('Print report', 'Imprimer le rapport')}
         >
-          <Printer size={16} />
+          <Printer size={18} />
         </button>
       </div>
 
@@ -77,7 +77,7 @@ const ExportPanel: React.FC<Props> = ({
       </div>
 
       <div className="rounded-2xl bg-page p-4 space-y-2">
-        <div className="micro-label text-gray-400">
+        <div className="micro-label text-ink-muted">
           {t('API Preview', 'Aperçu API')}
         </div>
         <code className="block text-xs text-navy break-all">{apiPreview}</code>

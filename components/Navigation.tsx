@@ -78,10 +78,9 @@ const Navigation: React.FC<Props> = ({
   const clientNav: NavItem[] = [
     {
       id: Screen.DELTA_DASHBOARD,
-      label: t('Delta Intelligence', 'Intelligence Delta'),
+      label: t('Delta', 'Delta'),
       ariaLabel: t('Delta Intelligence', 'Intelligence Delta'),
       icon: BarChart2,
-      multiline: true,
     },
     { id: Screen.INVESTOR_DASHBOARD, label: t('Dashboard', 'Tableau'), icon: LayoutDashboard },
     { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },

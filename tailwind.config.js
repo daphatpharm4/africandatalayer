@@ -45,6 +45,7 @@ const config = {
         ink: {
           DEFAULT: '#1f2933',
           dark: '#111827',
+          muted: '#4b5563',
         },
         danger: {
           DEFAULT: '#c53030',

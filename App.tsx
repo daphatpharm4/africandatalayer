@@ -43,7 +43,7 @@ const AdminQueue = lazy(() => import('./components/Screens/AdminQueue'));
 const AgentPerformance = lazy(() => import('./components/Screens/AgentPerformance'));
 const DeltaDashboard = lazy(() => import('./components/Screens/DeltaDashboard'));
 const InvestorDashboard = lazy(() => import('./components/Screens/InvestorDashboard'));
-const ClientInsights = lazy(() => import('./components/Screens/ClientInsights'));
+const ClientAccount = lazy(() => import('./components/Screens/ClientAccount'));
 const SubmissionQueue = lazy(() => import('./components/Screens/SubmissionQueue'));
 const PrivacyPolicy = lazy(() => import('./components/Screens/PrivacyPolicy'));
 const TermsOfUse = lazy(() => import('./components/Screens/TermsOfUse'));
@@ -468,6 +468,29 @@ const App: React.FC = () => {
           />
         );
       case Screen.PROFILE:
+        if (isClient) {
+          return (
+            <ClientAccount
+              language={language}
+              onBack={goBack}
+              onSettings={() => navigateTo(Screen.SETTINGS)}
+              onOpenDocs={() => navigatePath(docsPathForAudience(docsAudience))}
+              navigateTo={(screen) => navigateTo(screen)}
+              onLogout={async () => {
+                try {
+                  await signOut();
+                } catch {
+                  // Fallback to local logout even if server sign-out fails.
+                } finally {
+                  await refreshSession();
+                  setIsAuthenticated(false);
+                  clearContributionContext();
+                  switchTab(Screen.SPLASH);
+                }
+              }}
+            />
+          );
+        }
         return (
           <Profile
             language={language}
@@ -527,21 +550,12 @@ const App: React.FC = () => {
         return <InvestorDashboard language={language} onBack={goBack} />;
       case Screen.CLIENT_INSIGHTS:
         return (
-          <ClientInsights
-            language={language}
+          <Analytics
             onBack={goBack}
-            monthLabel={new Date().toLocaleDateString(
-              language === 'fr' ? 'fr-FR' : 'en-US',
-              { month: 'long', year: 'numeric' },
-            )}
-            totalPoints={0}
-            weeklyDelta={0}
-            headline={language === 'fr' ? 'Analyses clients' : 'Client Insights'}
-            body={language === 'fr'
-              ? 'Les analyses détaillées arrivent bientôt.'
-              : 'Detailed insights coming soon.'}
-            insights={[]}
-            onExport={() => {}}
+            isClient={true}
+            onDeltaDashboard={() => navigateTo(Screen.DELTA_DASHBOARD)}
+            onInvestorDashboard={() => navigateTo(Screen.INVESTOR_DASHBOARD)}
+            language={language}
           />
         );
       case Screen.PRIVACY_POLICY:

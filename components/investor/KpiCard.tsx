@@ -19,7 +19,7 @@ const colorMap: Record<string, string> = {
 
 const KpiCard: React.FC<Props> = ({ label, value, subtitle, trend, color = 'navy' }) => (
   <div className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
-    <span className="micro-label text-gray-400 block">{label}</span>
+    <span className="micro-label text-ink-muted block">{label}</span>
     <div className="mt-1 flex items-baseline gap-1.5">
       <span className={`text-2xl font-extrabold ${colorMap[color] ?? 'text-gray-900'}`}>{value}</span>
       {trend && (
