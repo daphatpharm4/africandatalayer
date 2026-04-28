@@ -1,0 +1,41 @@
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - button "Tout synchronisé. Prêt à capturer." [ref=e5] [cursor=pointer]:
+      - img [ref=e73]
+      - generic [ref=e9]: Tout synchronisé. Prêt à capturer.
+    - button "Actualiser" [ref=e76] [cursor=pointer]:
+      - img [ref=e77]
+  - main [ref=e16]:
+    - generic [ref=e442]:
+      - generic [ref=e443]:
+        - button "Retour" [ref=e444] [cursor=pointer]:
+          - img [ref=e445]
+        - generic [ref=e448]: Analyses
+        - generic [ref=e450]: avril 2026
+      - generic [ref=e451]:
+        - article [ref=e452]:
+          - generic [ref=e453]: Une · Cette semaine
+          - heading "Analyses clients" [level=2] [ref=e454]
+          - paragraph [ref=e455]: Les analyses détaillées arrivent bientôt.
+          - generic [ref=e457]:
+            - img [ref=e458]
+            - text: +0 points cette semaine
+        - button "Exporter les données de la semaine CSV · JSON · GeoJSON disponibles" [ref=e461] [cursor=pointer]:
+          - img [ref=e463]
+          - generic [ref=e466]:
+            - generic [ref=e467]: Exporter les données de la semaine
+            - generic [ref=e468]: CSV · JSON · GeoJSON disponibles
+          - img [ref=e469]
+  - navigation "Navigation principale" [ref=e51]:
+    - button "Tableau" [ref=e202] [cursor=pointer]:
+      - img [ref=e203]
+      - generic [ref=e208]: Tableau
+    - button "Carte" [ref=e209] [cursor=pointer]:
+      - img [ref=e53]
+      - generic [ref=e55]: Carte
+    - button "Analyses" [active] [ref=e210] [cursor=pointer]:
+      - img [ref=e211]
+      - generic [ref=e214]: Analyses
+    - button "Connexion" [ref=e68] [cursor=pointer]:
+      - img [ref=e69]
+      - generic [ref=e72]: Connexion

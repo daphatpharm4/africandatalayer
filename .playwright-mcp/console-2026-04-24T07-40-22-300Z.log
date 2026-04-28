@@ -1,0 +1,254 @@
+[    1114ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=58781661:20102
+[    1297ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[    1298ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[    1300ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[    1300ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[    1362ms] [LOG] %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[    1362ms] [LOG] %c[Vercel Web Analytics]%c [view] http://localhost:5173/ color: rgb(120, 120, 120) color: inherit {o: http://localhost:5173/, sv: 0.1.3, sdkn: @vercel/analytics/react, sdkv: 1.6.1, ts: 1777016423661} /_vercel/insights/view @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[    1371ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[    1372ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[    1383ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[    1383ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[    1384ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[    1384ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[    1389ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[    1393ms] [LOG] %c[Vercel Speed Insights]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[    1404ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[    1404ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[    1404ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[    1405ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[    1405ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[    1405ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[    1405ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[    1411ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[    1411ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[    1411ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[    1411ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[    1414ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[    1414ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[    1415ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[    1415ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[   21222ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[   21223ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[   43661ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/leaderboard:0
+[   43663ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/leaderboard:0
+[   94743ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions?view=review_queue&scope=global&page=1&limit=24:0
+[   94743ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions?view=schema_guard:0
+[   94743ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions?view=review_queue&scope=global&page=1&limit=24:0
+[   94750ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions?view=schema_guard:0
+[  151570ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=snapshots&limit=52:0
+[  151571ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=anomalies:0
+[  151579ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=snapshots&limit=52:0
+[  151579ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=anomalies:0
+[  162419ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions?view=admin_events&scope=global:0
+[  162420ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/user?view=assignments&scope=all:0
+[  162429ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions?view=admin_events&scope=global:0
+[  162430ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/user?view=assignments&scope=all:0
+[  185732ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=kpi_summary:0
+[  185733ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=snapshots&limit=52:0
+[  185734ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=kpi_weekly:0
+[  185735ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/leaderboard:0
+[  185737ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=kpi_summary:0
+[  185737ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=snapshots&limit=52:0
+[  185752ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/analytics?view=kpi_weekly:0
+[  185752ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/leaderboard:0
+[  199919ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[  199919ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1488200ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(3), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1488207ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(1), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1488371ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=58781661:20102
+[ 1488426ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1488426ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1488431ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1488431ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1488451ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1488452ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1488453ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1488453ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1488469ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1488469ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1488470ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1488470ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1488470ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1488470ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1488471ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1488471ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1488483ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1488490ms] [LOG] %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1488490ms] [LOG] %c[Vercel Web Analytics]%c [view] http://localhost:5173/ color: rgb(120, 120, 120) color: inherit {o: http://localhost:5173/, sv: 0.1.3, sdkn: @vercel/analytics/react, sdkv: 1.6.1, ts: 1777017910789} /_vercel/insights/view @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1488490ms] [LOG] %c[Vercel Speed Insights]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1488492ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1488492ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1488492ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1488493ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1488493ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1488497ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1488497ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1488497ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1488497ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1492076ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(3), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1492077ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(1), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1492507ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=58781661:20102
+[ 1492524ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1492524ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1492525ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1492525ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1492526ms] [LOG] %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1492526ms] [LOG] %c[Vercel Web Analytics]%c [view] http://localhost:5173/ color: rgb(120, 120, 120) color: inherit {o: http://localhost:5173/, sv: 0.1.3, sdkn: @vercel/analytics/react, sdkv: 1.6.1, ts: 1777017914825} /_vercel/insights/view @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1492526ms] [LOG] %c[Vercel Speed Insights]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1492535ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1492535ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1492539ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1492539ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1492539ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1492539ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1492552ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1492552ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1492552ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1492556ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1492556ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1492556ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1492556ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1492556ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1492556ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1492556ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1492566ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1492566ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1492566ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1492566ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1492581ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1492581ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502219ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(3), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1502220ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(1), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1502344ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=58781661:20102
+[ 1502364ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502364ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502365ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502365ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502366ms] [LOG] %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1502366ms] [LOG] %c[Vercel Web Analytics]%c [view] http://localhost:5173/ color: rgb(120, 120, 120) color: inherit {o: http://localhost:5173/, sv: 0.1.3, sdkn: @vercel/analytics/react, sdkv: 1.6.1, ts: 1777017924666} /_vercel/insights/view @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1502366ms] [LOG] %c[Vercel Speed Insights]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1502379ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502379ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502383ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502383ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502387ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502387ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502387ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502387ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502388ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502388ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502388ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502388ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502403ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1502415ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502415ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502415ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1502415ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502415ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502422ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502422ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502422ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502422ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502661ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(3), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1502661ms] [LOG] %c[Vercel Speed Insights]%c [vitals] color: rgb(120, 120, 120) color: inherit {speed: 4g, metrics: Array(1), scriptVersion: 0.1.3, sdkName: @vercel/speed-insights/react, sdkVersion: 1.3.1} /_vercel/speed-insights/vitals @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1502736ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/react-dom_client.js?v=58781661:20102
+[ 1502751ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502751ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502752ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502752ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502753ms] [LOG] %c[Vercel Web Analytics]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1502753ms] [LOG] %c[Vercel Web Analytics]%c [view] http://localhost:5173/ color: rgb(120, 120, 120) color: inherit {o: http://localhost:5173/, sv: 0.1.3, sdkn: @vercel/analytics/react, sdkv: 1.6.1, ts: 1777017925052} /_vercel/insights/view @ https://va.vercel-scripts.com/v1/script.debug.js:0
+[ 1502753ms] [LOG] %c[Vercel Speed Insights]%c Debug mode is enabled by default in development. No requests will be sent to the server. color: rgb(120, 120, 120) color: inherit @ https://va.vercel-scripts.com/v1/speed-insights/script.debug.js:0
+[ 1502760ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502760ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502760ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502760ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502768ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502768ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502769ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502769ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502769ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502769ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async refreshSession (http://localhost:5173/App.tsx:281:21)
+    at async bootstrap (http://localhost:5173/App.tsx:324:23) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502769ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ http://localhost:5173/lib/client/auth.ts:135
+[ 1502769ms] [LOG] [API] GET /api/auth/session @ http://localhost:5173/lib/client/api.ts:16
+[ 1502776ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502776ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502776ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1502781ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502781ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142
+[ 1502789ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/auth/session:0
+[ 1502789ms] [LOG] [API] GET /api/auth/session → 500 @ http://localhost:5173/lib/client/api.ts:25
+[ 1502790ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:5173/api/submissions:0
+[ 1502803ms] [ERROR] [API] apiJson non-OK: /api/auth/session 500  @ http://localhost:5173/lib/client/api.ts:39
+[ 1502803ms] [ERROR] [AUTH] getSession: FAILED (returning null) Error: Request failed
+    at apiJson (http://localhost:5173/lib/client/api.ts:42:11)
+    at async getSession (http://localhost:5173/lib/client/auth.ts:138:21)
+    at async bootstrap (http://localhost:5173/App.tsx:334:25) @ http://localhost:5173/lib/client/auth.ts:142

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   ChevronLeft,
@@ -41,6 +41,9 @@ const Auth: React.FC<Props> = ({
   navigateTo,
 }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode);
+  useEffect(() => {
+    try { sessionStorage.removeItem('adl_auth_initial_mode'); } catch { /* private browsing */ }
+  }, []);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [submitAction, setSubmitAction] = useState<SubmitAction>(null);
