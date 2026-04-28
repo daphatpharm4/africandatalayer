@@ -39,6 +39,7 @@
 | 05 | `05-risk-register.md` | Risk register with likelihood, impact, mitigations, and owners | Planned |
 | 06 | `06-validation-sop.md` | Standard operating procedures for field data validation and quality scoring | Planned |
 | 07 | `07-field-protocols.md` | Per-vertical field capture protocols, classification rules, and edge-case guidance | Planned |
+| 10 | [`10-basecamp-upload-matrix.md`](10-basecamp-upload-matrix.md) | Basecamp-ready upload plan with exact file names, formats, and folder structure | Complete |
 
 ---
 

@@ -7,10 +7,10 @@ import {
   Medal,
   User,
   TrendingUp,
-  LayoutDashboard,
   CheckSquare,
   Users,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 type UserRole = 'agent' | 'admin' | 'client';
 
@@ -23,6 +23,14 @@ interface Props {
   language?: 'en' | 'fr';
 }
 
+interface NavItem {
+  id: Screen;
+  label: string;
+  icon: LucideIcon;
+  ariaLabel?: string;
+  multiline?: boolean;
+}
+
 const Navigation: React.FC<Props> = ({
   currentScreen,
   onNavigate,
@@ -33,7 +41,7 @@ const Navigation: React.FC<Props> = ({
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
-  const agentNav = [
+  const agentNav: NavItem[] = [
     { id: Screen.HOME, label: t('Explore', 'Explorer'), icon: Map },
     {
       id: Screen.CONTRIBUTE,
@@ -54,7 +62,7 @@ const Navigation: React.FC<Props> = ({
     },
   ];
 
-  const adminNav = [
+  const adminNav: NavItem[] = [
     { id: Screen.ADMIN, label: t('Queue', 'File'), icon: CheckSquare },
     { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
     { id: Screen.DELTA_DASHBOARD, label: t('Analytics', 'Analyses'), icon: BarChart2 },
@@ -66,14 +74,20 @@ const Navigation: React.FC<Props> = ({
     },
   ];
 
-  const clientNav = [
-    { id: Screen.INVESTOR_DASHBOARD, label: t('Dashboard', 'Tableau'), icon: LayoutDashboard },
+  const clientNav: NavItem[] = [
+    {
+      id: Screen.DELTA_DASHBOARD,
+      label: t('Delta Intelligence', 'Intelligence Delta'),
+      ariaLabel: t('Delta Intelligence', 'Intelligence Delta'),
+      icon: BarChart2,
+      multiline: true,
+    },
     { id: Screen.HOME, label: t('Map', 'Carte'), icon: Map },
-    { id: Screen.CLIENT_INSIGHTS, label: t('Insights', 'Analyses'), icon: TrendingUp },
+    { id: Screen.ANALYTICS, label: t('Insights', 'Analyses'), icon: TrendingUp },
     {
       id: isAuthenticated ? Screen.PROFILE : Screen.AUTH,
       label: isAuthenticated
-        ? t('Profile', 'Profil')
+        ? t('Account', 'Compte')
         : t('Sign In', 'Connexion'),
       icon: User,
     },
@@ -96,7 +110,7 @@ const Navigation: React.FC<Props> = ({
             key={item.id}
             onClick={() => onNavigate(item.id)}
             aria-current={isActive ? 'page' : undefined}
-            aria-label={item.label}
+            aria-label={item.ariaLabel ?? item.label}
             className={`flex min-h-[54px] w-full flex-1 flex-col items-center justify-center gap-1 rounded-[1.35rem] px-2 transition-all ${
               isActive
                 ? 'bg-navy-wash text-navy shadow-[inset_0_0_0_1px_rgba(15,43,70,0.06)]'
@@ -106,7 +120,13 @@ const Navigation: React.FC<Props> = ({
             }`}
           >
             <Icon size={19} aria-hidden="true" />
-            <span className="max-w-full truncate px-1 text-[0.6875rem] font-semibold leading-none tracking-[0.01em]">
+            <span
+              className={`px-1 text-[0.6875rem] font-semibold tracking-[0.01em] ${
+                item.multiline
+                  ? 'max-w-[4.9rem] text-center leading-[1.05] whitespace-normal'
+                  : 'max-w-full truncate leading-none'
+              }`}
+            >
               {item.label}
             </span>
           </button>
