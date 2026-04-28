@@ -611,8 +611,12 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
                         <div
-                          className="h-full rounded-full transition-[width] duration-500"
-                          style={{ width: `${pct}%`, background: vertical?.color }}
+                          className="h-full origin-left rounded-full motion-safe:transition-transform motion-safe:duration-500"
+                          style={{
+                            width: '100%',
+                            transform: `scaleX(${Math.max(0, Math.min(1, pct / 100))})`,
+                            background: vertical?.color,
+                          }}
                         />
                       </div>
                     </div>

@@ -20,7 +20,7 @@ User decisions:
 | 2 | `$normalize` — branch client-only Account surface (no XP/streak/rewards) | ✅ done | `c95b8b4` | self | typecheck pass |
 | 3 | `$harden` — fix low-contrast micro-labels + add aria-live status for copy/export | ✅ done | `ce9c3c1` | self | typecheck pass |
 | 4 | `$adapt` — enlarge icon controls to ≥44px (DeltaDashboard, InvestorDashboard, Profile, ExportPanel) | ✅ done | `11b3de3` | self | typecheck pass |
-| 5 | `$quieter` — DeltaDashboard progressive disclosure (collapse export/API + secondary filters) | pending | — | — | — |
+| 5 | `$quieter` — DeltaDashboard progressive disclosure (collapse export/API + secondary filters) | ✅ done | `6c6d791` | self | typecheck pass |
 | 6 | `$optimize` — replace `width`-based animations with transform-based fills (Delta + Profile bars) | pending | — | — | — |
 | 7 | `$polish` — refresh client docs screenshots after IA stabilizes | pending | — | — | — |
 
