@@ -43,6 +43,7 @@ const AdminQueue = lazy(() => import('./components/Screens/AdminQueue'));
 const AgentPerformance = lazy(() => import('./components/Screens/AgentPerformance'));
 const DeltaDashboard = lazy(() => import('./components/Screens/DeltaDashboard'));
 const InvestorDashboard = lazy(() => import('./components/Screens/InvestorDashboard'));
+const ClientAccount = lazy(() => import('./components/Screens/ClientAccount'));
 const SubmissionQueue = lazy(() => import('./components/Screens/SubmissionQueue'));
 const PrivacyPolicy = lazy(() => import('./components/Screens/PrivacyPolicy'));
 const TermsOfUse = lazy(() => import('./components/Screens/TermsOfUse'));
@@ -467,6 +468,29 @@ const App: React.FC = () => {
           />
         );
       case Screen.PROFILE:
+        if (isClient) {
+          return (
+            <ClientAccount
+              language={language}
+              onBack={goBack}
+              onSettings={() => navigateTo(Screen.SETTINGS)}
+              onOpenDocs={() => navigatePath(docsPathForAudience(docsAudience))}
+              navigateTo={(screen) => navigateTo(screen)}
+              onLogout={async () => {
+                try {
+                  await signOut();
+                } catch {
+                  // Fallback to local logout even if server sign-out fails.
+                } finally {
+                  await refreshSession();
+                  setIsAuthenticated(false);
+                  clearContributionContext();
+                  switchTab(Screen.SPLASH);
+                }
+              }}
+            />
+          );
+        }
         return (
           <Profile
             language={language}

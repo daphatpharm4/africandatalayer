@@ -16,7 +16,7 @@ User decisions:
 
 | # | Task | Status | Commit | Spec Review | Quality Review |
 |---|------|--------|--------|-------------|----------------|
-| 1 | `$clarify` — Client Insights: kill dead CTA, real export or honest unavailable state | pending | — | — | — |
+| 1 | `$clarify` — Client Insights: kill dead CTA, real export or honest unavailable state | ✅ done | `12707ea` | self | typecheck pass |
 | 2 | `$normalize` — branch client-only Account surface (no XP/streak/rewards) | pending | — | — | — |
 | 3 | `$harden` — fix low-contrast micro-labels + add aria-live status for copy/export | pending | — | — | — |
 | 4 | `$adapt` — enlarge icon controls to ≥44px (DeltaDashboard, InvestorDashboard, Profile, ExportPanel) | pending | — | — | — |
