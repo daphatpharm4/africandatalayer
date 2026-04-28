@@ -459,7 +459,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
         {/* Per-vertical coverage */}
         {verticalRows.length > 0 && (
           <section className="px-4 pt-4">
-            <div className="micro-label mb-2.5 text-gray-400">
+            <div className="micro-label mb-2.5 text-ink-muted">
               {t('Coverage by vertical', 'Couverture par vertical')}
             </div>
             <div className="card-soft mb-3.5 p-3.5">
@@ -500,7 +500,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
 
         {/* Weekly submissions chart */}
         <section className="px-4">
-          <div className="micro-label mb-2.5 text-gray-400">
+          <div className="micro-label mb-2.5 text-ink-muted">
             {t('Daily submissions — This week', 'Contributions journalières — Cette semaine')}
           </div>
           <div className="card-soft mb-3.5 p-4">
@@ -511,7 +511,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
         {/* Top zones */}
         {topZones.length > 0 && (
           <section className="px-4 pb-4">
-            <div className="micro-label mb-2.5 text-gray-400">
+            <div className="micro-label mb-2.5 text-ink-muted">
               {t('Top verticals by coverage', 'Verticals principaux')}
             </div>
             <div className="card-soft px-3.5 py-2.5">
@@ -795,7 +795,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
                   style={{ width: `${kpi?.enrichmentRatePct ?? 0}%` }}
                 />
               </div>
-              <span className="text-[10px] text-gray-400 mt-0.5 block">
+              <span className="text-[10px] text-ink-muted mt-0.5 block">
                 {t('Points enriched beyond initial capture', 'Points enrichis au-delà de la capture initiale')}
               </span>
             </div>
@@ -864,7 +864,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
             <Printer size={16} className="mr-2 inline-block" />
             {t('Export as PDF', 'Exporter en PDF')}
           </button>
-          <p className="text-[10px] text-gray-400">
+          <p className="text-[10px] text-ink-muted">
             {t('Last updated', 'Dernière mise à jour')}: {formattedDate}
           </p>
         </div>

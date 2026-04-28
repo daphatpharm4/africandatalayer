@@ -580,7 +580,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         {/* Per-vertical bars */}
         {verticalStats.length > 0 && (
           <>
-            <div className="micro-label mb-2.5 text-gray-400">
+            <div className="micro-label mb-2.5 text-ink-muted">
               {t('By Vertical — Current week', 'Par vertical — Cette semaine')}
             </div>
             <div className="card-soft mb-3 p-4">
@@ -654,7 +654,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
         </div>
 
         {/* Weekly submissions chart */}
-        <div className="micro-label mb-2.5 text-gray-400">
+        <div className="micro-label mb-2.5 text-ink-muted">
           {t('Recent weekly submissions', 'Soumissions hebdomadaires récentes')}
         </div>
         <div className="card-soft p-4">
@@ -711,7 +711,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
             <p className="text-xs font-bold text-gray-600">
               {t('No data yet', 'Pas encore de données')}
             </p>
-            <p className="text-[11px] text-gray-400">
+            <p className="text-[11px] text-ink-muted">
               {t('Data is collected weekly. Check back after the first run.', 'Les données sont collectées chaque semaine.')}
             </p>
           </div>
@@ -1114,7 +1114,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                           {delta.delta_summary ?? `${delta.point_id.slice(0, 8)}...`}
                         </p>
                         {delta.delta_magnitude !== null && (
-                          <p className="text-[11px] text-gray-400">
+                          <p className="text-[11px] text-ink-muted">
                             {delta.delta_direction === 'increase' ? '+' : ''}{delta.delta_magnitude}
                           </p>
                         )}
