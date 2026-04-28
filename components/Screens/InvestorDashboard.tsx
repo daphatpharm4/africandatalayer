@@ -381,10 +381,10 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
           <button
             type="button"
             onClick={() => window.print()}
-            className="p-2 text-navy print:hidden"
+            className="flex h-11 w-11 items-center justify-center text-navy print:hidden"
             aria-label={t('Print dashboard', 'Imprimer le tableau')}
           >
-            <Printer size={18} />
+            <Printer size={20} />
           </button>
         }
       />

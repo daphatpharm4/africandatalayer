@@ -46,12 +46,12 @@ const ExportPanel: React.FC<Props> = ({
           type="button"
           onClick={() => onExport('pdf')}
           disabled={!canExport}
-          className={`h-10 w-10 rounded-2xl flex items-center justify-center ${
-            canExport ? 'bg-navy text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+          className={`h-11 w-11 rounded-2xl flex items-center justify-center ${
+            canExport ? 'bg-navy text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
           }`}
           aria-label={t('Print report', 'Imprimer le rapport')}
         >
-          <Printer size={16} />
+          <Printer size={18} />
         </button>
       </div>
 

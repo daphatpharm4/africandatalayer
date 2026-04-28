@@ -496,10 +496,10 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           <button
             type="button"
             onClick={() => handleExport(selectedFormat)}
-            className="p-2 text-navy"
+            className="flex h-11 w-11 items-center justify-center text-navy"
             aria-label={t('Export current view', 'Exporter la vue')}
           >
-            <Download size={18} />
+            <Download size={20} />
           </button>
         }
       />
