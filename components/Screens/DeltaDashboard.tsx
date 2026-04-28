@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Download, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Download, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { MapContainer, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import ScreenHeader from '../shared/ScreenHeader';
 import KpiTile from '../shared/KpiTile';
@@ -127,6 +127,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const [focusedCellId, setFocusedCellId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [exportPanelOpen, setExportPanelOpen] = useState(false);
 
   const announceStatus = (tone: 'success' | 'error', text: string) => {
     setStatusMessage({ tone, text });
@@ -656,16 +657,44 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           <WeeklyBarChart values={weeklyCounts} highlightIndex={6} />
         </div>
 
-        <ExportPanel
-          language={language}
-          apiPreview={apiPreview}
-          selectedFormat={selectedFormat}
-          canExport={canExport}
-          exportDisabledReason={exportDisabledReason}
-          onSelectFormat={setSelectedFormat}
-          onExport={handleExport}
-          onCopyApi={handleCopyApi}
-        />
+        <div>
+          <button
+            type="button"
+            onClick={() => setExportPanelOpen((v) => !v)}
+            aria-expanded={exportPanelOpen}
+            aria-controls="delta-export-panel"
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left shadow-sm motion-pressable"
+          >
+            <span className="flex flex-col">
+              <span className="micro-label text-ink-muted">
+                {t('Export & API', 'Export et API')}
+              </span>
+              <span className="text-[13px] font-semibold text-navy">
+                {exportPanelOpen
+                  ? t('Hide export options', 'Masquer les options')
+                  : t('Show export & API options', "Afficher l'export et l'API")}
+              </span>
+            </span>
+            <ChevronDown
+              size={18}
+              className={`text-navy transition-transform ${exportPanelOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+          {exportPanelOpen && (
+            <div id="delta-export-panel" className="mt-3">
+              <ExportPanel
+                language={language}
+                apiPreview={apiPreview}
+                selectedFormat={selectedFormat}
+                canExport={canExport}
+                exportDisabledReason={exportDisabledReason}
+                onSelectFormat={setSelectedFormat}
+                onExport={handleExport}
+                onCopyApi={handleCopyApi}
+              />
+            </div>
+          )}
+        </div>
 
         {loading ? (
           <div className="card p-8 text-center">
