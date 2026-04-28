@@ -126,6 +126,16 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const [spatialLoading, setSpatialLoading] = useState(false);
   const [focusedCellId, setFocusedCellId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusMessage, setStatusMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+
+  const announceStatus = (tone: 'success' | 'error', text: string) => {
+    setStatusMessage({ tone, text });
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        setStatusMessage((current) => (current && current.text === text ? null : current));
+      }, 4000);
+    }
+  };
 
   // Load stats and anomalies on mount
   useEffect(() => {
@@ -384,23 +394,40 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   };
 
   const handleExport = (format: 'csv' | 'geojson' | 'pdf') => {
-    if (!canExport) return;
-    if (format === 'csv') {
-      exportCsv();
+    if (!canExport) {
+      announceStatus('error', t('Nothing to export yet.', 'Rien à exporter pour le moment.'));
       return;
     }
-    if (format === 'geojson') {
-      exportGeoJson();
-      return;
+    try {
+      if (format === 'csv') {
+        exportCsv();
+      } else if (format === 'geojson') {
+        exportGeoJson();
+      } else {
+        window.print();
+      }
+      announceStatus(
+        'success',
+        format === 'csv'
+          ? t('CSV download started.', 'Téléchargement CSV lancé.')
+          : format === 'geojson'
+            ? t('GeoJSON download started.', 'Téléchargement GeoJSON lancé.')
+            : t('Print dialog opened.', "Boîte de dialogue d'impression ouverte."),
+      );
+    } catch {
+      announceStatus('error', t('Export failed. Try again.', "Échec de l'export. Réessayez."));
     }
-    window.print();
   };
 
   const handleCopyApi = async () => {
     try {
       await navigator.clipboard.writeText(apiPreview);
+      announceStatus('success', t('API request copied.', 'Requête API copiée.'));
     } catch {
-      // Ignore clipboard failures; the preview is still visible.
+      announceStatus(
+        'error',
+        t('Copy failed. Select the preview manually.', 'Copie impossible. Sélectionnez manuellement.'),
+      );
     }
   };
 
@@ -476,6 +503,28 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           </button>
         }
       />
+
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+        data-testid="delta-dashboard-status-live"
+      >
+        {statusMessage?.text ?? ''}
+      </div>
+      {statusMessage && (
+        <div
+          data-testid="delta-dashboard-status-banner"
+          className={`mx-4 mt-3 rounded-2xl border px-4 py-2 text-[13px] font-medium ${
+            statusMessage.tone === 'success'
+              ? 'border-forest/30 bg-forest-wash text-forest-dark'
+              : 'border-red-200 bg-red-50 text-red-700'
+          }`}
+        >
+          {statusMessage.text}
+        </div>
+      )}
 
       <div className="p-4 pb-24 space-y-4">
         <div className="rounded-[32px] bg-gradient-to-br from-navy via-navy-mid to-navy-mid text-white p-6 shadow-sm">
@@ -620,7 +669,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
 
         {loading ? (
           <div className="card p-8 text-center">
-            <p className="micro-label text-gray-400">
+            <p className="micro-label text-ink-muted">
               {t('Loading data...', 'Chargement des données...')}
             </p>
           </div>
@@ -717,7 +766,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
               <div data-testid="delta-spatial-intelligence" className="card-pill p-5 space-y-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <div className="micro-label-wide text-gray-400">
+                    <div className="micro-label-wide text-ink-muted">
                       {t('Spatial Intelligence', 'Intelligence spatiale')}
                     </div>
                     <h4 className="mt-1 text-lg font-bold text-gray-900">
@@ -756,15 +805,15 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                   <>
                     <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                       <div className="rounded-3xl bg-page px-4 py-3">
-                        <div className="micro-label text-gray-400">{t('Cells', 'Cellules')}</div>
+                        <div className="micro-label text-ink-muted">{t('Cells', 'Cellules')}</div>
                         <div className="mt-1 text-lg font-bold text-gray-900">{spatialData.totalCells}</div>
                       </div>
                       <div className="rounded-3xl bg-page px-4 py-3">
-                        <div className="micro-label text-gray-400">{t('Mapped Points', 'Points cartographiés')}</div>
+                        <div className="micro-label text-ink-muted">{t('Mapped Points', 'Points cartographiés')}</div>
                         <div className="mt-1 text-lg font-bold text-gray-900">{spatialData.totalPoints}</div>
                       </div>
                       <div className="rounded-3xl bg-page px-4 py-3">
-                        <div className="micro-label text-gray-400">{scoreLabel(selectedSpatialSort)}</div>
+                        <div className="micro-label text-ink-muted">{scoreLabel(selectedSpatialSort)}</div>
                         <div className="mt-1 text-lg font-bold text-gray-900">
                           {topSpatialCell ? `${selectedSpatialSort === 'coverage_gap_score'
                             ? topSpatialCell.coverageGapScore
@@ -774,7 +823,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                         </div>
                       </div>
                       <div className="rounded-3xl bg-page px-4 py-3">
-                        <div className="micro-label text-gray-400">{t('Top Cell', 'Cellule clé')}</div>
+                        <div className="micro-label text-ink-muted">{t('Top Cell', 'Cellule clé')}</div>
                         <div className="mt-1 text-lg font-bold text-gray-900">{topSpatialCell?.cellId ?? '--'}</div>
                       </div>
                     </div>
@@ -783,7 +832,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <div>
-                            <div className="micro-label text-gray-400">{t('Cluster map', 'Carte des clusters')}</div>
+                            <div className="micro-label text-ink-muted">{t('Cluster map', 'Carte des clusters')}</div>
                             <div className="mt-1 text-sm font-bold text-gray-900">
                               {focusedSpatialCell
                                 ? `${t('Focused cell', 'Cellule ciblée')} ${focusedSpatialCell.cellId}`
@@ -792,7 +841,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                           </div>
                           {focusedSpatialCell && (
                             <div className="rounded-2xl bg-page px-3 py-2 text-right">
-                              <div className="micro-label text-gray-400">{t('Center', 'Centre')}</div>
+                              <div className="micro-label text-ink-muted">{t('Center', 'Centre')}</div>
                               <div className="mt-1 text-[11px] font-bold text-gray-900">
                                 {focusedSpatialCell.center.latitude.toFixed(4)}, {focusedSpatialCell.center.longitude.toFixed(4)}
                               </div>
@@ -868,7 +917,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                       </div>
 
                       <div className="space-y-3">
-                        <div className="micro-label text-gray-400">{t('Cell selector', 'Sélecteur de cellule')}</div>
+                        <div className="micro-label text-ink-muted">{t('Cell selector', 'Sélecteur de cellule')}</div>
                         <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
                           {spatialData.cells.map((cell) => {
                             const score = scoreValueForCell(selectedSpatialSort, cell);
@@ -895,7 +944,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                                     </p>
                                   </div>
                                   <div className="rounded-2xl bg-page px-3 py-2">
-                                    <div className="micro-label text-gray-400">{scoreLabel(selectedSpatialSort)}</div>
+                                    <div className="micro-label text-ink-muted">{scoreLabel(selectedSpatialSort)}</div>
                                     <div className="mt-1 text-sm font-bold text-gray-900">{score}/100</div>
                                   </div>
                                 </div>
@@ -935,30 +984,30 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                                 <p className="mt-2 text-sm font-semibold text-gray-900">{cell.summary}</p>
                               </div>
                               <div className="rounded-3xl bg-page px-4 py-3 min-w-[140px]">
-                                <div className="micro-label text-gray-400">{scoreLabel(selectedSpatialSort)}</div>
+                                <div className="micro-label text-ink-muted">{scoreLabel(selectedSpatialSort)}</div>
                                 <div className="mt-1 text-xl font-extrabold text-gray-900">{activeScore}/100</div>
                               </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
                               <div className="rounded-2xl bg-page px-3 py-2">
-                                <div className="micro-label text-gray-400">{t('Points', 'Points')}</div>
+                                <div className="micro-label text-ink-muted">{t('Points', 'Points')}</div>
                                 <div className="mt-1 text-sm font-bold text-gray-900">{cell.totalPoints}</div>
                               </div>
                               <div className="rounded-2xl bg-page px-3 py-2">
-                                <div className="micro-label text-gray-400">{t('Publishable Changes', 'Changements publiables')}</div>
+                                <div className="micro-label text-ink-muted">{t('Publishable Changes', 'Changements publiables')}</div>
                                 <div className="mt-1 text-sm font-bold text-gray-900">{cell.publishableChangeCount}</div>
                               </div>
                               <div className="rounded-2xl bg-page px-3 py-2">
-                                <div className="micro-label text-gray-400">{t('Confidence', 'Confiance')}</div>
+                                <div className="micro-label text-ink-muted">{t('Confidence', 'Confiance')}</div>
                                 <div className="mt-1 text-sm font-bold text-gray-900">{cell.avgConfidenceScore}/100</div>
                               </div>
                               <div className="rounded-2xl bg-page px-3 py-2">
-                                <div className="micro-label text-gray-400">{t('Freshness', 'Fraîcheur')}</div>
+                                <div className="micro-label text-ink-muted">{t('Freshness', 'Fraîcheur')}</div>
                                 <div className="mt-1 text-sm font-bold text-gray-900">{cell.medianFreshnessDays}{t('d', 'j')}</div>
                               </div>
                               <div className="rounded-2xl bg-page px-3 py-2">
-                                <div className="micro-label text-gray-400">{t('Operators', 'Opérateurs')}</div>
+                                <div className="micro-label text-ink-muted">{t('Operators', 'Opérateurs')}</div>
                                 <div className="mt-1 text-sm font-bold text-gray-900">{cell.operatorDiversity}</div>
                               </div>
                             </div>

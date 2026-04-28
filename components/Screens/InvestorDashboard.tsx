@@ -364,7 +364,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
         <div className="flex items-center justify-center h-64">
           <div className="text-center space-y-2">
             <div className="w-8 h-8 border-2 border-navy border-t-transparent rounded-full animate-spin mx-auto" />
-            <p className="micro-label text-gray-400">{t('Loading metrics...', 'Chargement des métriques...')}</p>
+            <p className="micro-label text-ink-muted">{t('Loading metrics...', 'Chargement des métriques...')}</p>
           </div>
         </div>
       </div>
@@ -600,7 +600,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
               </div>
             ) : (
               <div className="bg-page rounded-2xl p-4 text-center">
-                <span className="micro-label text-gray-400">{t('Velocity data loading...', 'Chargement des données de vélocité...')}</span>
+                <span className="micro-label text-ink-muted">{t('Velocity data loading...', 'Chargement des données de vélocité...')}</span>
               </div>
             )}
 
@@ -643,7 +643,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-36 flex items-center justify-center text-gray-400 micro-label">--</div>
+                  <div className="h-36 flex items-center justify-center text-ink-muted micro-label">--</div>
                 )}
               </div>
 
@@ -664,7 +664,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <div className="h-36 flex items-center justify-center text-gray-400 micro-label">--</div>
+                  <div className="h-36 flex items-center justify-center text-ink-muted micro-label">--</div>
                 )}
               </div>
             </div>
@@ -716,17 +716,17 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
             {/* Key stats row */}
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-page rounded-xl p-3 text-center">
-                <span className="micro-label text-gray-400 block">{t('Total Points', 'Total points')}</span>
+                <span className="micro-label text-ink-muted block">{t('Total Points', 'Total points')}</span>
                 <span className="text-lg font-extrabold text-navy">{totalPoints}</span>
               </div>
               <div className="bg-page rounded-xl p-3 text-center">
-                <span className="micro-label text-gray-400 block">{t('WoW Growth', 'Croissance')}</span>
+                <span className="micro-label text-ink-muted block">{t('WoW Growth', 'Croissance')}</span>
                 <span className={`text-lg font-extrabold ${avgWoW !== null && avgWoW > 0 ? 'text-forest' : avgWoW !== null && avgWoW < 0 ? 'text-danger' : 'text-gray-500'}`}>
                   {avgWoW !== null ? `${avgWoW > 0 ? '+' : ''}${avgWoW}%` : '--'}
                 </span>
               </div>
               <div className="bg-page rounded-xl p-3 text-center">
-                <span className="micro-label text-gray-400 block">{t('Verticals', 'Secteurs')}</span>
+                <span className="micro-label text-ink-muted block">{t('Verticals', 'Secteurs')}</span>
                 <span className="text-lg font-extrabold text-terra">{activeVerticals}/7</span>
               </div>
             </div>
@@ -752,7 +752,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
               </div>
             ) : (
               <div className="bg-page rounded-2xl p-4 text-center">
-                <span className="micro-label text-gray-400">{t('No snapshot data yet', 'Pas encore de données')}</span>
+                <span className="micro-label text-ink-muted">{t('No snapshot data yet', 'Pas encore de données')}</span>
               </div>
             )}
 
@@ -811,7 +811,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
             {/* Completion Rate */}
             <div className="bg-page rounded-2xl p-4 flex items-center justify-between">
               <div>
-                <span className="micro-label text-gray-400 block">{t('Completion Rate', 'Taux de complétion')}</span>
+                <span className="micro-label text-ink-muted block">{t('Completion Rate', 'Taux de complétion')}</span>
                 <span className="text-xl font-extrabold text-navy">{avgCompletionRate}%</span>
               </div>
               <div className="w-12 h-12 rounded-full border-4 border-navy flex items-center justify-center">

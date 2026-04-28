@@ -489,7 +489,7 @@ const Analytics: React.FC<Props> = ({
                 </h4>
                 <div className="flex items-center space-x-1.5">
                   <ShieldCheck size={12} className="text-forest" />
-                  <span className="micro-label text-gray-400">
+                  <span className="micro-label text-ink-muted">
                     {t('Senior Contributor', 'Contributeur senior')}
                   </span>
                 </div>
@@ -507,7 +507,7 @@ const Analytics: React.FC<Props> = ({
         ) : clientMode ? (
           <div className="flex items-center justify-between py-2">
             <div className="flex flex-col">
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Client Insights', 'Insights client')}
               </span>
               <span className="text-sm font-semibold text-gray-900">
@@ -520,7 +520,7 @@ const Analytics: React.FC<Props> = ({
           </div>
         ) : (
           <div className="px-1 pt-1">
-            <span className="micro-label text-gray-400">
+            <span className="micro-label text-ink-muted">
               {t('Leaderboard', 'Classement')}
             </span>
             <p className="mt-1 text-lg font-bold leading-tight text-gray-900">
@@ -653,7 +653,7 @@ const Analytics: React.FC<Props> = ({
         {adminMode && (
           <div className="grid grid-cols-2 gap-4">
             <div className="card p-4 space-y-2">
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Data Complete', 'Données complètes')}
               </span>
               <div className="flex items-baseline space-x-1">
@@ -666,7 +666,7 @@ const Analytics: React.FC<Props> = ({
               </div>
             </div>
             <div className="card p-4 space-y-2">
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Active Contributors', 'Contributeurs actifs')}
               </span>
               <div className="flex items-baseline space-x-1">
@@ -684,7 +684,7 @@ const Analytics: React.FC<Props> = ({
         {clientMode && (
           <div className="grid grid-cols-2 gap-4">
             <div className="card p-4 space-y-2">
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Tracked points', 'Points suivis')}
               </span>
               <div className="flex items-baseline space-x-1">
@@ -697,7 +697,7 @@ const Analytics: React.FC<Props> = ({
               </div>
             </div>
             <div className="card p-4 space-y-2">
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Completion rate', 'Taux de complétion')}
               </span>
               <div className="flex items-baseline space-x-1">
@@ -710,7 +710,7 @@ const Analytics: React.FC<Props> = ({
               </div>
             </div>
             <div className="card p-4 space-y-2">
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Anomaly flags', 'Signaux anomalies')}
               </span>
               <div className="flex items-baseline space-x-1">
@@ -723,7 +723,7 @@ const Analytics: React.FC<Props> = ({
               </div>
             </div>
             <div className="card p-4 space-y-2">
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Avg WoW growth', 'Croissance moy. hebdo')}
               </span>
               <div className="flex items-baseline space-x-1">
@@ -750,7 +750,7 @@ const Analytics: React.FC<Props> = ({
                   )}
                 </span>
               </div>
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Role-specific', 'Spécifique au rôle')}
               </span>
             </div>
@@ -790,7 +790,7 @@ const Analytics: React.FC<Props> = ({
                   )}
                 </span>
               </div>
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Live', 'Live')}
               </span>
             </div>
@@ -828,7 +828,7 @@ const Analytics: React.FC<Props> = ({
                   {t('XP Distribution', 'Distribution XP')}
                 </span>
               </div>
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('All Users', 'Tous les utilisateurs')}
               </span>
             </div>
@@ -861,7 +861,7 @@ const Analytics: React.FC<Props> = ({
                   {t('Data Freshness Heatmap', 'Heatmap fraîcheur des données')}
                 </span>
               </div>
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Last 24h', 'Dernieres 24h')}
               </span>
             </div>
@@ -898,7 +898,7 @@ const Analytics: React.FC<Props> = ({
             </div>
 
             <div className="mt-4 rounded-[1.5rem] border border-gray-100 bg-page px-4 py-4">
-              <p className="micro-label text-gray-400">
+              <p className="micro-label text-ink-muted">
                 {t('How rankings work', 'Comment fonctionne le classement')}
               </p>
               <p className="mt-2 text-sm font-semibold leading-6 text-gray-900">
@@ -918,7 +918,7 @@ const Analytics: React.FC<Props> = ({
 
             <div className="mt-4 space-y-3">
               {isLoadingLeaderboard && (
-                <div className="rounded-[1.35rem] border border-gray-100 bg-page p-4 micro-label text-gray-400">
+                <div className="rounded-[1.35rem] border border-gray-100 bg-page p-4 micro-label text-ink-muted">
                   {t(
                     'Loading contributors...',
                     'Chargement des contributeurs...',
@@ -966,7 +966,7 @@ const Analytics: React.FC<Props> = ({
                         <p className="text-base font-bold leading-tight text-gray-900">
                           <span className={rankColor}>#{entry.rank}</span> {entry.name}
                         </p>
-                        <p className="mt-1 micro-label text-gray-400">
+                        <p className="mt-1 micro-label text-ink-muted">
                           {entry.contributions}{' '}
                           {t('submissions', 'soumissions')} •{' '}
                           {formatLastSeen(entry.lastContributionAt)}
@@ -990,7 +990,7 @@ const Analytics: React.FC<Props> = ({
                         <span className="mt-1 block text-xs font-bold text-forest">
                           {entry.xp.toLocaleString()} XP
                         </span>
-                        <span className="mt-1 block micro-label text-gray-400">
+                        <span className="mt-1 block micro-label text-ink-muted">
                           {entry.averageQualityScore}% {t('quality', 'qualité')}
                         </span>
                       </div>
@@ -1014,12 +1014,12 @@ const Analytics: React.FC<Props> = ({
                   )}
                 </span>
               </div>
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Monthly', 'Mensuel')}
               </span>
             </div>
             <div className="rounded-2xl bg-page p-4">
-              <div className="micro-label text-gray-400">
+              <div className="micro-label text-ink-muted">
                 {t('How rankings work', 'Comment fonctionne le classement')}
               </div>
               <div className="mt-2 text-sm font-semibold text-gray-900">
@@ -1038,7 +1038,7 @@ const Analytics: React.FC<Props> = ({
             </div>
             <div className="space-y-3">
               {isLoadingLeaderboard && (
-                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
+                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-ink-muted">
                   {t(
                     'Loading contributors...',
                     'Chargement des contributeurs...',
@@ -1077,7 +1077,7 @@ const Analytics: React.FC<Props> = ({
                       <p className="text-sm font-bold text-gray-900">
                         <span className={rankColor}>#{entry.rank}</span> {entry.name}
                       </p>
-                      <p className="micro-label text-gray-400">
+                      <p className="micro-label text-ink-muted">
                         {entry.contributions} {t('submissions', 'soumissions')}{' '}
                         • {formatLastSeen(entry.lastContributionAt)}
                       </p>
@@ -1098,7 +1098,7 @@ const Analytics: React.FC<Props> = ({
                       <span className="block text-xs font-bold text-forest">
                         {entry.xp.toLocaleString()} XP
                       </span>
-                      <span className="block micro-label text-gray-400">
+                      <span className="block micro-label text-ink-muted">
                         {entry.averageQualityScore}% {t('quality', 'qualité')}
                       </span>
                     </div>
@@ -1118,13 +1118,13 @@ const Analytics: React.FC<Props> = ({
                   {t('Field network pulse', 'Pouls du réseau terrain')}
                 </span>
               </div>
-              <span className="micro-label text-gray-400">
+              <span className="micro-label text-ink-muted">
                 {t('Top 3 contributors', 'Top 3 contributeurs')}
               </span>
             </div>
             <div className="space-y-3">
               {isLoadingLeaderboard && (
-                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-gray-400">
+                <div className="bg-page border border-gray-100 rounded-2xl p-3 micro-label text-ink-muted">
                   {t(
                     'Loading contributors...',
                     'Chargement des contributeurs...',
@@ -1163,7 +1163,7 @@ const Analytics: React.FC<Props> = ({
                       <p className="text-sm font-bold text-gray-900">
                         <span className={rankColor}>#{entry.rank}</span> {entry.name}
                       </p>
-                      <p className="micro-label text-gray-400">
+                      <p className="micro-label text-ink-muted">
                         {entry.contributions} {t('submissions', 'soumissions')}{' '}
                         • {formatLastSeen(entry.lastContributionAt)}
                       </p>

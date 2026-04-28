@@ -35,7 +35,7 @@ const ExportPanel: React.FC<Props> = ({
     <div className="card-pill p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="micro-label-wide text-gray-400">
+          <div className="micro-label-wide text-ink-muted">
             {t('Export Workflow', 'Workflow export')}
           </div>
           <h4 className="mt-1 text-lg font-bold text-gray-900">
@@ -77,7 +77,7 @@ const ExportPanel: React.FC<Props> = ({
       </div>
 
       <div className="rounded-2xl bg-page p-4 space-y-2">
-        <div className="micro-label text-gray-400">
+        <div className="micro-label text-ink-muted">
           {t('API Preview', 'Aperçu API')}
         </div>
         <code className="block text-xs text-navy break-all">{apiPreview}</code>
