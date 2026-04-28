@@ -527,21 +527,12 @@ const App: React.FC = () => {
         return <InvestorDashboard language={language} onBack={goBack} />;
       case Screen.CLIENT_INSIGHTS:
         return (
-          <ClientInsights
-            language={language}
+          <Analytics
             onBack={goBack}
-            monthLabel={new Date().toLocaleDateString(
-              language === 'fr' ? 'fr-FR' : 'en-US',
-              { month: 'long', year: 'numeric' },
-            )}
-            totalPoints={0}
-            weeklyDelta={0}
-            headline={language === 'fr' ? 'Analyses clients' : 'Client Insights'}
-            body={language === 'fr'
-              ? 'Les analyses détaillées arrivent bientôt.'
-              : 'Detailed insights coming soon.'}
-            insights={[]}
-            onExport={() => {}}
+            isClient={true}
+            onDeltaDashboard={() => navigateTo(Screen.DELTA_DASHBOARD)}
+            onInvestorDashboard={() => navigateTo(Screen.INVESTOR_DASHBOARD)}
+            language={language}
           />
         );
       case Screen.PRIVACY_POLICY:
