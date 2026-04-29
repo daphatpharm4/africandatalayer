@@ -94,6 +94,21 @@ export const registerBodySchema = z
   })
   .strict();
 
+export const adminAccountCreateSchema = z
+  .object({
+    identifier: z.string().trim().min(3).max(160),
+    password: z
+      .string()
+      .min(10)
+      .max(128)
+      .regex(/[A-Z]/, "Password must include an uppercase letter")
+      .regex(/[a-z]/, "Password must include a lowercase letter")
+      .regex(/[0-9]/, "Password must include a number"),
+    name: z.string().trim().max(160).optional(),
+    role: z.enum(["agent", "admin", "client"]).default("client"),
+  })
+  .strict();
+
 export const userUpdateSchema = z
   .object({
     occupation: z.string().trim().max(120).optional(),
