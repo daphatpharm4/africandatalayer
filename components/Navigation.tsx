@@ -99,7 +99,7 @@ const Navigation: React.FC<Props> = ({
   return (
     <nav
       data-testid="main-navigation"
-      className="z-40 flex min-h-[calc(var(--bottom-nav-height)+var(--safe-bottom))] items-start justify-around gap-1 border-t border-gray-200/90 bg-white/98 px-3 pt-2 shadow-[0_-12px_32px_rgba(15,43,70,0.08)] backdrop-blur-xl pb-[var(--safe-bottom)]"
+      className="relative z-40 flex min-h-[calc(var(--bottom-nav-height)+var(--safe-bottom))] items-start justify-around gap-1 border-t border-gray-200/90 bg-white px-3 pt-2 shadow-[0_-12px_32px_rgba(15,43,70,0.10)] backdrop-blur-xl pb-[var(--safe-bottom)]"
       aria-label={t('Main navigation', 'Navigation principale')}
     >
       {navItems.map((item) => {
@@ -117,7 +117,7 @@ const Navigation: React.FC<Props> = ({
                 ? 'bg-navy-wash text-navy shadow-[inset_0_0_0_1px_rgba(15,43,70,0.06)]'
                 : isContribute
                   ? 'text-terra hover:bg-terra-wash hover:text-terra-dark'
-                  : 'text-gray-500 hover:bg-white hover:text-gray-700'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
             }`}
           >
             <Icon size={19} aria-hidden="true" />

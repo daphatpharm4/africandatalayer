@@ -34,55 +34,42 @@ const MissionCards: React.FC<MissionCardsProps> = ({
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const primaryCard = cards[0];
 
-  // Peek mode — stacked mission peek cards
   if (sheetSnap === 'peek') {
     if (!primaryCard) return null;
-    const peekCards = cards.slice(0, 2);
-    return (
-      <div className="space-y-2">
-        {peekCards.map((card, index) => {
-          const Icon = card.icon;
-          const isPrimary = index === 0;
+    const Icon = primaryCard.icon;
 
-          return (
-            <button
-              key={card.id}
-              type="button"
-              onClick={card.action}
-              className={`motion-pressable w-full text-left ${
-                isPrimary
-                  ? 'route-grid mb-2 cursor-pointer rounded-2xl bg-navy p-3.5 text-white'
-                  : 'rounded-2xl bg-terra p-3.5 text-white'
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/15 text-white">
-                  <Icon size={18} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className={`micro-label mb-1 ${isPrimary ? 'text-white/50' : 'text-white/65'}`}>
-                    {card.label}
-                  </div>
-                  <div className="mt-1 text-sm font-semibold leading-tight text-white">
-                    {card.title}
-                  </div>
-                  <div className="mt-0.5 text-[11px] leading-4 text-white/70">
-                    {card.meta}
-                  </div>
-                  {isPrimary && card.xpReward && (
-                    <div className="mt-2">
-                      <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-bold text-gold">
-                        {card.xpReward}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {isPrimary && <ChevronUp size={16} className="shrink-0 text-white/45" />}
+    return (
+      <button
+        type="button"
+        onClick={primaryCard.action}
+        data-testid="mission-peek-primary"
+        className="motion-pressable route-grid w-full cursor-pointer rounded-2xl bg-navy p-3.5 text-left text-white shadow-[0_10px_28px_rgba(15,43,70,0.24)]"
+      >
+        <div className="flex min-h-[76px] items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/18 text-white">
+            <Icon size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="micro-label mb-1 text-white/85">
+              {primaryCard.label}
+            </div>
+            <div className="truncate text-sm font-bold leading-tight text-white">
+              {primaryCard.title}
+            </div>
+            <div className="mt-0.5 line-clamp-1 text-[11px] font-medium leading-4 text-white/82">
+              {primaryCard.meta}
+            </div>
+            {primaryCard.xpReward && (
+              <div className="mt-1.5">
+                <span className="rounded-full bg-gold px-2 py-0.5 text-[11px] font-bold text-navy">
+                  {primaryCard.xpReward}
+                </span>
               </div>
-            </button>
-          );
-        })}
-      </div>
+            )}
+          </div>
+          <ChevronUp size={16} className="shrink-0 text-white/70" />
+        </div>
+      </button>
     );
   }
 
