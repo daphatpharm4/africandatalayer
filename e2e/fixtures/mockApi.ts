@@ -10,6 +10,7 @@ import {
   pointEvents,
   projectedPoints,
 } from '../mocks/shared';
+import type { UserRole } from '../../shared/types';
 import type { MockApiResponse, MockApiResolver } from '../mocks/types';
 import { getMockSession, type AdlRole, type MockAuthSession } from './roles';
 
@@ -20,6 +21,8 @@ const BLANK_TILE_PNG = Buffer.from(
 
 const TILE_URL_PATTERN =
   /https:\/\/[a-z]\.basemaps\.cartocdn\.com\/light_all\/.+/i;
+const GOOGLE_FONT_CSS_PATTERN = /https:\/\/fonts\.googleapis\.com\/.+/i;
+const GOOGLE_FONT_FILE_PATTERN = /https:\/\/fonts\.gstatic\.com\/.+/i;
 
 const COMMON_RESOLVERS: MockApiResolver[] = [
   (url, method) => {
@@ -136,6 +139,8 @@ export async function installAdlMocks(
 ): Promise<void> {
   await page.unroute('**/api/**');
   await page.unroute(TILE_URL_PATTERN);
+  await page.unroute(GOOGLE_FONT_CSS_PATTERN);
+  await page.unroute(GOOGLE_FONT_FILE_PATTERN);
 
   let currentSession: MockAuthSession | null =
     options.initialSession !== undefined
@@ -157,6 +162,19 @@ export async function installAdlMocks(
       status: 200,
       contentType: 'image/png',
       body: BLANK_TILE_PNG,
+    });
+  });
+  await page.route(GOOGLE_FONT_CSS_PATTERN, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/css',
+      body: '',
+    });
+  });
+  await page.route(GOOGLE_FONT_FILE_PATTERN, async (route) => {
+    await route.fulfill({
+      status: 204,
+      body: '',
     });
   });
 
@@ -207,6 +225,64 @@ export async function installAdlMocks(
           'New field account',
       );
       await fulfillRoute(route, { status: 201, body: { ok: true } });
+      return;
+    }
+
+    if (
+      role === 'admin' &&
+      url.pathname === '/api/user' &&
+      url.searchParams.get('view') === 'account_create' &&
+      method === 'POST'
+    ) {
+      const payload = request.postDataJSON() as {
+        identifier?: string;
+        name?: string;
+        role?: UserRole;
+        password?: string;
+      };
+      const identifier = String(payload.identifier ?? '').trim().toLowerCase();
+      const accountRole: UserRole =
+        payload.role === 'admin' || payload.role === 'agent' || payload.role === 'client'
+          ? payload.role
+          : 'client';
+      const name = String(payload.name ?? '').trim() || 'New client account';
+
+      if (!identifier || knownCredentials.has(identifier)) {
+        await fulfillRoute(route, {
+          status: identifier ? 409 : 400,
+          body: {
+            error: identifier
+              ? 'An account already exists for this phone/email'
+              : 'Enter a valid email or phone number',
+          },
+        });
+        return;
+      }
+
+      knownCredentials.set(identifier, String(payload.password ?? ''));
+      knownNames.set(identifier, name);
+      await fulfillRoute(route, {
+        status: 201,
+        body: {
+          id: identifier,
+          name,
+          email: identifier.includes('@') ? identifier : null,
+          phone: identifier.startsWith('+') ? identifier : null,
+          image: 'baobab',
+          avatarPreset: 'baobab',
+          occupation: accountRole === 'client' ? 'Client stakeholder' : '',
+          XP: 0,
+          isAdmin: accountRole === 'admin',
+          role: accountRole,
+          mapScope: accountRole === 'admin' ? 'global' : 'bonamoussadi',
+          trustScore: 50,
+          trustTier: 'standard',
+          suspendedUntil: null,
+          wipeRequested: false,
+          failedLoginCount: 0,
+          lockedUntil: null,
+        },
+      });
       return;
     }
 
