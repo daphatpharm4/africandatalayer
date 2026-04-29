@@ -1,5 +1,6 @@
+import bcrypt from "bcryptjs";
 import { requireUser } from "../../lib/auth.js";
-import { normalizeIdentifier } from "../../lib/shared/identifier.js";
+import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { computeCanonicalUserXp } from "../../lib/server/xp.js";
@@ -13,13 +14,19 @@ import {
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { updateUserTrust } from "../../lib/server/userTrust.js";
-import { adminUserAccessPatchSchema, userStatusPatchSchema, userUpdateSchema } from "../../lib/server/validation.js";
-import { encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
+import {
+  adminAccountCreateSchema,
+  adminUserAccessPatchSchema,
+  userStatusPatchSchema,
+  userUpdateSchema,
+} from "../../lib/server/validation.js";
+import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type {
   CollectionAssignmentCreateInput,
   CollectionAssignmentStatus,
   CollectionAssignmentUpdateInput,
   MapScope,
+  UserProfile,
   UserRole,
 } from "../../shared/types.js";
 
@@ -66,6 +73,102 @@ function sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit
   delete safe.passwordHash;
   return safe;
 }
+
+type GetUserProfileFn = typeof getUserProfile;
+type UpsertUserProfileFn = typeof upsertUserProfile;
+type HashPasswordFn = typeof bcrypt.hash;
+type LogSecurityEventFn = typeof logSecurityEvent;
+
+type AdminAccountCreateDeps = {
+  getUserProfileFn?: GetUserProfileFn;
+  upsertUserProfileFn?: UpsertUserProfileFn;
+  hashPasswordFn?: HashPasswordFn;
+  logSecurityEventFn?: LogSecurityEventFn;
+};
+
+export function createAdminAccountCreateHandler(deps: AdminAccountCreateDeps = {}) {
+  const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
+  const upsertUserProfileFn = deps.upsertUserProfileFn ?? upsertUserProfile;
+  const hashPasswordFn = deps.hashPasswordFn ?? bcrypt.hash;
+  const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
+
+  return async function handleAdminAccountCreate(request: Request, actorUserId: string): Promise<Response> {
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+
+    const validation = adminAccountCreateSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 400);
+    }
+
+    const body = validation.data;
+    const normalizedIdentifier = normalizeIdentifier(body.identifier);
+    if (!normalizedIdentifier) {
+      return errorResponse("Enter a valid email or phone number", 400);
+    }
+
+    const userId = normalizedIdentifier.value;
+    try {
+      const existing = await getUserProfileFn(userId);
+      if (existing) {
+        return errorResponse("An account already exists for this phone/email", 409);
+      }
+
+      const nextRole = body.role;
+      const nextIsAdmin = nextRole === "admin";
+      const nextMapScope: MapScope = nextIsAdmin ? "global" : "bonamoussadi";
+      const name = body.name?.trim() || inferDefaultDisplayName(userId);
+
+      const profile: UserProfile = {
+        id: userId,
+        name,
+        email: normalizedIdentifier.type === "email" ? userId : null,
+        phone: normalizedIdentifier.type === "phone" ? userId : null,
+        image: encodeAvatarPresetImage(DEFAULT_AVATAR_PRESET),
+        avatarPreset: DEFAULT_AVATAR_PRESET,
+        occupation: nextRole === "client" ? "Client stakeholder" : "",
+        XP: 0,
+        passwordHash: await hashPasswordFn(body.password, 12),
+        isAdmin: nextIsAdmin,
+        role: nextRole,
+        mapScope: nextMapScope,
+        trustScore: 50,
+        trustTier: "standard",
+        failedLoginCount: 0,
+        lockedUntil: null,
+        wipeRequested: false,
+        suspendedUntil: null,
+      };
+
+      await upsertUserProfileFn(userId, profile);
+      await logSecurityEventFn({
+        eventType: "admin_account_created",
+        userId,
+        request,
+        details: {
+          actorUserId,
+          role: nextRole,
+          isAdmin: nextIsAdmin,
+          mapScope: nextMapScope,
+          identifierType: normalizedIdentifier.type,
+        },
+      });
+
+      return jsonResponse(sanitizeProfile(profile), { status: 201 });
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
+  };
+}
+
+const handleAdminAccountCreate = createAdminAccountCreateHandler();
 
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
@@ -253,6 +356,9 @@ export async function POST(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
+  if (view === "account_create") {
+    return await handleAdminAccountCreate(request, auth.id);
+  }
   if (view !== "assignments") return errorResponse("Invalid view", 400);
 
   let body: CollectionAssignmentCreateInput;

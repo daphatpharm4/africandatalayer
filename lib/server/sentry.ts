@@ -1,6 +1,5 @@
-import * as Sentry from "@sentry/node";
-
 let initialized = false;
+let sentryModulePromise: Promise<typeof import("@sentry/node")> | null = null;
 
 function scrubString(value: string): string {
   return value
@@ -37,6 +36,34 @@ export function initServerSentry(): void {
   const dsn = process.env.SENTRY_DSN;
   if (!dsn) return;
 
+  void loadSentryModule()
+    .then((Sentry) => {
+      if (initialized) return;
+      Sentry.init({
+        dsn,
+        environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
+        sendDefaultPii: false,
+        beforeSend(event) {
+          return scrubValue(event) as typeof event;
+        },
+      });
+      initialized = true;
+    })
+    .catch((error) => {
+      console.error("[sentry] failed to initialize", error);
+    });
+}
+
+function loadSentryModule(): Promise<typeof import("@sentry/node")> {
+  sentryModulePromise ??= import("@sentry/node");
+  return sentryModulePromise;
+}
+
+function ensureSentryInitialized(Sentry: typeof import("@sentry/node")): boolean {
+  if (initialized) return true;
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return false;
+
   Sentry.init({
     dsn,
     environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
@@ -47,12 +74,19 @@ export function initServerSentry(): void {
   });
 
   initialized = true;
+  return true;
 }
 
 export function captureServerException(error: unknown, context?: Record<string, unknown>): void {
-  initServerSentry();
-  if (!initialized) return;
-  Sentry.captureException(error, {
-    extra: scrubValue(context ?? {}) as Record<string, unknown>,
-  });
+  if (!process.env.SENTRY_DSN) return;
+  void loadSentryModule()
+    .then((Sentry) => {
+      if (!ensureSentryInitialized(Sentry)) return;
+      Sentry.captureException(error, {
+        extra: scrubValue(context ?? {}) as Record<string, unknown>,
+      });
+    })
+    .catch((loadError) => {
+      console.error("[sentry] failed to capture exception", loadError);
+    });
 }

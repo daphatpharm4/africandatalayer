@@ -9,6 +9,7 @@ export type SecurityAuditEventType =
   | "account_locked"
   | "account_unlocked"
   | "role_changed"
+  | "admin_account_created"
   | "remote_wipe_triggered"
   | "remote_wipe_executed"
   | "data_export"
