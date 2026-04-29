@@ -122,7 +122,11 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
   const listContentTopInset = isLowEndDevice ? (isAdmin ? '18.5rem' : '15rem') : (isAdmin ? '15rem' : '11.75rem');
   const listContentTopInsetPx = isLowEndDevice ? (isAdmin ? 296 : 240) : (isAdmin ? 240 : 188);
-  const mapBottomChromePx = 80 + 88 + 4; // bottom nav + peek sheet + small offset
+  const bottomNavHeightPx = 80;
+  const missionPeekHeightPx = 152;
+  const mapBottomChromePx = bottomNavHeightPx + missionPeekHeightPx + 12;
+  const floatingCtaOffsetPx = missionPeekHeightPx + 20;
+  const floatingHintOffsetPx = missionPeekHeightPx + 88;
   const mapScopeOptions: Array<{ value: MapScope; label: string }> = [
     { value: 'bonamoussadi', label: t('Bonamoussadi', 'Bonamoussadi') },
     { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
@@ -914,7 +918,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
 
         {viewMode === 'map' && isAuthenticated && (
           <BottomSheet
-            peekHeight={88}
+            peekHeight={missionPeekHeightPx}
             onSnapChange={setSheetSnap}
             hidden={false}
             isLowEndDevice={isLowEndDevice}
@@ -960,7 +964,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               sheetSnap !== 'peek' ? 'opacity-0 pointer-events-none' : ''
             }`}
             style={{
-              bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 6rem)',
+              bottom: `calc(var(--bottom-nav-height) + var(--safe-bottom) + ${floatingCtaOffsetPx}px)`,
               boxShadow: '0 6px 28px rgba(200,107,74,0.4), 0 2px 8px rgba(200,107,74,0.2)',
             }}
             aria-label={
@@ -977,7 +981,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
         {onContribute && isAuthenticated && sheetSnap === 'peek' && (
           <div
             className="surface-reveal fixed right-4 z-40"
-            style={{ bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom) + 10rem)' }}
+            style={{ bottom: `calc(var(--bottom-nav-height) + var(--safe-bottom) + ${floatingHintOffsetPx}px)` }}
           >
             <div className="max-w-[14rem] rounded-2xl bg-white/96 px-3 py-2 text-[11px] font-semibold leading-4 text-gray-600 shadow-lg">
               {t('Tap for one point. Press and hold to start a batch.', 'Touchez pour un point. Maintenez pour lancer une série.')}
