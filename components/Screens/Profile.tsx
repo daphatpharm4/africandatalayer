@@ -63,6 +63,13 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const [accessActionSuccess, setAccessActionSuccess] = useState('');
   const [isLookingUpAccount, setIsLookingUpAccount] = useState(false);
   const [isSavingAccountAccess, setIsSavingAccountAccess] = useState(false);
+  const [createIdentifier, setCreateIdentifier] = useState('');
+  const [createName, setCreateName] = useState('');
+  const [createRole, setCreateRole] = useState<UserRole>('client');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createAccountError, setCreateAccountError] = useState('');
+  const [createAccountSuccess, setCreateAccountSuccess] = useState('');
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
   const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
     if (isAdminMode) return 'global';
@@ -87,6 +94,10 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const isMapUnlocked = activeMapScope !== 'bonamoussadi';
   const managedAccountRole = resolveRole(managedAccount);
   const hasManagedAccessChanges = Boolean(managedAccount) && managedRole !== managedAccountRole;
+  const canCreateAccount =
+    createIdentifier.trim().length > 0 &&
+    createPassword.trim().length >= 10 &&
+    !isCreatingAccount;
 
   const submissionToHistory = (submission: PointEvent) => {
     const details = (submission.details ?? {}) as Record<string, unknown>;
@@ -432,6 +443,50 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     }
   };
 
+  const handleCreateAccount = async () => {
+    if (!canCreateAccount) {
+      setCreateAccountError(t('Enter an email or phone and a temporary password.', 'Saisissez un email ou numéro et un mot de passe temporaire.'));
+      return;
+    }
+
+    setCreateAccountError('');
+    setCreateAccountSuccess('');
+    setLookupError('');
+    setAccessActionError('');
+    setAccessActionSuccess('');
+
+    try {
+      setIsCreatingAccount(true);
+      const created = await apiJson<UserProfile>('/api/user?view=account_create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: createIdentifier.trim(),
+          name: createName.trim() || undefined,
+          role: createRole,
+          password: createPassword,
+        }),
+      });
+
+      setManagedAccount(created);
+      setManagedRole(resolveRole(created));
+      setAccountLookupInput(created.email || created.phone || created.id);
+      setCreateIdentifier('');
+      setCreateName('');
+      setCreateRole('client');
+      setCreatePassword('');
+      setCreateAccountSuccess(t('Account created. Share the temporary password through a trusted channel.', 'Compte créé. Partagez le mot de passe temporaire via un canal de confiance.'));
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : t('Unable to create account.', 'Impossible de créer le compte.');
+      setCreateAccountError(message);
+    } finally {
+      setIsCreatingAccount(false);
+    }
+  };
+
   const handleLookupAccount = async () => {
     if (isLookingUpAccount) return;
     const identifier = accountLookupInput.trim();
@@ -663,14 +718,116 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
                 {t('Account Access', 'Acces aux comptes')}
               </span>
               <h3 className="text-sm font-bold text-gray-900">
-                {t('Grant admin access to another account', 'Donner un acces admin a un autre compte')}
+                {t('Create or manage account access', 'Créer ou gérer les accès aux comptes')}
               </h3>
               <p className="text-xs leading-5 text-gray-500">
                 {t(
-                  'Look up an account by exact email or phone, then promote it to admin. Admin accounts automatically unlock Cameroon and worldwide map views.',
-                  'Recherchez un compte par email ou numero exact, puis promouvez-le en admin. Les comptes admin debloquent automatiquement les vues Cameroun et monde entier.',
+                  'Create client accounts, then look up any account by exact email or phone to adjust Agent, Client, or Admin access. Admin accounts automatically unlock worldwide map views.',
+                  'Créez des comptes client, puis recherchez un compte par email ou numéro exact pour régler les accès Agent, Client ou Admin. Les comptes admin débloquent automatiquement la vue mondiale.',
                 )}
               </p>
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-navy-border bg-page p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-bold text-gray-900">
+                    {t('Create account', 'Créer un compte')}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {t('Default role is Client. The user accepts policies on first login.', 'Le rôle par défaut est Client. L’utilisateur accepte les politiques à la première connexion.')}
+                  </div>
+                </div>
+                <span className="rounded-full bg-gold-wash px-3 py-1 micro-label text-amber-900">
+                  {roleLabel(createRole)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="micro-label text-gray-400">
+                    {t('Email or phone', 'Email ou téléphone')}
+                  </span>
+                  <input
+                    type="text"
+                    value={createIdentifier}
+                    onChange={(event) => setCreateIdentifier(event.target.value)}
+                    placeholder={t('client@example.com or +237...', 'client@exemple.com ou +237...')}
+                    data-testid="admin-account-create-identifier"
+                    className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+                  />
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="micro-label text-gray-400">
+                    {t('Display name', 'Nom affiché')}
+                  </span>
+                  <input
+                    type="text"
+                    value={createName}
+                    onChange={(event) => setCreateName(event.target.value)}
+                    placeholder={t('Client team name', 'Nom de l’équipe client')}
+                    data-testid="admin-account-create-name"
+                    className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="micro-label text-gray-400">
+                    {t('Role', 'Rôle')}
+                  </span>
+                  <select
+                    value={createRole}
+                    onChange={(event) => setCreateRole(event.target.value as UserRole)}
+                    data-testid="admin-account-create-role"
+                    className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-gray-900 outline-none transition-colors focus:border-navy"
+                  >
+                    <option value="client">{t('Client', 'Client')}</option>
+                    <option value="agent">{t('Agent', 'Agent')}</option>
+                    <option value="admin">{t('Admin', 'Admin')}</option>
+                  </select>
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="micro-label text-gray-400">
+                    {t('Temporary password', 'Mot de passe temporaire')}
+                  </span>
+                  <input
+                    type="password"
+                    value={createPassword}
+                    onChange={(event) => setCreatePassword(event.target.value)}
+                    placeholder={t('Minimum 10 chars, mixed case, number', '10 caractères min., majuscule, minuscule, chiffre')}
+                    data-testid="admin-account-create-password"
+                    className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+                  />
+                </label>
+              </div>
+
+              {createAccountError && (
+                <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] text-red-600">
+                  {createAccountError}
+                </div>
+              )}
+
+              {createAccountSuccess && (
+                <div data-testid="admin-account-create-success" className="rounded-xl border border-forest/20 bg-forest-wash p-3 text-[11px] text-forest-dark">
+                  {createAccountSuccess}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleCreateAccount}
+                disabled={!canCreateAccount}
+                data-testid="admin-account-create-submit"
+                className={`h-11 rounded-xl px-4 text-sm font-semibold ${
+                  !canCreateAccount ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
+                }`}
+              >
+                {isCreatingAccount ? t('Creating...', 'Création...') : t('Create account', 'Créer le compte')}
+              </button>
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
