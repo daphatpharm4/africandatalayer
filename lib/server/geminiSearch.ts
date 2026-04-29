@@ -1,5 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
 const SEARCH_MODEL = "gemini-2.5-flash";
 
 export class GeminiConfigError extends Error {
@@ -24,20 +22,23 @@ export interface GeminiSearchResult {
   grounding: unknown[];
 }
 
-let client: GoogleGenAI | null = null;
+type GoogleGenAIClient = InstanceType<typeof import("@google/genai").GoogleGenAI>;
 
-function getGeminiClient(): GoogleGenAI {
+let client: GoogleGenAIClient | null = null;
+
+async function getGeminiClient(): Promise<GoogleGenAIClient> {
   if (client) return client;
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     throw new GeminiConfigError("GEMINI_API_KEY is not configured");
   }
+  const { GoogleGenAI } = await import("@google/genai");
   client = new GoogleGenAI({ apiKey });
   return client;
 }
 
 export async function searchLocationsServer(query: string, lat?: number, lng?: number): Promise<GeminiSearchResult> {
-  const ai = getGeminiClient();
+  const ai = await getGeminiClient();
   const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lng);
 
   try {
