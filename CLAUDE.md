@@ -326,6 +326,7 @@ Example: `import { SubmissionCategory } from '@/shared/types'`
 - **No ORM** — raw SQL via `pg` driver through `lib/server/db.ts`.
 - **Zod for validation** at API boundaries (`lib/server/validation.ts`).
 - **Bilingual inline** — use `t = (en, fr) => language === 'fr' ? fr : en` pattern, not i18n libraries.
+- **File path references** — when citing files in chat, use workspace-relative paths with no leading slash and a `:line` suffix (e.g. `api/submissions/index.ts:816`). VS Code's terminal ⌘-click treats a leading `/` as absolute and fails to open the file.
 
 ### File Organization
 
