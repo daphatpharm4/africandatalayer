@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "africandatalayer",
+  "project_id": "2f009ad4-edb6-4c09-8e5a-575090a623fe"
+}
