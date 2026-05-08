@@ -15,6 +15,7 @@ import ScreenHeader from '../shared/ScreenHeader';
 import TrustBadge, { type TrustTier as TrustBadgeTier } from '../shared/TrustBadge';
 import VerticalIcon from '../shared/VerticalIcon';
 import FilterChipRow from '../shared/FilterChipRow';
+import CommunicationsPanel from './CommunicationsPanel';
 import { apiJson } from '../../lib/client/api';
 import { fetchIpReports, updateIpReport } from '../../lib/client/legal';
 import type { IpReport } from '../../shared/types';
@@ -50,7 +51,7 @@ type ReviewDecision = 'approved' | 'rejected' | 'flagged';
 type ReviewResult = Extract<ReviewDecision, 'approved' | 'rejected'>;
 type AutomationStatusFilter = '' | AutomationLeadStatus;
 type AutomationPriorityFilter = '' | AutomationLeadPriority;
-type AdminMode = 'review' | 'assignments' | 'automation' | 'ip-reports';
+type AdminMode = 'review' | 'assignments' | 'automation' | 'ip-reports' | 'communications';
 type MatchState = 'match' | 'mismatch' | 'unavailable';
 
 type ViewTransitionDocument = Document & {
@@ -1187,12 +1188,13 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
       <div className="p-4 pb-24 space-y-4">
         <div className="card p-2">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
             {([
               ['review', t('Review cockpit', 'Cockpit revue')],
               ['assignments', t('Assignments', 'Affectations')],
               ['automation', t('Automation', 'Automatisation')],
               ['ip-reports', t('IP Reports', 'Signalements PI')],
+              ['communications', t('Communications', 'Communications')],
             ] as Array<[AdminMode, string]>).map(([mode, label]) => (
               <button
                 key={mode}
@@ -2502,6 +2504,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
               })}
             </div>
           </div>
+        )}
+
+        {activeMode === 'communications' && (
+          <CommunicationsPanel language={language} />
         )}
       </div>
     </div>

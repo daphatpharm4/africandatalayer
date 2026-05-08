@@ -1,0 +1,632 @@
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2, Mail, MessageSquare, Send, X } from 'lucide-react';
+import { apiJson } from '../../lib/client/api';
+
+type Channel = 'email' | 'sms' | 'history';
+
+interface AudienceFilter {
+  roles?: Array<'agent' | 'admin' | 'client'>;
+  trustTiers?: Array<'new' | 'standard' | 'trusted' | 'elite' | 'restricted'>;
+  mapScopes?: string[];
+  requireEmailOptIn?: boolean;
+  lastActiveDays?: number;
+}
+
+interface AudiencePreviewResponse {
+  recipientCount: number;
+  totalCount: number;
+  suppressedCount: number;
+  maxRecipients: number;
+}
+
+interface CampaignRow {
+  id: string;
+  subject: string;
+  status: string;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  suppressedCount: number;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+interface SmsCampaignRow extends Omit<CampaignRow, 'subject'> {
+  message: string;
+}
+
+interface CampaignsListResponse {
+  campaigns: CampaignRow[];
+  maxRecipients: number;
+}
+
+interface SmsCampaignsListResponse {
+  campaigns: SmsCampaignRow[];
+  maxRecipients: number;
+}
+
+interface CreateCampaignResponse {
+  id: string;
+  status: string;
+  recipientCount: number;
+  suppressedCount?: number;
+  capped: boolean;
+  segmentsPerRecipient?: number;
+  estimatedCostUnits?: number | null;
+}
+
+interface Props {
+  language: 'en' | 'fr';
+}
+
+const ROLE_OPTIONS: Array<NonNullable<AudienceFilter['roles']>[number]> = ['agent', 'admin', 'client'];
+const TRUST_TIER_OPTIONS: Array<NonNullable<AudienceFilter['trustTiers']>[number]> = [
+  'new', 'standard', 'trusted', 'elite', 'restricted',
+];
+
+function gsmSegmentCount(message: string): number {
+  if (!message) return 0;
+  let isAscii = true;
+  for (let i = 0; i < message.length; i += 1) {
+    const code = message.charCodeAt(i);
+    if (code === 0x0a || code === 0x0d) continue;
+    if (code < 0x20 || code > 0x7e) { isAscii = false; break; }
+  }
+  const limit = isAscii ? 160 : 70;
+  return Math.max(1, Math.ceil(message.length / limit));
+}
+
+const CommunicationsPanel: React.FC<Props> = ({ language }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+
+  const [channel, setChannel] = useState<Channel>('email');
+  const [audience, setAudience] = useState<AudienceFilter>({ requireEmailOptIn: true });
+  const [preview, setPreview] = useState<AudiencePreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailHtml, setEmailHtml] = useState('');
+  const [emailText, setEmailText] = useState('');
+  const [emailLanguage, setEmailLanguage] = useState<'en' | 'fr'>(language);
+
+  const [smsMessage, setSmsMessage] = useState('');
+  const [smsLanguage, setSmsLanguage] = useState<'en' | 'fr'>(language);
+  const [acknowledgeCost, setAcknowledgeCost] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
+  const [actionError, setActionError] = useState('');
+
+  const [emailCampaigns, setEmailCampaigns] = useState<CampaignRow[]>([]);
+  const [smsCampaigns, setSmsCampaigns] = useState<SmsCampaignRow[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const refreshPreview = useCallback(async () => {
+    setPreviewLoading(true);
+    setPreviewError('');
+    try {
+      const params = new URLSearchParams({ view: 'audience-preview', audience: JSON.stringify(audience) });
+      const data = await apiJson<AudiencePreviewResponse>(`/api/privacy?${params.toString()}`);
+      setPreview(data);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : 'preview_failed');
+      setPreview(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  }, [audience]);
+
+  useEffect(() => {
+    void refreshPreview();
+  }, [refreshPreview]);
+
+  const refreshHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const [emailResult, smsResult] = await Promise.all([
+        apiJson<CampaignsListResponse>('/api/privacy?view=campaigns'),
+        apiJson<SmsCampaignsListResponse>('/api/privacy?view=sms-campaigns'),
+      ]);
+      setEmailCampaigns(emailResult.campaigns ?? []);
+      setSmsCampaigns(smsResult.campaigns ?? []);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'history_failed');
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (channel === 'history') void refreshHistory();
+  }, [channel, refreshHistory]);
+
+  const toggleRole = (role: NonNullable<AudienceFilter['roles']>[number]) => {
+    setAudience((prev) => {
+      const set = new Set(prev.roles ?? []);
+      if (set.has(role)) set.delete(role);
+      else set.add(role);
+      return { ...prev, roles: set.size > 0 ? Array.from(set) : undefined };
+    });
+  };
+
+  const toggleTier = (tier: NonNullable<AudienceFilter['trustTiers']>[number]) => {
+    setAudience((prev) => {
+      const set = new Set(prev.trustTiers ?? []);
+      if (set.has(tier)) set.delete(tier);
+      else set.add(tier);
+      return { ...prev, trustTiers: set.size > 0 ? Array.from(set) : undefined };
+    });
+  };
+
+  const segmentCount = useMemo(() => gsmSegmentCount(smsMessage), [smsMessage]);
+  const totalSmsSegments = segmentCount * (preview?.recipientCount ?? 0);
+
+  const canSendEmail =
+    !submitting &&
+    emailSubject.trim().length > 0 &&
+    emailHtml.trim().length > 0 &&
+    emailText.trim().length > 0 &&
+    (preview?.recipientCount ?? 0) > 0;
+
+  const canSendSms =
+    !submitting &&
+    smsMessage.trim().length > 0 &&
+    smsMessage.length <= 459 &&
+    (preview?.recipientCount ?? 0) > 0 &&
+    acknowledgeCost;
+
+  const sendEmail = async (dryRun: boolean) => {
+    setActionMessage('');
+    setActionError('');
+    setSubmitting(true);
+    try {
+      const body = {
+        subject: emailSubject,
+        htmlBody: emailHtml,
+        textBody: emailText,
+        language: emailLanguage,
+        audience,
+        dryRun,
+      };
+      const result = await apiJson<CreateCampaignResponse>('/api/privacy?view=campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      setActionMessage(
+        dryRun
+          ? t(`Dry-run created (${result.recipientCount} recipients)`, `Test créé (${result.recipientCount} destinataires)`)
+          : t(`Campaign sent to ${result.recipientCount} recipients.`, `Campagne envoyée à ${result.recipientCount} destinataires.`),
+      );
+      await refreshHistory();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'send_failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const sendSms = async (dryRun: boolean) => {
+    setActionMessage('');
+    setActionError('');
+    setSubmitting(true);
+    try {
+      const body = {
+        message: smsMessage,
+        language: smsLanguage,
+        audience,
+        dryRun,
+        acknowledgeCost,
+      };
+      const result = await apiJson<CreateCampaignResponse>('/api/privacy?view=sms-campaigns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      setActionMessage(
+        dryRun
+          ? t(`Dry-run: ${result.recipientCount} recipients × ${result.segmentsPerRecipient ?? 1} segments`, `Test : ${result.recipientCount} destinataires × ${result.segmentsPerRecipient ?? 1} segments`)
+          : t(`SMS sent to ${result.recipientCount} recipients.`, `SMS envoyés à ${result.recipientCount} destinataires.`),
+      );
+      await refreshHistory();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'send_failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const cancelCampaign = async (id: string, kind: 'email' | 'sms') => {
+    setActionMessage('');
+    setActionError('');
+    try {
+      const view = kind === 'email' ? 'campaigns:cancel' : 'sms-campaigns:cancel';
+      await apiJson(`/api/privacy?view=${view}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setActionMessage(t('Campaign cancelled.', 'Campagne annulée.'));
+      await refreshHistory();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'cancel_failed');
+    }
+  };
+
+  const channelTabs: Array<[Channel, string, React.ReactNode]> = [
+    ['email', t('Email', 'E-mail'), <Mail key="i" size={14} />],
+    ['sms', t('SMS', 'SMS'), <MessageSquare key="i" size={14} />],
+    ['history', t('History', 'Historique'), <Loader2 key="i" size={14} />],
+  ];
+
+  return (
+    <div className="card p-4 space-y-4">
+      <div className="flex flex-col gap-1">
+        <div className="micro-label-wide text-navy">{t('Communications', 'Communications')}</div>
+        <div className="text-lg font-bold text-ink-dark">
+          {t('Email + SMS broadcaster', 'Diffusion e-mail + SMS')}
+        </div>
+        <div className="text-xs text-gray-500">
+          {t(
+            'Compose and send to filtered audiences. Dry-run before send. Suppression and opt-out enforced server-side.',
+            'Composez et envoyez à des audiences filtrées. Test avant envoi. Désinscription appliquée côté serveur.',
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2" role="tablist">
+        {channelTabs.map(([key, label, icon]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={channel === key}
+            onClick={() => setChannel(key)}
+            className={`flex h-9 items-center gap-1 rounded-full px-3 text-[11px] font-bold uppercase tracking-wider ${
+              channel === key ? 'bg-navy text-white' : 'bg-page text-gray-600 border border-gray-100'
+            }`}
+          >
+            {icon}
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {channel !== 'history' && (
+        <div className="rounded-2xl border border-gray-100 bg-page p-3 space-y-3">
+          <div className="micro-label text-gray-500">{t('Audience', 'Audience')}</div>
+
+          <div>
+            <div className="micro-label text-gray-400 mb-1">{t('Roles', 'Rôles')}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {ROLE_OPTIONS.map((role) => {
+                const active = (audience.roles ?? []).includes(role);
+                return (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => toggleRole(role)}
+                    className={`h-8 rounded-full px-3 text-[11px] font-semibold ${
+                      active ? 'bg-navy text-white' : 'border border-gray-200 bg-white text-gray-600'
+                    }`}
+                  >
+                    {role}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <div className="micro-label text-gray-400 mb-1">{t('Trust tier', 'Niveau de confiance')}</div>
+            <div className="flex flex-wrap gap-1.5">
+              {TRUST_TIER_OPTIONS.map((tier) => {
+                const active = (audience.trustTiers ?? []).includes(tier);
+                return (
+                  <button
+                    key={tier}
+                    type="button"
+                    onClick={() => toggleTier(tier)}
+                    className={`h-8 rounded-full px-3 text-[11px] font-semibold ${
+                      active ? 'bg-forest text-white' : 'border border-gray-200 bg-white text-gray-600'
+                    }`}
+                  >
+                    {tier}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2 text-xs text-gray-600">
+              <span>{t('Active in last (days)', 'Actif dans les (jours)')}</span>
+              <input
+                type="number"
+                min={1}
+                value={audience.lastActiveDays ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setAudience((prev) => ({
+                    ...prev,
+                    lastActiveDays: value ? Math.max(1, Math.floor(Number(value))) : undefined,
+                  }));
+                }}
+                className="h-9 w-20 rounded-xl border border-gray-200 bg-white px-2 text-sm"
+              />
+            </label>
+            {channel === 'email' && (
+              <label className="flex items-center gap-2 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={audience.requireEmailOptIn !== false}
+                  onChange={(e) =>
+                    setAudience((prev) => ({ ...prev, requireEmailOptIn: e.target.checked }))
+                  }
+                />
+                {t('Require email opt-in', "Exiger l'opt-in e-mail")}
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={refreshPreview}
+              disabled={previewLoading}
+              className="ml-auto h-9 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-700"
+            >
+              {previewLoading ? t('Refreshing…', 'Actualisation…') : t('Refresh preview', 'Actualiser')}
+            </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white border border-gray-100 px-3 py-2 text-xs text-gray-600">
+            {previewError ? (
+              <span className="text-red-600">{previewError}</span>
+            ) : preview ? (
+              <>
+                <span>
+                  <strong className="text-navy">{preview.recipientCount}</strong>
+                  {' '}{t('matched', 'correspondants')}
+                </span>
+                <span>· {preview.suppressedCount} {t('suppressed', 'supprimés')}</span>
+                <span>· {t('cap', 'limite')} {preview.maxRecipients}</span>
+              </>
+            ) : (
+              <span>{t('No preview yet.', 'Aucun aperçu.')}</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {channel === 'email' && (
+        <div className="space-y-3">
+          <input
+            value={emailSubject}
+            onChange={(e) => setEmailSubject(e.target.value)}
+            placeholder={t('Subject', 'Sujet')}
+            className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm"
+          />
+          <textarea
+            value={emailHtml}
+            onChange={(e) => setEmailHtml(e.target.value)}
+            placeholder={t('HTML body', 'Corps HTML')}
+            rows={6}
+            className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm font-mono"
+          />
+          <textarea
+            value={emailText}
+            onChange={(e) => setEmailText(e.target.value)}
+            placeholder={t('Plain-text body (required)', 'Corps texte brut (obligatoire)')}
+            rows={4}
+            className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm"
+          />
+          <div className="flex items-center gap-3 text-xs text-gray-600">
+            <label className="flex items-center gap-2">
+              <span>{t('Language', 'Langue')}</span>
+              <select
+                value={emailLanguage}
+                onChange={(e) => setEmailLanguage(e.target.value as 'en' | 'fr')}
+                className="h-8 rounded-lg border border-gray-200 bg-white px-2"
+              >
+                <option value="en">EN</option>
+                <option value="fr">FR</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={!canSendEmail}
+              onClick={() => sendEmail(true)}
+              className="ml-auto h-9 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-700 disabled:opacity-50"
+            >
+              {t('Dry-run', 'Test')}
+            </button>
+            <button
+              type="button"
+              disabled={!canSendEmail}
+              onClick={() => sendEmail(false)}
+              className="flex h-9 items-center gap-1 rounded-full bg-navy px-3 text-[11px] font-semibold text-white disabled:opacity-50"
+            >
+              <Send size={12} />
+              {t('Send', 'Envoyer')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {channel === 'sms' && (
+        <div className="space-y-3">
+          <textarea
+            value={smsMessage}
+            onChange={(e) => setSmsMessage(e.target.value)}
+            placeholder={t('SMS message (max 459 chars)', 'Message SMS (max 459 caractères)')}
+            rows={4}
+            className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm"
+          />
+          <div className="text-[11px] text-gray-500 flex flex-wrap items-center gap-3">
+            <span>{smsMessage.length} / 459 chars</span>
+            <span>· {segmentCount} {t('segment(s) per recipient', 'segment(s) par destinataire')}</span>
+            {preview && (
+              <span>· {totalSmsSegments} {t('total segments', 'segments totaux')}</span>
+            )}
+          </div>
+          <label className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-800">
+            <input
+              type="checkbox"
+              checked={acknowledgeCost}
+              onChange={(e) => setAcknowledgeCost(e.target.checked)}
+            />
+            <span>
+              {t(
+                `I confirm sending ~${totalSmsSegments} SMS segments. SMS retries cost real money.`,
+                `Je confirme l'envoi d'environ ${totalSmsSegments} segments SMS. Les SMS coûtent.`,
+              )}
+            </span>
+          </label>
+          <div className="flex items-center gap-3 text-xs text-gray-600">
+            <label className="flex items-center gap-2">
+              <span>{t('Language', 'Langue')}</span>
+              <select
+                value={smsLanguage}
+                onChange={(e) => setSmsLanguage(e.target.value as 'en' | 'fr')}
+                className="h-8 rounded-lg border border-gray-200 bg-white px-2"
+              >
+                <option value="en">EN</option>
+                <option value="fr">FR</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={submitting || smsMessage.trim().length === 0}
+              onClick={() => sendSms(true)}
+              className="ml-auto h-9 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-700 disabled:opacity-50"
+            >
+              {t('Dry-run', 'Test')}
+            </button>
+            <button
+              type="button"
+              disabled={!canSendSms}
+              onClick={() => sendSms(false)}
+              className="flex h-9 items-center gap-1 rounded-full bg-terra px-3 text-[11px] font-semibold text-white disabled:opacity-50"
+            >
+              <Send size={12} />
+              {t('Send', 'Envoyer')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {channel === 'history' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="micro-label text-gray-500">
+              {t('Recent campaigns', 'Campagnes récentes')}
+            </div>
+            <button
+              type="button"
+              onClick={refreshHistory}
+              disabled={historyLoading}
+              className="h-8 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-700"
+            >
+              {historyLoading ? t('Loading…', 'Chargement…') : t('Refresh', 'Actualiser')}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="micro-label-wide text-navy">{t('Email', 'E-mail')}</div>
+            {emailCampaigns.length === 0 && (
+              <div className="text-xs text-gray-400">{t('No campaigns yet.', 'Aucune campagne.')}</div>
+            )}
+            {emailCampaigns.map((row) => (
+              <CampaignRowView
+                key={row.id}
+                title={row.subject}
+                row={row}
+                onCancel={() => cancelCampaign(row.id, 'email')}
+                language={language}
+              />
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <div className="micro-label-wide text-navy">{t('SMS', 'SMS')}</div>
+            {smsCampaigns.length === 0 && (
+              <div className="text-xs text-gray-400">{t('No campaigns yet.', 'Aucune campagne.')}</div>
+            )}
+            {smsCampaigns.map((row) => (
+              <CampaignRowView
+                key={row.id}
+                title={row.message.length > 80 ? `${row.message.slice(0, 80)}…` : row.message}
+                row={row}
+                onCancel={() => cancelCampaign(row.id, 'sms')}
+                language={language}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(actionMessage || actionError) && (
+        <div
+          role={actionError ? 'alert' : 'status'}
+          className={`rounded-xl px-3 py-2 text-[12px] ${
+            actionError
+              ? 'border border-red-100 bg-red-50 text-red-700'
+              : 'border border-forest-wash bg-forest-wash text-forest'
+          }`}
+        >
+          {actionError || actionMessage}
+        </div>
+      )}
+    </div>
+  );
+};
+
+interface CampaignRowViewProps {
+  title: string;
+  row: { id: string; status: string; recipientCount: number; sentCount: number; failedCount: number; suppressedCount: number; createdAt: string };
+  onCancel: () => void;
+  language: 'en' | 'fr';
+}
+
+const CampaignRowView: React.FC<CampaignRowViewProps> = ({ title, row, onCancel, language }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const created = new Date(row.createdAt);
+  const canCancel = row.status === 'draft' || row.status === 'sending';
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white p-3 text-xs text-gray-700">
+      <div className="flex items-start justify-between gap-2">
+        <div className="font-semibold text-ink truncate">{title || '(no subject)'}</div>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+            row.status === 'completed'
+              ? 'bg-forest-wash text-forest'
+              : row.status === 'cancelled' || row.status === 'failed'
+                ? 'bg-red-50 text-red-700'
+                : 'bg-amber-50 text-amber-800'
+          }`}
+        >
+          {row.status}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-gray-500">
+        <span>{row.recipientCount} {t('recipients', 'destinataires')}</span>
+        <span>· {row.sentCount} {t('sent', 'envoyés')}</span>
+        <span>· {row.failedCount} {t('failed', 'échecs')}</span>
+        <span>· {row.suppressedCount} {t('suppressed', 'supprimés')}</span>
+        <span>· {created.toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')}</span>
+        {canCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="ml-auto inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
+          >
+            <X size={10} />
+            {t('Cancel', 'Annuler')}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default CommunicationsPanel;
