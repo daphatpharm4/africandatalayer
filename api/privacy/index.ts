@@ -16,6 +16,17 @@ import {
 import type { IpReport, PrivacyRequest } from "../../shared/types.js";
 import { POLICY_KINDS, POLICY_VERSIONS, type PolicyKind } from "../../shared/legalPolicies.js";
 import { handleUnsubscribeRequest, readPostUnsubscribeToken } from "../../lib/server/email/unsubscribe.js";
+import {
+  campaignCreateSchema,
+  cancelCampaign,
+  createCampaign,
+  dispatchCampaignSendBatch,
+  listCampaigns,
+  MAX_CAMPAIGN_RECIPIENTS,
+  resolveAudience,
+  audienceSchema,
+} from "../../lib/server/email/campaigns.js";
+import { handleResendWebhookEvent } from "../../lib/server/email/webhookHandler.js";
 
 const IP_REPORT_LIMIT_PER_WINDOW = Number(process.env.IP_REPORT_LIMIT_PER_WINDOW ?? "5") || 5;
 const IP_REPORT_WINDOW_SECONDS = Number(process.env.IP_REPORT_WINDOW_SECONDS ?? "600") || 600;
@@ -109,6 +120,38 @@ export async function GET(request: Request): Promise<Response> {
       return jsonResponse(result.rows, { status: 200 });
     }
 
+    if (view === "campaigns") {
+      if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
+      const campaigns = await listCampaigns(50);
+      return jsonResponse({ campaigns, maxRecipients: MAX_CAMPAIGN_RECIPIENTS }, { status: 200 });
+    }
+
+    if (view === "audience-preview") {
+      if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
+      const audienceJson = url.searchParams.get("audience");
+      if (!audienceJson) return errorResponse("Missing audience query param", 400);
+      let parsedAudience: unknown;
+      try {
+        parsedAudience = JSON.parse(audienceJson);
+      } catch {
+        return errorResponse("Invalid audience JSON", 400);
+      }
+      const validation = audienceSchema.safeParse(parsedAudience);
+      if (!validation.success) {
+        return errorResponse(validation.error.issues[0]?.message ?? "Invalid audience filter", 400);
+      }
+      const audience = await resolveAudience(validation.data);
+      return jsonResponse(
+        {
+          recipientCount: audience.recipients.length,
+          totalCount: audience.totalCount,
+          suppressedCount: audience.suppressedCount,
+          maxRecipients: MAX_CAMPAIGN_RECIPIENTS,
+        },
+        { status: 200 },
+      );
+    }
+
     return errorResponse("Invalid view", 400);
   } catch (error) {
     if (isMissingDbObjectError(error)) return jsonResponse([], { status: 200 });
@@ -131,6 +174,54 @@ export async function POST(request: Request): Promise<Response> {
     rawBody = await request.json();
   } catch {
     return errorResponse("Invalid JSON body", 400);
+  }
+
+  if (view === "email-webhook") {
+    const expectedSecret = process.env.RESEND_WEBHOOK_SECRET;
+    if (expectedSecret) {
+      const provided = request.headers.get("x-resend-secret") ?? "";
+      if (provided !== expectedSecret) {
+        return errorResponse("Forbidden", 403);
+      }
+    }
+    const result = await handleResendWebhookEvent(rawBody);
+    return jsonResponse(result, { status: result.accepted ? 200 : 400 });
+  }
+
+  if (view === "campaigns" || view === "campaigns:cancel") {
+    const auth = await requireUser(request);
+    if (!auth) return errorResponse("Unauthorized", 401);
+    const viewer = toSubmissionAuthContext(auth);
+    if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
+
+    if (view === "campaigns:cancel") {
+      const id = typeof (rawBody as Record<string, unknown> | null)?.id === "string"
+        ? ((rawBody as Record<string, unknown>).id as string)
+        : "";
+      if (!id) return errorResponse("Missing campaign id", 400);
+      const cancelled = await cancelCampaign(id);
+      return jsonResponse({ ok: cancelled }, { status: cancelled ? 200 : 404 });
+    }
+
+    const validation = campaignCreateSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid campaign payload", 400);
+    }
+
+    const campaign = await createCampaign({ ...validation.data, createdBy: auth.id });
+
+    if (validation.data.dryRun) {
+      return jsonResponse(campaign, { status: 200 });
+    }
+
+    const baseUrl = process.env.APP_BASE_URL?.trim() || new URL(request.url).origin;
+    await dispatchCampaignSendBatch({
+      campaignId: campaign.id,
+      baseUrl,
+      batchSize: campaign.recipientCount,
+    });
+
+    return jsonResponse(campaign, { status: 201 });
   }
 
   try {

@@ -145,6 +145,7 @@
     { "source": "/api/auth/verify-request", "destination": "/api/auth/[...auth]" },
     { "source": "/api/intake/leads/:id", "destination": "/api/intake/leads" },
     { "source": "/api/comms/unsubscribe", "destination": "/api/privacy?view=unsubscribe" },
+    { "source": "/api/comms/email/webhook", "destination": "/api/privacy?view=email-webhook" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
