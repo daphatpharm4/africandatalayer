@@ -27,6 +27,7 @@ import {
   audienceSchema,
 } from "../../lib/server/email/campaigns.js";
 import { handleResendWebhookEvent } from "../../lib/server/email/webhookHandler.js";
+import { readSvixHeaders, verifySvixSignature } from "../../lib/server/email/svixVerify.js";
 import {
   cancelSmsCampaign,
   createSmsCampaign,
@@ -187,23 +188,45 @@ export async function POST(request: Request): Promise<Response> {
     return handleUnsubscribeRequest(token);
   }
 
+  if (view === "email-webhook") {
+    const rawText = await request.text().catch(() => "");
+    if (!rawText) return errorResponse("Empty body", 400);
+
+    const signingSecret = process.env.RESEND_WEBHOOK_SIGNING_SECRET?.trim();
+    if (signingSecret) {
+      const verifyResult = verifySvixSignature({
+        rawBody: rawText,
+        signingSecret,
+        headers: readSvixHeaders(request.headers),
+      });
+      if (!verifyResult.valid) {
+        return errorResponse(`Webhook signature invalid: ${verifyResult.reason}`, 401);
+      }
+    } else {
+      const fallbackSecret = process.env.RESEND_WEBHOOK_SECRET?.trim();
+      if (fallbackSecret) {
+        const provided = request.headers.get("x-resend-secret") ?? "";
+        if (provided !== fallbackSecret) {
+          return errorResponse("Forbidden", 403);
+        }
+      }
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+    const result = await handleResendWebhookEvent(parsed);
+    return jsonResponse(result, { status: result.accepted ? 200 : 400 });
+  }
+
   let rawBody: unknown;
   try {
     rawBody = await request.json();
   } catch {
     return errorResponse("Invalid JSON body", 400);
-  }
-
-  if (view === "email-webhook") {
-    const expectedSecret = process.env.RESEND_WEBHOOK_SECRET;
-    if (expectedSecret) {
-      const provided = request.headers.get("x-resend-secret") ?? "";
-      if (provided !== expectedSecret) {
-        return errorResponse("Forbidden", 403);
-      }
-    }
-    const result = await handleResendWebhookEvent(rawBody);
-    return jsonResponse(result, { status: result.accepted ? 200 : 400 });
   }
 
   if (view === "sms-inbound") {
