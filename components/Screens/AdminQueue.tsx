@@ -22,6 +22,7 @@ import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } fro
 import {
   buildAdminSubmissionGroups,
   createEmptyAdminReviewStats,
+  getReviewFinality,
   type AdminReviewQueueResponse,
   type AdminRiskFilter,
   type AdminSubmissionGroup,
@@ -362,6 +363,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [deleteError, setDeleteError] = useState('');
   const [isApplyingDecision, setIsApplyingDecision] = useState(false);
   const [decisionResult, setDecisionResult] = useState<{ decision: ReviewResult; submissionId: string } | null>(null);
+  const [overrideMode, setOverrideMode] = useState(false);
   const [allowEmptySelection, setAllowEmptySelection] = useState(false);
   const [selectedForBulk, setSelectedForBulk] = useState<Set<string>>(new Set());
   const [ipReports, setIpReports] = useState<IpReport[]>([]);
@@ -653,6 +655,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   useEffect(() => {
     setDeleteError('');
     setActionMessage('');
+    setOverrideMode(false);
   }, [selectedPointId]);
 
   useEffect(() => {
@@ -714,6 +717,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
       if (!selected || isApplyingDecision) return;
 
+      const selectedFinality = getReviewFinality(selected.latestEvent.event.details as SubmissionDetails);
+      const actionsLocked = selectedFinality.isFinalized && !overrideMode;
+      if (actionsLocked) return;
+
       if (key === 'a') {
         event.preventDefault();
         void handleReviewDecision(selected, 'approved');
@@ -732,7 +739,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [activeMode, decisionResult, isApplyingDecision, reviewData.groups, reviewData.page, reviewData.totalPages, selectedPointId]);
+  }, [activeMode, decisionResult, isApplyingDecision, overrideMode, reviewData.groups, reviewData.page, reviewData.totalPages, selectedPointId]);
 
   const togglePlannerVertical = (vertical: SubmissionCategory) => {
     setPlannerVerticals((prev) => {
@@ -795,6 +802,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           ? { decision, submissionId: group.latestEvent.event.id }
           : null,
       );
+      setOverrideMode(false);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : t("Unable to apply review decision.", "Impossible d'appliquer la décision.");
@@ -1747,6 +1755,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     trustBadgeTier,
                     fraudFlags: Array.from(new Set(Array.from(fraudFlagKeys).map((flag) => formatFraudFlag(flag, language)))),
                   };
+                  const finality = getReviewFinality(latestDetails);
+                  const reviewedAtLabel = finality.reviewedAt
+                    ? formatDate(finality.reviewedAt, unavailableLabel, language)
+                    : null;
+                  const reviewerName = finality.reviewedBy
+                    ? reviewData.reviewers.find((r) => r.id === finality.reviewedBy)?.name ?? finality.reviewedBy
+                    : null;
+                  const showActionGrid = !finality.isFinalized || overrideMode;
 
                   return (
                     <div
@@ -1759,6 +1775,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         language={language}
                         onBack={() => {
                           setDecisionResult(null);
+                          setOverrideMode(false);
                           setAllowEmptySelection(true);
                           setSelectedPointId(null);
                         }}
@@ -1836,34 +1853,77 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                           </div>
                         )}
 
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label={t('Review actions', 'Actions de revue')}>
+                        {finality.isFinalized && (
+                          <div
+                            className={`rounded-2xl border p-4 space-y-2 ${
+                              finality.state === 'approved'
+                                ? 'border-forest-wash bg-forest-wash text-forest'
+                                : 'border-red-100 bg-red-50 text-red-700'
+                            }`}
+                            aria-live="polite"
+                          >
+                            <div className="flex items-center gap-2">
+                              {finality.state === 'approved' ? <Check size={16} /> : <X size={16} />}
+                              <span className="micro-label">
+                                {finality.state === 'approved'
+                                  ? t('Already approved', 'Déjà approuvé')
+                                  : t('Already rejected', 'Déjà rejeté')}
+                              </span>
+                            </div>
+                            <div className="text-[12px] leading-relaxed opacity-80">
+                              {reviewedAtLabel
+                                ? reviewerName
+                                  ? t(
+                                      `Reviewed by ${reviewerName} on ${reviewedAtLabel}.`,
+                                      `Revue par ${reviewerName} le ${reviewedAtLabel}.`,
+                                    )
+                                  : t(`Reviewed on ${reviewedAtLabel}.`, `Revue le ${reviewedAtLabel}.`)
+                                : t(
+                                    'Decision recorded. No further action required.',
+                                    'Décision enregistrée. Aucune autre action requise.',
+                                  )}
+                            </div>
+                          </div>
+                        )}
+
+                        {showActionGrid ? (
+                          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" aria-label={t('Review actions', 'Actions de revue')}>
+                            <button
+                              type="button"
+                              onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
+                              disabled={isApplyingDecision}
+                              className={`flex h-11 items-center justify-center gap-2 rounded-2xl border px-4 micro-label ${focusRingClass} ${
+                                isApplyingDecision
+                                  ? 'border-gray-100 bg-gray-100 text-gray-400'
+                                  : 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100'
+                              }`}
+                            >
+                              <X size={16} />
+                              <span>{t('Reject', 'Rejeter')}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
+                              disabled={isApplyingDecision}
+                              className={`flex h-11 items-center justify-center gap-2 rounded-2xl border px-4 micro-label ${focusRingClass} ${
+                                isApplyingDecision
+                                  ? 'border-gray-100 bg-gray-100 text-gray-400'
+                                  : 'border-forest-wash bg-forest-wash text-forest'
+                              }`}
+                            >
+                              <Check size={16} />
+                              <span>{t('Approve', 'Approuver')}</span>
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            onClick={() => void handleReviewDecision(selectedGroup, 'rejected')}
-                            disabled={isApplyingDecision}
-                            className={`flex h-11 items-center justify-center gap-2 rounded-2xl border px-4 micro-label ${focusRingClass} ${
-                              isApplyingDecision
-                                ? 'border-gray-100 bg-gray-100 text-gray-400'
-                                : 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100'
-                            }`}
+                            onClick={() => setOverrideMode(true)}
+                            className={`flex h-11 w-full items-center justify-center gap-2 rounded-2xl border border-gray-200 bg-white px-4 micro-label text-gray-600 hover:bg-gray-50 ${focusRingClass}`}
                           >
-                            <X size={16} />
-                            <span>{t('Reject', 'Rejeter')}</span>
+                            <span>{t('Override decision', 'Modifier la décision')}</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleReviewDecision(selectedGroup, 'approved')}
-                            disabled={isApplyingDecision}
-                            className={`flex h-11 items-center justify-center gap-2 rounded-2xl border px-4 micro-label ${focusRingClass} ${
-                              isApplyingDecision
-                                ? 'border-gray-100 bg-gray-100 text-gray-400'
-                                : 'border-forest-wash bg-forest-wash text-forest'
-                            }`}
-                          >
-                            <Check size={16} />
-                            <span>{t('Approve', 'Approuver')}</span>
-                          </button>
-                        </div>
+                        )}
                       </div>
                     </div>
                   );

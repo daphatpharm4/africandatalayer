@@ -5,6 +5,7 @@ import {
   buildAdminSubmissionGroups,
   compareAdminReviewSort,
   getAdminRiskBucket,
+  getReviewFinality,
   parseAdminReviewLimit,
   parseAdminReviewPage,
 } from "../lib/shared/adminReviewQueue.js";
@@ -177,6 +178,42 @@ test("review queue helpers bucket risk and clamp paging inputs", () => {
   assert.equal(parseAdminReviewPage("3"), 3);
   assert.equal(parseAdminReviewLimit("200"), 48);
   assert.equal(parseAdminReviewLimit("12"), 12);
+});
+
+test("getReviewFinality marks pending submissions as not finalized", () => {
+  const finality = getReviewFinality({ reviewStatus: "pending_review" });
+  assert.equal(finality.state, "pending");
+  assert.equal(finality.isFinalized, false);
+  assert.equal(finality.decision, null);
+});
+
+test("getReviewFinality treats auto_approved and explicit reviewDecision as approved", () => {
+  const fromStatus = getReviewFinality({ reviewStatus: "auto_approved" });
+  assert.equal(fromStatus.state, "approved");
+  assert.equal(fromStatus.isFinalized, true);
+  assert.equal(fromStatus.decision, "approved");
+
+  const fromDecision = getReviewFinality({
+    reviewStatus: "pending_review",
+    reviewDecision: "approved",
+    reviewedAt: "2026-05-08T12:00:00.000Z",
+    reviewedBy: "reviewer-1",
+  });
+  assert.equal(fromDecision.state, "approved");
+  assert.equal(fromDecision.isFinalized, true);
+  assert.equal(fromDecision.reviewedAt, "2026-05-08T12:00:00.000Z");
+  assert.equal(fromDecision.reviewedBy, "reviewer-1");
+});
+
+test("getReviewFinality recognizes rejection from reviewDecision even when reviewStatus stays pending", () => {
+  const finality = getReviewFinality({
+    reviewStatus: "pending_review",
+    reviewDecision: "rejected",
+    reviewedAt: "2026-05-08T13:30:00.000Z",
+  });
+  assert.equal(finality.state, "rejected");
+  assert.equal(finality.isFinalized, true);
+  assert.equal(finality.decision, "rejected");
 });
 
 test("buildAdminReviewStatsFromPoints counts queue segments and eligibles", () => {

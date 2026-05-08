@@ -109,6 +109,52 @@ export function getAdminReviewStatusFromDetails(details: SubmissionDetails | Rec
     : "auto_approved";
 }
 
+export type ReviewFinalityState = "pending" | "approved" | "rejected" | "flagged";
+
+export interface ReviewFinality {
+  state: ReviewFinalityState;
+  decision: "approved" | "rejected" | "flagged" | null;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  isFinalized: boolean;
+}
+
+export function getReviewFinality(
+  details: SubmissionDetails | Record<string, unknown> | null | undefined,
+): ReviewFinality {
+  const safe = asDetails(details);
+  const decisionRaw =
+    typeof safe.reviewDecision === "string" ? safe.reviewDecision.trim().toLowerCase() : "";
+  const reviewStatus = getAdminReviewStatusFromDetails(details);
+  const reviewedAt = typeof safe.reviewedAt === "string" && safe.reviewedAt.trim() ? safe.reviewedAt : null;
+  const reviewedBy = typeof safe.reviewedBy === "string" && safe.reviewedBy.trim() ? safe.reviewedBy : null;
+
+  let state: ReviewFinalityState = "pending";
+  let decision: ReviewFinality["decision"] = null;
+
+  if (decisionRaw === "approved" || decisionRaw === "rejected" || decisionRaw === "flagged") {
+    state = decisionRaw;
+    decision = decisionRaw;
+  } else if (reviewStatus === "approved" || reviewStatus === "auto_approved") {
+    state = "approved";
+    decision = "approved";
+  } else if (reviewStatus === "rejected" || reviewStatus.startsWith("rejected_")) {
+    state = "rejected";
+    decision = "rejected";
+  } else if (reviewStatus === "flagged") {
+    state = "flagged";
+    decision = "flagged";
+  }
+
+  return {
+    state,
+    decision,
+    reviewedAt,
+    reviewedBy,
+    isFinalized: state === "approved" || state === "rejected",
+  };
+}
+
 export function getAdminRiskBucket(riskScore: number, reviewStatus: string): AdminRiskBucket {
   if (riskScore >= 60) return "flagged";
   if (reviewStatus === "pending_review") return "pending";
