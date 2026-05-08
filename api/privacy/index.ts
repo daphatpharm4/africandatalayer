@@ -27,6 +27,18 @@ import {
   audienceSchema,
 } from "../../lib/server/email/campaigns.js";
 import { handleResendWebhookEvent } from "../../lib/server/email/webhookHandler.js";
+import {
+  cancelSmsCampaign,
+  createSmsCampaign,
+  dispatchSmsCampaignBatch,
+  listSmsCampaigns,
+  MAX_SMS_CAMPAIGN_RECIPIENTS,
+  smsCampaignCreateSchema,
+} from "../../lib/server/sms/campaigns.js";
+import {
+  handleInboundSms,
+  handleSmsDeliveryReport,
+} from "../../lib/server/sms/webhookHandler.js";
 
 const IP_REPORT_LIMIT_PER_WINDOW = Number(process.env.IP_REPORT_LIMIT_PER_WINDOW ?? "5") || 5;
 const IP_REPORT_WINDOW_SECONDS = Number(process.env.IP_REPORT_WINDOW_SECONDS ?? "600") || 600;
@@ -126,6 +138,12 @@ export async function GET(request: Request): Promise<Response> {
       return jsonResponse({ campaigns, maxRecipients: MAX_CAMPAIGN_RECIPIENTS }, { status: 200 });
     }
 
+    if (view === "sms-campaigns") {
+      if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
+      const campaigns = await listSmsCampaigns(50);
+      return jsonResponse({ campaigns, maxRecipients: MAX_SMS_CAMPAIGN_RECIPIENTS }, { status: 200 });
+    }
+
     if (view === "audience-preview") {
       if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
       const audienceJson = url.searchParams.get("audience");
@@ -186,6 +204,78 @@ export async function POST(request: Request): Promise<Response> {
     }
     const result = await handleResendWebhookEvent(rawBody);
     return jsonResponse(result, { status: result.accepted ? 200 : 400 });
+  }
+
+  if (view === "sms-inbound") {
+    const expectedSecret = process.env.AT_INBOUND_SECRET;
+    if (expectedSecret) {
+      const provided = request.headers.get("x-at-secret") ?? "";
+      if (provided !== expectedSecret) return errorResponse("Forbidden", 403);
+    }
+    const body = (rawBody as Record<string, unknown> | null) ?? {};
+    const from = typeof body.from === "string" ? body.from : "";
+    const text = typeof body.text === "string" ? body.text : "";
+    if (!from || !text) return errorResponse("Missing from/text", 400);
+    const result = await handleInboundSms({ from, text });
+    return jsonResponse(result, { status: result.accepted ? 200 : 400 });
+  }
+
+  if (view === "sms-dlr") {
+    const expectedSecret = process.env.AT_INBOUND_SECRET;
+    if (expectedSecret) {
+      const provided = request.headers.get("x-at-secret") ?? "";
+      if (provided !== expectedSecret) return errorResponse("Forbidden", 403);
+    }
+    const body = (rawBody as Record<string, unknown> | null) ?? {};
+    const id = typeof body.id === "string" ? body.id : "";
+    const status = typeof body.status === "string" ? body.status : "";
+    if (!id || !status) return errorResponse("Missing id/status", 400);
+    const failureReason = typeof body.failureReason === "string" ? body.failureReason : undefined;
+    const phoneNumber = typeof body.phoneNumber === "string" ? body.phoneNumber : undefined;
+    const result = await handleSmsDeliveryReport({ id, status, failureReason, phoneNumber });
+    return jsonResponse(result, { status: result.accepted ? 200 : 400 });
+  }
+
+  if (view === "sms-campaigns" || view === "sms-campaigns:cancel") {
+    const auth = await requireUser(request);
+    if (!auth) return errorResponse("Unauthorized", 401);
+    const viewer = toSubmissionAuthContext(auth);
+    if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
+
+    if (view === "sms-campaigns:cancel") {
+      const id = typeof (rawBody as Record<string, unknown> | null)?.id === "string"
+        ? ((rawBody as Record<string, unknown>).id as string)
+        : "";
+      if (!id) return errorResponse("Missing campaign id", 400);
+      const cancelled = await cancelSmsCampaign(id);
+      return jsonResponse({ ok: cancelled }, { status: cancelled ? 200 : 404 });
+    }
+
+    const validation = smsCampaignCreateSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid SMS campaign payload", 400);
+    }
+
+    const campaign = await createSmsCampaign({ ...validation.data, createdBy: auth.id });
+
+    if (validation.data.dryRun) {
+      return jsonResponse(campaign, { status: 200 });
+    }
+
+    if (!validation.data.acknowledgeCost) {
+      return errorResponse(
+        "Cost confirmation required. Set acknowledgeCost=true after reviewing estimated segments.",
+        400,
+        { code: "cost_ack_required" },
+      );
+    }
+
+    await dispatchSmsCampaignBatch({
+      campaignId: campaign.id,
+      batchSize: campaign.recipientCount,
+    });
+
+    return jsonResponse(campaign, { status: 201 });
   }
 
   if (view === "campaigns" || view === "campaigns:cancel") {
