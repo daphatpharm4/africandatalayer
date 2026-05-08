@@ -49,6 +49,7 @@ const PrivacyPolicy = lazy(() => import('./components/Screens/PrivacyPolicy'));
 const TermsOfUse = lazy(() => import('./components/Screens/TermsOfUse'));
 const DataCompliance = lazy(() => import('./components/Screens/DataCompliance'));
 const IpReport = lazy(() => import('./components/Screens/IpReport'));
+const ForgotPassword = lazy(() => import('./components/Screens/ForgotPassword'));
 
 type WindowWithIdleCallback = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -120,6 +121,13 @@ const App: React.FC = () => {
     return () => {
       window.removeEventListener('popstate', handlePopState);
     };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (window.location.pathname.startsWith('/reset')) {
+      setCurrentScreen(Screen.FORGOT_PASSWORD);
+    }
   }, []);
 
   const navigateTo = useCallback((screen: Screen, point: DataPoint | null = null) => {
@@ -574,6 +582,8 @@ const App: React.FC = () => {
             }}
           />
         );
+      case Screen.FORGOT_PASSWORD:
+        return <ForgotPassword language={language} onBack={() => navigateTo(Screen.AUTH)} />;
       default:
         return <Splash onStart={(scr) => navigateTo(scr)} language={language} />;
     }

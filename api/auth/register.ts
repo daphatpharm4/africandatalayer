@@ -11,6 +11,10 @@ import { preflightResponse, applyCorsHeaders } from "../../lib/server/auth/cors.
 import { query } from "../../lib/server/db.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { POLICY_VERSIONS, type PolicyKind } from "../../shared/legalPolicies.js";
+import {
+  handlePasswordResetConfirm,
+  handlePasswordResetRequest,
+} from "../../lib/server/auth/passwordResetHandlers.js";
 
 const REGISTER_IP_LIMIT_PER_HOUR = Number(process.env.REGISTER_IP_LIMIT_PER_HOUR ?? "20") || 20;
 const REGISTER_IDENTIFIER_LIMIT_PER_HOUR = Number(process.env.REGISTER_IDENTIFIER_LIMIT_PER_HOUR ?? "5") || 5;
@@ -84,6 +88,16 @@ export function createRegisterHandler(
       parsedBody = await request.json();
     } catch {
       return errorResponse("Invalid JSON body", 400);
+    }
+
+    if (parsedBody && typeof parsedBody === "object") {
+      const action = (parsedBody as Record<string, unknown>).action;
+      if (action === "password-reset-request") {
+        return handlePasswordResetRequest(request, parsedBody);
+      }
+      if (action === "password-reset-confirm") {
+        return handlePasswordResetConfirm(request, parsedBody);
+      }
     }
 
     const requestIp = extractRateLimitIp(request);

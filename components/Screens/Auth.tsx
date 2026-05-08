@@ -553,6 +553,18 @@ const Auth: React.FC<Props> = ({
             </button>
           </form>
 
+          {mode === 'signin' && navigateTo && (
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={() => navigateTo(Screen.FORGOT_PASSWORD)}
+                className="text-xs font-semibold text-navy hover:underline"
+              >
+                {t('Forgot your password?', 'Mot de passe oublié ?')}
+              </button>
+            </div>
+          )}
+
           <div className="mt-8 flex flex-col items-center gap-5 text-center">
             <div className="flex items-center gap-2 text-gray-500">
               <ShieldCheck size={12} />
