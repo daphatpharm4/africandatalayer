@@ -15,6 +15,7 @@ import {
 } from "../../lib/server/validation.js";
 import type { IpReport, PrivacyRequest } from "../../shared/types.js";
 import { POLICY_KINDS, POLICY_VERSIONS, type PolicyKind } from "../../shared/legalPolicies.js";
+import { handleUnsubscribeRequest, readPostUnsubscribeToken } from "../../lib/server/email/unsubscribe.js";
 
 const IP_REPORT_LIMIT_PER_WINDOW = Number(process.env.IP_REPORT_LIMIT_PER_WINDOW ?? "5") || 5;
 const IP_REPORT_WINDOW_SECONDS = Number(process.env.IP_REPORT_WINDOW_SECONDS ?? "600") || 600;
@@ -45,6 +46,10 @@ function hashIp(ip: string | null): string | null {
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "requests";
+
+  if (view === "unsubscribe") {
+    return handleUnsubscribeRequest(url.searchParams.get("token"));
+  }
 
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
@@ -115,6 +120,11 @@ export async function GET(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "requests";
+
+  if (view === "unsubscribe") {
+    const token = await readPostUnsubscribeToken(request);
+    return handleUnsubscribeRequest(token);
+  }
 
   let rawBody: unknown;
   try {
