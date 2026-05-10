@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { query } from "../db.js";
 import { extractVariableNames } from "./variables.js";
+import { sanitizeEmailHtml } from "./sanitize.js";
 
 export const KNOWN_TEMPLATE_VARIABLES = [
   "firstName",
@@ -103,6 +104,8 @@ export async function upsertTemplate(
   createdBy: string,
 ): Promise<TemplateRow> {
   const variables = deriveTemplateVariables(input);
+  const htmlEn = sanitizeEmailHtml(input.htmlEn).html;
+  const htmlFr = sanitizeEmailHtml(input.htmlFr).html;
   if (input.id) {
     const result = await query<{
       id: string;
@@ -135,8 +138,8 @@ export async function upsertTemplate(
         input.name,
         input.subjectEn,
         input.subjectFr,
-        input.htmlEn,
-        input.htmlFr,
+        htmlEn,
+        htmlFr,
         input.textEn,
         input.textFr,
         JSON.stringify(variables),
@@ -172,8 +175,8 @@ export async function upsertTemplate(
       input.name,
       input.subjectEn,
       input.subjectFr,
-      input.htmlEn,
-      input.htmlFr,
+      htmlEn,
+      htmlFr,
       input.textEn,
       input.textFr,
       JSON.stringify(variables),

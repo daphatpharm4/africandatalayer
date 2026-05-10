@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { FileText, Loader2, Mail, MessageSquare, Send, Trash2, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Bold, Code, Eye, FileText, Heading2, Italic, Link2, List, Loader2, Mail, MessageSquare, Send, Trash2, Wand2, X } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 
 type Channel = 'email' | 'sms' | 'templates' | 'history';
@@ -87,6 +87,28 @@ const TRUST_TIER_OPTIONS: Array<NonNullable<AudienceFilter['trustTiers']>[number
   'new', 'standard', 'trusted', 'elite', 'restricted',
 ];
 
+function deriveTextFromHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>(?:\s*)/gi, "\n")
+    .replace(/<\/(p|div|h[1-4]|li|tr|blockquote|pre)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function wrapSelection(value: string, start: number, end: number, before: string, after: string): { value: string; cursor: number } {
+  const selected = value.slice(start, end) || "text";
+  const next = value.slice(0, start) + before + selected + after + value.slice(end);
+  return { value: next, cursor: start + before.length + selected.length };
+}
+
 function gsmSegmentCount(message: string): number {
   if (!message) return 0;
   let isAscii = true;
@@ -117,6 +139,8 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
   const [smsLanguage, setSmsLanguage] = useState<'en' | 'fr'>(language);
   const [acknowledgeCost, setAcknowledgeCost] = useState(false);
   const [scheduledAtLocal, setScheduledAtLocal] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
+  const htmlAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
@@ -262,6 +286,29 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
     if (target === 'subject') setEmailSubject((prev) => prev + placeholder);
     if (target === 'html') setEmailHtml((prev) => prev + placeholder);
     if (target === 'text') setEmailText((prev) => prev + placeholder);
+  };
+
+  const applyFormatting = (before: string, after: string) => {
+    const area = htmlAreaRef.current;
+    if (!area) return;
+    const start = area.selectionStart ?? area.value.length;
+    const end = area.selectionEnd ?? area.value.length;
+    const result = wrapSelection(area.value, start, end, before, after);
+    setEmailHtml(result.value);
+    requestAnimationFrame(() => {
+      area.focus();
+      area.setSelectionRange(result.cursor, result.cursor);
+    });
+  };
+
+  const insertLink = () => {
+    const href = window.prompt(t('Link URL', 'URL du lien') ?? '', 'https://');
+    if (!href) return;
+    applyFormatting(`<a href="${href}">`, '</a>');
+  };
+
+  const deriveTextFromHtmlBody = () => {
+    setEmailText(deriveTextFromHtml(emailHtml));
   };
 
   const toggleRole = (role: NonNullable<AudienceFilter['roles']>[number]) => {
@@ -609,20 +656,105 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
             placeholder={t('Subject', 'Sujet')}
             className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm"
           />
-          <textarea
-            value={emailHtml}
-            onChange={(e) => setEmailHtml(e.target.value)}
-            placeholder={t('HTML body', 'Corps HTML')}
-            rows={6}
-            className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm font-mono"
-          />
-          <textarea
-            value={emailText}
-            onChange={(e) => setEmailText(e.target.value)}
-            placeholder={t('Plain-text body (required)', 'Corps texte brut (obligatoire)')}
-            rows={4}
-            className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm"
-          />
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gray-100 bg-white px-2 py-1.5">
+            <button
+              type="button"
+              onClick={() => applyFormatting('<strong>', '</strong>')}
+              title="Bold"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-page text-gray-700 hover:bg-navy-wash"
+            >
+              <Bold size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('<em>', '</em>')}
+              title="Italic"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-page text-gray-700 hover:bg-navy-wash"
+            >
+              <Italic size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('<h2>', '</h2>')}
+              title="Heading"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-page text-gray-700 hover:bg-navy-wash"
+            >
+              <Heading2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('<ul>\n  <li>', '</li>\n</ul>')}
+              title="List"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-page text-gray-700 hover:bg-navy-wash"
+            >
+              <List size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={insertLink}
+              title="Link"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-page text-gray-700 hover:bg-navy-wash"
+            >
+              <Link2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('<code>', '</code>')}
+              title="Inline code"
+              className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-page text-gray-700 hover:bg-navy-wash"
+            >
+              <Code size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPreview((p) => !p)}
+              title={t('Toggle preview', 'Afficher/masquer aperçu')}
+              className={`ml-auto flex h-8 items-center gap-1 rounded-lg border px-2 text-[11px] font-semibold ${
+                showPreview ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-page text-gray-700'
+              }`}
+            >
+              <Eye size={12} />
+              {showPreview ? t('Preview on', 'Aperçu') : t('Preview off', 'Aperçu')}
+            </button>
+          </div>
+
+          <div className={showPreview ? 'grid grid-cols-1 gap-3 lg:grid-cols-2' : 'space-y-3'}>
+            <textarea
+              ref={htmlAreaRef}
+              value={emailHtml}
+              onChange={(e) => setEmailHtml(e.target.value)}
+              placeholder={t('HTML body', 'Corps HTML')}
+              rows={showPreview ? 14 : 6}
+              className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm font-mono"
+            />
+            {showPreview && (
+              <iframe
+                title={t('Email preview', 'Aperçu e-mail')}
+                sandbox=""
+                srcDoc={emailHtml}
+                className="h-full min-h-[280px] w-full rounded-xl border border-gray-200 bg-white"
+              />
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <textarea
+              value={emailText}
+              onChange={(e) => setEmailText(e.target.value)}
+              placeholder={t('Plain-text body (required)', 'Corps texte brut (obligatoire)')}
+              rows={4}
+              className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm"
+            />
+            <button
+              type="button"
+              onClick={deriveTextFromHtmlBody}
+              title={t('Derive text from HTML', 'Dériver le texte du HTML')}
+              className="flex h-9 shrink-0 items-center gap-1 self-start rounded-full border border-gray-200 bg-page px-2 text-[11px] font-semibold text-gray-700"
+            >
+              <Wand2 size={12} />
+              {t('From HTML', 'Depuis HTML')}
+            </button>
+          </div>
           <div className="flex items-center gap-3 text-xs text-gray-600">
             <label className="flex items-center gap-2">
               <span>{t('Language', 'Langue')}</span>

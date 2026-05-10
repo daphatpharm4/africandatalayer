@@ -4,6 +4,7 @@ import { logInfo, logWarn } from "../logger.js";
 import { sendTransactional } from "./provider.js";
 import { buildUnsubscribeUrl } from "./unsubscribe.js";
 import { renderEmailWithVariables } from "./variables.js";
+import { sanitizeEmailHtml } from "./sanitize.js";
 
 export const audienceSchema = z.object({
   roles: z.array(z.enum(["agent", "admin", "client"])).optional(),
@@ -132,6 +133,7 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
   const isScheduled = !params.dryRun && isFutureScheduledAt(params.scheduledAt ?? null);
   const initialStatus = params.dryRun ? "draft" : isScheduled ? "scheduled" : "sending";
 
+  const sanitizedHtml = sanitizeEmailHtml(params.htmlBody).html;
   const insert = await query<{ id: string; status: string }>(
     `INSERT INTO public.email_campaigns
        (subject, html_body, text_body, audience, language, status, recipient_count, suppressed_count, created_by, scheduled_at)
@@ -139,7 +141,7 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
      RETURNING id, status`,
     [
       params.subject,
-      params.htmlBody,
+      sanitizedHtml,
       params.textBody,
       JSON.stringify(params.audience),
       params.language,
