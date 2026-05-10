@@ -1,8 +1,30 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Mail, MessageSquare, Send, X } from 'lucide-react';
+import { FileText, Loader2, Mail, MessageSquare, Send, Trash2, X } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 
-type Channel = 'email' | 'sms' | 'history';
+type Channel = 'email' | 'sms' | 'templates' | 'history';
+
+interface TemplateRow {
+  id: string;
+  slug: string;
+  name: string;
+  subjectEn: string;
+  subjectFr: string;
+  htmlEn: string;
+  htmlFr: string;
+  textEn: string;
+  textFr: string;
+  variables: string[];
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface TemplatesListResponse {
+  templates: TemplateRow[];
+}
+
+const KNOWN_VARS = ['firstName', 'name', 'city', 'role', 'trustTier', 'language'] as const;
 
 interface AudienceFilter {
   roles?: Array<'agent' | 'admin' | 'client'>;
@@ -103,6 +125,16 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
   const [smsCampaigns, setSmsCampaigns] = useState<SmsCampaignRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
+  const [templates, setTemplates] = useState<TemplateRow[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<TemplateRow | null>(null);
+  const [tplDraft, setTplDraft] = useState({
+    slug: '', name: '',
+    subjectEn: '', subjectFr: '',
+    htmlEn: '', htmlFr: '',
+    textEn: '', textFr: '',
+  });
+
   const refreshPreview = useCallback(async () => {
     setPreviewLoading(true);
     setPreviewError('');
@@ -141,6 +173,95 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
   useEffect(() => {
     if (channel === 'history') void refreshHistory();
   }, [channel, refreshHistory]);
+
+  const refreshTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    try {
+      const data = await apiJson<TemplatesListResponse>('/api/privacy?view=email-templates');
+      setTemplates(data.templates ?? []);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'templates_failed');
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (channel === 'templates') void refreshTemplates();
+  }, [channel, refreshTemplates]);
+
+  const startEditTemplate = (template: TemplateRow | null) => {
+    setEditingTemplate(template);
+    setTplDraft(
+      template
+        ? {
+            slug: template.slug,
+            name: template.name,
+            subjectEn: template.subjectEn,
+            subjectFr: template.subjectFr,
+            htmlEn: template.htmlEn,
+            htmlFr: template.htmlFr,
+            textEn: template.textEn,
+            textFr: template.textFr,
+          }
+        : {
+            slug: '', name: '',
+            subjectEn: '', subjectFr: '',
+            htmlEn: '', htmlFr: '',
+            textEn: '', textFr: '',
+          },
+    );
+  };
+
+  const saveTemplate = async () => {
+    setActionMessage('');
+    setActionError('');
+    try {
+      const body = editingTemplate ? { id: editingTemplate.id, ...tplDraft } : tplDraft;
+      await apiJson('/api/privacy?view=email-templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      setActionMessage(t('Template saved.', 'Modèle enregistré.'));
+      setEditingTemplate(null);
+      await refreshTemplates();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'save_failed');
+    }
+  };
+
+  const archiveTemplateRow = async (id: string) => {
+    setActionMessage('');
+    setActionError('');
+    try {
+      await apiJson('/api/privacy?view=email-templates:archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setActionMessage(t('Template archived.', 'Modèle archivé.'));
+      await refreshTemplates();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'archive_failed');
+    }
+  };
+
+  const loadTemplateIntoComposer = (template: TemplateRow) => {
+    const useFr = emailLanguage === 'fr';
+    setEmailSubject(useFr ? template.subjectFr : template.subjectEn);
+    setEmailHtml(useFr ? template.htmlFr : template.htmlEn);
+    setEmailText(useFr ? template.textFr : template.textEn);
+    setChannel('email');
+    setActionMessage(t(`Loaded template "${template.name}"`, `Modèle "${template.name}" chargé`));
+  };
+
+  const insertVariable = (target: 'subject' | 'html' | 'text', name: string) => {
+    const placeholder = `{${name}}`;
+    if (target === 'subject') setEmailSubject((prev) => prev + placeholder);
+    if (target === 'html') setEmailHtml((prev) => prev + placeholder);
+    if (target === 'text') setEmailText((prev) => prev + placeholder);
+  };
 
   const toggleRole = (role: NonNullable<AudienceFilter['roles']>[number]) => {
     setAudience((prev) => {
@@ -258,6 +379,7 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
   const channelTabs: Array<[Channel, string, React.ReactNode]> = [
     ['email', t('Email', 'E-mail'), <Mail key="i" size={14} />],
     ['sms', t('SMS', 'SMS'), <MessageSquare key="i" size={14} />],
+    ['templates', t('Templates', 'Modèles'), <FileText key="i" size={14} />],
     ['history', t('History', 'Historique'), <Loader2 key="i" size={14} />],
   ];
 
@@ -294,7 +416,7 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
         ))}
       </div>
 
-      {channel !== 'history' && (
+      {channel !== 'history' && channel !== 'templates' && (
         <div className="rounded-2xl border border-gray-100 bg-page p-3 space-y-3">
           <div className="micro-label text-gray-500">{t('Audience', 'Audience')}</div>
 
@@ -400,6 +522,54 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
 
       {channel === 'email' && (
         <div className="space-y-3">
+          {templates.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2">
+              <span className="micro-label text-gray-500">{t('Load template', 'Charger un modèle')}</span>
+              {templates.slice(0, 6).map((tpl) => (
+                <button
+                  key={tpl.id}
+                  type="button"
+                  onClick={() => loadTemplateIntoComposer(tpl)}
+                  className="h-7 rounded-full border border-gray-200 bg-page px-2 text-[11px] font-semibold text-navy hover:bg-navy-wash"
+                >
+                  {tpl.name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-gray-100 bg-white px-3 py-2">
+            <span className="micro-label text-gray-500">{t('Insert variable', 'Insérer variable')}</span>
+            {KNOWN_VARS.map((name) => (
+              <div key={name} className="flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => insertVariable('subject', name)}
+                  title={t('Insert into subject', 'Insérer dans le sujet')}
+                  className="h-7 rounded-l-full border border-r-0 border-gray-200 bg-page px-2 text-[10px] font-mono text-gray-600 hover:bg-navy-wash"
+                >
+                  S
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertVariable('html', name)}
+                  title={t('Insert into HTML body', 'Insérer dans le corps HTML')}
+                  className="h-7 border border-r-0 border-gray-200 bg-page px-2 text-[11px] font-mono text-gray-700 hover:bg-navy-wash"
+                >
+                  {`{${name}}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => insertVariable('text', name)}
+                  title={t('Insert into text body', 'Insérer dans le texte')}
+                  className="h-7 rounded-r-full border border-gray-200 bg-page px-2 text-[10px] font-mono text-gray-600 hover:bg-navy-wash"
+                >
+                  T
+                </button>
+              </div>
+            ))}
+          </div>
+
           <input
             value={emailSubject}
             onChange={(e) => setEmailSubject(e.target.value)}
@@ -512,6 +682,180 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
               {t('Send', 'Envoyer')}
             </button>
           </div>
+        </div>
+      )}
+
+      {channel === 'templates' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="micro-label text-gray-500">
+              {t('Saved templates', 'Modèles enregistrés')}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={refreshTemplates}
+                disabled={templatesLoading}
+                className="h-8 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-700"
+              >
+                {templatesLoading ? t('Loading…', 'Chargement…') : t('Refresh', 'Actualiser')}
+              </button>
+              <button
+                type="button"
+                onClick={() => startEditTemplate(null)}
+                className="h-8 rounded-full bg-navy px-3 text-[11px] font-bold text-white"
+              >
+                + {t('New template', 'Nouveau modèle')}
+              </button>
+            </div>
+          </div>
+
+          {!editingTemplate && (
+            <div className="space-y-2">
+              {templates.length === 0 && (
+                <div className="text-xs text-gray-400">{t('No templates yet.', 'Aucun modèle.')}</div>
+              )}
+              {templates.map((tpl) => (
+                <div key={tpl.id} className="rounded-xl border border-gray-100 bg-white p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-sm font-bold text-ink">{tpl.name}</div>
+                      <div className="mt-0.5 font-mono text-[11px] text-gray-500">{tpl.slug}</div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => loadTemplateIntoComposer(tpl)}
+                        className="h-7 rounded-full bg-forest-wash px-2 text-[10px] font-bold uppercase tracking-widest text-forest"
+                      >
+                        {t('Use', 'Utiliser')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => startEditTemplate(tpl)}
+                        className="h-7 rounded-full border border-gray-200 bg-page px-2 text-[10px] font-bold uppercase tracking-widest text-gray-700"
+                      >
+                        {t('Edit', 'Modifier')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => archiveTemplateRow(tpl.id)}
+                        className="h-7 rounded-full border border-red-100 bg-red-50 px-2 text-red-700"
+                        aria-label={t('Archive', 'Archiver')}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  </div>
+                  {tpl.variables.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {tpl.variables.map((v) => (
+                        <span
+                          key={v}
+                          className="rounded-full bg-page px-2 py-0.5 font-mono text-[10px] text-gray-600"
+                        >
+                          {`{${v}}`}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {editingTemplate !== null || tplDraft.slug !== '' || tplDraft.name !== '' ? (
+            <div className="rounded-xl border border-gray-100 bg-white p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="micro-label text-navy">
+                  {editingTemplate ? t('Edit template', 'Modifier le modèle') : t('New template', 'Nouveau modèle')}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingTemplate(null);
+                    setTplDraft({ slug: '', name: '', subjectEn: '', subjectFr: '', htmlEn: '', htmlFr: '', textEn: '', textFr: '' });
+                  }}
+                  className="text-[11px] text-gray-500 underline"
+                >
+                  {t('Cancel', 'Annuler')}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  value={tplDraft.slug}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, slug: e.target.value }))}
+                  placeholder={t('slug (lowercase, hyphens)', 'slug (minuscules, tirets)')}
+                  className="h-10 rounded-xl border border-gray-200 px-3 text-sm font-mono"
+                />
+                <input
+                  value={tplDraft.name}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, name: e.target.value }))}
+                  placeholder={t('Display name', "Nom d'affichage")}
+                  className="h-10 rounded-xl border border-gray-200 px-3 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input
+                  value={tplDraft.subjectEn}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, subjectEn: e.target.value }))}
+                  placeholder="Subject (EN)"
+                  className="h-10 rounded-xl border border-gray-200 px-3 text-sm"
+                />
+                <input
+                  value={tplDraft.subjectFr}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, subjectFr: e.target.value }))}
+                  placeholder="Sujet (FR)"
+                  className="h-10 rounded-xl border border-gray-200 px-3 text-sm"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <textarea
+                  value={tplDraft.htmlEn}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, htmlEn: e.target.value }))}
+                  placeholder="HTML body (EN)"
+                  rows={5}
+                  className="rounded-xl border border-gray-200 bg-white p-3 text-xs font-mono"
+                />
+                <textarea
+                  value={tplDraft.htmlFr}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, htmlFr: e.target.value }))}
+                  placeholder="Corps HTML (FR)"
+                  rows={5}
+                  className="rounded-xl border border-gray-200 bg-white p-3 text-xs font-mono"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <textarea
+                  value={tplDraft.textEn}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, textEn: e.target.value }))}
+                  placeholder="Plain-text (EN)"
+                  rows={3}
+                  className="rounded-xl border border-gray-200 bg-white p-3 text-xs"
+                />
+                <textarea
+                  value={tplDraft.textFr}
+                  onChange={(e) => setTplDraft((p) => ({ ...p, textFr: e.target.value }))}
+                  placeholder="Texte brut (FR)"
+                  rows={3}
+                  className="rounded-xl border border-gray-200 bg-white p-3 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={saveTemplate}
+                  className="h-9 rounded-full bg-navy px-4 text-[11px] font-bold uppercase tracking-widest text-white"
+                >
+                  {t('Save template', 'Enregistrer')}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 
