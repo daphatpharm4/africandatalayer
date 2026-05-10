@@ -119,10 +119,18 @@ export interface CreatedCampaign {
   capped: boolean;
 }
 
+export function isFutureScheduledAt(scheduledAt: string | null | undefined): boolean {
+  if (!scheduledAt) return false;
+  const t = new Date(scheduledAt).getTime();
+  return Number.isFinite(t) && t > Date.now();
+}
+
 export async function createCampaign(params: CreateCampaignParams): Promise<CreatedCampaign> {
   const audience = await resolveAudience(params.audience);
   const capped = audience.totalCount > MAX_CAMPAIGN_RECIPIENTS;
   const recipients = audience.recipients;
+  const isScheduled = !params.dryRun && isFutureScheduledAt(params.scheduledAt ?? null);
+  const initialStatus = params.dryRun ? "draft" : isScheduled ? "scheduled" : "sending";
 
   const insert = await query<{ id: string; status: string }>(
     `INSERT INTO public.email_campaigns
@@ -135,7 +143,7 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
       params.textBody,
       JSON.stringify(params.audience),
       params.language,
-      params.dryRun ? "draft" : "sending",
+      initialStatus,
       recipients.length,
       audience.suppressedCount,
       params.createdBy,
@@ -158,6 +166,16 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
     return {
       id: campaign.id,
       status: campaign.status,
+      recipientCount: recipients.length,
+      suppressedCount: audience.suppressedCount,
+      capped,
+    };
+  }
+
+  if (isScheduled) {
+    return {
+      id: campaign.id,
+      status: "scheduled",
       recipientCount: recipients.length,
       suppressedCount: audience.suppressedCount,
       capped,
@@ -345,7 +363,18 @@ export async function dispatchCampaignSendBatch(params: {
   return { sent, failed, suppressed, duplicate };
 }
 
+export async function promoteDueScheduledCampaigns(): Promise<number> {
+  const result = await query<{ id: string }>(
+    `UPDATE public.email_campaigns
+     SET status = 'sending', started_at = COALESCE(started_at, NOW()), updated_at = NOW()
+     WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= NOW()
+     RETURNING id`,
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function drainPendingCampaigns(baseUrl: string, maxCampaigns = 5): Promise<number> {
+  await promoteDueScheduledCampaigns();
   const result = await query<{ id: string }>(
     `SELECT id FROM public.email_campaigns
      WHERE status = 'sending'
@@ -410,7 +439,7 @@ export async function cancelCampaign(campaignId: string): Promise<boolean> {
   const result = await query<{ id: string }>(
     `UPDATE public.email_campaigns
      SET status = 'cancelled', updated_at = NOW()
-     WHERE id = $1 AND status IN ('draft', 'sending')
+     WHERE id = $1 AND status IN ('draft', 'scheduled', 'sending')
      RETURNING id`,
     [campaignId],
   );

@@ -306,6 +306,10 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    if (campaign.status === "scheduled") {
+      return jsonResponse(campaign, { status: 201 });
+    }
+
     const smsFastPathBatch = Number(process.env.SMS_DRAIN_BATCH_SIZE ?? "50") || 50;
     await dispatchSmsCampaignBatch({
       campaignId: campaign.id,
@@ -362,6 +366,10 @@ export async function POST(request: Request): Promise<Response> {
 
     if (validation.data.dryRun) {
       return jsonResponse(campaign, { status: 200 });
+    }
+
+    if (campaign.status === "scheduled") {
+      return jsonResponse(campaign, { status: 201 });
     }
 
     const baseUrl = process.env.APP_BASE_URL?.trim() || new URL(request.url).origin;

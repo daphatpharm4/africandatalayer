@@ -106,11 +106,19 @@ export interface CreatedSmsCampaign {
   estimatedCostUnits: number | null;
 }
 
+export function isFutureScheduledAt(scheduledAt: string | null | undefined): boolean {
+  if (!scheduledAt) return false;
+  const t = new Date(scheduledAt).getTime();
+  return Number.isFinite(t) && t > Date.now();
+}
+
 export async function createSmsCampaign(params: CreateSmsCampaignParams): Promise<CreatedSmsCampaign> {
   const audience = await resolveSmsAudience(params.audience);
   const capped = audience.totalCount > MAX_SMS_CAMPAIGN_RECIPIENTS;
   const segmentsPerRecipient = estimateSegments(params.message);
   const totalSegments = segmentsPerRecipient * audience.recipients.length;
+  const isScheduled = !params.dryRun && isFutureScheduledAt(params.scheduledAt ?? null);
+  const initialStatus = params.dryRun ? "draft" : isScheduled ? "scheduled" : "sending";
 
   const insert = await query<{ id: string; status: string }>(
     `INSERT INTO public.sms_campaigns
@@ -121,7 +129,7 @@ export async function createSmsCampaign(params: CreateSmsCampaignParams): Promis
       params.message,
       JSON.stringify(params.audience),
       params.language,
-      params.dryRun ? "draft" : "sending",
+      initialStatus,
       audience.recipients.length,
       params.createdBy,
       params.scheduledAt ?? null,
@@ -143,6 +151,17 @@ export async function createSmsCampaign(params: CreateSmsCampaignParams): Promis
     return {
       id: campaign.id,
       status: campaign.status,
+      recipientCount: audience.recipients.length,
+      capped,
+      segmentsPerRecipient,
+      estimatedCostUnits: totalSegments,
+    };
+  }
+
+  if (isScheduled) {
+    return {
+      id: campaign.id,
+      status: "scheduled",
       recipientCount: audience.recipients.length,
       capped,
       segmentsPerRecipient,
@@ -285,7 +304,18 @@ export async function dispatchSmsCampaignBatch(params: {
   return { sent, failed, suppressed };
 }
 
+export async function promoteDueScheduledSmsCampaigns(): Promise<number> {
+  const result = await query<{ id: string }>(
+    `UPDATE public.sms_campaigns
+     SET status = 'sending', started_at = COALESCE(started_at, NOW()), updated_at = NOW()
+     WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= NOW()
+     RETURNING id`,
+  );
+  return result.rowCount ?? 0;
+}
+
 export async function drainPendingSmsCampaigns(maxCampaigns = 5): Promise<number> {
+  await promoteDueScheduledSmsCampaigns();
   const result = await query<{ id: string }>(
     `SELECT id FROM public.sms_campaigns
      WHERE status = 'sending'
@@ -350,7 +380,7 @@ export async function cancelSmsCampaign(campaignId: string): Promise<boolean> {
   const result = await query<{ id: string }>(
     `UPDATE public.sms_campaigns
      SET status = 'cancelled', updated_at = NOW()
-     WHERE id = $1 AND status IN ('draft', 'sending')
+     WHERE id = $1 AND status IN ('draft', 'scheduled', 'sending')
      RETURNING id`,
     [campaignId],
   );

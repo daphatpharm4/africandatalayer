@@ -116,6 +116,7 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
   const [smsMessage, setSmsMessage] = useState('');
   const [smsLanguage, setSmsLanguage] = useState<'en' | 'fr'>(language);
   const [acknowledgeCost, setAcknowledgeCost] = useState(false);
+  const [scheduledAtLocal, setScheduledAtLocal] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
@@ -298,6 +299,12 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
     (preview?.recipientCount ?? 0) > 0 &&
     acknowledgeCost;
 
+  const scheduledAtIso = useMemo(() => {
+    if (!scheduledAtLocal) return null;
+    const t = new Date(scheduledAtLocal).getTime();
+    return Number.isFinite(t) ? new Date(t).toISOString() : null;
+  }, [scheduledAtLocal]);
+
   const sendEmail = async (dryRun: boolean) => {
     setActionMessage('');
     setActionError('');
@@ -310,6 +317,7 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
         language: emailLanguage,
         audience,
         dryRun,
+        ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
       };
       const result = await apiJson<CreateCampaignResponse>('/api/privacy?view=campaigns', {
         method: 'POST',
@@ -340,6 +348,7 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
         audience,
         dryRun,
         acknowledgeCost,
+        ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
       };
       const result = await apiJson<CreateCampaignResponse>('/api/privacy?view=sms-campaigns', {
         method: 'POST',
@@ -499,6 +508,30 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
             >
               {previewLoading ? t('Refreshing…', 'Actualisation…') : t('Refresh preview', 'Actualiser')}
             </button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2 text-xs text-gray-600">
+            <span className="micro-label text-gray-400">{t('Schedule send', 'Planifier')}</span>
+            <input
+              type="datetime-local"
+              value={scheduledAtLocal}
+              onChange={(e) => setScheduledAtLocal(e.target.value)}
+              className="h-8 rounded-lg border border-gray-200 bg-page px-2 text-xs"
+            />
+            {scheduledAtLocal && (
+              <button
+                type="button"
+                onClick={() => setScheduledAtLocal('')}
+                className="text-[11px] text-gray-500 underline"
+              >
+                {t('Clear', 'Effacer')}
+              </button>
+            )}
+            <span className="ml-auto text-[10px] text-gray-400">
+              {scheduledAtIso
+                ? t('Will send via cron drain when due', "S'enverra via le cron à l'heure prévue")
+                : t('Empty = send now', "Vide = envoyer maintenant")}
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white border border-gray-100 px-3 py-2 text-xs text-gray-600">
