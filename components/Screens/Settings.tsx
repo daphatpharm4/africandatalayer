@@ -4,10 +4,12 @@ import {
   ChevronRight,
   Contrast,
   LogOut,
+  MessageSquare,
 } from 'lucide-react';
 import BrandLogo from '../BrandLogo';
 import ScreenHeader from '../shared/ScreenHeader';
 import { Screen } from '../../types';
+import { apiJson } from '../../lib/client/api';
 
 interface Props {
   onBack: () => void;
@@ -23,6 +25,55 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
   const [highContrast, setHighContrast] = useState(() => {
     try { return localStorage.getItem('adl_high_contrast') === '1'; } catch { return false; }
   });
+
+  const [smsConsent, setSmsConsent] = useState<{
+    optedIn: boolean;
+    lastChangedAt: string | null;
+    lastSource: string | null;
+  } | null>(null);
+  const [smsConsentSaving, setSmsConsentSaving] = useState(false);
+  const [smsConsentError, setSmsConsentError] = useState('');
+
+  useEffect(() => {
+    if (userRole === 'client') return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const data = await apiJson<{ optedIn: boolean; lastChangedAt: string | null; lastSource: string | null }>(
+          '/api/user?view=sms-consent',
+        );
+        if (!cancelled) setSmsConsent(data);
+      } catch (error) {
+        if (!cancelled) {
+          setSmsConsentError(error instanceof Error ? error.message : 'load_failed');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userRole]);
+
+  const toggleSmsConsent = async (next: boolean) => {
+    setSmsConsentSaving(true);
+    setSmsConsentError('');
+    try {
+      await apiJson('/api/user?view=sms-consent', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ consented: next }),
+      });
+      setSmsConsent({
+        optedIn: next,
+        lastChangedAt: new Date().toISOString(),
+        lastSource: 'settings',
+      });
+    } catch (error) {
+      setSmsConsentError(error instanceof Error ? error.message : 'save_failed');
+    } finally {
+      setSmsConsentSaving(false);
+    }
+  };
 
   useEffect(() => {
     if (highContrast) {
@@ -153,6 +204,56 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
             </div>
           </div>
         </div>
+
+        {userRole !== 'client' && (
+          <div className="space-y-2">
+            <h4 className="micro-label px-1 text-gray-400">{t('Notifications', 'Notifications')}</h4>
+            <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
+              <div className="flex items-start justify-between gap-3 px-4 py-3">
+                <div className="flex flex-1 items-start gap-3">
+                  <MessageSquare size={18} className="mt-0.5 text-gray-500 shrink-0" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-gray-900">
+                      {t('SMS notifications', 'Notifications SMS')}
+                    </div>
+                    <div className="mt-0.5 text-[11px] leading-relaxed text-gray-500">
+                      {t(
+                        'Receive operational SMS (assignments, payouts, system notices). Reply STOP anytime to opt out.',
+                        "Recevoir des SMS (missions, paiements, avis système). Répondez STOP à tout moment.",
+                      )}
+                    </div>
+                    {smsConsent?.lastChangedAt && (
+                      <div className="mt-1 text-[10px] text-gray-400">
+                        {t('Last changed', 'Dernière modification')}:{' '}
+                        {new Date(smsConsent.lastChangedAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-US')}
+                      </div>
+                    )}
+                    {smsConsentError && (
+                      <div className="mt-1 text-[11px] text-red-600">{smsConsentError}</div>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={smsConsent?.optedIn ?? false}
+                  aria-label={t('SMS notifications', 'Notifications SMS')}
+                  disabled={smsConsentSaving || smsConsent === null}
+                  onClick={() => void toggleSmsConsent(!smsConsent?.optedIn)}
+                  className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
+                    smsConsent?.optedIn ? 'bg-navy' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`absolute left-0.5 top-0.5 h-7 w-7 rounded-full bg-white shadow transition-transform ${
+                      smsConsent?.optedIn ? 'translate-x-6' : ''
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <h4 className="micro-label px-1 text-gray-400">{t('Legal', 'Légal')}</h4>

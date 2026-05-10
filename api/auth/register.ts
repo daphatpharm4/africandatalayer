@@ -15,6 +15,7 @@ import {
   handlePasswordResetConfirm,
   handlePasswordResetRequest,
 } from "../../lib/server/auth/passwordResetHandlers.js";
+import { recordSmsConsent } from "../../lib/server/sms/consent.js";
 
 const REGISTER_IP_LIMIT_PER_HOUR = Number(process.env.REGISTER_IP_LIMIT_PER_HOUR ?? "20") || 20;
 const REGISTER_IDENTIFIER_LIMIT_PER_HOUR = Number(process.env.REGISTER_IDENTIFIER_LIMIT_PER_HOUR ?? "5") || 5;
@@ -201,6 +202,16 @@ export function createRegisterHandler(
         userAgent,
         request,
       });
+
+      if (body.smsOptIn === true && normalizedIdentifier.type === "phone") {
+        await recordSmsConsent({
+          userId: identifier,
+          consented: true,
+          source: "signup",
+          ip: ipForHash,
+          userAgent,
+        });
+      }
 
       return jsonResponse({ ok: true }, { status: 201 });
     } catch (error) {

@@ -1,6 +1,7 @@
 import { query } from "../db.js";
 import { logInfo, logWarn } from "../logger.js";
-import { disableSmsOptIn, normalizePhone } from "./provider.js";
+import { normalizePhone } from "./provider.js";
+import { recordSmsConsent } from "./consent.js";
 
 const STOP_KEYWORDS = new Set(["stop", "arret", "arrêt", "unsubscribe", "stop all", "stopall", "quit", "cancel"]);
 
@@ -21,7 +22,18 @@ export async function handleInboundSms(event: InboundSmsEvent): Promise<{ accept
 
   const normalized = event.text.trim().toLowerCase();
   if (STOP_KEYWORDS.has(normalized)) {
-    await disableSmsOptIn(phone);
+    const userResult = await query<{ id: string }>(
+      `SELECT id FROM public.user_profiles WHERE phone = $1 LIMIT 1`,
+      [phone],
+    );
+    const userId = userResult.rows[0]?.id;
+    if (userId) {
+      await recordSmsConsent({
+        userId,
+        consented: false,
+        source: "inbound_stop",
+      });
+    }
     logInfo("sms.opt_out", { phone });
     return { accepted: true, action: "opted_out" };
   }

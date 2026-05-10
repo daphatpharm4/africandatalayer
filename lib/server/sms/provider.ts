@@ -72,17 +72,6 @@ export async function isPhoneSmsOptedIn(userId: string): Promise<boolean> {
   return result.rows[0]?.sms_opt_in === true;
 }
 
-export async function disableSmsOptIn(phone: string): Promise<void> {
-  const normalized = normalizePhone(phone);
-  if (!normalized) return;
-  await query(
-    `UPDATE public.user_profiles
-     SET sms_opt_in = FALSE, updated_at = NOW()
-     WHERE phone = $1`,
-    [normalized],
-  );
-}
-
 export async function sendSms(params: SendSmsParams): Promise<SmsSendResult> {
   const apiKey = getEnv("AT_API_KEY");
   const username = getEnv("AT_USERNAME");

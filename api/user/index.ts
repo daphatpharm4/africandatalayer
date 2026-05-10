@@ -14,6 +14,8 @@ import {
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { updateUserTrust } from "../../lib/server/userTrust.js";
+import { extractRateLimitIp } from "../../lib/server/rateLimit.js";
+import { getCurrentSmsConsent, recordSmsConsent } from "../../lib/server/sms/consent.js";
 import {
   adminAccountCreateSchema,
   adminUserAccessPatchSchema,
@@ -201,6 +203,11 @@ export async function GET(request: Request): Promise<Response> {
       }
       throw error;
     }
+  }
+
+  if (view === "sms-consent") {
+    const consent = await getCurrentSmsConsent(auth.id);
+    return jsonResponse(consent, { status: 200 });
   }
 
   if (view === "assignments") {
@@ -504,6 +511,29 @@ export async function PATCH(request: Request): Promise<Response> {
       }
       throw error;
     }
+  }
+
+  if (view === "sms-consent") {
+    let consentBody: { consented?: unknown };
+    try {
+      consentBody = (await request.json()) as { consented?: unknown };
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+    const consented = typeof consentBody.consented === "boolean" ? consentBody.consented : null;
+    if (consented === null) {
+      return errorResponse("Field 'consented' (boolean) is required", 400);
+    }
+    const ip = extractRateLimitIp(request);
+    const userAgent = request.headers.get("user-agent");
+    await recordSmsConsent({
+      userId: auth.id,
+      consented,
+      source: "settings",
+      ip,
+      userAgent,
+    });
+    return jsonResponse({ ok: true, consented }, { status: 200 });
   }
 
   if (view !== "assignments") return errorResponse("Invalid view", 400);

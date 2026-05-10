@@ -51,6 +51,7 @@ const Auth: React.FC<Props> = ({
   const [errorCode, setErrorCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [smsOptIn, setSmsOptIn] = useState(false);
 
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const isNativeApp = isNative();
@@ -223,6 +224,7 @@ const Auth: React.FC<Props> = ({
         console.log('[AUTH:UI] registering...');
         await registerWithCredentials(normalizedIdentifier, password, {
           acceptedPolicies: ['privacy', 'terms'],
+          smsOptIn,
         });
         accountCreated = true;
         console.log('[AUTH:UI] registration succeeded, auto-signing in...');
@@ -497,6 +499,27 @@ const Auth: React.FC<Props> = ({
                   </button>
                 )}
               </div>
+            )}
+
+            {mode === 'signup' && (
+              <label
+                className="flex items-start gap-2 px-1 text-xs leading-5 text-gray-600"
+                data-testid="auth-sms-opt-in"
+              >
+                <input
+                  type="checkbox"
+                  checked={smsOptIn}
+                  onChange={(e) => setSmsOptIn(e.target.checked)}
+                  className="mt-1 min-w-[16px]"
+                  aria-label={t('Receive SMS notifications', 'Recevoir des SMS')}
+                />
+                <span>
+                  {t(
+                    'I agree to receive operational SMS (assignment alerts, payouts, system notices) at the phone I register with. Message frequency varies. Reply STOP to opt out anytime.',
+                    "J'accepte de recevoir des SMS (alertes de mission, paiements, avis système) au numéro indiqué. Fréquence variable. Répondez STOP pour vous désabonner.",
+                  )}
+                </span>
+              </label>
             )}
 
             {mode === 'signup' && (

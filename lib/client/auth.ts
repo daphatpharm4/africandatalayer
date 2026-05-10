@@ -363,6 +363,7 @@ export async function signOut(): Promise<void> {
 export interface RegisterOptions {
   name?: string;
   acceptedPolicies: Array<'privacy' | 'terms'>;
+  smsOptIn?: boolean;
 }
 
 export async function registerWithCredentials(
@@ -389,6 +390,7 @@ export async function registerWithCredentials(
       password,
       name: options.name,
       acceptedPolicies: options.acceptedPolicies,
+      ...(options.smsOptIn ? { smsOptIn: true } : {}),
     }),
   });
 

@@ -91,6 +91,7 @@ export const registerBodySchema = z
       .refine((kinds) => kinds.includes("privacy") && kinds.includes("terms"), {
         message: "Must accept both the Privacy Policy and Terms of Use",
       }),
+    smsOptIn: z.boolean().optional(),
   })
   .strict();
 
