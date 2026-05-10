@@ -4,6 +4,8 @@ import { jsonResponse, errorResponse } from "../../lib/server/http.js";
 import { computeMovingAverage } from "../../lib/server/snapshotEngine.js";
 import { getSpatialIntelligence } from "../../lib/server/spatialIntelligence.js";
 import type { SpatialIntelligenceSort } from "../../shared/types.js";
+import { drainPendingCampaigns } from "../../lib/server/email/campaigns.js";
+import { drainPendingSmsCampaigns } from "../../lib/server/sms/campaigns.js";
 
 export const maxDuration = 60;
 
@@ -261,6 +263,27 @@ export async function GET(request: Request): Promise<Response> {
   // Daily cron dispatcher (Hobby-compatible) - authenticated via CRON_SECRET.
   if (view === "cron_dispatch") {
     return handleAnalyticsCronDispatchRequest(request);
+  }
+
+  // Per-minute campaign drain - authenticated via CRON_SECRET.
+  if (view === "campaign_drain") {
+    const unauthorizedResponse = requireCronAuthorization(request);
+    if (unauthorizedResponse) return unauthorizedResponse;
+    try {
+      const baseUrl = process.env.APP_BASE_URL?.trim() || new URL(request.url).origin;
+      const maxCampaigns = Number(process.env.CAMPAIGN_DRAIN_MAX_CAMPAIGNS ?? "5") || 5;
+      const [emailDrained, smsDrained] = await Promise.all([
+        drainPendingCampaigns(baseUrl, maxCampaigns),
+        drainPendingSmsCampaigns(maxCampaigns),
+      ]);
+      return jsonResponse({ emailDrained, smsDrained });
+    } catch (error) {
+      console.error("Campaign drain cron failed:", error);
+      return errorResponse(
+        error instanceof Error ? error.message : "Campaign drain failed",
+        500,
+      );
+    }
   }
 
   // Weekly snapshot cron trigger - authenticated via CRON_SECRET.

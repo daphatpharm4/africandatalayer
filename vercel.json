@@ -7,6 +7,10 @@
     {
       "path": "/api/analytics?view=cron_dispatch",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/analytics?view=campaign_drain",
+      "schedule": "* * * * *"
     }
   ],
   "headers": [

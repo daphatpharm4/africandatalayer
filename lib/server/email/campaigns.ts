@@ -40,7 +40,7 @@ export interface AudienceResolution {
   suppressedCount: number;
 }
 
-export const MAX_CAMPAIGN_RECIPIENTS = Number(process.env.EMAIL_CAMPAIGN_MAX_RECIPIENTS ?? "500") || 500;
+export const MAX_CAMPAIGN_RECIPIENTS = Number(process.env.EMAIL_CAMPAIGN_MAX_RECIPIENTS ?? "5000") || 5000;
 
 export async function resolveAudience(filter: AudienceFilter): Promise<AudienceResolution> {
   const conditions: string[] = ["up.email IS NOT NULL"];

@@ -293,9 +293,10 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    const smsFastPathBatch = Number(process.env.SMS_DRAIN_BATCH_SIZE ?? "50") || 50;
     await dispatchSmsCampaignBatch({
       campaignId: campaign.id,
-      batchSize: campaign.recipientCount,
+      batchSize: Math.min(campaign.recipientCount, smsFastPathBatch),
     });
 
     return jsonResponse(campaign, { status: 201 });
@@ -328,10 +329,11 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const baseUrl = process.env.APP_BASE_URL?.trim() || new URL(request.url).origin;
+    const fastPathBatch = Number(process.env.EMAIL_DRAIN_BATCH_SIZE ?? "50") || 50;
     await dispatchCampaignSendBatch({
       campaignId: campaign.id,
       baseUrl,
-      batchSize: campaign.recipientCount,
+      batchSize: Math.min(campaign.recipientCount, fastPathBatch),
     });
 
     return jsonResponse(campaign, { status: 201 });

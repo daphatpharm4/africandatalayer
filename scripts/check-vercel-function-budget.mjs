@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve, extname } from "node:path";
 
 const DEFAULT_LIMIT = 13;
@@ -36,10 +36,30 @@ function countApiRoutes(dirPath) {
   return total;
 }
 
-function countCrons(vercelConfig) {
+function cronPathHasMatchingRoute(apiDirPath, cronPath) {
+  if (typeof cronPath !== "string" || !cronPath.startsWith("/api/")) return false;
+  const pathname = cronPath.split("?")[0];
+  const segments = pathname.replace(/^\/api\//, "").split("/").filter(Boolean);
+  if (segments.length === 0) return false;
+  // Check candidates: api/<seg>.ts, api/<seg>/index.ts, or any nested file under api/<seg>/
+  const baseDir = resolve(apiDirPath, segments[0]);
+  if (existsSync(baseDir) && statSync(baseDir).isDirectory()) return true;
+  for (const ext of ALLOWED_ROUTE_EXTENSIONS) {
+    if (existsSync(`${baseDir}${ext}`)) return true;
+  }
+  return false;
+}
+
+function countCrons(vercelConfig, apiDirPath) {
   if (!vercelConfig || typeof vercelConfig !== "object") return 0;
   if (!Array.isArray(vercelConfig.crons)) return 0;
-  return vercelConfig.crons.length;
+  let added = 0;
+  for (const entry of vercelConfig.crons) {
+    if (!entry || typeof entry !== "object") continue;
+    if (cronPathHasMatchingRoute(apiDirPath, entry.path)) continue;
+    added += 1;
+  }
+  return added;
 }
 
 function main() {
@@ -57,11 +77,12 @@ function main() {
   }
 
   const routeCount = countApiRoutes(apiDirPath);
-  const cronCount = countCrons(vercelConfig);
-  const projectedTotal = routeCount + cronCount;
+  const dedupedCronCount = countCrons(vercelConfig, apiDirPath);
+  const totalCronEntries = Array.isArray(vercelConfig.crons) ? vercelConfig.crons.length : 0;
+  const projectedTotal = routeCount + dedupedCronCount;
 
   console.log(`[function-budget] route files: ${routeCount}`);
-  console.log(`[function-budget] cron entries: ${cronCount}`);
+  console.log(`[function-budget] cron entries: ${totalCronEntries} (${dedupedCronCount} not covered by existing routes)`);
   console.log(`[function-budget] projected deployment functions: ${projectedTotal}`);
   console.log(`[function-budget] budget limit: ${limit}`);
 

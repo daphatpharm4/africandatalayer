@@ -17,7 +17,7 @@ export const smsCampaignCreateSchema = z.object({
 
 export type SmsCampaignCreateInput = z.infer<typeof smsCampaignCreateSchema>;
 
-export const MAX_SMS_CAMPAIGN_RECIPIENTS = Number(process.env.SMS_CAMPAIGN_MAX_RECIPIENTS ?? "300") || 300;
+export const MAX_SMS_CAMPAIGN_RECIPIENTS = Number(process.env.SMS_CAMPAIGN_MAX_RECIPIENTS ?? "1000") || 1000;
 export const SMS_SEGMENT_GSM7_LIMIT = 160;
 export const SMS_SEGMENT_UNICODE_LIMIT = 70;
 
@@ -283,6 +283,22 @@ export async function dispatchSmsCampaignBatch(params: {
   });
 
   return { sent, failed, suppressed };
+}
+
+export async function drainPendingSmsCampaigns(maxCampaigns = 5): Promise<number> {
+  const result = await query<{ id: string }>(
+    `SELECT id FROM public.sms_campaigns
+     WHERE status = 'sending'
+     ORDER BY started_at ASC NULLS FIRST
+     LIMIT $1::int`,
+    [maxCampaigns],
+  );
+  let drained = 0;
+  for (const row of result.rows) {
+    await dispatchSmsCampaignBatch({ campaignId: row.id });
+    drained += 1;
+  }
+  return drained;
 }
 
 export async function listSmsCampaigns(limit = 50): Promise<Array<{
