@@ -3,6 +3,7 @@ import { query } from "../db.js";
 import { logInfo, logWarn } from "../logger.js";
 import { sendTransactional } from "./provider.js";
 import { buildUnsubscribeUrl } from "./unsubscribe.js";
+import { renderEmailWithVariables } from "./variables.js";
 
 export const audienceSchema = z.object({
   roles: z.array(z.enum(["agent", "admin", "client"])).optional(),
@@ -211,8 +212,17 @@ export async function dispatchCampaignSendBatch(params: {
     return { sent: 0, failed: 0, suppressed: 0, duplicate: 0 };
   }
 
-  const pending = await query<{ user_id: string; email: string; unsubscribe_token: string }>(
-    `SELECT cr.user_id, cr.email, up.unsubscribe_token
+  const pending = await query<{
+    user_id: string;
+    email: string;
+    unsubscribe_token: string;
+    name: string | null;
+    map_scope: string | null;
+    role: string | null;
+    trust_tier: string | null;
+  }>(
+    `SELECT cr.user_id, cr.email, up.unsubscribe_token,
+            up.name, up.map_scope, up.role, up.trust_tier
      FROM public.email_campaign_recipients cr
      JOIN public.user_profiles up ON up.id = cr.user_id
      WHERE cr.campaign_id = $1 AND cr.status = 'pending'
@@ -229,13 +239,27 @@ export async function dispatchCampaignSendBatch(params: {
   for (const row of pending.rows) {
     const unsubscribeUrl = buildUnsubscribeUrl(params.baseUrl, row.unsubscribe_token);
     const idempotencyKey = `email_campaign:${params.campaignId}:${row.user_id}`;
+    const firstName = row.name ? row.name.split(/\s+/)[0] : "";
+    const rendered = renderEmailWithVariables(
+      { subject: campaign.subject, html: campaign.html_body, text: campaign.text_body },
+      {
+        values: {
+          firstName,
+          name: row.name ?? "",
+          city: row.map_scope ?? "",
+          role: row.role ?? "",
+          trustTier: row.trust_tier ?? "",
+          language: campaign.language,
+        },
+      },
+    );
     try {
       const result = await sendTransactional({
         recipient: { email: row.email, userId: row.user_id },
         templateId: `email_campaign:${params.campaignId}`,
-        subject: campaign.subject,
-        html: campaign.html_body,
-        text: campaign.text_body,
+        subject: rendered.subject,
+        html: rendered.html,
+        text: rendered.text,
         idempotencyKey,
         campaignId: params.campaignId,
         emailClass: "marketing",

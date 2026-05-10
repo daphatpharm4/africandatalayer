@@ -29,6 +29,12 @@ import {
 import { handleResendWebhookEvent } from "../../lib/server/email/webhookHandler.js";
 import { readSvixHeaders, verifySvixSignature } from "../../lib/server/email/svixVerify.js";
 import {
+  archiveTemplate,
+  listTemplates,
+  templateUpsertSchema,
+  upsertTemplate,
+} from "../../lib/server/email/templates.js";
+import {
   cancelSmsCampaign,
   createSmsCampaign,
   dispatchSmsCampaignBatch,
@@ -143,6 +149,13 @@ export async function GET(request: Request): Promise<Response> {
       if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
       const campaigns = await listSmsCampaigns(50);
       return jsonResponse({ campaigns, maxRecipients: MAX_SMS_CAMPAIGN_RECIPIENTS }, { status: 200 });
+    }
+
+    if (view === "email-templates") {
+      if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
+      const includeArchived = url.searchParams.get("includeArchived") === "true";
+      const templates = await listTemplates(includeArchived);
+      return jsonResponse({ templates }, { status: 200 });
     }
 
     if (view === "audience-preview") {
@@ -300,6 +313,29 @@ export async function POST(request: Request): Promise<Response> {
     });
 
     return jsonResponse(campaign, { status: 201 });
+  }
+
+  if (view === "email-templates" || view === "email-templates:archive") {
+    const auth = await requireUser(request);
+    if (!auth) return errorResponse("Unauthorized", 401);
+    const viewer = toSubmissionAuthContext(auth);
+    if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
+
+    if (view === "email-templates:archive") {
+      const id = typeof (rawBody as Record<string, unknown> | null)?.id === "string"
+        ? ((rawBody as Record<string, unknown>).id as string)
+        : "";
+      if (!id) return errorResponse("Missing template id", 400);
+      const archived = await archiveTemplate(id);
+      return jsonResponse({ ok: archived }, { status: archived ? 200 : 404 });
+    }
+
+    const validation = templateUpsertSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid template payload", 400);
+    }
+    const template = await upsertTemplate(validation.data, auth.id);
+    return jsonResponse({ template }, { status: validation.data.id ? 200 : 201 });
   }
 
   if (view === "campaigns" || view === "campaigns:cancel") {
