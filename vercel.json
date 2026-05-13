@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/analytics?view=campaign_drain",
-      "schedule": "* * * * *"
+      "schedule": "0 7 * * *"
     }
   ],
   "headers": [
