@@ -33,6 +33,7 @@ interface ResendSendBody {
   subject: string;
   html: string;
   text: string;
+  reply_to?: string;
   headers?: Record<string, string>;
 }
 
@@ -155,6 +156,7 @@ async function markLogStatus(
 export async function sendTransactional(params: SendTransactionalParams): Promise<SendResult> {
   const apiKey = getEnv("RESEND_API_KEY");
   const from = getEnv("RESEND_FROM");
+  const replyTo = (process.env.RESEND_REPLY_TO ?? "").trim() || null;
   const recipient = normalizeEmail(params.recipient.email);
   const emailClass = params.emailClass ?? "transactional";
 
@@ -190,6 +192,7 @@ export async function sendTransactional(params: SendTransactionalParams): Promis
     subject: params.subject,
     html: params.html,
     text: params.text,
+    reply_to: replyTo ?? undefined,
     headers: Object.keys(headers).length > 0 ? headers : undefined,
   };
 
