@@ -50,7 +50,15 @@ function getEnv(name: string): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`Missing required env var: ${name}`);
   }
-  return value.trim();
+  const trimmed = value.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return trimmed.slice(1, -1).trim();
+    }
+  }
+  return trimmed;
 }
 
 function normalizeEmail(input: string): string {
