@@ -74,7 +74,12 @@ const defaultQueueSnapshot: QueueSnapshot = {
 
 const App: React.FC = () => {
   const isSyncingRef = useRef(false);
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.SPLASH);
+  const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/reset')) {
+      return Screen.FORGOT_PASSWORD;
+    }
+    return Screen.SPLASH;
+  });
   const [selectedPoint, setSelectedPoint] = useState<DataPoint | null>(null);
   const [isOffline, setIsOffline] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -123,12 +128,6 @@ const App: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    if (window.location.pathname.startsWith('/reset')) {
-      setCurrentScreen(Screen.FORGOT_PASSWORD);
-    }
-  }, []);
 
   const navigateTo = useCallback((screen: Screen, point: DataPoint | null = null) => {
     setCurrentScreen((prev) => {
