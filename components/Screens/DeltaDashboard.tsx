@@ -15,6 +15,7 @@ import {
   Legend,
 } from 'recharts';
 import { apiJson, buildUrl } from '../../lib/client/api';
+import { askAnalyticsAssistant } from '../../lib/client/ai';
 import ExportPanel from '../ExportPanel';
 import { categoryLabel, VERTICAL_IDS, VERTICALS } from '../../shared/verticals';
 import VerticalIcon from '../shared/VerticalIcon';
@@ -26,6 +27,7 @@ import type {
   SpatialIntelligenceCell,
   SpatialIntelligenceResponse,
   SpatialIntelligenceSort,
+  AiAnalyticsResponse,
 } from '../../shared/types';
 import { decodeGeohashBounds } from '../../lib/shared/pointId';
 
@@ -128,6 +130,12 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [exportPanelOpen, setExportPanelOpen] = useState(false);
+  const [analystQuestion, setAnalystQuestion] = useState(() =>
+    t('What changed in this vertical this week?', 'Qu\'est-ce qui a changé dans cette verticale cette semaine ?'),
+  );
+  const [analystAnswer, setAnalystAnswer] = useState<AiAnalyticsResponse | null>(null);
+  const [analystLoading, setAnalystLoading] = useState(false);
+  const [analystError, setAnalystError] = useState('');
 
   const announceStatus = (tone: 'success' | 'error', text: string) => {
     setStatusMessage({ tone, text });
@@ -432,6 +440,31 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
+  const handleAskAnalyst = async () => {
+    const question = analystQuestion.trim();
+    if (!question || analystLoading) return;
+    setAnalystLoading(true);
+    setAnalystError('');
+    try {
+      const sortedDates = filteredStats.map((row) => row.snapshot_date).sort((a, b) => a.localeCompare(b));
+      const dateRange = sortedDates.length > 0
+        ? { from: sortedDates[0], to: sortedDates[sortedDates.length - 1] }
+        : undefined;
+      const result = await askAnalyticsAssistant({
+        question,
+        vertical: selectedVertical === 'all' ? undefined : selectedVertical,
+        zone: 'bonamoussadi',
+        dateRange,
+      });
+      setAnalystAnswer(result);
+    } catch {
+      setAnalystAnswer(null);
+      setAnalystError(t('Analyst answer unavailable.', 'Réponse analyste indisponible.'));
+    } finally {
+      setAnalystLoading(false);
+    }
+  };
+
   const deltaTypeColor = (type: string) => {
     switch (type) {
       case 'new': return 'text-green-600 bg-green-50';
@@ -575,6 +608,61 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
           <KpiTile label={t('vs Last Week', 'vs semaine passée')} value={summaryWoW !== null ? `${summaryWoW >= 0 ? '+' : ''}${summaryWoW}%` : '--'} tone="forest" />
           <KpiTile label={t('Alerts', 'Alertes')} value={filteredAnomalies.length} tone="amber" />
           <KpiTile label={t('Completion', 'Complet')} value={`${summaryCompletion}%`} tone="navy" />
+        </div>
+
+        <div className="card-soft p-4 space-y-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+            <div className="min-w-0 flex-1">
+              <div className="micro-label text-ink-muted">{t('Client analyst', 'Analyste client')}</div>
+              <input
+                value={analystQuestion}
+                onChange={(event) => setAnalystQuestion(event.target.value)}
+                className="mt-2 min-h-12 w-full rounded-2xl border border-gray-100 bg-white px-4 py-3 text-sm font-semibold text-gray-900 outline-none focus:border-navy"
+                placeholder={t('Ask about aggregate changes', 'Question sur les changements agrégés')}
+                maxLength={500}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleAskAnalyst()}
+              disabled={analystLoading || !analystQuestion.trim()}
+              className={`min-h-12 rounded-2xl px-5 py-3 text-sm font-bold ${
+                analystLoading || !analystQuestion.trim()
+                  ? 'bg-gray-100 text-gray-400'
+                  : 'bg-navy text-white'
+              }`}
+            >
+              {analystLoading ? t('Asking', 'Analyse') : t('Ask', 'Demander')}
+            </button>
+          </div>
+
+          {analystError && (
+            <div className="rounded-2xl border border-terra-wash bg-white px-4 py-3 text-[12px] font-semibold text-terra-dark">
+              {analystError}
+            </div>
+          )}
+
+          {analystAnswer && (
+            <div className="space-y-3 rounded-2xl border border-white bg-white px-4 py-3">
+              <p className="text-sm font-semibold leading-relaxed text-gray-900">{analystAnswer.answer}</p>
+              {analystAnswer.facts.length > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {analystAnswer.facts.slice(0, 6).map((fact) => (
+                    <div key={`${fact.label}-${fact.source}`} className="rounded-xl bg-page px-3 py-2">
+                      <div className="text-[11px] font-bold text-gray-500">{fact.label}</div>
+                      <div className="mt-1 text-sm font-extrabold text-navy">{fact.value}</div>
+                      <div className="mt-1 text-[10px] font-semibold text-gray-400">{fact.source}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {analystAnswer.caveats.length > 0 && (
+                <div className="text-[11px] font-medium leading-relaxed text-gray-500">
+                  {analystAnswer.caveats.slice(0, 3).join(' · ')}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Per-vertical bars */}

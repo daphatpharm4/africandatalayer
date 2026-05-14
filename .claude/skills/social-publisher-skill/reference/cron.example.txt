@@ -1,0 +1,30 @@
+# === crontab snippets for social-publisher-skill ===
+# Adjust the absolute path to your repo root.
+
+# Drain queued posts every 5 minutes
+*/5 * * * * cd /Users/charlesvictormahouve/Documents/GitHub/africandatalayer && node .claude/skills/social-publisher-skill/scripts/publish.mjs queue run >> .claude/skills/social-publisher-skill/queue/logs/cron-drain.log 2>&1
+
+# Refresh IG + LinkedIn tokens every Monday at 03:00
+0 3 * * 1 cd /Users/charlesvictormahouve/Documents/GitHub/africandatalayer && node .claude/skills/social-publisher-skill/scripts/token-refresh.mjs >> .claude/skills/social-publisher-skill/queue/logs/token-refresh.log 2>&1
+
+# === macOS launchd alternative ===
+# Save as ~/Library/LaunchAgents/local.adl.publisher.plist and load with launchctl.
+# (Template — adjust path + interval.)
+#
+# <?xml version="1.0" encoding="UTF-8"?>
+# <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+# <plist version="1.0">
+# <dict>
+#   <key>Label</key><string>local.adl.publisher.drain</string>
+#   <key>ProgramArguments</key>
+#   <array>
+#     <string>/usr/local/bin/node</string>
+#     <string>/Users/charlesvictormahouve/Documents/GitHub/africandatalayer/.claude/skills/social-publisher-skill/scripts/publish.mjs</string>
+#     <string>queue</string>
+#     <string>run</string>
+#   </array>
+#   <key>StartInterval</key><integer>300</integer>
+#   <key>StandardOutPath</key><string>/tmp/adl-publisher.log</string>
+#   <key>StandardErrorPath</key><string>/tmp/adl-publisher.err.log</string>
+# </dict>
+# </plist>

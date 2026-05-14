@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "slug": "test-multi",
+  "briefPath": "docs/marketing/test.md",
+  "targets": [
+    {
+      "platform": "instagram",
+      "format": "carousel",
+      "account": "adl_main",
+      "assets": ["frame-01.png", "frame-02.png"],
+      "caption": { "en": "EN", "fr": "FR" },
+      "captionLang": "en",
+      "hashtags": ["#A"],
+      "altText": ["a", "b"]
+    },
+    {
+      "platform": "instagram",
+      "format": "story",
+      "account": "adl_main",
+      "assets": ["frame-01.png"],
+      "altText": ["a"]
+    },
+    {
+      "platform": "linkedin",
+      "format": "image",
+      "account": "adl_org",
+      "assets": ["frame-01.png"],
+      "title": "T",
+      "commentary": "C",
+      "visibility": "PUBLIC"
+    }
+  ],
+  "schedule": { "mode": "now", "at": null, "timezone": "Africa/Douala" },
+  "claimAudit": "passed",
+  "createdBy": "test",
+  "status": "pending"
+}

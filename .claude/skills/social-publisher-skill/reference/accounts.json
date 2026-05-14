@@ -1,0 +1,19 @@
+{
+  "adl_main": {
+    "platform": "instagram",
+    "envKeys": {
+      "pageToken": "IG_PAGE_TOKEN_ADL_MAIN",
+      "businessId": "IG_BUSINESS_ID_ADL_MAIN",
+      "fbPageId": "IG_FB_PAGE_ID_ADL_MAIN"
+    }
+  },
+  "adl_org": {
+    "platform": "linkedin",
+    "envKeys": {
+      "accessToken": "LI_ACCESS_TOKEN_ADL_ORG",
+      "refreshToken": "LI_REFRESH_TOKEN_ADL_ORG",
+      "orgUrn": "LI_ORG_URN_ADL_ORG",
+      "expiresAt": "LI_TOKEN_EXPIRES_AT_ADL_ORG"
+    }
+  }
+}

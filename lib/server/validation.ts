@@ -71,6 +71,65 @@ export const submissionInputSchema = z
   })
   .strict();
 
+const LANGUAGE_VALUES = ["en", "fr"] as const;
+const POI_STATUS_VALUES = [
+  "discovered",
+  "normalized",
+  "matched_to_existing",
+  "needs_field_verification",
+  "assigned_to_agent",
+  "verified",
+  "promoted_to_point_event",
+  "rejected",
+] as const;
+
+export const aiExtractionRequestSchema = z
+  .object({
+    category: z.enum(CATEGORY_VALUES).nullable().optional(),
+    imageData: z.string().min(1).max(12_000_000).optional(),
+    photoUrl: z.string().trim().url().max(1000).optional(),
+    location: z.object({
+      latitude: z.number().finite(),
+      longitude: z.number().finite(),
+    }),
+    language: z.enum(LANGUAGE_VALUES),
+    draftDetails: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict()
+  .refine((value) => Boolean(value.imageData || value.photoUrl), {
+    message: "imageData or photoUrl is required",
+    path: ["imageData"],
+  });
+
+export const aiReviewSummaryRequestSchema = z
+  .object({
+    eventId: z.string().trim().min(1).max(160),
+  })
+  .strict();
+
+export const aiAnalyticsQueryRequestSchema = z
+  .object({
+    question: z.string().trim().min(3).max(500),
+    vertical: z.enum(CATEGORY_VALUES).optional(),
+    zone: z.string().trim().min(1).max(120).optional(),
+    dateRange: z
+      .object({
+        from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+      .optional(),
+    exportFormat: z.enum(["json", "csv", "geojson", "pdf"]).optional(),
+  })
+  .strict();
+
+export const poiCandidatePatchSchema = z
+  .object({
+    matchStatus: z.enum(POI_STATUS_VALUES).optional(),
+    assignedTo: z.string().trim().min(1).max(160).nullable().optional(),
+    needsFieldVerification: z.boolean().optional(),
+  })
+  .strict();
+
 const POLICY_KIND_VALUES = ["privacy", "terms"] as const;
 
 export const registerBodySchema = z

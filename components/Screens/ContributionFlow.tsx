@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Award,
@@ -39,7 +39,9 @@ import { collectGpsIntegrity } from '../../lib/client/gpsIntegrity';
 import { hashDataUrl } from '../../lib/client/photoIntegrity';
 import { sendSubmissionPayload, toSubmissionSyncError } from '../../lib/client/submissionSync';
 import { apiJson } from '../../lib/client/api';
+import { extractSubmission } from '../../lib/client/ai';
 import type { ClientExifData, CollectionAssignment, ConsentStatus, DedupCheckResult, SubmissionCategory, SubmissionInput } from '../../shared/types';
+import type { AiFieldSuggestion, AiQualityWarning } from '../../shared/types';
 import { ENRICH_FIELD_CATALOG, getEnrichFieldLabel, type EnrichFieldConfig, type EnrichFieldOption } from '../../shared/enrichFieldCatalog';
 import { Category } from '../../types';
 import type { ContributionMode, DataPoint } from '../../types';
@@ -203,6 +205,38 @@ function formatEnrichFieldValue(value: unknown, language: 'en' | 'fr'): string |
     return entries.length > 0 ? entries.join(', ') : null;
   }
   return null;
+}
+
+function normalizeAiFieldSuggestions(input: unknown): AiFieldSuggestion[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.field !== 'string' || !record.field.trim()) return [];
+    return [{
+      field: record.field.trim(),
+      value: record.value,
+      confidence: typeof record.confidence === 'number' && Number.isFinite(record.confidence) ? record.confidence : 0,
+      evidence: typeof record.evidence === 'string' ? record.evidence : '',
+    }];
+  });
+}
+
+function normalizeAiQualityWarnings(input: unknown): AiQualityWarning[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const record = item as Record<string, unknown>;
+    if (typeof record.code !== 'string' || !record.code.trim()) return [];
+    return [{
+      code: record.code.trim(),
+      severity: record.severity === 'blocker' || record.severity === 'warning' || record.severity === 'info'
+        ? record.severity
+        : 'info',
+      messageEn: typeof record.messageEn === 'string' ? record.messageEn : '',
+      messageFr: typeof record.messageFr === 'string' ? record.messageFr : '',
+    }];
+  });
 }
 
 function dataUrlToBytes(dataUrl: string): Uint8Array | null {
@@ -486,6 +520,11 @@ const ContributionFlow: React.FC<Props> = ({
   const [pendingPayload, setPendingPayload] = useState<SubmissionInput | null>(null);
   const [selectedDedupPointId, setSelectedDedupPointId] = useState('');
   const [isResolvingDedup, setIsResolvingDedup] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<AiFieldSuggestion[]>([]);
+  const [aiWarnings, setAiWarnings] = useState<AiQualityWarning[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiCaptureRevision, setAiCaptureRevision] = useState(0);
+  const aiExtractionKeyRef = useRef('');
   const [batchCapturedCount, setBatchCapturedCount] = useState(0);
   const [xpBreakdown, setXpBreakdown] = useState({
     baseXp: 5,
@@ -890,6 +929,9 @@ const ContributionFlow: React.FC<Props> = ({
     setPhotoFile(file);
     setDraftImageBase64(null);
     setDraftClientExif(null);
+    setAiSuggestions([]);
+    setAiWarnings([]);
+    setAiCaptureRevision((current) => current + 1);
     setPhotoError('');
     const nextPreview = URL.createObjectURL(file);
     setPhotoPreview((prev) => {
@@ -913,6 +955,9 @@ const ContributionFlow: React.FC<Props> = ({
         setDraftImageBase64(photo.dataUrl);
         setPhotoFile(null);
         setDraftClientExif(null);
+        setAiSuggestions([]);
+        setAiWarnings([]);
+        setAiCaptureRevision((current) => current + 1);
         setPhotoError('');
         setPhotoPreview((prev) => {
           if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
@@ -1128,6 +1173,215 @@ const ContributionFlow: React.FC<Props> = ({
     }
     return details;
   };
+
+  const coerceSuggestionString = (value: unknown): string | null => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      return trimmed || null;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    return null;
+  };
+
+  const coerceSuggestionBoolean = (value: unknown): boolean | null => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', 'yes', 'oui', 'open', 'available', '1'].includes(normalized)) return true;
+      if (['false', 'no', 'non', 'closed', 'unavailable', '0'].includes(normalized)) return false;
+    }
+    return null;
+  };
+
+  const coerceSuggestionList = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => coerceSuggestionString(item))
+        .filter((item): item is string => Boolean(item));
+    }
+    const single = coerceSuggestionString(value);
+    return single ? [single] : [];
+  };
+
+  const coerceSuggestionNumber = (value: unknown): number | null => {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value.trim());
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  };
+
+  const applyMapSuggestion = (field: string, value: unknown): boolean => {
+    if (field === 'merchantIdByProvider' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const entry = Object.entries(value as Record<string, unknown>).find(([, entryValue]) => coerceSuggestionString(entryValue));
+      if (!entry) return false;
+      setMerchantProvider(entry[0]);
+      setMerchantId(coerceSuggestionString(entry[1]) ?? '');
+      if (isEnrichMode) markEnrichTouched(field);
+      return true;
+    }
+    if (field === 'pricesByFuel' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const nextPrices: Record<string, string> = {};
+      for (const [fuel, raw] of Object.entries(value as Record<string, unknown>)) {
+        const parsed = coerceSuggestionNumber(raw);
+        if (parsed !== null && parsed > 0) nextPrices[fuel] = String(parsed);
+      }
+      if (Object.keys(nextPrices).length === 0) return false;
+      setFuelPrices((current) => ({ ...current, ...nextPrices }));
+      if (isEnrichMode) markEnrichTouched(field);
+      return true;
+    }
+    return false;
+  };
+
+  const applyAiSuggestion = (suggestion: AiFieldSuggestion) => {
+    const field = suggestion.field;
+    const value = suggestion.value;
+    if (applyMapSuggestion(field, value)) return;
+
+    if (isEnrichMode && editableEnrichFields.includes(field)) {
+      setEnrichFieldValue(field, value);
+      return;
+    }
+
+    const asString = coerceSuggestionString(value);
+    const asBoolean = coerceSuggestionBoolean(value);
+    const asList = coerceSuggestionList(value);
+    const asNumber = coerceSuggestionNumber(value);
+
+    switch (field) {
+      case 'name':
+      case 'siteName':
+      case 'brand':
+        if (asString) {
+          if (vertical === 'transport_road') setRoadName(asString);
+          else setSiteName(asString);
+        }
+        break;
+      case 'roadName':
+        if (asString) setRoadName(asString);
+        break;
+      case 'openingHours':
+        if (asString) setOpeningHours(asString);
+        break;
+      case 'isOpenNow':
+        if (asBoolean !== null) setIsOpenNow(asBoolean);
+        break;
+      case 'isOnDuty':
+        if (asBoolean !== null) setIsOnDuty(asBoolean);
+        break;
+      case 'provider':
+        if (asString) setProviders([asString]);
+        break;
+      case 'providers':
+        if (asList.length > 0) setProviders(asList);
+        break;
+      case 'paymentMethods':
+        if (asList.length > 0) setPaymentMethods(asList);
+        break;
+      case 'merchantId':
+        if (asString) setMerchantId(asString);
+        break;
+      case 'hasFuelAvailable':
+        if (asBoolean !== null) setHasFuelAvailable(asBoolean);
+        break;
+      case 'fuelType':
+        if (asString) setFuelTypes([asString]);
+        break;
+      case 'fuelTypes':
+        if (asList.length > 0) setFuelTypes(asList);
+        break;
+      case 'quality':
+        if (asString) setQuality(asString);
+        break;
+      case 'outletType':
+        if (asString) setOutletType(asString);
+        break;
+      case 'isFormal':
+        if (asBoolean !== null) setIsFormal(asBoolean);
+        break;
+      case 'billboardType':
+        if (asString) setBillboardType(asString);
+        break;
+      case 'isOccupied':
+        if (asBoolean !== null) setIsOccupied(asBoolean);
+        break;
+      case 'advertiserBrand':
+        if (asString) setAdvertiserBrand(asString);
+        break;
+      case 'condition':
+      case 'roadCondition':
+        if (asString) setRoadCondition(asString);
+        break;
+      case 'surfaceType':
+      case 'roadSurface':
+        if (asString) setRoadSurface(asString);
+        break;
+      case 'isBlocked':
+        if (asBoolean !== null) setRoadBlocked(asBoolean);
+        break;
+      case 'blockageType':
+        if (asString) setBlockageType(asString);
+        break;
+      case 'buildingType':
+        if (asString) setBuildingType(asString);
+        break;
+      case 'occupancyStatus':
+        if (asString) setOccupancyStatus(asString);
+        break;
+      case 'storeyCount':
+        if (asNumber !== null) setStoreyCount(String(asNumber));
+        break;
+      case 'estimatedUnits':
+        if (asNumber !== null) setEstimatedUnits(String(asNumber));
+        break;
+      default:
+        break;
+    }
+  };
+
+  useEffect(() => {
+    const resolvedLocation = location ?? parseManualLocation();
+    if (aiCaptureRevision === 0 || !resolvedLocation) return;
+    if (!photoFile && !draftImageBase64) return;
+    const extractionKey = `${aiCaptureRevision}:${vertical}:${language}`;
+    if (aiExtractionKeyRef.current === extractionKey) return;
+    aiExtractionKeyRef.current = extractionKey;
+
+    let cancelled = false;
+    const loadAiSuggestions = async () => {
+      setAiLoading(true);
+      try {
+        const imageData = photoFile ? await fileToBase64(photoFile) : draftImageBase64 ?? undefined;
+        if (cancelled || !imageData) return;
+        const draftDetails = isEnrichMode ? buildEnrichDetails() : buildCreateDetails();
+        const response = await extractSubmission({
+          category: vertical,
+          imageData,
+          location: resolvedLocation,
+          language,
+          draftDetails,
+        });
+        if (cancelled || aiExtractionKeyRef.current !== extractionKey) return;
+        setAiSuggestions(normalizeAiFieldSuggestions(response.fieldSuggestions));
+        setAiWarnings(normalizeAiQualityWarnings(response.qualityWarnings));
+      } catch {
+        if (cancelled || aiExtractionKeyRef.current !== extractionKey) return;
+        setAiSuggestions([]);
+        setAiWarnings([]);
+      } finally {
+        if (!cancelled && aiExtractionKeyRef.current === extractionKey) {
+          setAiLoading(false);
+        }
+      }
+    };
+
+    void loadAiSuggestions();
+    return () => {
+      cancelled = true;
+    };
+  }, [aiCaptureRevision, draftImageBase64, language, location, manualLatitude, manualLongitude, photoFile, vertical]);
 
   const validateBeforeSubmit = (details: Record<string, unknown>): boolean => {
     setPhotoError('');
@@ -2659,6 +2913,83 @@ const ContributionFlow: React.FC<Props> = ({
     </div>
   );
 
+  const renderAiSuggestionsPanel = () => {
+    if (!aiLoading && aiSuggestions.length === 0 && aiWarnings.length === 0) return null;
+
+    const fieldLabel = (field: string) => {
+      if (ENRICH_FIELD_CATALOG[field]) return getEnrichFieldLabel(field, language);
+      const humanized = field.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+      return humanized.charAt(0).toUpperCase() + humanized.slice(1);
+    };
+
+    const warningText = (warning: AiQualityWarning) => {
+      const localized = language === 'fr' ? warning.messageFr || warning.messageEn : warning.messageEn || warning.messageFr;
+      return localized || warning.code.replace(/_/g, ' ');
+    };
+
+    return (
+      <div className="rounded-2xl border border-navy-border bg-navy-wash p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-navy">
+            <ShieldCheck size={15} />
+            <span className="text-sm font-bold">{t('Suggested from photo', 'Suggéré depuis la photo')}</span>
+          </div>
+          {aiLoading && (
+            <span className="micro-label text-navy/70">{t('Checking', 'Analyse')}</span>
+          )}
+        </div>
+
+        {aiSuggestions.length > 0 && (
+          <div className="space-y-2">
+            {aiSuggestions.slice(0, 5).map((suggestion) => {
+              const valueLabel = formatEnrichFieldValue(suggestion.value, language) ?? String(suggestion.value ?? '');
+              return (
+                <button
+                  key={`${suggestion.field}:${valueLabel}`}
+                  type="button"
+                  onClick={() => applyAiSuggestion(suggestion)}
+                  className="motion-pressable min-h-12 w-full rounded-xl border border-white bg-white px-4 py-3 text-left shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-gray-900">{fieldLabel(suggestion.field)}</div>
+                      <div className="mt-1 break-words text-sm font-semibold text-navy">{valueLabel}</div>
+                      {suggestion.evidence && (
+                        <div className="mt-1 text-[11px] text-gray-500">{suggestion.evidence}</div>
+                      )}
+                    </div>
+                    <span className="shrink-0 rounded-full bg-forest-wash px-2 py-1 text-[10px] font-bold text-forest">
+                      {Math.round(suggestion.confidence * 100)}%
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {aiWarnings.length > 0 && (
+          <div className="space-y-2">
+            {aiWarnings.slice(0, 3).map((warning) => (
+              <div
+                key={warning.code}
+                className={`rounded-xl border px-3 py-2 text-[12px] font-semibold ${
+                  warning.severity === 'blocker'
+                    ? 'border-red-100 bg-red-50 text-red-700'
+                    : warning.severity === 'warning'
+                      ? 'border-terra-wash bg-terra-wash text-terra-dark'
+                      : 'border-white bg-white text-gray-600'
+                }`}
+              >
+                {warningText(warning)}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const resetForAnotherCapture = () => {
     if (photoPreview?.startsWith('blob:')) {
       URL.revokeObjectURL(photoPreview);
@@ -2679,6 +3010,11 @@ const ContributionFlow: React.FC<Props> = ({
     setPendingPayload(null);
     setSelectedDedupPointId('');
     setDedupCheck(null);
+    setAiSuggestions([]);
+    setAiWarnings([]);
+    setAiLoading(false);
+    setAiCaptureRevision(0);
+    aiExtractionKeyRef.current = '';
     setConsentStatus('not_required');
     setConsentAcknowledged(false);
     setSiteName('');
@@ -2935,6 +3271,7 @@ const ContributionFlow: React.FC<Props> = ({
         {renderPhotoBlock()}
         {renderCommonLocationBlock()}
         {isEnrichMode ? renderEnrichFields() : renderCreateFields()}
+        {renderAiSuggestionsPanel()}
         {renderConsentBlock()}
         {renderQualityPreview()}
 

@@ -304,3 +304,33 @@ The initial build in this repo should do four things:
 - Client-facing dashboard redesign
 
 Those are valid next steps, but they are not required to prove the commercial value of explainable spatial reporting.
+
+## 14. AI Collection and POI Enrichment Status
+
+Implemented APIs:
+
+- `POST /api/ai/extract-submission` returns editable field suggestions and quality warnings for field capture.
+- `POST /api/ai/review-summary` returns reviewer-facing risk summaries for admin triage.
+- `POST /api/ai/analytics-query` returns aggregate-only answers for client analysis.
+- `POST /api/ai/report-draft` returns structured report sections from the same aggregate fact boundary.
+- `POST /api/poi/import/osm` imports OpenStreetMap candidates in dry-run mode by default, then persists candidates when `dryRun=false`.
+- `GET /api/poi/candidates`, `GET/PATCH /api/poi/candidates/:id`, `POST /api/poi/candidates/:id/assign`, and `POST /api/poi/candidates/:id/promote` support admin review and promotion.
+
+OSM attribution rule:
+
+- Any promoted OpenStreetMap candidate must preserve `source="osm"`, `sourceLicense="ODbL-1.0"`, and `sourceAttribution="OpenStreetMap contributors"` on the candidate and promoted point event.
+- OSM candidates remain enrichment leads until a human verifies or rejects them. They must not be treated as ADL-verified field observations at import time.
+
+Human-in-loop enforcement rule:
+
+- AI extraction suggestions are editable and never auto-submit.
+- Review summaries support admin triage and do not approve or reject submissions.
+- Client analyst answers use aggregate facts only and must include caveats.
+- POI promotion requires `matchStatus="verified"` before a point event can be created.
+
+Known rollout gates:
+
+- Configure `GEMINI_API_KEY` and `AI_GEMINI_MODEL` before enabling production model calls. Without a key, handlers use deterministic fallback behavior.
+- Configure Postgres and run the `20260514_ai_and_poi_foundation.sql` migration before enabling persistence-backed APIs.
+- Keep OSM imports bounded by small bounding boxes and rate limits. Large POI collection jobs should run as scheduled source runs, not synchronous dashboard actions.
+- Add operational monitoring for AI invalid-output errors, Overpass failures, candidate promotion volume, and reviewer override rates before client-facing launch.

@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "slug": "instagram-week5-post1",
+  "briefPath": "docs/marketing/instagram-week5-post1.md",
+  "targets": [
+    {
+      "platform": "instagram",
+      "format": "carousel",
+      "account": "adl_main",
+      "assets": ["frame-01.png", "frame-02.png", "frame-03.png"],
+      "caption": {
+        "en": "Ground truth, frame by frame. We map what others assume.",
+        "fr": "Verite terrain, image par image. Nous cartographions ce que les autres supposent."
+      },
+      "captionLang": "en",
+      "hashtags": ["#GroundTruth", "#Cameroon", "#OpenData"],
+      "altText": ["Title slide", "Method slide", "CTA slide"],
+      "firstComment": null,
+      "locationId": null
+    },
+    {
+      "platform": "linkedin",
+      "format": "document-carousel",
+      "account": "adl_org",
+      "assets": ["frame-01.png", "frame-02.png", "frame-03.png"],
+      "title": "Ground truth, frame by frame",
+      "commentary": "How we verify infrastructure data in Cameroonian cities, one walk at a time.",
+      "visibility": "PUBLIC"
+    }
+  ],
+  "schedule": { "mode": "now", "at": null, "timezone": "Africa/Douala" },
+  "claimAudit": "passed",
+  "createdBy": "instagram-carousel-skill@2026-05-14",
+  "status": "pending"
+}
