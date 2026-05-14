@@ -1,0 +1,88 @@
+===============================
+CAROUSEL CAPTION EXEMPLARS — ADL
+===============================
+
+Format: EN hook (max 125 chars) + body + FR mirror + hashtags.
+Use as tone/length reference, not copy-paste.
+
+-------------------------------
+EXAMPLE 1 — Verification pipeline (Week 2)
+-------------------------------
+
+EN:
+"Verified" is the most abused word in data.
+
+At ADL we don't ship it loose. Every submission in Bonamoussadi walks a 4-step pipeline before it touches the public map:
+
+-> GPS locked inside geofence
+-> Photo + EXIF captured on-device
+-> Velocity + anomaly check against history
+-> Risk score, trust tier, confidence rating
+
+When a point clears, we can show the work. That's what ground truth means to us.
+
+Field agents in Douala — beta is opening. Drop "MAP" in the comments.
+
+FR:
+Verifie est le mot le plus galvaude en data.
+
+A ADL, on ne le lance pas gratuitement. Chaque soumission a Bonamoussadi traverse un pipeline en 4 etapes avant d'apparaitre sur la carte publique :
+
+-> GPS verrouille dans la geofence
+-> Photo + EXIF capturees sur l'appareil
+-> Controle de vitesse et d'anomalies
+-> Score de risque, niveau de confiance
+
+Quand un point passe, on peut le prouver. C'est ca, la verite terrain.
+
+Agents de terrain a Douala — la beta ouvre. Ecrivez CARTE en commentaire.
+
+#AfricanDataLayer #ADL #GroundTruth #DataInfrastructure #FieldData #Douala #Bonamoussadi #Cameroon #MadeInCameroon #GovTech #DataQuality #UrbanMapping
+
+-------------------------------
+EXAMPLE 2 — Offline-first (Week 1 style)
+-------------------------------
+
+EN:
+Connectivity in Douala is honest work. 2G one street, nothing the next.
+
+So we built the queue first, not last. Your submissions save on device, sync when you're back. No data lost. No re-entries. No stress.
+
+Field-first means field-real.
+
+Download drops next week. Tap follow to catch it.
+
+FR:
+La connectivite a Douala, c'est un travail honnete. 2G dans une rue, rien dans la suivante.
+
+Alors on a construit la file d'attente en premier, pas en dernier. Vos soumissions sont sauvegardees sur le telephone et synchronisees au retour. Zero perte. Zero re-saisie. Zero stress.
+
+Terrain d'abord, reellement.
+
+Le telechargement arrive la semaine prochaine. Suivez-nous pour ne rien rater.
+
+#AfricanDataLayer #OfflineFirst #FieldData #Douala #Cameroon #MobileFirst #ADL #DataInfrastructure #GroundTruth #MadeInCameroon
+
+-------------------------------
+EXAMPLE 3 — Agent recruit (Week 3 style)
+-------------------------------
+
+EN:
+Your neighborhood knowledge has a market price.
+
+ADL pays you to map the places you already know — pharmacies, fuel stations, mobile money kiosks, billboards, transport routes. Every verified submission earns XP. XP turns into rewards you can actually spend.
+
+No experience needed. Just your phone and the streets you already walk.
+
+Beta opens this week. Comment "JOIN" to get the link.
+
+FR:
+Votre connaissance du quartier a un prix.
+
+ADL vous paie pour cartographier les endroits que vous connaissez deja — pharmacies, stations-service, points de mobile money, panneaux, lignes de transport. Chaque soumission verifiee rapporte des XP. Les XP deviennent des recompenses reelles.
+
+Aucune experience requise. Juste votre telephone et les rues que vous arpentez deja.
+
+La beta ouvre cette semaine. Commentez REJOINDRE pour recevoir le lien.
+
+#AfricanDataLayer #ADL #Douala #Bonamoussadi #Cameroon #FieldAgents #GigEconomy #MadeInCameroon #DataQuality #GroundTruth
