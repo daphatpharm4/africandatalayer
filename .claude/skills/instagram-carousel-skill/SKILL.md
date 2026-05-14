@@ -38,6 +38,14 @@ Write one markdown brief to `docs/marketing/instagram-week{N}-post{M}.md` contai
 - Claim audit — each claim mapped to accuracy per CLAUDE.md rules.
 - Asset checklist.
 
+**Also emit a publishing manifest**: write `docs/marketing/assets/<slug>/publish.json` conforming to the schema at `.claude/skills/social-publisher-skill/reference/manifest-schema.md`. The manifest must include:
+
+- An `instagram` / `carousel` target with `account: "adl_main"`, `assets[]` matching the rendered PNG filenames, the `caption` object (EN + FR), `captionLang`, `hashtags`, and `altText`.
+- A `linkedin` / `document-carousel` target with `account: "adl_org"`, same `assets[]`, a `title`, and a `commentary` (long-form LinkedIn copy — distinct from IG caption).
+- `claimAudit: "passed"` ONLY after the claim audit step succeeds.
+- `createdBy: "instagram-carousel-skill@<today>"`.
+- `schedule: { mode: "now", at: null, timezone: "Africa/Douala" }` by default. If the user requested a specific slot time, set `mode: "at"` and `at` to the ISO time.
+
 ## Rules
 
 - **Claim discipline**: only "verified", "ground truth", "fraud-resistant" — never "fraud-proof", never exact numbers, never accuracy %. See `docs/marketing/social-media-launch-plan.md` claim rules.
@@ -61,7 +69,9 @@ Write one markdown brief to `docs/marketing/instagram-week{N}-post{M}.md` contai
 7. Claim audit.
 8. Add LinkedIn crosspost + publish packet.
 9. Save to `docs/marketing/instagram-week{N}-post{M}.md`.
-10. Report path + slot + hook in chat (≤80 words).
+10. Write `docs/marketing/assets/<slug>/publish.json` with both IG carousel + LinkedIn document-carousel targets.
+11. Tell the user the manifest path and remind them to publish via the `social-publisher-skill` (do NOT publish from this skill).
+12. Report path + slot + hook in chat (≤80 words).
 
 ## Publishing workflow
 
