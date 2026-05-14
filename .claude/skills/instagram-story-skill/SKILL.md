@@ -50,6 +50,14 @@ Write one markdown brief to `docs/marketing/instagram-story-week{N}-{slug}.md` c
 - Claim audit — each claim mapped to accuracy per CLAUDE.md rules.
 - Asset checklist + render command.
 
+**Also emit a publishing manifest**: write `docs/marketing/assets/story-week<N>-<slug>/publish.json` conforming to `.claude/skills/social-publisher-skill/reference/manifest-schema.md`. The manifest must include:
+
+- An `instagram` / `story` target with `account: "adl_main"`, `assets[]` matching the rendered frame PNG filenames in order, optional `linkSticker` (frame index + URL + display text — translated to a manual step by the publisher), and `altText[]`.
+- If the story is amplifying a feed post AND the operator wants a LinkedIn cross-post, also include a `linkedin` / `image` or `multi-image` target with `account: "adl_org"`, a `title`, and a `commentary`.
+- `claimAudit: "passed"` ONLY after the claim audit step succeeds.
+- `createdBy: "instagram-story-skill@<today>"`.
+- Schedule defaults to `mode: "now"`.
+
 ## Build + render workflow
 
 Same pattern as carousel skill — diverge only on dimensions and renderer:
@@ -88,7 +96,9 @@ Renderer hard-coded to 1080×1920 viewport, deviceScaleFactor 2.
 7. Write `build-frames.mjs` + `build-frames-fr.mjs`.
 8. Render PNGs via `scripts/render-story.mjs`.
 9. Save brief to `docs/marketing/instagram-story-week{N}-{slug}.md`.
-10. Report path + slot + first-frame hook in chat (≤80 words).
+10. Write `docs/marketing/assets/story-week<N>-<slug>/publish.json` with the IG story target (and optional LinkedIn target if requested).
+11. Tell the user the manifest path and remind them to publish via the `social-publisher-skill` (do NOT publish from this skill). Note any link-sticker frames as a manual post-publish step.
+12. Report path + slot + first-frame hook in chat (≤80 words).
 
 ## Publishing workflow
 
