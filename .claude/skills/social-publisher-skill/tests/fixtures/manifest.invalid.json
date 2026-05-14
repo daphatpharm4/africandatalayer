@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "slug": "test-invalid",
+  "briefPath": "docs/marketing/test.md",
+  "targets": [
+    {
+      "platform": "instagram",
+      "format": "carousel",
+      "account": "adl_main",
+      "assets": ["frame-01.png", "frame-02.png"],
+      "caption": { "en": "E", "fr": "F" },
+      "captionLang": "en",
+      "hashtags": [],
+      "altText": ["a", "b"]
+    }
+  ],
+  "schedule": { "mode": "now", "at": null, "timezone": "Africa/Douala" },
+  "createdBy": "test",
+  "status": "pending"
+}

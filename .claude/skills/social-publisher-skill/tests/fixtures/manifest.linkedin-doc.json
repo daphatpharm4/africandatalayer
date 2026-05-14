@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "slug": "test-linkedin-doc",
+  "briefPath": "docs/marketing/test.md",
+  "targets": [
+    {
+      "platform": "linkedin",
+      "format": "document-carousel",
+      "account": "adl_org",
+      "assets": ["frame-01.png", "frame-02.png", "frame-03.png"],
+      "title": "Ground truth",
+      "commentary": "Long-form post body.",
+      "visibility": "PUBLIC"
+    }
+  ],
+  "schedule": { "mode": "now", "at": null, "timezone": "Africa/Douala" },
+  "claimAudit": "passed",
+  "createdBy": "test",
+  "status": "pending"
+}

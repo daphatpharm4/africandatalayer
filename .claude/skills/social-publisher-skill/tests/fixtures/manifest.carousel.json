@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "slug": "test-carousel",
+  "briefPath": "docs/marketing/test.md",
+  "targets": [
+    {
+      "platform": "instagram",
+      "format": "carousel",
+      "account": "adl_main",
+      "assets": ["frame-01.png", "frame-02.png", "frame-03.png"],
+      "caption": { "en": "Hello", "fr": "Bonjour" },
+      "captionLang": "en",
+      "hashtags": ["#Test", "#ADL"],
+      "altText": ["alt 1", "alt 2", "alt 3"],
+      "firstComment": null,
+      "locationId": null
+    }
+  ],
+  "schedule": { "mode": "now", "at": null, "timezone": "Africa/Douala" },
+  "claimAudit": "passed",
+  "createdBy": "test",
+  "status": "pending"
+}

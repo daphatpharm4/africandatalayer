@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "slug": "test-story",
+  "briefPath": "docs/marketing/test-story.md",
+  "targets": [
+    {
+      "platform": "instagram",
+      "format": "story",
+      "account": "adl_main",
+      "assets": ["frame-01.png", "frame-02.png"],
+      "linkSticker": { "frame": 2, "url": "https://adl.app/?utm=test", "text": "MAP" },
+      "altText": ["alt 1", "alt 2"]
+    }
+  ],
+  "schedule": { "mode": "now", "at": null, "timezone": "Africa/Douala" },
+  "claimAudit": "passed",
+  "createdBy": "test",
+  "status": "pending"
+}
