@@ -18,7 +18,7 @@
     "test:e2e:update": "playwright test --update-snapshots",
     "docs:media:sync": "node scripts/sync-docs-media.mjs",
     "playwright:install": "playwright install chromium",
-    "test:ci": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "test:ci": "npm run lint && npm run typecheck && npm run test && npm run test:publisher && npm run build",
     "check:function-budget": "node scripts/check-vercel-function-budget.mjs",
     "typecheck": "tsc --noEmit",
     "migrate": "node scripts/migrate.mjs",
