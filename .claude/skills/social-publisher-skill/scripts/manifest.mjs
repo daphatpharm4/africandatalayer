@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 
 const Schedule = z
   .object({
@@ -121,3 +124,25 @@ export function validateManifest(input) {
 }
 
 export { Manifest };
+
+export function computeIdempotencyKey({ manifest, manifestDir, assetMap = {} }) {
+  const hash = createHash('sha256');
+  for (const target of manifest.targets) {
+    hash.update(target.platform);
+    hash.update(target.format);
+    hash.update(target.account);
+    if (target.caption) {
+      hash.update(target.caption.en);
+      hash.update(target.caption.fr);
+    }
+    if (target.commentary) hash.update(target.commentary);
+    if (target.title) hash.update(target.title);
+    if (target.hashtags) hash.update(target.hashtags.join(','));
+    for (const asset of target.assets) {
+      const realPath = assetMap[asset] ?? asset;
+      const data = readFileSync(join(manifestDir, realPath));
+      hash.update(createHash('sha256').update(data).digest());
+    }
+  }
+  return 'sha256:' + hash.digest('hex');
+}
