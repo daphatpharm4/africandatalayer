@@ -119,3 +119,37 @@
 6. ADL logo on brand color backgrounds for profile images
 
 All visuals should use ADL brand colors (navy, terracotta, forest green, gold) and be readable at mobile social media sizes.
+
+---
+
+## Publishing Operations
+
+Posts produced by the carousel/story skills land in `docs/marketing/` (briefs) and `docs/marketing/assets/<slug>/` (PNG assets + `publish.json` manifest).
+
+To publish a queued asset to Instagram + LinkedIn:
+
+```bash
+# Pre-flight (run once per session)
+node .claude/skills/social-publisher-skill/scripts/publish.mjs --check
+
+# Dry-run a new manifest
+node .claude/skills/social-publisher-skill/scripts/publish.mjs <slug> --dry-run
+
+# Publish immediately
+node .claude/skills/social-publisher-skill/scripts/publish.mjs <slug> --now
+
+# Or schedule for a slot time
+node .claude/skills/social-publisher-skill/scripts/publish.mjs <slug> --at 2026-05-15T08:30 --tz Africa/Douala
+```
+
+Scheduled posts are drained automatically by the cron job in `.claude/skills/social-publisher-skill/reference/cron.example.txt`. Verify the cron is wired:
+
+```bash
+crontab -l | grep social-publisher
+```
+
+Per-post results live next to the manifest in `result.json`. Permalinks for the launch tracker are pulled from there.
+
+Manual steps the operator must handle in-app:
+- IG story link stickers, polls, quizzes — Graph API does not overlay stickers. The publisher writes a `manualSteps` note in `result.json`.
+- IG first-comment posting — not supported by Graph API. Add manually if needed.
