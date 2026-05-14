@@ -17,6 +17,7 @@ import VerticalIcon from '../shared/VerticalIcon';
 import FilterChipRow from '../shared/FilterChipRow';
 import CommunicationsPanel from './CommunicationsPanel';
 import { apiJson } from '../../lib/client/api';
+import { getAiReviewSummary } from '../../lib/client/ai';
 import { fetchIpReports, updateIpReport } from '../../lib/client/legal';
 import type { IpReport } from '../../shared/types';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
@@ -29,6 +30,7 @@ import {
   type AdminSubmissionGroup,
 } from '../../lib/shared/adminReviewQueue';
 import type {
+  AiReviewSummaryResponse,
   AssignmentPlannerContext,
   AutomationLeadPriority,
   AutomationLeadStatus,
@@ -53,6 +55,10 @@ type AutomationStatusFilter = '' | AutomationLeadStatus;
 type AutomationPriorityFilter = '' | AutomationLeadPriority;
 type AdminMode = 'review' | 'assignments' | 'automation' | 'ip-reports' | 'communications';
 type MatchState = 'match' | 'mismatch' | 'unavailable';
+type AiReviewSummaryDisplay = Pick<
+  AiReviewSummaryResponse,
+  'summary' | 'recommendedChecks' | 'riskDrivers' | 'supportingEvidence' | 'caveats' | 'agentFeedbackDraft' | 'confidence'
+>;
 
 type ViewTransitionDocument = Document & {
   startViewTransition?: (callback: () => void) => void;
@@ -308,11 +314,38 @@ function formatFraudFlag(flag: string, language: 'en' | 'fr'): string {
   return `${humanized.charAt(0).toUpperCase()}${humanized.slice(1)}`;
 }
 
+function readStringList(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return input.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
+function normalizeAiReviewSummary(input: unknown): AiReviewSummaryDisplay | null {
+  if (!input || typeof input !== 'object') return null;
+  const record = input as Record<string, unknown>;
+  if (typeof record.summary !== 'string' || !record.summary.trim()) return null;
+  const draft = record.agentFeedbackDraft && typeof record.agentFeedbackDraft === 'object'
+    ? record.agentFeedbackDraft as Record<string, unknown>
+    : {};
+  return {
+    summary: record.summary.trim(),
+    recommendedChecks: readStringList(record.recommendedChecks),
+    riskDrivers: readStringList(record.riskDrivers),
+    supportingEvidence: readStringList(record.supportingEvidence),
+    caveats: readStringList(record.caveats),
+    agentFeedbackDraft: {
+      en: typeof draft.en === 'string' ? draft.en : '',
+      fr: typeof draft.fr === 'string' ? draft.fr : '',
+    },
+    confidence: typeof record.confidence === 'number' && Number.isFinite(record.confidence) ? record.confidence : 0,
+  };
+}
+
 const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const unavailableLabel = t('Unavailable', 'Indisponible');
   const unnamedLabel = t('Unnamed submission', 'Soumission sans nom');
   const reviewCacheRef = useRef(new Map<string, AdminReviewQueueResponse>());
+  const aiReviewRequestRef = useRef('');
 
   const [activeMode, setActiveMode] = useState<AdminMode>('review');
   const [reviewData, setReviewData] = useState<AdminReviewQueueResponse>({
@@ -327,6 +360,10 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const [isLoadingReview, setIsLoadingReview] = useState(true);
   const [reviewError, setReviewError] = useState('');
   const [reviewPage, setReviewPage] = useState(1);
+  const [aiReviewSummary, setAiReviewSummary] = useState<AiReviewSummaryDisplay | null>(null);
+  const [aiReviewEventId, setAiReviewEventId] = useState<string | null>(null);
+  const [aiReviewLoading, setAiReviewLoading] = useState(false);
+  const [aiReviewError, setAiReviewError] = useState('');
   const [schemaGuard, setSchemaGuard] = useState<SchemaGuardStatus | null>(null);
   const [selectedPointId, setSelectedPointId] = useState<string | null>(null);
   const [syncErrors, setSyncErrors] = useState<SyncErrorRecord[]>([]);
@@ -425,6 +462,13 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     () => reviewData.groups.find((group) => group.pointId === selectedPointId) ?? null,
     [reviewData.groups, selectedPointId],
   );
+  useEffect(() => {
+    aiReviewRequestRef.current = '';
+    setAiReviewSummary(null);
+    setAiReviewEventId(null);
+    setAiReviewError('');
+    setAiReviewLoading(false);
+  }, [selectedGroup?.latestEvent.event.id]);
   const eligibleGroups = useMemo(
     () =>
       reviewData.groups.filter(
@@ -442,6 +486,31 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, [reviewData.groups.length, reviewData.limit, reviewData.page, reviewData.totalGroups, t]);
 
   const makeQueueCacheKey = (page: number) => `${riskFilter}:${userFilter || 'all'}:${page}`;
+
+  const loadAiReviewSummary = async (eventId: string) => {
+    if (aiReviewLoading) return;
+    aiReviewRequestRef.current = eventId;
+    setAiReviewLoading(true);
+    setAiReviewError('');
+    setAiReviewEventId(eventId);
+    try {
+      const response = await getAiReviewSummary(eventId);
+      if (aiReviewRequestRef.current !== eventId) return;
+      const summary = normalizeAiReviewSummary(response);
+      if (!summary) {
+        setAiReviewSummary(null);
+        setAiReviewError(t('Risk summary unavailable.', 'Résumé du risque indisponible.'));
+        return;
+      }
+      setAiReviewSummary(summary);
+    } catch {
+      if (aiReviewRequestRef.current !== eventId) return;
+      setAiReviewSummary(null);
+      setAiReviewError(t('Risk summary unavailable.', 'Résumé du risque indisponible.'));
+    } finally {
+      if (aiReviewRequestRef.current === eventId) setAiReviewLoading(false);
+    }
+  };
 
   const fetchReviewQueue = async (page: number, options: { force?: boolean; background?: boolean } = {}) => {
     const key = makeQueueCacheKey(page);
@@ -1833,6 +1902,68 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                               </div>
                             ))}
                           </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-navy-border bg-navy-wash p-4 space-y-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <div className="micro-label text-navy">{t('Review assistant', 'Assistant revue')}</div>
+                              <div className="mt-1 text-sm font-bold text-gray-900">
+                                {t('Risk summary', 'Résumé du risque')}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => void loadAiReviewSummary(submission.id)}
+                              disabled={aiReviewLoading && aiReviewEventId === submission.id}
+                              className={`min-h-12 rounded-xl px-4 py-3 text-sm font-bold ${focusRingClass} ${
+                                aiReviewLoading && aiReviewEventId === submission.id
+                                  ? 'bg-gray-200 text-gray-500'
+                                  : 'bg-navy text-white'
+                              }`}
+                            >
+                              {aiReviewLoading && aiReviewEventId === submission.id
+                                ? t('Summarizing', 'Résumé en cours')
+                                : t('Summarize risk', 'Résumer le risque')}
+                            </button>
+                          </div>
+
+                          {aiReviewError && (
+                            <div className="rounded-xl border border-terra-wash bg-white px-3 py-2 text-[12px] font-semibold text-terra-dark">
+                              {aiReviewError}
+                            </div>
+                          )}
+
+                          {aiReviewSummary && aiReviewEventId === submission.id && (
+                            <div className="space-y-3">
+                              <p className="text-sm font-semibold leading-relaxed text-gray-800">
+                                {aiReviewSummary.summary}
+                              </p>
+                              {aiReviewSummary.riskDrivers.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {aiReviewSummary.riskDrivers.map((driver) => (
+                                    <span key={driver} className="rounded-full border border-white bg-white px-3 py-1 text-[11px] font-bold text-navy">
+                                      {driver}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                              {aiReviewSummary.recommendedChecks.length > 0 && (
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                  {aiReviewSummary.recommendedChecks.slice(0, 4).map((check) => (
+                                    <div key={check} className="rounded-xl bg-white px-3 py-2 text-[12px] font-semibold text-gray-700">
+                                      {check}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {aiReviewSummary.caveats.length > 0 && (
+                                <div className="text-[11px] font-medium leading-relaxed text-gray-500">
+                                  {aiReviewSummary.caveats.slice(0, 2).join(' · ')}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {submission.fraudFlags.length > 0 && (
