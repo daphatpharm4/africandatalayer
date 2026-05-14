@@ -199,6 +199,90 @@ export interface ProjectedPoint {
   eventIds: string[];
 }
 
+export type AiLanguage = "en" | "fr";
+
+export interface AiModelMetadata {
+  provider: string;
+  model: string;
+  modelVersion: string | null;
+  promptVersion: string;
+  confidence: number;
+}
+
+export interface AiFieldSuggestion {
+  field: string;
+  value: unknown;
+  confidence: number;
+  evidence: string;
+}
+
+export interface AiQualityWarning {
+  code: string;
+  severity: "info" | "warning" | "blocker";
+  messageEn: string;
+  messageFr: string;
+}
+
+export interface AiExtractionResponse {
+  detectedCategory: SubmissionCategory | null;
+  fieldSuggestions: AiFieldSuggestion[];
+  qualityWarnings: AiQualityWarning[];
+  duplicateCandidates: DedupCandidate[];
+  confidence: number;
+  modelMetadata: AiModelMetadata;
+}
+
+export interface AiReviewSummaryResponse {
+  summary: string;
+  recommendedChecks: string[];
+  riskDrivers: string[];
+  supportingEvidence: string[];
+  caveats: string[];
+  agentFeedbackDraft: { en: string; fr: string };
+  confidence: number;
+  modelMetadata: AiModelMetadata;
+}
+
+export interface AiAnalyticsResponse {
+  answer: string;
+  facts: Array<{ label: string; value: string | number; source: string }>;
+  caveats: string[];
+  suggestedNextValidations: string[];
+  confidence: number;
+  modelMetadata: AiModelMetadata;
+}
+
+export type ExternalPoiMatchStatus =
+  | "discovered"
+  | "normalized"
+  | "matched_to_existing"
+  | "needs_field_verification"
+  | "assigned_to_agent"
+  | "verified"
+  | "promoted_to_point_event"
+  | "rejected";
+
+export interface ExternalPoiCandidate {
+  id: string;
+  source: string;
+  sourceLicense: string;
+  sourceAttribution: string;
+  externalId: string;
+  raw: Record<string, unknown>;
+  normalized: SubmissionDetails;
+  category: SubmissionCategory;
+  location: SubmissionLocation;
+  name: string | null;
+  matchStatus: ExternalPoiMatchStatus;
+  matchedPointId: string | null;
+  matchScore: number;
+  confidence: number;
+  needsFieldVerification: boolean;
+  assignedTo: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type Submission = PointEvent;
 
 export interface AdminSubmissionEvent {
