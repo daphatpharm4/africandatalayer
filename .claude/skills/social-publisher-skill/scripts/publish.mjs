@@ -82,7 +82,11 @@ export async function runPublish({
       return null;
     }
   })();
-  if (existingResults?.idempotencyKey === idempotencyKey && !options.force) {
+  if (
+    existingResults?.idempotencyKey === idempotencyKey &&
+    existingResults?.status === 'published' &&
+    !options.force
+  ) {
     log.info('idempotency match, returning cached result', { idempotencyKey });
     return { exitCode: 0, cached: true, results: existingResults };
   }
