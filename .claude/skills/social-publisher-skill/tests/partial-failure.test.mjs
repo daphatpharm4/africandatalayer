@@ -22,9 +22,8 @@ const fixturesDir = join(here, 'fixtures');
 test('IG succeeds, LinkedIn fails → exit 4, both recorded', async () => {
   const teardown = setupNock();
   const env = {
-    IG_PAGE_TOKEN_ADL_MAIN: 'tok',
-    IG_BUSINESS_ID_ADL_MAIN: '17841',
-    IG_FB_PAGE_ID_ADL_MAIN: '10215',
+    IG_ACCESS_TOKEN_ADL_MAIN: 'tok',
+    IG_USER_ID_ADL_MAIN: '17841',
     LI_ACCESS_TOKEN_ADL_ORG: 'AQX',
     LI_REFRESH_TOKEN_ADL_ORG: 'AQY',
     LI_ORG_URN_ADL_ORG: 'urn:li:organization:1',

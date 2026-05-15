@@ -13,10 +13,10 @@ import { publishIgSingle } from '../scripts/ig-single.mjs';
 test('publishIgSingle creates container, polls, publishes, returns permalink', async () => {
   const teardown = setupNock();
   const igId = '17841000';
-  const credentials = { pageToken: 'tok', businessId: igId, fbPageId: '10215' };
+  const credentials = { accessToken: 'tok', userId: igId };
 
   nock(GRAPH_BASE)
-    .post(`/v21.0/${igId}/media`)
+    .post(`/v22.0/${igId}/media`)
     .query(
       (q) =>
         q.image_url === 'https://blob.test/img' && q.caption === 'Hi' && !q.media_type

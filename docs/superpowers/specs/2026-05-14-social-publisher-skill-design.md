@@ -2,8 +2,25 @@
 
 **Date:** 2026-05-14
 **Author:** Charles Victor Mahouve (with Claude)
-**Status:** Approved — ready for implementation plan
+**Status:** Implemented; migrated to Instagram Login API (2026-05-15)
 **Skill path:** `.claude/skills/social-publisher-skill/`
+
+## 2026-05-15 — Migration note
+
+The initial spec targeted the older Instagram Graph API via Facebook Page link. ADL's IG account has no Facebook Page and the operator opted not to create one, so the skill was migrated to the **Instagram API with Instagram Login** (Meta, 2024). Functional behavior is identical; only the API host, OAuth flow, and env-var names changed:
+
+| Old (Graph API via FB Page) | New (Instagram Login) |
+|------------------------------|-----------------------|
+| `graph.facebook.com/v21.0` | `graph.instagram.com/v22.0` |
+| `IG_PAGE_TOKEN_ADL_MAIN` | `IG_ACCESS_TOKEN_ADL_MAIN` |
+| `IG_BUSINESS_ID_ADL_MAIN` | `IG_USER_ID_ADL_MAIN` |
+| `IG_FB_PAGE_ID_ADL_MAIN` | (removed) |
+| FB OAuth → Page token | IG OAuth → IG user token |
+| Requires FB Page link | No FB Page needed |
+| Refresh via `/oauth/access_token` | Refresh via `/refresh_access_token` |
+| Scopes: `instagram_basic`, `instagram_content_publish`, `pages_*` | Scopes: `instagram_business_basic`, `instagram_business_content_publish` |
+
+Operational docs at `reference/ig-graph-api.md` and `reference/auth-setup.md` are the authoritative source post-migration; the sections below describe the original Graph-API-via-FB design for context.
 
 ---
 

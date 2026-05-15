@@ -11,7 +11,7 @@ import { publishIgStory } from '../scripts/ig-story.mjs';
 test('publishIgStory posts each frame sequentially and returns media IDs', async () => {
   const teardown = setupNock();
   const igId = '17841000';
-  const credentials = { pageToken: 'tok', businessId: igId, fbPageId: '10215' };
+  const credentials = { accessToken: 'tok', userId: igId };
 
   mockIgStoryContainer({ igId, imageUrl: 'https://blob.test/f1', containerId: 'c1' });
   mockIgStatus({ containerId: 'c1', statuses: ['FINISHED'] });
@@ -36,7 +36,7 @@ test('publishIgStory posts each frame sequentially and returns media IDs', async
 test('publishIgStory includes manual-step note when linkSticker provided', async () => {
   const teardown = setupNock();
   const igId = '17841000';
-  const credentials = { pageToken: 'tok', businessId: igId, fbPageId: '10215' };
+  const credentials = { accessToken: 'tok', userId: igId };
 
   mockIgStoryContainer({ igId, imageUrl: 'https://blob.test/f1', containerId: 'c1' });
   mockIgStatus({ containerId: 'c1', statuses: ['FINISHED'] });

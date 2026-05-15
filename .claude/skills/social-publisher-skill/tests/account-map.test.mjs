@@ -4,15 +4,14 @@ import { resolveAccount, listRequiredEnvKeys } from '../scripts/account-map.mjs'
 
 test('resolves IG account from env', () => {
   const env = {
-    IG_PAGE_TOKEN_ADL_MAIN: 'tok',
-    IG_BUSINESS_ID_ADL_MAIN: '17841',
-    IG_FB_PAGE_ID_ADL_MAIN: '10215',
+    IG_ACCESS_TOKEN_ADL_MAIN: 'tok',
+    IG_USER_ID_ADL_MAIN: '17841',
   };
   const result = resolveAccount('adl_main', env);
   assert.equal(result.ok, true);
   assert.equal(result.value.platform, 'instagram');
-  assert.equal(result.value.credentials.pageToken, 'tok');
-  assert.equal(result.value.credentials.businessId, '17841');
+  assert.equal(result.value.credentials.accessToken, 'tok');
+  assert.equal(result.value.credentials.userId, '17841');
 });
 
 test('resolves LinkedIn account from env', () => {
@@ -28,10 +27,9 @@ test('resolves LinkedIn account from env', () => {
 });
 
 test('missing env keys produce explicit error listing each missing key', () => {
-  const result = resolveAccount('adl_main', { IG_PAGE_TOKEN_ADL_MAIN: 'tok' });
+  const result = resolveAccount('adl_main', { IG_ACCESS_TOKEN_ADL_MAIN: 'tok' });
   assert.equal(result.ok, false);
-  assert.match(result.error, /IG_BUSINESS_ID_ADL_MAIN/);
-  assert.match(result.error, /IG_FB_PAGE_ID_ADL_MAIN/);
+  assert.match(result.error, /IG_USER_ID_ADL_MAIN/);
 });
 
 test('unknown account name produces error', () => {
@@ -42,7 +40,7 @@ test('unknown account name produces error', () => {
 
 test('listRequiredEnvKeys returns all env vars for a target set', () => {
   const keys = listRequiredEnvKeys(['adl_main', 'adl_org']);
-  assert.ok(keys.includes('IG_PAGE_TOKEN_ADL_MAIN'));
+  assert.ok(keys.includes('IG_ACCESS_TOKEN_ADL_MAIN'));
   assert.ok(keys.includes('LI_ACCESS_TOKEN_ADL_ORG'));
-  assert.equal(keys.length, 7);
+  assert.equal(keys.length, 6);
 });

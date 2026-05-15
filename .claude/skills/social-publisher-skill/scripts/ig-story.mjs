@@ -1,4 +1,4 @@
-const API = 'https://graph.facebook.com/v21.0';
+const API = 'https://graph.instagram.com/v22.0';
 
 async function graphFetch(path, { method = 'GET', token, params = {} } = {}) {
   const url = new URL(`${API}${path}`);
@@ -56,7 +56,7 @@ export async function publishIgStory({
   maxPolls = 30,
   frameDelayMs = 2000,
 }) {
-  const { pageToken: token, businessId: igId } = credentials;
+  const { accessToken: token, userId: igId } = credentials;
   const mediaIds = [];
 
   for (let i = 0; i < imageUrls.length; i++) {

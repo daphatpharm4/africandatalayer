@@ -2,9 +2,8 @@
   "adl_main": {
     "platform": "instagram",
     "envKeys": {
-      "pageToken": "IG_PAGE_TOKEN_ADL_MAIN",
-      "businessId": "IG_BUSINESS_ID_ADL_MAIN",
-      "fbPageId": "IG_FB_PAGE_ID_ADL_MAIN"
+      "accessToken": "IG_ACCESS_TOKEN_ADL_MAIN",
+      "userId": "IG_USER_ID_ADL_MAIN"
     }
   },
   "adl_org": {

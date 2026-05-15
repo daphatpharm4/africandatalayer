@@ -39,7 +39,7 @@ await new Promise((r) => setTimeout(r, 60_000));
 
 try {
   const res = await fetch(
-    `https://graph.facebook.com/v21.0/${result.mediaId}?access_token=${credentials.pageToken}`,
+    `https://graph.instagram.com/v22.0/${result.mediaId}?access_token=${credentials.accessToken}`,
     { method: 'DELETE' }
   );
   if (!res.ok) {

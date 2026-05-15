@@ -9,9 +9,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(here, 'fixtures');
 
 const credentials = {
-  IG_PAGE_TOKEN_ADL_MAIN: 'tok',
-  IG_BUSINESS_ID_ADL_MAIN: '17841',
-  IG_FB_PAGE_ID_ADL_MAIN: '10215',
+  IG_ACCESS_TOKEN_ADL_MAIN: 'tok',
+  IG_USER_ID_ADL_MAIN: '17841',
   LI_ACCESS_TOKEN_ADL_ORG: 'AQX',
   LI_REFRESH_TOKEN_ADL_ORG: 'AQY',
   LI_ORG_URN_ADL_ORG: 'urn:li:organization:1',
@@ -39,7 +38,7 @@ test('dry-run fails fast when env keys missing', async () => {
   const manifestPath = join(fixturesDir, 'manifest.carousel.json');
   const result = await runPublish({
     manifestPath,
-    env: { IG_PAGE_TOKEN_ADL_MAIN: 'tok' },
+    env: { IG_ACCESS_TOKEN_ADL_MAIN: 'tok' },
     options: { dryRun: true },
     blob: createMockBlob(),
     assetMap: {

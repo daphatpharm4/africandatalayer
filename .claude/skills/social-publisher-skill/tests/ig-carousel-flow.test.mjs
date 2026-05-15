@@ -14,7 +14,7 @@ import { publishIgCarousel } from '../scripts/ig-carousel.mjs';
 test('publishIgCarousel posts children, parent, polls, publishes, returns permalink', async () => {
   const teardown = setupNock();
   const igId = '17841000';
-  const credentials = { pageToken: 'tok', businessId: igId, fbPageId: '10215' };
+  const credentials = { accessToken: 'tok', userId: igId };
 
   mockIgChildContainer({ igId, imageUrl: 'https://blob.test/img-1', containerId: 'c1' });
   mockIgChildContainer({ igId, imageUrl: 'https://blob.test/img-2', containerId: 'c2' });
@@ -39,7 +39,7 @@ test('publishIgCarousel posts children, parent, polls, publishes, returns permal
 test('publishIgCarousel times out if container never finishes', async () => {
   const teardown = setupNock();
   const igId = '17841000';
-  const credentials = { pageToken: 'tok', businessId: igId, fbPageId: '10215' };
+  const credentials = { accessToken: 'tok', userId: igId };
 
   mockIgChildContainer({ igId, imageUrl: 'https://blob.test/img-1', containerId: 'c1' });
   mockIgChildContainer({ igId, imageUrl: 'https://blob.test/img-2', containerId: 'c2' });
@@ -65,10 +65,10 @@ test('publishIgCarousel times out if container never finishes', async () => {
 test('publishIgCarousel surfaces auth error from Graph API', async () => {
   const teardown = setupNock();
   const igId = '17841000';
-  const credentials = { pageToken: 'bad', businessId: igId, fbPageId: '10215' };
+  const credentials = { accessToken: 'bad', userId: igId };
 
-  nock('https://graph.facebook.com')
-    .post(`/v21.0/${igId}/media`)
+  nock('https://graph.instagram.com')
+    .post(`/v22.0/${igId}/media`)
     .query(true)
     .reply(401, { error: { code: 190, message: 'Invalid OAuth access token' } });
 

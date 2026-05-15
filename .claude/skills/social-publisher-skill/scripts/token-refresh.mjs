@@ -43,22 +43,22 @@ async function writeEnvAtomic(lines) {
 }
 
 async function refreshIg({ lines }) {
-  const tokenKey = accounts.adl_main.envKeys.pageToken;
+  const tokenKey = accounts.adl_main.envKeys.accessToken;
   const env = parseEnvFile(lines.join('\n'));
   const current = env.get(tokenKey);
   if (!current) {
-    log.warn('IG page token missing, skipping refresh', { key: tokenKey });
+    log.warn('IG access token missing, skipping refresh', { key: tokenKey });
     return lines;
   }
   const res = await fetch(
-    `https://graph.facebook.com/v21.0/oauth/access_token?grant_type=fb_exchange_token&fb_exchange_token=${current}&access_token=${current}`
+    `https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${current}`
   );
   const body = await res.json();
   if (!res.ok || !body.access_token) {
     log.error('IG token refresh failed', body);
     return lines;
   }
-  log.info('IG page token refreshed');
+  log.info('IG access token refreshed', { expiresInSec: body.expires_in });
   return setEnvLine(lines, tokenKey, body.access_token);
 }
 
