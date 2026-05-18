@@ -2,6 +2,13 @@ import { createHash } from "node:crypto";
 import { query } from "./db.js";
 import { haversineKm, computePhotoFreshnessScore, detectPhotoManipulation } from "./submissionFraud.js";
 import { validateGps } from "./gpsValidation.js";
+import {
+  computePhash,
+  computeDhash,
+  encodeSegments,
+  findCandidatesByPhashSegments,
+  scoreCandidate,
+} from "./imageSimilarity.js";
 import type {
   ClientDeviceInfo,
   GpsIntegrityReport,
@@ -191,29 +198,10 @@ export function computeImageSha256(imageBuffer: Buffer): string {
   return createHash("sha256").update(imageBuffer).digest("hex");
 }
 
+// Legacy aHash entry point retained for callers that still reference it.
+// New code should use `computePhash` / `computeDhash` from ./imageSimilarity.
 export async function computePerceptualHash(imageBuffer: Buffer): Promise<string | null> {
-  try {
-    const sharp = (await import("sharp")).default;
-    const { data } = await sharp(imageBuffer)
-      .resize(8, 8, { fit: "fill" })
-      .grayscale()
-      .raw()
-      .toBuffer({ resolveWithObject: true });
-    const pixels = Array.from(data);
-    const mean = pixels.reduce((sum, v) => sum + v, 0) / pixels.length;
-    let hash = "";
-    for (const pixel of pixels) {
-      hash += pixel >= mean ? "1" : "0";
-    }
-    // Convert binary string to hex
-    let hex = "";
-    for (let i = 0; i < hash.length; i += 4) {
-      hex += parseInt(hash.slice(i, i + 4), 2).toString(16);
-    }
-    return hex;
-  } catch {
-    return null;
-  }
+  return computePhash(imageBuffer);
 }
 
 export function hammingDistance(a: string, b: string): number {
@@ -360,24 +348,6 @@ async function getDuplicateImageMatches(imageHash: string): Promise<Array<{ even
       [imageHash],
     );
     return result.rows.map((row) => ({ eventId: row.event_id, pointId: row.point_id, userId: row.user_id }));
-  } catch (error) {
-    if (isMissingDbObjectError(error)) return [];
-    throw error;
-  }
-}
-
-async function getPerceptualHashMatches(perceptualHash: string): Promise<Array<{ eventId: string; pointId: string; hash: string }>> {
-  try {
-    const result = await query<{ event_id: string; point_id: string; perceptual_hash: string }>(
-      `SELECT event_id::text, point_id, perceptual_hash
-       FROM submission_image_hashes
-       WHERE perceptual_hash IS NOT NULL
-       ORDER BY created_at DESC
-       LIMIT 100`,
-    );
-    return result.rows
-      .filter((row) => hammingDistance(row.perceptual_hash, perceptualHash) <= 5)
-      .map((row) => ({ eventId: row.event_id, pointId: row.point_id, hash: row.perceptual_hash }));
   } catch (error) {
     if (isMissingDbObjectError(error)) return [];
     throw error;
@@ -744,13 +714,19 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
     blockingCodes.clear();
   }
 
-  // 6D: Perceptual hash duplicate detection
+  // Perceptual hash duplicate detection (pHash + dHash AND-rule).
+  // Stage C policy (cross-agent/cross-point matrix) lands in PR #2.
   try {
-    const perceptualHash = await computePerceptualHash(input.imageBuffer);
-    if (perceptualHash) {
-      const perceptualMatches = await getPerceptualHashMatches(perceptualHash);
-      const nearDuplicate = perceptualMatches.some((row) => row.pointId !== input.pointId);
-      if (nearDuplicate) {
+    const [phash, dhash] = await Promise.all([
+      computePhash(input.imageBuffer),
+      computeDhash(input.imageBuffer),
+    ]);
+    if (phash) {
+      const candidates = await findCandidatesByPhashSegments(phash);
+      const matches = candidates
+        .map((c) => scoreCandidate(c, phash, dhash))
+        .filter((c) => c.passesAndRule && c.pointId !== input.pointId);
+      if (matches.length > 0) {
         photoRisk = Math.min(100, photoRisk + 30);
         reviewFlags.add("perceptual_near_duplicate");
       }
@@ -813,19 +789,36 @@ async function persistContentHash(eventId: string, contentHash: string): Promise
 
 async function insertImageHashRecord(input: PersistSubmissionRiskInput): Promise<void> {
   try {
-    let perceptualHash = input.perceptualHash ?? null;
-    if (!perceptualHash && input.imageBuffer) {
+    let phash = input.perceptualHash ?? null;
+    let dhash: string | null = null;
+    if (input.imageBuffer) {
       try {
-        perceptualHash = await computePerceptualHash(input.imageBuffer);
+        const [computedPhash, computedDhash] = await Promise.all([
+          phash ? Promise.resolve(phash) : computePhash(input.imageBuffer),
+          computeDhash(input.imageBuffer),
+        ]);
+        phash = computedPhash;
+        dhash = computedDhash;
       } catch {
-        // Best-effort perceptual hash computation
+        // Best-effort hash computation
       }
     }
+    const segs = phash ? encodeSegments(phash) : null;
     await query(
-      `INSERT INTO submission_image_hashes (event_id, point_id, user_id, sha256_hash, perceptual_hash)
-       VALUES ($1::uuid, $2, $3, $4, $5)
+      `INSERT INTO submission_image_hashes (
+         event_id, point_id, user_id, sha256_hash,
+         perceptual_hash, phash, dhash, hash_version,
+         phash_seg_0, phash_seg_1, phash_seg_2, phash_seg_3,
+         embedding_status
+       )
+       VALUES ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        ON CONFLICT (event_id) DO NOTHING`,
-      [input.eventId, input.pointId, input.userId, input.imageHash, perceptualHash],
+      [
+        input.eventId, input.pointId, input.userId, input.imageHash,
+        phash, phash, dhash, 2,
+        segs?.[0] ?? null, segs?.[1] ?? null, segs?.[2] ?? null, segs?.[3] ?? null,
+        phash ? "pending" : "skipped",
+      ],
     );
   } catch (error) {
     if (isMissingDbObjectError(error) || isUniqueViolationError(error)) return;
