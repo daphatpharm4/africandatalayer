@@ -1,0 +1,1266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>African Data Layer — Architecture Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0f2b46;
+    --navy-deep: #081a2c;
+    --navy-wash: #eef3f8;
+    --navy-mid: #1f3e5e;
+    --navy-line: rgba(15, 43, 70, 0.12);
+    --terra: #c86b4a;
+    --terra-wash: #fbe8df;
+    --forest: #4c7c59;
+    --forest-wash: #e7efe8;
+    --gold: #f4c317;
+    --ink: #14202b;
+    --ink-soft: #43536a;
+    --muted: #7a8699;
+    --paper: #f5f1e8;
+    --paper-deep: #ebe5d4;
+    --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--paper); color: var(--ink);
+    font: 15px/1.55 var(--sans);
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  body {
+    background-image:
+      radial-gradient(circle at 20% 0%, rgba(200, 107, 74, 0.05), transparent 40%),
+      radial-gradient(circle at 95% 100%, rgba(76, 124, 89, 0.04), transparent 35%);
+    background-attachment: fixed;
+  }
+  a { color: var(--terra); text-decoration: none; border-bottom: 1px solid var(--terra-wash); }
+  a:hover { border-bottom-color: var(--terra); }
+  code, .mono { font-family: var(--mono); font-size: 0.85em; }
+
+  /* HERO */
+  header.hero {
+    position: relative;
+    background: var(--navy-deep);
+    color: #f5f1e8;
+    padding: clamp(40px, 7vw, 88px) clamp(24px, 5vw, 64px) clamp(36px, 5vw, 56px);
+    overflow: hidden;
+    border-bottom: 1px solid var(--navy);
+  }
+  header.hero::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(rgba(244, 195, 23, 0.18) 1px, transparent 1px),
+      radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 32px 32px, 8px 8px;
+    background-position: 0 0, 0 0;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  header.hero::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: 6px;
+    background: linear-gradient(90deg,
+      var(--terra) 0%, var(--terra) 35%,
+      var(--gold) 35%, var(--gold) 60%,
+      var(--forest) 60%, var(--forest) 100%);
+  }
+  .hero-inner {
+    position: relative; z-index: 1;
+    max-width: 1400px; margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(220px, auto);
+    gap: 48px 64px;
+    align-items: end;
+  }
+  .hero-eyebrow {
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.22em;
+    color: var(--gold);
+    margin-bottom: 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .hero-eyebrow::before {
+    content: ""; width: 28px; height: 1px; background: var(--gold);
+  }
+  .hero-title {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(44px, 8vw, 96px);
+    line-height: 0.95;
+    letter-spacing: -0.025em;
+    margin: 0;
+    color: #faf6e8;
+    font-variation-settings: "opsz" 144, "SOFT" 50;
+  }
+  .hero-title em {
+    font-style: italic;
+    color: var(--terra);
+    font-weight: 400;
+  }
+  .hero-sub {
+    font-family: var(--serif); font-style: italic;
+    font-size: clamp(16px, 1.6vw, 20px);
+    color: rgba(245, 241, 232, 0.72);
+    margin: 18px 0 0;
+    max-width: 56ch;
+    line-height: 1.4;
+  }
+  .hero-meta {
+    font-family: var(--mono); font-size: 11px;
+    color: rgba(245, 241, 232, 0.65);
+    line-height: 1.9;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .hero-meta strong { color: var(--gold); font-weight: 500; }
+  .hero-meta .row { display: flex; justify-content: flex-end; gap: 8px; }
+  .hero-meta .row span:first-child {
+    color: rgba(245, 241, 232, 0.4);
+    text-transform: uppercase; letter-spacing: 0.15em;
+  }
+  @media (max-width: 720px) {
+    .hero-inner { grid-template-columns: 1fr; gap: 28px; }
+    .hero-meta, .hero-meta .row { text-align: left; justify-content: flex-start; }
+  }
+
+  main { padding: 48px clamp(24px, 5vw, 64px) 64px; max-width: 1400px; margin: 0 auto; }
+
+  /* TABS */
+  nav.tabs {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--navy-line);
+    margin: 0 0 40px;
+    overflow-x: auto;
+  }
+  nav.tabs button {
+    background: transparent; border: 0;
+    padding: 14px 22px 14px 0;
+    margin-right: 28px;
+    font: 500 11px/1 var(--mono);
+    text-transform: uppercase; letter-spacing: 0.18em;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    display: flex; align-items: baseline; gap: 10px;
+    transition: color 120ms ease;
+    white-space: nowrap;
+  }
+  nav.tabs button::before {
+    content: attr(data-index);
+    font-family: var(--serif); font-style: italic;
+    font-size: 14px; color: var(--terra);
+    letter-spacing: 0;
+  }
+  nav.tabs button:hover { color: var(--ink); }
+  nav.tabs button.active {
+    color: var(--navy);
+    border-bottom-color: var(--navy);
+  }
+  section { display: none; }
+  section.active { display: block; animation: fade 240ms ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* OVERVIEW LAYOUT */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr);
+    gap: 56px;
+    align-items: start;
+  }
+  @media (max-width: 880px) { .overview-grid { grid-template-columns: 1fr; gap: 40px; } }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr 1fr;
+    gap: 0;
+    border-top: 1px solid var(--navy);
+    border-bottom: 1px solid var(--navy-line);
+    margin: 0 0 40px;
+  }
+  @media (max-width: 720px) { .stat-grid { grid-template-columns: 1fr 1fr; } }
+  .stat {
+    padding: 28px 24px 24px 0;
+    border-right: 1px solid var(--navy-line);
+    display: flex; flex-direction: column; justify-content: space-between;
+    min-height: 140px;
+  }
+  .stat:nth-child(2), .stat:nth-child(3), .stat:nth-child(4) { padding-left: 24px; }
+  .stat:last-child { border-right: 0; }
+  .stat .n {
+    font-family: var(--serif);
+    font-weight: 400;
+    font-size: clamp(48px, 6vw, 84px);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    color: var(--navy);
+    font-variation-settings: "opsz" 144;
+  }
+  .stat:first-child .n { color: var(--terra); }
+  .stat .l {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.2em;
+    color: var(--muted);
+    margin-top: 12px;
+  }
+  .stat .sub {
+    font-family: var(--serif); font-style: italic;
+    font-size: 13px; color: var(--ink-soft);
+    margin-top: 4px;
+  }
+
+  .narrative h2 {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.22em;
+    color: var(--terra); font-weight: 500;
+    margin: 0 0 16px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .narrative h2::before { content: "§"; font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--terra); }
+  .narrative p {
+    font-family: var(--serif); font-size: 18px; line-height: 1.55;
+    color: var(--ink); margin: 0 0 18px;
+    max-width: 60ch;
+  }
+  .narrative p code { background: var(--navy-wash); color: var(--navy); padding: 1px 6px; border-radius: 3px; font-size: 14px; }
+  .narrative .footnote {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    border-top: 1px dashed var(--navy-line); padding-top: 16px; margin-top: 32px;
+  }
+
+  /* LEGEND — numbered taxonomy */
+  .legend-block h2 {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.22em;
+    color: var(--terra); font-weight: 500;
+    margin: 0 0 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--navy);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .legend-block h2 span { color: var(--muted); }
+  .legend {
+    display: flex; flex-direction: column;
+    margin: 0; padding: 0; list-style: none;
+    gap: 0;
+  }
+  .legend .row {
+    display: grid;
+    grid-template-columns: 28px 16px 1fr auto;
+    gap: 12px; align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--navy-line);
+    font-size: 14px;
+  }
+  .legend .row:last-child { border-bottom: 0; }
+  .legend .idx {
+    font-family: var(--mono); font-size: 10px;
+    color: var(--muted); letter-spacing: 0.1em;
+  }
+  .legend .sw {
+    width: 14px; height: 14px;
+    background: var(--c, var(--navy));
+    border-radius: 2px;
+  }
+  .legend .lbl { font-family: var(--sans); color: var(--ink); font-weight: 500; }
+  .legend .cnt {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+  }
+
+  /* SECTION INTROS */
+  .section-intro {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: 24px; flex-wrap: wrap;
+    margin-bottom: 28px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--navy);
+  }
+  .section-intro h2 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(32px, 4vw, 48px);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin: 0;
+    color: var(--navy);
+  }
+  .section-intro h2 em { font-style: italic; color: var(--terra); }
+  .section-intro .lede {
+    font-family: var(--serif); font-style: italic;
+    font-size: 16px; color: var(--ink-soft);
+    max-width: 48ch; margin: 0;
+  }
+
+  /* FILTER ROW */
+  .filter-row {
+    display: flex; gap: 0; margin-bottom: 24px;
+    align-items: stretch; flex-wrap: wrap;
+    border-bottom: 1px solid var(--navy);
+  }
+  .filter-row input, .filter-row select {
+    padding: 12px 0; border: 0; background: transparent;
+    font: 500 14px/1 var(--sans); color: var(--ink);
+    outline: none; min-width: 240px;
+  }
+  .filter-row input::placeholder { color: var(--muted); font-weight: 400; font-style: italic; font-family: var(--serif); }
+  .filter-row select {
+    margin-left: 24px; padding-left: 24px;
+    border-left: 1px solid var(--navy-line);
+    cursor: pointer;
+    font-family: var(--mono); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.15em;
+    color: var(--navy);
+  }
+
+  /* TABLES */
+  .table-wrap { overflow: auto; border-top: 1px solid var(--navy); }
+  table {
+    width: 100%; border-collapse: collapse;
+    background: transparent;
+    font-size: 13px;
+  }
+  th, td {
+    padding: 14px 16px 14px 0; text-align: left;
+    border-bottom: 1px solid var(--navy-line);
+    vertical-align: top;
+  }
+  th:first-child, td:first-child { padding-left: 4px; }
+  th {
+    font: 500 10px/1 var(--mono);
+    text-transform: uppercase; letter-spacing: 0.18em;
+    color: var(--muted);
+    background: transparent;
+    position: sticky; top: 0;
+    padding-top: 12px; padding-bottom: 12px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--navy);
+  }
+  tr:hover td { background: rgba(15, 43, 70, 0.025); }
+  td code {
+    font-family: var(--mono); font-size: 11.5px;
+    background: transparent; color: var(--navy);
+    padding: 0; border-radius: 0;
+    word-break: break-all;
+  }
+  td .label { font-weight: 500; color: var(--ink); }
+  td .role { font-family: var(--serif); font-style: italic; color: var(--ink-soft); font-size: 13.5px; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 9px 4px 8px;
+    border-radius: 2px;
+    font: 500 10px/1 var(--mono);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    color: white;
+    white-space: nowrap;
+  }
+  .pill::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%;
+    background: rgba(255,255,255,0.6);
+  }
+
+  /* DIAGRAM */
+  .mermaid-wrap {
+    background: white;
+    border: 1px solid var(--navy-line);
+    border-top: 2px solid var(--navy);
+    padding: 32px;
+    overflow: auto; max-height: 80vh;
+    position: relative;
+    background-image:
+      linear-gradient(rgba(15,43,70,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15,43,70,0.04) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  details.diagram-toggle {
+    margin: 24px 0 0;
+    border-top: 1px solid var(--navy-line);
+    padding-top: 20px;
+  }
+  details.diagram-toggle:first-of-type { border-top: 0; padding-top: 0; margin-top: 0; }
+  details.diagram-toggle summary {
+    cursor: pointer; list-style: none;
+    padding: 12px 0 16px;
+    font-family: var(--serif); font-weight: 400;
+    font-size: 24px; color: var(--navy);
+    letter-spacing: -0.01em;
+    display: flex; align-items: baseline; gap: 16px;
+  }
+  details.diagram-toggle summary::-webkit-details-marker { display: none; }
+  details.diagram-toggle summary::before {
+    content: "→"; color: var(--terra); transition: transform 200ms ease;
+    font-size: 20px;
+  }
+  details.diagram-toggle[open] summary::before { transform: rotate(90deg); }
+  details.diagram-toggle summary em {
+    margin-left: auto; font: 500 10px/1 var(--mono);
+    text-transform: uppercase; letter-spacing: 0.18em;
+    color: var(--muted); font-style: normal;
+  }
+
+  /* DATA SECTION */
+  #data h3 {
+    font-family: var(--mono); font-size: 10px;
+    text-transform: uppercase; letter-spacing: 0.22em;
+    color: var(--terra); font-weight: 500;
+    margin: 36px 0 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--navy);
+  }
+  #data h3:first-of-type { margin-top: 8px; }
+  #data p { font-family: var(--serif); font-size: 22px; color: var(--navy); margin: 0 0 8px; font-style: italic; }
+  #data ul { margin: 0; padding: 0; list-style: none; columns: 2; column-gap: 40px; }
+  @media (max-width: 720px) { #data ul { columns: 1; } }
+  #data ul li {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--navy-line);
+    font-size: 14px;
+    break-inside: avoid;
+  }
+  #data ul li strong { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--navy); margin-right: 8px; }
+
+  footer {
+    padding: 48px clamp(24px, 5vw, 64px);
+    color: var(--muted);
+    font-family: var(--mono); font-size: 11px;
+    text-align: center;
+    text-transform: uppercase; letter-spacing: 0.2em;
+    border-top: 1px solid var(--navy-line);
+    margin-top: 64px;
+    background: var(--paper-deep);
+  }
+  footer code { background: transparent; color: var(--terra); }
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div>
+      <div class="hero-eyebrow">African Data Layer · Field Engineering Atlas</div>
+      <h1 class="hero-title">Architecture<br><em>Map.</em></h1>
+      <p class="hero-sub">A printed atlas of every file, route and edge that runs the platform — from the agent's map screen down to the Postgres migrations underneath.</p>
+    </div>
+    <div class="hero-meta">
+      <div class="row"><span>Branch</span><strong>main</strong></div>
+      <div class="row"><span>Commit</span><strong>6207ee38</strong></div>
+      <div class="row"><span>Generated</span><strong>2026-05-18</strong></div>
+      <div class="row"><span>Source</span><strong>architecture.json</strong></div>
+    </div>
+  </div>
+</header>
+<main>
+  <nav class="tabs">
+    <button class="active" data-tab="overview" data-index="01">Overview</button>
+    <button data-tab="diagram" data-index="02">Diagram</button>
+    <button data-tab="nodes" data-index="03">Nodes</button>
+    <button data-tab="edges" data-index="04">Edges</button>
+    <button data-tab="data" data-index="05">Data &amp; Services</button>
+  </nav>
+
+  <section id="overview" class="active">
+    <div class="stat-grid" id="statgrid"></div>
+    <div class="overview-grid">
+      <div class="narrative">
+        <h2>The system, briefly</h2>
+        <p>A single-page React app with screen-based navigation — no router. <code>App.tsx</code> is the state hub. Vercel serverless functions back a Postgres (Supabase) primary store with Edge Config fallback.</p>
+        <p>Offline-first via IndexedDB queue. Bilingual EN/FR inline. Fraud detection, gamification, and RBAC across <em>agent</em>, <em>admin</em>, and <em>client</em> roles.</p>
+        <p class="footnote">Use <strong>Diagram</strong> for layout, <strong>Nodes</strong> for the file inventory, <strong>Edges</strong> for relationships, <strong>Data &amp; Services</strong> for storage and integrations. Spec: <a href="./architecture.json">architecture.json</a>.</p>
+      </div>
+      <div class="legend-block">
+        <h2>Taxonomy <span id="legendCount"></span></h2>
+        <ol class="legend" id="legend"></ol>
+      </div>
+    </div>
+  </section>
+
+  <script id="archData" type="application/json">{
+  "$schema": "https://github.com/daphatpharm4/africandatalayer/docs/architecture.schema.json",
+  "name": "African Data Layer — Architecture Graph",
+  "generated": "2026-05-18",
+  "branch": "main",
+  "commit": "6207ee388272",
+  "stats": {
+    "files": 166,
+    "groups": 15,
+    "nodes": 166,
+    "edges": 189
+  },
+  "groups": [
+    { "id": "entry",       "label": "Entry / Bootstrap",       "color": "#0f2b46" },
+    { "id": "screens",     "label": "Screens (React)",         "color": "#c86b4a" },
+    { "id": "components",  "label": "Feature Components",      "color": "#c86b4a" },
+    { "id": "shared-ui",   "label": "Shared UI Primitives",    "color": "#4c7c59" },
+    { "id": "client",      "label": "Client Library",          "color": "#0f2b46" },
+    { "id": "api",         "label": "API Routes (Vercel fn)",  "color": "#f4c317" },
+    { "id": "server-core", "label": "Server Core",             "color": "#0f2b46" },
+    { "id": "server-auth", "label": "Server: Auth",            "color": "#0f2b46" },
+    { "id": "server-ai",   "label": "Server: AI",              "color": "#c86b4a" },
+    { "id": "server-email","label": "Server: Email",           "color": "#4c7c59" },
+    { "id": "server-sms",  "label": "Server: SMS",             "color": "#4c7c59" },
+    { "id": "server-poi",  "label": "Server: POI",             "color": "#c86b4a" },
+    { "id": "server-store","label": "Server: Storage",         "color": "#0f2b46" },
+    { "id": "shared",      "label": "Shared (client+server)",  "color": "#4c7c59" },
+    { "id": "infra",       "label": "Infra / Config / DB",     "color": "#6b7280" }
+  ],
+  "nodes": [
+    { "id": "index.tsx",                                          "group": "entry",       "label": "index.tsx",                  "role": "react-mount" },
+    { "id": "App.tsx",                                            "group": "entry",       "label": "App.tsx",                    "role": "screen-router/state-hub" },
+    { "id": "types.ts",                                           "group": "entry",       "label": "types.ts",                   "role": "root types" },
+
+    { "id": "components/Screens/Splash.tsx",                      "group": "screens",     "label": "Splash",                     "role": "onboarding" },
+    { "id": "components/Screens/Auth.tsx",                        "group": "screens",     "label": "Auth",                       "role": "sign-in/up" },
+    { "id": "components/Screens/ForgotPassword.tsx",              "group": "screens",     "label": "ForgotPassword",             "role": "pw reset" },
+    { "id": "components/Screens/Home.tsx",                        "group": "screens",     "label": "Home",                       "role": "agent map shell" },
+    { "id": "components/Screens/HomeMap.tsx",                     "group": "screens",     "label": "HomeMap",                    "role": "leaflet map" },
+    { "id": "components/Screens/Details.tsx",                     "group": "screens",     "label": "Details",                    "role": "point detail" },
+    { "id": "components/Screens/ContributionFlow.tsx",            "group": "screens",     "label": "ContributionFlow",           "role": "multi-step submit" },
+    { "id": "components/Screens/SubmissionQueue.tsx",             "group": "screens",     "label": "SubmissionQueue",            "role": "offline sync" },
+    { "id": "components/Screens/Profile.tsx",                     "group": "screens",     "label": "Profile",                    "role": "agent profile" },
+    { "id": "components/Screens/Settings.tsx",                    "group": "screens",     "label": "Settings",                   "role": "lang/logout" },
+    { "id": "components/Screens/Analytics.tsx",                   "group": "screens",     "label": "Analytics",                  "role": "leaderboard" },
+    { "id": "components/Screens/QualityInfo.tsx",                 "group": "screens",     "label": "QualityInfo",                "role": "data quality" },
+    { "id": "components/Screens/RewardsCatalog.tsx",              "group": "screens",     "label": "RewardsCatalog",             "role": "redemption" },
+    { "id": "components/Screens/AdminQueue.tsx",                  "group": "screens",     "label": "AdminQueue",                 "role": "admin review" },
+    { "id": "components/Screens/AgentPerformance.tsx",            "group": "screens",     "label": "AgentPerformance",           "role": "admin metrics" },
+    { "id": "components/Screens/DeltaDashboard.tsx",              "group": "screens",     "label": "DeltaDashboard",             "role": "client deltas" },
+    { "id": "components/Screens/InvestorDashboard.tsx",           "group": "screens",     "label": "InvestorDashboard",          "role": "investor view" },
+    { "id": "components/Screens/ClientAccount.tsx",               "group": "screens",     "label": "ClientAccount",              "role": "client billing" },
+    { "id": "components/Screens/CommunicationsPanel.tsx",         "group": "screens",     "label": "CommunicationsPanel",        "role": "email/sms admin" },
+    { "id": "components/Screens/IpReport.tsx",                    "group": "screens",     "label": "IpReport",                   "role": "ip abuse report" },
+    { "id": "components/Screens/DataCompliance.tsx",              "group": "screens",     "label": "DataCompliance",             "role": "gdpr/dpia" },
+    { "id": "components/Screens/PrivacyPolicy.tsx",               "group": "screens",     "label": "PrivacyPolicy",              "role": "policy doc" },
+    { "id": "components/Screens/TermsOfUse.tsx",                  "group": "screens",     "label": "TermsOfUse",                 "role": "tos doc" },
+
+    { "id": "components/BadgeSystem.tsx",                         "group": "components",  "label": "BadgeSystem",                "role": "badges" },
+    { "id": "components/BrandLogo.tsx",                           "group": "components",  "label": "BrandLogo",                  "role": "logo" },
+    { "id": "components/DailyProgressWidget.tsx",                 "group": "components",  "label": "DailyProgressWidget",        "role": "daily goal" },
+    { "id": "components/ErrorBoundary.tsx",                       "group": "components",  "label": "ErrorBoundary",              "role": "error wrap" },
+    { "id": "components/ExportPanel.tsx",                         "group": "components",  "label": "ExportPanel",                "role": "data export" },
+    { "id": "components/LevelUpCelebration.tsx",                  "group": "components",  "label": "LevelUpCelebration",         "role": "level animation" },
+    { "id": "components/MissionCards.tsx",                        "group": "components",  "label": "MissionCards",               "role": "missions" },
+    { "id": "components/Navigation.tsx",                          "group": "components",  "label": "Navigation",                 "role": "bottom tab bar" },
+    { "id": "components/StreakTracker.tsx",                       "group": "components",  "label": "StreakTracker",              "role": "streak ui" },
+    { "id": "components/SyncStatusBar.tsx",                       "group": "components",  "label": "SyncStatusBar",              "role": "offline indicator" },
+    { "id": "components/XPPopup.tsx",                             "group": "components",  "label": "XPPopup",                    "role": "xp award" },
+    { "id": "components/docs/HelpCenter.tsx",                     "group": "components",  "label": "HelpCenter",                 "role": "help docs" },
+    { "id": "components/investor/KpiCard.tsx",                    "group": "components",  "label": "investor/KpiCard",           "role": "investor kpi" },
+    { "id": "components/investor/TrustGauge.tsx",                 "group": "components",  "label": "investor/TrustGauge",        "role": "trust gauge" },
+
+    { "id": "components/shared/BottomSheet.tsx",                  "group": "shared-ui",   "label": "BottomSheet",                "role": "modal sheet" },
+    { "id": "components/shared/FilterChipRow.tsx",                "group": "shared-ui",   "label": "FilterChipRow",              "role": "chip row" },
+    { "id": "components/shared/KpiTile.tsx",                      "group": "shared-ui",   "label": "KpiTile",                    "role": "metric tile" },
+    { "id": "components/shared/ProfileAvatar.tsx",                "group": "shared-ui",   "label": "ProfileAvatar",              "role": "letter avatar" },
+    { "id": "components/shared/RiskBadge.tsx",                    "group": "shared-ui",   "label": "RiskBadge",                  "role": "risk pill" },
+    { "id": "components/shared/ScreenHeader.tsx",                 "group": "shared-ui",   "label": "ScreenHeader",               "role": "page header" },
+    { "id": "components/shared/StatusBar.tsx",                    "group": "shared-ui",   "label": "StatusBar",                  "role": "status strip" },
+    { "id": "components/shared/TrustBadge.tsx",                   "group": "shared-ui",   "label": "TrustBadge",                 "role": "trust tier pill" },
+    { "id": "components/shared/VerticalIcon.tsx",                 "group": "shared-ui",   "label": "VerticalIcon",               "role": "category icon" },
+    { "id": "components/shared/VerticalPickerBar.tsx",            "group": "shared-ui",   "label": "VerticalPickerBar",          "role": "vertical picker" },
+    { "id": "components/shared/VoiceMicButton.tsx",               "group": "shared-ui",   "label": "VoiceMicButton",             "role": "voice capture" },
+    { "id": "components/shared/WeeklyBarChart.tsx",               "group": "shared-ui",   "label": "WeeklyBarChart",             "role": "7d bar chart" },
+
+    { "id": "lib/client/api.ts",                                  "group": "client",      "label": "client/api",                 "role": "fetch wrapper" },
+    { "id": "lib/client/auth.ts",                                 "group": "client",      "label": "client/auth",                "role": "session mgmt" },
+    { "id": "lib/client/offlineQueue.ts",                         "group": "client",      "label": "client/offlineQueue",        "role": "IndexedDB queue" },
+    { "id": "lib/client/submissionSync.ts",                       "group": "client",      "label": "client/submissionSync",      "role": "queue sync" },
+    { "id": "lib/client/deviceProfile.ts",                        "group": "client",      "label": "client/deviceProfile",       "role": "device fingerprint" },
+    { "id": "lib/client/gpsIntegrity.ts",                         "group": "client",      "label": "client/gpsIntegrity",        "role": "gps spoof check" },
+    { "id": "lib/client/photoIntegrity.ts",                       "group": "client",      "label": "client/photoIntegrity",      "role": "exif client check" },
+    { "id": "lib/client/sentry.ts",                               "group": "client",      "label": "client/sentry",              "role": "browser sentry" },
+    { "id": "lib/client/errorUtils.ts",                           "group": "client",      "label": "client/errorUtils",          "role": "error helpers" },
+    { "id": "lib/client/native.ts",                               "group": "client",      "label": "client/native",              "role": "capacitor bridge" },
+    { "id": "lib/client/remoteWipe.ts",                           "group": "client",      "label": "client/remoteWipe",          "role": "remote wipe" },
+    { "id": "lib/client/motion.ts",                               "group": "client",      "label": "client/motion",              "role": "prefers-reduced-motion" },
+    { "id": "lib/client/ai.ts",                                   "group": "client",      "label": "client/ai",                  "role": "ai client" },
+    { "id": "lib/client/legal.ts",                                "group": "client",      "label": "client/legal",               "role": "policy accept" },
+
+    { "id": "api/auth/[...auth].ts",                              "group": "api",         "label": "POST /api/auth/[...auth]",   "role": "auth.js handler" },
+    { "id": "api/auth/register.ts",                               "group": "api",         "label": "POST /api/auth/register",    "role": "register" },
+    { "id": "api/submissions/index.ts",                           "group": "api",         "label": "/api/submissions",           "role": "list/create" },
+    { "id": "api/submissions/[id].ts",                            "group": "api",         "label": "/api/submissions/:id",       "role": "single ops" },
+    { "id": "api/submissions/batch-review.ts",                    "group": "api",         "label": "POST /api/submissions/batch-review", "role": "admin batch" },
+    { "id": "api/user/index.ts",                                  "group": "api",         "label": "/api/user",                  "role": "profile" },
+    { "id": "api/analytics/index.ts",                             "group": "api",         "label": "GET /api/analytics",         "role": "snapshot stats" },
+    { "id": "api/leaderboard/index.ts",                           "group": "api",         "label": "GET /api/leaderboard",       "role": "leaderboard" },
+    { "id": "api/health/index.ts",                                "group": "api",         "label": "GET /api/health",            "role": "health check" },
+    { "id": "api/ai/search.ts",                                   "group": "api",         "label": "POST /api/ai/search",        "role": "gemini search" },
+    { "id": "api/intake/leads/index.ts",                          "group": "api",         "label": "POST /api/intake/leads",     "role": "automation leads" },
+    { "id": "api/privacy/index.ts",                               "group": "api",         "label": "GET /api/privacy",           "role": "gdpr" },
+
+    { "id": "lib/server/http.ts",                                 "group": "server-core", "label": "http.ts",                    "role": "response builders" },
+    { "id": "lib/server/db.ts",                                   "group": "server-core", "label": "db.ts",                      "role": "pg pool" },
+    { "id": "lib/server/validation.ts",                           "group": "server-core", "label": "validation.ts",              "role": "zod schemas" },
+    { "id": "lib/server/rateLimit.ts",                            "group": "server-core", "label": "rateLimit.ts",               "role": "rate limit" },
+    { "id": "lib/server/idempotency.ts",                          "group": "server-core", "label": "idempotency.ts",             "role": "idempotency keys" },
+    { "id": "lib/server/logger.ts",                               "group": "server-core", "label": "logger.ts",                  "role": "structured log" },
+    { "id": "lib/server/sentry.ts",                               "group": "server-core", "label": "sentry.ts",                  "role": "node sentry" },
+    { "id": "lib/server/privacy.ts",                              "group": "server-core", "label": "privacy.ts",                 "role": "pii filter" },
+    { "id": "lib/server/submissionAccess.ts",                     "group": "server-core", "label": "submissionAccess.ts",        "role": "rbac" },
+    { "id": "lib/server/submissionEvents.ts",                     "group": "server-core", "label": "submissionEvents.ts",        "role": "event log" },
+    { "id": "lib/server/submissionRisk.ts",                       "group": "server-core", "label": "submissionRisk.ts",          "role": "risk score" },
+    { "id": "lib/server/submissionFraud.ts",                      "group": "server-core", "label": "submissionFraud.ts",         "role": "fraud detect" },
+    { "id": "lib/server/gpsValidation.ts",                        "group": "server-core", "label": "gpsValidation.ts",           "role": "geofence" },
+    { "id": "lib/server/gpsAnomalyDetection.ts",                  "group": "server-core", "label": "gpsAnomalyDetection.ts",     "role": "velocity/teleport" },
+    { "id": "lib/server/userTrust.ts",                            "group": "server-core", "label": "userTrust.ts",               "role": "trust tier" },
+    { "id": "lib/server/fraudAlerts.ts",                          "group": "server-core", "label": "fraudAlerts.ts",             "role": "alert sink" },
+    { "id": "lib/server/snapshotEngine.ts",                       "group": "server-core", "label": "snapshotEngine.ts",          "role": "deltas" },
+    { "id": "lib/server/pointProjection.ts",                      "group": "server-core", "label": "pointProjection.ts",         "role": "event→point" },
+    { "id": "lib/server/dedup.ts",                                "group": "server-core", "label": "dedup.ts",                   "role": "dedup" },
+    { "id": "lib/server/confidenceScore.ts",                      "group": "server-core", "label": "confidenceScore.ts",         "role": "confidence" },
+    { "id": "lib/server/xp.ts",                                   "group": "server-core", "label": "xp.ts",                      "role": "xp calc" },
+    { "id": "lib/server/collectionAssignments.ts",                "group": "server-core", "label": "collectionAssignments.ts",   "role": "agent zones" },
+    { "id": "lib/server/reviewDecision.ts",                       "group": "server-core", "label": "reviewDecision.ts",          "role": "admin decisions" },
+    { "id": "lib/server/securityAudit.ts",                        "group": "server-core", "label": "securityAudit.ts",           "role": "audit log" },
+    { "id": "lib/server/automationLeads.ts",                      "group": "server-core", "label": "automationLeads.ts",         "role": "lead queue" },
+    { "id": "lib/server/automationAuth.ts",                       "group": "server-core", "label": "automationAuth.ts",          "role": "automation auth" },
+    { "id": "lib/server/spatialIntelligence.ts",                  "group": "server-core", "label": "spatialIntelligence.ts",     "role": "spatial analytics" },
+    { "id": "lib/server/schemaGuard.ts",                          "group": "server-core", "label": "schemaGuard.ts",             "role": "schema verify" },
+    { "id": "lib/server/geminiSearch.ts",                         "group": "server-core", "label": "geminiSearch.ts",            "role": "gemini search api" },
+
+    { "id": "lib/server/auth/handler.ts",                         "group": "server-auth", "label": "auth/handler",               "role": "Auth.js config" },
+    { "id": "lib/server/auth/passwordReset.ts",                   "group": "server-auth", "label": "auth/passwordReset",         "role": "reset token" },
+    { "id": "lib/server/auth/passwordResetHandlers.ts",           "group": "server-auth", "label": "auth/passwordResetHandlers", "role": "reset endpoints" },
+    { "id": "lib/server/auth/requestUrl.ts",                      "group": "server-auth", "label": "auth/requestUrl",            "role": "req-url utils" },
+    { "id": "lib/server/auth/cors.ts",                            "group": "server-auth", "label": "auth/cors",                  "role": "cors" },
+
+    { "id": "lib/server/ai/modelClient.ts",                       "group": "server-ai",   "label": "ai/modelClient",             "role": "llm client" },
+    { "id": "lib/server/ai/outputSchemas.ts",                     "group": "server-ai",   "label": "ai/outputSchemas",           "role": "zod ai schemas" },
+    { "id": "lib/server/ai/redaction.ts",                         "group": "server-ai",   "label": "ai/redaction",               "role": "pii redact" },
+    { "id": "lib/server/ai/audit.ts",                             "group": "server-ai",   "label": "ai/audit",                   "role": "ai audit log" },
+    { "id": "lib/server/ai/analyticsAssistant.ts",                "group": "server-ai",   "label": "ai/analyticsAssistant",      "role": "analytics qa" },
+    { "id": "lib/server/ai/analyticsFacts.ts",                    "group": "server-ai",   "label": "ai/analyticsFacts",          "role": "fact retrieval" },
+    { "id": "lib/server/ai/reviewAssistant.ts",                   "group": "server-ai",   "label": "ai/reviewAssistant",         "role": "admin assist" },
+    { "id": "lib/server/ai/extractSubmissionFields.ts",           "group": "server-ai",   "label": "ai/extractSubmissionFields", "role": "ocr/extract" },
+
+    { "id": "lib/server/email/provider.ts",                       "group": "server-email","label": "email/provider",             "role": "resend client" },
+    { "id": "lib/server/email/campaigns.ts",                      "group": "server-email","label": "email/campaigns",            "role": "campaign send" },
+    { "id": "lib/server/email/templates.ts",                      "group": "server-email","label": "email/templates",            "role": "email templates" },
+    { "id": "lib/server/email/variables.ts",                      "group": "server-email","label": "email/variables",            "role": "merge vars" },
+    { "id": "lib/server/email/sanitize.ts",                       "group": "server-email","label": "email/sanitize",             "role": "sanitize html" },
+    { "id": "lib/server/email/unsubscribe.ts",                    "group": "server-email","label": "email/unsubscribe",          "role": "unsub tokens" },
+    { "id": "lib/server/email/svixVerify.ts",                     "group": "server-email","label": "email/svixVerify",           "role": "webhook verify" },
+    { "id": "lib/server/email/webhookHandler.ts",                 "group": "server-email","label": "email/webhookHandler",       "role": "inbound webhook" },
+
+    { "id": "lib/server/sms/provider.ts",                         "group": "server-sms",  "label": "sms/provider",               "role": "sms gateway" },
+    { "id": "lib/server/sms/campaigns.ts",                        "group": "server-sms",  "label": "sms/campaigns",              "role": "sms send" },
+    { "id": "lib/server/sms/consent.ts",                          "group": "server-sms",  "label": "sms/consent",                "role": "opt-in log" },
+    { "id": "lib/server/sms/webhookHandler.ts",                   "group": "server-sms",  "label": "sms/webhookHandler",         "role": "inbound sms" },
+
+    { "id": "lib/server/poi/normalizePoi.ts",                     "group": "server-poi",  "label": "poi/normalizePoi",           "role": "name normalize" },
+    { "id": "lib/server/poi/candidateMatcher.ts",                 "group": "server-poi",  "label": "poi/candidateMatcher",       "role": "match candidates" },
+    { "id": "lib/server/poi/candidateStore.ts",                   "group": "server-poi",  "label": "poi/candidateStore",         "role": "candidate persist" },
+    { "id": "lib/server/poi/promoteCandidate.ts",                 "group": "server-poi",  "label": "poi/promoteCandidate",       "role": "promote to point" },
+    { "id": "lib/server/poi/adminAccess.ts",                      "group": "server-poi",  "label": "poi/adminAccess",            "role": "poi admin rbac" },
+
+    { "id": "lib/server/storage/index.ts",                        "group": "server-store","label": "storage/index",              "role": "store iface" },
+    { "id": "lib/server/storage/types.ts",                        "group": "server-store","label": "storage/types",              "role": "store types" },
+    { "id": "lib/server/storage/postgresStore.ts",                "group": "server-store","label": "storage/postgresStore",      "role": "pg impl" },
+    { "id": "lib/server/storage/edgeConfigStore.ts",              "group": "server-store","label": "storage/edgeConfigStore",    "role": "edge config" },
+    { "id": "lib/server/storage/edgeFallbackStore.ts",            "group": "server-store","label": "storage/edgeFallbackStore",  "role": "fallback" },
+    { "id": "lib/server/storage/createdAt.ts",                    "group": "server-store","label": "storage/createdAt",          "role": "timestamp util" },
+
+    { "id": "shared/types.ts",                                    "group": "shared",      "label": "shared/types",               "role": "30+ interfaces" },
+    { "id": "shared/verticals.ts",                                "group": "shared",      "label": "shared/verticals",           "role": "7 categories" },
+    { "id": "shared/geofence.ts",                                 "group": "shared",      "label": "shared/geofence",            "role": "bonamoussadi bounds" },
+    { "id": "shared/submissionRewards.ts",                        "group": "shared",      "label": "shared/submissionRewards",   "role": "xp tables" },
+    { "id": "shared/xp.ts",                                       "group": "shared",      "label": "shared/xp",                  "role": "xp tiers" },
+    { "id": "shared/avatarPresets.ts",                            "group": "shared",      "label": "shared/avatarPresets",       "role": "avatar presets" },
+    { "id": "shared/legalPolicies.ts",                            "group": "shared",      "label": "shared/legalPolicies",       "role": "policy text" },
+    { "id": "shared/enrichFieldCatalog.ts",                       "group": "shared",      "label": "shared/enrichFieldCatalog",  "role": "enrich fields" },
+    { "id": "shared/collectionZones.ts",                          "group": "shared",      "label": "shared/collectionZones",     "role": "zone defs" },
+    { "id": "shared/bonamoussadiSeedEvents.ts",                   "group": "shared",      "label": "shared/bonamoussadiSeedEvents","role": "seed data" },
+    { "id": "lib/shared/pointId.ts",                              "group": "shared",      "label": "lib/shared/pointId",         "role": "point id gen" },
+    { "id": "lib/shared/identifier.ts",                           "group": "shared",      "label": "lib/shared/identifier",      "role": "identifier norm" },
+    { "id": "lib/shared/adminReviewQueue.ts",                     "group": "shared",      "label": "lib/shared/adminReviewQueue","role": "queue model" },
+    { "id": "lib/shared/contributionMetrics.ts",                  "group": "shared",      "label": "lib/shared/contributionMetrics","role": "metrics calc" },
+    { "id": "lib/docs/helpCenter.ts",                             "group": "shared",      "label": "lib/docs/helpCenter",        "role": "help content" },
+    { "id": "lib/auth.ts",                                        "group": "shared",      "label": "lib/auth",                   "role": "auth helpers" },
+    { "id": "lib/edgeConfig.ts",                                  "group": "shared",      "label": "lib/edgeConfig",             "role": "edge config sdk" },
+
+    { "id": "vite.config.ts",                                     "group": "infra",       "label": "vite.config",                "role": "build config" },
+    { "id": "playwright.config.ts",                               "group": "infra",       "label": "playwright.config",          "role": "e2e config" },
+    { "id": "capacitor.config.ts",                                "group": "infra",       "label": "capacitor.config",           "role": "mobile shell" },
+    { "id": "tailwind.config.js",                                 "group": "infra",       "label": "tailwind.config",            "role": "design tokens" },
+    { "id": "supabase/migrations",                                "group": "infra",       "label": "supabase/migrations (24 SQL)","role": "postgres schema" },
+    { "id": "vercel.json",                                        "group": "infra",       "label": "vercel.json",                "role": "csp/routes/cron" }
+  ],
+  "edges": [
+    { "from": "index.tsx", "to": "App.tsx", "kind": "mounts" },
+
+    { "from": "App.tsx", "to": "components/Screens/Splash.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/Auth.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/ForgotPassword.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/Home.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/Details.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/ContributionFlow.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/SubmissionQueue.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/Profile.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/Settings.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/Analytics.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/QualityInfo.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/RewardsCatalog.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/AdminQueue.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/AgentPerformance.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/DeltaDashboard.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/InvestorDashboard.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/ClientAccount.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/CommunicationsPanel.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/IpReport.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/DataCompliance.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/PrivacyPolicy.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Screens/TermsOfUse.tsx", "kind": "lazy-loads" },
+    { "from": "App.tsx", "to": "components/Navigation.tsx", "kind": "uses" },
+    { "from": "App.tsx", "to": "components/ErrorBoundary.tsx", "kind": "uses" },
+    { "from": "App.tsx", "to": "components/SyncStatusBar.tsx", "kind": "uses" },
+    { "from": "App.tsx", "to": "lib/client/auth.ts", "kind": "uses" },
+    { "from": "App.tsx", "to": "lib/client/offlineQueue.ts", "kind": "uses" },
+    { "from": "App.tsx", "to": "lib/client/submissionSync.ts", "kind": "uses" },
+    { "from": "App.tsx", "to": "shared/types.ts", "kind": "imports" },
+
+    { "from": "components/Screens/Home.tsx", "to": "components/Screens/HomeMap.tsx", "kind": "renders" },
+    { "from": "components/Screens/Home.tsx", "to": "components/shared/FilterChipRow.tsx", "kind": "uses" },
+    { "from": "components/Screens/Home.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+    { "from": "components/Screens/HomeMap.tsx", "to": "shared/geofence.ts", "kind": "imports" },
+
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "components/shared/VerticalPickerBar.tsx", "kind": "uses" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "components/shared/VoiceMicButton.tsx", "kind": "uses" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "lib/client/offlineQueue.ts", "kind": "enqueues" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "lib/client/photoIntegrity.ts", "kind": "uses" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "lib/client/gpsIntegrity.ts", "kind": "uses" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "shared/verticals.ts", "kind": "imports" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "shared/enrichFieldCatalog.ts", "kind": "imports" },
+    { "from": "components/Screens/ContributionFlow.tsx", "to": "lib/client/ai.ts", "kind": "uses" },
+
+    { "from": "components/Screens/SubmissionQueue.tsx", "to": "lib/client/offlineQueue.ts", "kind": "subscribes" },
+    { "from": "components/Screens/SubmissionQueue.tsx", "to": "lib/client/submissionSync.ts", "kind": "triggers" },
+
+    { "from": "components/Screens/Auth.tsx", "to": "lib/client/auth.ts", "kind": "calls" },
+    { "from": "components/Screens/Auth.tsx", "to": "lib/client/legal.ts", "kind": "uses" },
+    { "from": "components/Screens/ForgotPassword.tsx", "to": "lib/client/api.ts", "kind": "calls" },
+
+    { "from": "components/Screens/Profile.tsx", "to": "components/shared/ProfileAvatar.tsx", "kind": "uses" },
+    { "from": "components/Screens/Profile.tsx", "to": "components/BadgeSystem.tsx", "kind": "uses" },
+    { "from": "components/Screens/Profile.tsx", "to": "components/StreakTracker.tsx", "kind": "uses" },
+    { "from": "components/Screens/Profile.tsx", "to": "components/DailyProgressWidget.tsx", "kind": "uses" },
+    { "from": "components/Screens/Profile.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+    { "from": "components/Screens/Profile.tsx", "to": "shared/xp.ts", "kind": "imports" },
+
+    { "from": "components/Screens/Analytics.tsx", "to": "components/shared/KpiTile.tsx", "kind": "uses" },
+    { "from": "components/Screens/Analytics.tsx", "to": "components/shared/WeeklyBarChart.tsx", "kind": "uses" },
+    { "from": "components/Screens/Analytics.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+
+    { "from": "components/Screens/AdminQueue.tsx", "to": "components/shared/RiskBadge.tsx", "kind": "uses" },
+    { "from": "components/Screens/AdminQueue.tsx", "to": "components/shared/TrustBadge.tsx", "kind": "uses" },
+    { "from": "components/Screens/AdminQueue.tsx", "to": "components/shared/StatusBar.tsx", "kind": "uses" },
+    { "from": "components/Screens/AdminQueue.tsx", "to": "lib/shared/adminReviewQueue.ts", "kind": "imports" },
+    { "from": "components/Screens/AdminQueue.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+
+    { "from": "components/Screens/AgentPerformance.tsx", "to": "components/shared/TrustBadge.tsx", "kind": "uses" },
+    { "from": "components/Screens/AgentPerformance.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+    { "from": "components/Screens/AgentPerformance.tsx", "to": "lib/shared/contributionMetrics.ts", "kind": "imports" },
+
+    { "from": "components/Screens/DeltaDashboard.tsx", "to": "components/shared/KpiTile.tsx", "kind": "uses" },
+    { "from": "components/Screens/DeltaDashboard.tsx", "to": "components/shared/WeeklyBarChart.tsx", "kind": "uses" },
+    { "from": "components/Screens/DeltaDashboard.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+    { "from": "components/Screens/InvestorDashboard.tsx", "to": "components/investor/KpiCard.tsx", "kind": "uses" },
+    { "from": "components/Screens/InvestorDashboard.tsx", "to": "components/investor/TrustGauge.tsx", "kind": "uses" },
+    { "from": "components/Screens/InvestorDashboard.tsx", "to": "components/shared/WeeklyBarChart.tsx", "kind": "uses" },
+    { "from": "components/Screens/InvestorDashboard.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+
+    { "from": "components/Screens/CommunicationsPanel.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+    { "from": "components/Screens/RewardsCatalog.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+    { "from": "components/Screens/Details.tsx", "to": "lib/client/api.ts", "kind": "fetches" },
+
+    { "from": "lib/client/api.ts", "to": "api/submissions/index.ts", "kind": "http" },
+    { "from": "lib/client/api.ts", "to": "api/submissions/[id].ts", "kind": "http" },
+    { "from": "lib/client/api.ts", "to": "api/user/index.ts", "kind": "http" },
+    { "from": "lib/client/api.ts", "to": "api/analytics/index.ts", "kind": "http" },
+    { "from": "lib/client/api.ts", "to": "api/leaderboard/index.ts", "kind": "http" },
+    { "from": "lib/client/api.ts", "to": "api/privacy/index.ts", "kind": "http" },
+    { "from": "lib/client/api.ts", "to": "api/intake/leads/index.ts", "kind": "http" },
+    { "from": "lib/client/auth.ts", "to": "api/auth/[...auth].ts", "kind": "http" },
+    { "from": "lib/client/auth.ts", "to": "api/auth/register.ts", "kind": "http" },
+    { "from": "lib/client/ai.ts", "to": "api/ai/search.ts", "kind": "http" },
+    { "from": "lib/client/submissionSync.ts", "to": "lib/client/offlineQueue.ts", "kind": "drains" },
+    { "from": "lib/client/submissionSync.ts", "to": "lib/client/api.ts", "kind": "uses" },
+    { "from": "lib/client/auth.ts", "to": "lib/client/sentry.ts", "kind": "tags-user" },
+
+    { "from": "api/auth/[...auth].ts", "to": "lib/server/auth/handler.ts", "kind": "delegates" },
+    { "from": "api/auth/[...auth].ts", "to": "lib/server/auth/passwordResetHandlers.ts", "kind": "delegates" },
+    { "from": "api/auth/register.ts", "to": "lib/server/auth/handler.ts", "kind": "uses" },
+    { "from": "api/auth/register.ts", "to": "lib/server/validation.ts", "kind": "validates" },
+    { "from": "api/auth/register.ts", "to": "lib/server/storage/index.ts", "kind": "persists" },
+    { "from": "lib/server/auth/handler.ts", "to": "lib/server/auth/cors.ts", "kind": "uses" },
+    { "from": "lib/server/auth/handler.ts", "to": "lib/server/storage/index.ts", "kind": "persists" },
+    { "from": "lib/server/auth/handler.ts", "to": "lib/server/auth/requestUrl.ts", "kind": "uses" },
+    { "from": "lib/server/auth/handler.ts", "to": "lib/server/securityAudit.ts", "kind": "audits" },
+    { "from": "lib/server/auth/passwordReset.ts", "to": "lib/server/email/provider.ts", "kind": "sends" },
+    { "from": "lib/server/auth/passwordResetHandlers.ts", "to": "lib/server/auth/passwordReset.ts", "kind": "uses" },
+
+    { "from": "api/submissions/index.ts", "to": "lib/server/http.ts", "kind": "responds" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/validation.ts", "kind": "validates" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/rateLimit.ts", "kind": "limits" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/idempotency.ts", "kind": "dedups" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/submissionAccess.ts", "kind": "rbac" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/submissionRisk.ts", "kind": "scores" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/submissionFraud.ts", "kind": "detects" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/gpsValidation.ts", "kind": "validates" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/gpsAnomalyDetection.ts", "kind": "detects" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/userTrust.ts", "kind": "weights" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/xp.ts", "kind": "awards" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/pointProjection.ts", "kind": "projects" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/dedup.ts", "kind": "dedups" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/submissionEvents.ts", "kind": "logs" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/storage/index.ts", "kind": "persists" },
+    { "from": "api/submissions/index.ts", "to": "lib/server/auth/handler.ts", "kind": "session" },
+
+    { "from": "api/submissions/[id].ts", "to": "lib/server/submissionAccess.ts", "kind": "rbac" },
+    { "from": "api/submissions/[id].ts", "to": "lib/server/storage/index.ts", "kind": "persists" },
+    { "from": "api/submissions/[id].ts", "to": "lib/server/reviewDecision.ts", "kind": "applies" },
+    { "from": "api/submissions/[id].ts", "to": "lib/server/privacy.ts", "kind": "filters" },
+
+    { "from": "api/submissions/batch-review.ts", "to": "lib/server/reviewDecision.ts", "kind": "applies" },
+    { "from": "api/submissions/batch-review.ts", "to": "lib/server/submissionAccess.ts", "kind": "rbac" },
+    { "from": "api/submissions/batch-review.ts", "to": "lib/server/storage/index.ts", "kind": "persists" },
+
+    { "from": "api/user/index.ts", "to": "lib/server/storage/index.ts", "kind": "reads" },
+    { "from": "api/user/index.ts", "to": "lib/server/securityAudit.ts", "kind": "audits" },
+    { "from": "api/user/index.ts", "to": "lib/server/collectionAssignments.ts", "kind": "uses" },
+    { "from": "api/user/index.ts", "to": "lib/server/auth/handler.ts", "kind": "session" },
+
+    { "from": "api/analytics/index.ts", "to": "lib/server/snapshotEngine.ts", "kind": "queries" },
+    { "from": "api/analytics/index.ts", "to": "lib/server/spatialIntelligence.ts", "kind": "queries" },
+    { "from": "api/analytics/index.ts", "to": "lib/server/storage/index.ts", "kind": "reads" },
+
+    { "from": "api/leaderboard/index.ts", "to": "lib/server/storage/index.ts", "kind": "reads" },
+    { "from": "api/leaderboard/index.ts", "to": "lib/server/privacy.ts", "kind": "filters" },
+
+    { "from": "api/ai/search.ts", "to": "lib/server/geminiSearch.ts", "kind": "delegates" },
+    { "from": "api/ai/search.ts", "to": "lib/server/ai/redaction.ts", "kind": "redacts" },
+    { "from": "api/ai/search.ts", "to": "lib/server/ai/audit.ts", "kind": "audits" },
+    { "from": "lib/server/geminiSearch.ts", "to": "lib/server/ai/modelClient.ts", "kind": "uses" },
+
+    { "from": "api/intake/leads/index.ts", "to": "lib/server/automationAuth.ts", "kind": "authz" },
+    { "from": "api/intake/leads/index.ts", "to": "lib/server/automationLeads.ts", "kind": "enqueues" },
+    { "from": "api/intake/leads/index.ts", "to": "lib/server/validation.ts", "kind": "validates" },
+
+    { "from": "api/privacy/index.ts", "to": "lib/server/privacy.ts", "kind": "delegates" },
+    { "from": "api/privacy/index.ts", "to": "lib/server/storage/index.ts", "kind": "persists" },
+
+    { "from": "lib/server/storage/index.ts", "to": "lib/server/storage/postgresStore.ts", "kind": "primary" },
+    { "from": "lib/server/storage/index.ts", "to": "lib/server/storage/edgeConfigStore.ts", "kind": "fallback" },
+    { "from": "lib/server/storage/index.ts", "to": "lib/server/storage/edgeFallbackStore.ts", "kind": "secondary-fallback" },
+    { "from": "lib/server/storage/postgresStore.ts", "to": "lib/server/db.ts", "kind": "uses" },
+    { "from": "lib/server/storage/postgresStore.ts", "to": "supabase/migrations", "kind": "schema" },
+    { "from": "lib/server/storage/edgeConfigStore.ts", "to": "lib/edgeConfig.ts", "kind": "uses" },
+
+    { "from": "lib/server/submissionRisk.ts", "to": "lib/server/submissionFraud.ts", "kind": "uses" },
+    { "from": "lib/server/submissionFraud.ts", "to": "lib/server/gpsAnomalyDetection.ts", "kind": "uses" },
+    { "from": "lib/server/submissionFraud.ts", "to": "lib/server/fraudAlerts.ts", "kind": "emits" },
+    { "from": "lib/server/submissionRisk.ts", "to": "lib/server/userTrust.ts", "kind": "reads" },
+    { "from": "lib/server/userTrust.ts", "to": "lib/server/storage/index.ts", "kind": "reads" },
+    { "from": "lib/server/reviewDecision.ts", "to": "lib/server/userTrust.ts", "kind": "updates" },
+    { "from": "lib/server/reviewDecision.ts", "to": "lib/server/xp.ts", "kind": "awards" },
+    { "from": "lib/server/reviewDecision.ts", "to": "lib/server/poi/promoteCandidate.ts", "kind": "promotes" },
+    { "from": "lib/server/reviewDecision.ts", "to": "lib/server/pointProjection.ts", "kind": "projects" },
+
+    { "from": "lib/server/pointProjection.ts", "to": "lib/server/dedup.ts", "kind": "uses" },
+    { "from": "lib/server/pointProjection.ts", "to": "lib/server/confidenceScore.ts", "kind": "uses" },
+    { "from": "lib/server/snapshotEngine.ts", "to": "lib/server/storage/index.ts", "kind": "reads" },
+    { "from": "lib/server/snapshotEngine.ts", "to": "lib/server/pointProjection.ts", "kind": "uses" },
+
+    { "from": "lib/server/poi/candidateMatcher.ts", "to": "lib/server/poi/normalizePoi.ts", "kind": "uses" },
+    { "from": "lib/server/poi/candidateMatcher.ts", "to": "lib/server/poi/candidateStore.ts", "kind": "reads" },
+    { "from": "lib/server/poi/promoteCandidate.ts", "to": "lib/server/poi/candidateStore.ts", "kind": "uses" },
+    { "from": "lib/server/poi/promoteCandidate.ts", "to": "lib/server/storage/index.ts", "kind": "persists" },
+
+    { "from": "lib/server/ai/analyticsAssistant.ts", "to": "lib/server/ai/modelClient.ts", "kind": "uses" },
+    { "from": "lib/server/ai/analyticsAssistant.ts", "to": "lib/server/ai/analyticsFacts.ts", "kind": "uses" },
+    { "from": "lib/server/ai/analyticsAssistant.ts", "to": "lib/server/ai/redaction.ts", "kind": "redacts" },
+    { "from": "lib/server/ai/analyticsAssistant.ts", "to": "lib/server/ai/outputSchemas.ts", "kind": "validates" },
+    { "from": "lib/server/ai/reviewAssistant.ts", "to": "lib/server/ai/modelClient.ts", "kind": "uses" },
+    { "from": "lib/server/ai/extractSubmissionFields.ts", "to": "lib/server/ai/modelClient.ts", "kind": "uses" },
+    { "from": "lib/server/ai/extractSubmissionFields.ts", "to": "lib/server/ai/outputSchemas.ts", "kind": "validates" },
+
+    { "from": "lib/server/email/campaigns.ts", "to": "lib/server/email/provider.ts", "kind": "sends" },
+    { "from": "lib/server/email/campaigns.ts", "to": "lib/server/email/templates.ts", "kind": "renders" },
+    { "from": "lib/server/email/campaigns.ts", "to": "lib/server/email/variables.ts", "kind": "merges" },
+    { "from": "lib/server/email/campaigns.ts", "to": "lib/server/email/sanitize.ts", "kind": "sanitizes" },
+    { "from": "lib/server/email/webhookHandler.ts", "to": "lib/server/email/svixVerify.ts", "kind": "verifies" },
+    { "from": "lib/server/email/webhookHandler.ts", "to": "lib/server/email/unsubscribe.ts", "kind": "processes" },
+
+    { "from": "lib/server/sms/campaigns.ts", "to": "lib/server/sms/provider.ts", "kind": "sends" },
+    { "from": "lib/server/sms/campaigns.ts", "to": "lib/server/sms/consent.ts", "kind": "checks" },
+    { "from": "lib/server/sms/webhookHandler.ts", "to": "lib/server/sms/consent.ts", "kind": "updates" },
+
+    { "from": "lib/server/db.ts", "to": "supabase/migrations", "kind": "schema" },
+    { "from": "lib/server/auth/handler.ts", "to": "lib/auth.ts", "kind": "uses" },
+    { "from": "lib/server/validation.ts", "to": "shared/types.ts", "kind": "imports" },
+    { "from": "lib/server/validation.ts", "to": "shared/verticals.ts", "kind": "imports" },
+    { "from": "lib/server/xp.ts", "to": "shared/xp.ts", "kind": "imports" },
+    { "from": "lib/server/xp.ts", "to": "shared/submissionRewards.ts", "kind": "imports" },
+    { "from": "lib/server/gpsValidation.ts", "to": "shared/geofence.ts", "kind": "imports" },
+    { "from": "lib/server/pointProjection.ts", "to": "lib/shared/pointId.ts", "kind": "imports" },
+    { "from": "lib/server/collectionAssignments.ts", "to": "shared/collectionZones.ts", "kind": "imports" },
+    { "from": "lib/server/automationLeads.ts", "to": "lib/server/storage/index.ts", "kind": "persists" }
+  ],
+  "data_model": {
+    "primary_db": "PostgreSQL via Supabase",
+    "tables_inferred_from_migrations": [
+      "users (auth, trust, roles)",
+      "submissions (event log)",
+      "projected_points (merged points)",
+      "snapshots (weekly/monthly deltas)",
+      "collection_zones, collection_assignments",
+      "verticals (active categories)",
+      "fraud_alerts, security_audit, ip_reports",
+      "admin_account_creation_audit",
+      "policy_acceptance",
+      "automation_lead_queue",
+      "email_campaigns, email_templates, email_unsubscribe",
+      "sms_campaigns, sms_consent_log",
+      "password_reset_tokens",
+      "poi_candidates"
+    ],
+    "client_storage": {
+      "indexeddb": "adl_offline_queue (75 items max, 6 retries, 72h TTL)",
+      "localstorage": "language, splash flag, auth flag",
+      "session_cookies": "auth.js session token"
+    }
+  },
+  "external_services": [
+    { "name": "Vercel",            "use": "hosting, cron, blob, edge-config" },
+    { "name": "Supabase Postgres", "use": "primary db (pg driver, no ORM)" },
+    { "name": "Sentry",            "use": "error tracking (browser + node)" },
+    { "name": "Google OAuth",      "use": "social login via @auth/core" },
+    { "name": "Gemini",            "use": "AI search + extract + assistants" },
+    { "name": "Resend (inferred)", "use": "email transactional/campaigns" },
+    { "name": "SMS provider",      "use": "outbound sms + webhook" },
+    { "name": "Svix",              "use": "webhook signature verification" },
+    { "name": "@vercel/analytics", "use": "page analytics" },
+    { "name": "@vercel/speed-insights", "use": "Web Vitals" }
+  ],
+  "navigation_flow": {
+    "agent": ["Splash", "Auth", "Home", "ContributionFlow", "SubmissionQueue", "Profile", "Analytics", "RewardsCatalog", "Settings"],
+    "admin": ["Auth", "AdminQueue", "AgentPerformance", "Analytics", "CommunicationsPanel", "Settings"],
+    "client": ["Auth", "Home", "DeltaDashboard", "InvestorDashboard", "ClientAccount", "Settings"]
+  }
+}
+</script>
+  <section id="diagram">
+    <div class="section-intro">
+      <h2>The <em>graph</em>, plotted.</h2>
+      <p class="lede">Layer-grouped Mermaid render. Pan with scroll. Expand the full graph only when you need the wiring of every node.</p>
+    </div>
+    <details class="diagram-toggle" open>
+      <summary>Top-level <em>cross-layer edges</em></summary>
+      <div class="mermaid-wrap" id="m_top">Rendering…</div>
+    </details>
+    <details class="diagram-toggle">
+      <summary>Full graph <em>all 166 nodes · large</em></summary>
+      <div class="mermaid-wrap" id="m_full">Click to render…</div>
+    </details>
+  </section>
+
+  <section id="nodes">
+    <div class="section-intro">
+      <h2>Every <em>file</em>, indexed.</h2>
+      <p class="lede">Searchable inventory of all 166 source nodes with role annotations.</p>
+    </div>
+    <div class="filter-row">
+      <input id="nodeSearch" placeholder="Search by name, path, or role…" />
+      <select id="nodeGroup"><option value="">All groups</option></select>
+    </div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:170px">Group</th><th style="width:300px">ID</th><th>Label</th><th>Role</th></tr></thead>
+      <tbody id="nodesBody"></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="edges">
+    <div class="section-intro">
+      <h2>How things <em>connect</em>.</h2>
+      <p class="lede">189 directed edges between source nodes — imports, calls, persistence, validation.</p>
+    </div>
+    <div class="filter-row">
+      <input id="edgeSearch" placeholder="Filter by node id or edge kind…" />
+    </div>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th>From</th><th style="width:160px">Kind</th><th>To</th></tr></thead>
+      <tbody id="edgesBody"></tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="data">
+    <div class="section-intro">
+      <h2>Storage &amp; <em>integrations</em>.</h2>
+      <p class="lede">What lives where — the primary database, client persistence, third-party services, and per-role navigation flows.</p>
+    </div>
+    <h3>Primary store</h3>
+    <p id="primaryDb"></p>
+    <h3>Postgres tables · inferred from migrations</h3>
+    <ul id="tables"></ul>
+    <h3>Client storage</h3>
+    <ul id="clientStore"></ul>
+    <h3>External services</h3>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:220px">Service</th><th>Used for</th></tr></thead>
+      <tbody id="extServices"></tbody>
+    </table>
+    </div>
+    <h3>Navigation by role</h3>
+    <div class="table-wrap">
+    <table>
+      <thead><tr><th style="width:140px">Role</th><th>Screens (in order)</th></tr></thead>
+      <tbody id="navFlow"></tbody>
+    </table>
+    </div>
+  </section>
+</main>
+<footer>African Data Layer · Architecture Atlas · rendered from <code>architecture.json</code></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  const tabs = document.querySelectorAll('nav.tabs button');
+  const sections = document.querySelectorAll('main section');
+  tabs.forEach(b => b.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.remove('active'));
+    sections.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById(b.dataset.tab).classList.add('active');
+    if (b.dataset.tab === 'diagram') renderMermaid();
+  }));
+
+  let DATA = null;
+  let mermaidRendered = false;
+
+  function safeId(s) { return 'n_' + s.replace(/[^a-zA-Z0-9]/g, '_'); }
+  function safeGroup(g) { return g.replace(/[^a-zA-Z0-9]/g, '_'); }
+  function safeLabel(s) {
+    // Mermaid 10 closes node bracket on `]` even inside quotes; also escape quotes.
+    return String(s).replace(/\[/g, '(').replace(/\]/g, ')').replace(/"/g, '\\"');
+  }
+
+  async function load() {
+    // Prefer inline data (works on file://). Fall back to fetch over http.
+    const inline = document.getElementById('archData');
+    if (inline && inline.textContent.trim().length > 2) {
+      try { DATA = JSON.parse(inline.textContent); } catch (e) { console.error('inline parse failed', e); }
+    }
+    if (!DATA) {
+      try {
+        const res = await fetch('./architecture.json');
+        DATA = await res.json();
+      } catch (e) {
+        document.body.insertAdjacentHTML('afterbegin',
+          '<div style="background:#fee;border:1px solid #c00;padding:12px;margin:12px;border-radius:8px;color:#900">' +
+          'Failed to load architecture data. Serve via http (e.g. <code>npx serve docs</code>) or rebuild inline.' +
+          '</div>');
+        return;
+      }
+    }
+    renderOverview();
+    renderNodes();
+    renderEdges();
+    renderDataTab();
+  }
+
+  function renderOverview() {
+    const g = document.getElementById('statgrid');
+    const s = DATA.stats;
+    const subs = {
+      Files: 'source modules tracked',
+      Groups: 'architectural layers',
+      Nodes: 'addressable units',
+      Edges: 'directed relationships'
+    };
+    g.innerHTML = [
+      ['Files', s.files], ['Groups', s.groups], ['Nodes', s.nodes], ['Edges', s.edges]
+    ].map(([l, n]) => `<div class="stat"><div class="n">${n}</div><div><div class="l">${l}</div><div class="sub">${subs[l]}</div></div></div>`).join('');
+
+    // Count nodes per group for taxonomy
+    const groupCounts = {};
+    for (const n of DATA.nodes) groupCounts[n.group] = (groupCounts[n.group] || 0) + 1;
+    document.getElementById('legend').innerHTML = DATA.groups.map((grp, i) =>
+      `<li class="row" style="--c:${grp.color}">
+        <span class="idx">${String(i + 1).padStart(2, '0')}</span>
+        <span class="sw"></span>
+        <span class="lbl">${grp.label}</span>
+        <span class="cnt">${groupCounts[grp.id] || 0}</span>
+      </li>`).join('');
+    const legendCount = document.getElementById('legendCount');
+    if (legendCount) legendCount.textContent = `${DATA.groups.length} layers`;
+
+    const sel = document.getElementById('nodeGroup');
+    DATA.groups.forEach(g => {
+      const o = document.createElement('option');
+      o.value = g.id; o.textContent = g.label; sel.appendChild(o);
+    });
+  }
+
+  function renderNodes() {
+    const body = document.getElementById('nodesBody');
+    const search = document.getElementById('nodeSearch');
+    const group = document.getElementById('nodeGroup');
+    const draw = () => {
+      const q = search.value.toLowerCase();
+      const gf = group.value;
+      const groupMap = Object.fromEntries(DATA.groups.map(g => [g.id, g]));
+      body.innerHTML = DATA.nodes
+        .filter(n => (!gf || n.group === gf) && (!q || (n.id+n.label+n.role).toLowerCase().includes(q)))
+        .map(n => {
+          const grp = groupMap[n.group];
+          return `<tr>
+            <td><span class="pill" style="background:${grp.color}">${grp.label}</span></td>
+            <td><code>${n.id}</code></td>
+            <td><span class="label">${n.label}</span></td>
+            <td><span class="role">${n.role || ''}</span></td>
+          </tr>`;
+        }).join('');
+    };
+    search.addEventListener('input', draw);
+    group.addEventListener('change', draw);
+    draw();
+  }
+
+  function renderEdges() {
+    const body = document.getElementById('edgesBody');
+    const search = document.getElementById('edgeSearch');
+    const draw = () => {
+      const q = search.value.toLowerCase();
+      body.innerHTML = DATA.edges
+        .filter(e => !q || (e.from+e.to+e.kind).toLowerCase().includes(q))
+        .map(e => `<tr><td><code>${e.from}</code></td><td><span class="pill" style="background:var(--forest)">${e.kind}</span></td><td><code>${e.to}</code></td></tr>`)
+        .join('');
+    };
+    search.addEventListener('input', draw);
+    draw();
+  }
+
+  function renderDataTab() {
+    document.getElementById('primaryDb').textContent = DATA.data_model.primary_db;
+    document.getElementById('tables').innerHTML = DATA.data_model.tables_inferred_from_migrations.map(t => `<li><code>${t}</code></li>`).join('');
+    const cs = DATA.data_model.client_storage;
+    document.getElementById('clientStore').innerHTML = Object.entries(cs).map(([k,v]) => `<li><strong>${k}</strong>: ${v}</li>`).join('');
+    document.getElementById('extServices').innerHTML = DATA.external_services.map(s => `<tr><td><strong>${s.name}</strong></td><td>${s.use}</td></tr>`).join('');
+    document.getElementById('navFlow').innerHTML = Object.entries(DATA.navigation_flow).map(([role, screens]) => `<tr><td><strong>${role}</strong></td><td>${screens.map(s => `<code>${s}</code>`).join(' → ')}</td></tr>`).join('');
+  }
+
+  function buildMermaidTop() {
+    // Group-to-group edge counts
+    const idGroup = Object.fromEntries(DATA.nodes.map(n => [n.id, n.group]));
+    const counts = {};
+    for (const e of DATA.edges) {
+      const a = idGroup[e.from], b = idGroup[e.to];
+      if (!a || !b || a === b) continue;
+      const k = a + '→' + b;
+      counts[k] = (counts[k] || 0) + 1;
+    }
+    const lines = ['flowchart LR'];
+    for (const g of DATA.groups) {
+      const gid = safeGroup(g.id);
+      lines.push(`  ${gid}["${safeLabel(g.label)}"]:::g_${gid}`);
+    }
+    for (const k of Object.keys(counts)) {
+      const [a,b] = k.split('→');
+      lines.push(`  ${safeGroup(a)} -- ${counts[k]} --> ${safeGroup(b)}`);
+    }
+    for (const g of DATA.groups) {
+      const gid = safeGroup(g.id);
+      lines.push(`  classDef g_${gid} fill:${g.color},color:#fff,stroke:#000,stroke-width:0px,rx:8,ry:8`);
+    }
+    return lines.join('\n');
+  }
+
+  function buildMermaidFull() {
+    const lines = ['flowchart LR'];
+    const groupNodes = {};
+    for (const n of DATA.nodes) (groupNodes[n.group] = groupNodes[n.group] || []).push(n);
+    for (const g of DATA.groups) {
+      const ns = groupNodes[g.id] || [];
+      if (!ns.length) continue;
+      const gid = safeGroup(g.id);
+      lines.push(`  subgraph ${gid}["${safeLabel(g.label)}"]`);
+      lines.push(`    direction TB`);
+      for (const n of ns) {
+        const id = safeId(n.id);
+        lines.push(`    ${id}["${safeLabel(n.label)}"]:::g_${gid}`);
+      }
+      lines.push(`  end`);
+    }
+    for (const e of DATA.edges) {
+      lines.push(`  ${safeId(e.from)} --> ${safeId(e.to)}`);
+    }
+    for (const g of DATA.groups) {
+      const gid = safeGroup(g.id);
+      lines.push(`  classDef g_${gid} fill:${g.color},color:#fff,stroke:#000,stroke-width:0px,rx:6,ry:6`);
+    }
+    return lines.join('\n');
+  }
+
+  async function renderMermaid() {
+    if (mermaidRendered) return;
+    mermaidRendered = true;
+
+    if (typeof mermaid === 'undefined') {
+      document.getElementById('m_top').innerHTML =
+        '<div style="color:#900;padding:12px;background:#fee;border-radius:8px">Mermaid library failed to load. Check network or open via local server.</div>';
+      return;
+    }
+
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'default',
+      flowchart: { htmlLabels: false, curve: 'basis' },
+      securityLevel: 'loose'
+    });
+
+    async function renderInto(elId, source, gid) {
+      const el = document.getElementById(elId);
+      try {
+        const { svg } = await mermaid.render(gid, source);
+        el.innerHTML = svg;
+      } catch (err) {
+        console.error('mermaid render fail', err);
+        el.innerHTML =
+          '<div style="color:#900;padding:12px;background:#fee;border-radius:8px;margin-bottom:8px">' +
+          'Mermaid render error: <code>' + (err && err.message ? err.message : String(err)) + '</code></div>' +
+          '<pre style="overflow:auto;background:#f5f5f0;padding:12px;border-radius:8px;font-size:11px">' +
+          source.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])) +
+          '</pre>';
+      }
+    }
+
+    await renderInto('m_top', buildMermaidTop(), 'mermaid_top');
+
+    // Defer full graph until user expands details (it's 355 lines, ~1-2s to render)
+    const fullDetails = document.getElementById('m_full').closest('details');
+    let fullDone = false;
+    fullDetails.addEventListener('toggle', async () => {
+      if (fullDetails.open && !fullDone) {
+        fullDone = true;
+        document.getElementById('m_full').textContent = 'Rendering full graph…';
+        await renderInto('m_full', buildMermaidFull(), 'mermaid_full');
+      }
+    });
+  }
+
+  load();
+</script>
+</body>
+</html>

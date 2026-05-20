@@ -1,0 +1,148 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: African Data Layer · Field Engineering Atlas
+        - heading "Architecture Map." [level=1] [ref=e6]:
+          - text: Architecture
+          - emphasis [ref=e7]: Map.
+        - paragraph [ref=e8]: A printed atlas of every file, route and edge that runs the platform — from the agent's map screen down to the Postgres migrations underneath.
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]: Branch
+          - strong [ref=e12]: main
+        - generic [ref=e13]:
+          - generic [ref=e14]: Commit
+          - strong [ref=e15]: 6207ee38
+        - generic [ref=e16]:
+          - generic [ref=e17]: Generated
+          - strong [ref=e18]: 2026-05-18
+        - generic [ref=e19]:
+          - generic [ref=e20]: Source
+          - strong [ref=e21]: architecture.json
+  - main [ref=e22]:
+    - navigation [ref=e23]:
+      - button "01 Overview" [ref=e24] [cursor=pointer]
+      - button "02 Diagram" [ref=e25] [cursor=pointer]
+      - button "03 Nodes" [ref=e26] [cursor=pointer]
+      - button "04 Edges" [ref=e27] [cursor=pointer]
+      - button "05 Data & Services" [ref=e28] [cursor=pointer]
+    - generic [ref=e29]:
+      - generic [ref=e30]:
+        - generic [ref=e31]:
+          - generic [ref=e32]: "166"
+          - generic [ref=e33]:
+            - generic [ref=e34]: Files
+            - generic [ref=e35]: source modules tracked
+        - generic [ref=e36]:
+          - generic [ref=e37]: "15"
+          - generic [ref=e38]:
+            - generic [ref=e39]: Groups
+            - generic [ref=e40]: architectural layers
+        - generic [ref=e41]:
+          - generic [ref=e42]: "166"
+          - generic [ref=e43]:
+            - generic [ref=e44]: Nodes
+            - generic [ref=e45]: addressable units
+        - generic [ref=e46]:
+          - generic [ref=e47]: "189"
+          - generic [ref=e48]:
+            - generic [ref=e49]: Edges
+            - generic [ref=e50]: directed relationships
+      - generic [ref=e51]:
+        - generic [ref=e52]:
+          - heading "§ The system, briefly" [level=2] [ref=e53]
+          - paragraph [ref=e54]:
+            - text: A single-page React app with screen-based navigation — no router.
+            - code [ref=e55]: App.tsx
+            - text: is the state hub. Vercel serverless functions back a Postgres (Supabase) primary store with Edge Config fallback.
+          - paragraph [ref=e56]:
+            - text: Offline-first via IndexedDB queue. Bilingual EN/FR inline. Fraud detection, gamification, and RBAC across
+            - emphasis [ref=e57]: agent
+            - text: ","
+            - emphasis [ref=e58]: admin
+            - text: ", and"
+            - emphasis [ref=e59]: client
+            - text: roles.
+          - paragraph [ref=e60]:
+            - text: Use
+            - strong [ref=e61]: Diagram
+            - text: for layout,
+            - strong [ref=e62]: Nodes
+            - text: for the file inventory,
+            - strong [ref=e63]: Edges
+            - text: for relationships,
+            - strong [ref=e64]: Data & Services
+            - text: "for storage and integrations. Spec:"
+            - link "architecture.json" [ref=e65] [cursor=pointer]:
+              - /url: ./architecture.json
+            - text: .
+        - generic [ref=e66]:
+          - heading "Taxonomy 15 layers" [level=2] [ref=e67]:
+            - text: Taxonomy
+            - generic [ref=e68]: 15 layers
+          - list [ref=e69]:
+            - listitem [ref=e70]:
+              - generic [ref=e71]: "01"
+              - generic [ref=e73]: Entry / Bootstrap
+              - generic [ref=e74]: "3"
+            - listitem [ref=e75]:
+              - generic [ref=e76]: "02"
+              - generic [ref=e78]: Screens (React)
+              - generic [ref=e79]: "23"
+            - listitem [ref=e80]:
+              - generic [ref=e81]: "03"
+              - generic [ref=e83]: Feature Components
+              - generic [ref=e84]: "14"
+            - listitem [ref=e85]:
+              - generic [ref=e86]: "04"
+              - generic [ref=e88]: Shared UI Primitives
+              - generic [ref=e89]: "12"
+            - listitem [ref=e90]:
+              - generic [ref=e91]: "05"
+              - generic [ref=e93]: Client Library
+              - generic [ref=e94]: "14"
+            - listitem [ref=e95]:
+              - generic [ref=e96]: "06"
+              - generic [ref=e98]: API Routes (Vercel fn)
+              - generic [ref=e99]: "12"
+            - listitem [ref=e100]:
+              - generic [ref=e101]: "07"
+              - generic [ref=e103]: Server Core
+              - generic [ref=e104]: "29"
+            - listitem [ref=e105]:
+              - generic [ref=e106]: "08"
+              - generic [ref=e108]: "Server: Auth"
+              - generic [ref=e109]: "5"
+            - listitem [ref=e110]:
+              - generic [ref=e111]: "09"
+              - generic [ref=e113]: "Server: AI"
+              - generic [ref=e114]: "8"
+            - listitem [ref=e115]:
+              - generic [ref=e116]: "10"
+              - generic [ref=e118]: "Server: Email"
+              - generic [ref=e119]: "8"
+            - listitem [ref=e120]:
+              - generic [ref=e121]: "11"
+              - generic [ref=e123]: "Server: SMS"
+              - generic [ref=e124]: "4"
+            - listitem [ref=e125]:
+              - generic [ref=e126]: "12"
+              - generic [ref=e128]: "Server: POI"
+              - generic [ref=e129]: "5"
+            - listitem [ref=e130]:
+              - generic [ref=e131]: "13"
+              - generic [ref=e133]: "Server: Storage"
+              - generic [ref=e134]: "6"
+            - listitem [ref=e135]:
+              - generic [ref=e136]: "14"
+              - generic [ref=e138]: Shared (client+server)
+              - generic [ref=e139]: "17"
+            - listitem [ref=e140]:
+              - generic [ref=e141]: "15"
+              - generic [ref=e143]: Infra / Config / DB
+              - generic [ref=e144]: "6"
+    - text: → →
+  - contentinfo [ref=e145]:
+    - text: African Data Layer · Architecture Atlas · rendered from
+    - code [ref=e146]: architecture.json

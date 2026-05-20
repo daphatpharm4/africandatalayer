@@ -1,0 +1,93 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e4]:
+        - generic [ref=e5]: African Data Layer · Field Engineering Atlas
+        - heading "Architecture Map." [level=1] [ref=e6]:
+          - text: Architecture
+          - emphasis [ref=e7]: Map.
+        - paragraph [ref=e8]: A printed atlas of every file, route and edge that runs the platform — from the agent's map screen down to the Postgres migrations underneath.
+      - generic [ref=e9]:
+        - generic [ref=e10]:
+          - generic [ref=e11]: Branch
+          - strong [ref=e12]: main
+        - generic [ref=e13]:
+          - generic [ref=e14]: Commit
+          - strong [ref=e15]: 6207ee38
+        - generic [ref=e16]:
+          - generic [ref=e17]: Generated
+          - strong [ref=e18]: 2026-05-18
+        - generic [ref=e19]:
+          - generic [ref=e20]: Source
+          - strong [ref=e21]: architecture.json
+  - main [ref=e22]:
+    - navigation [ref=e23]:
+      - button "01 Overview" [ref=e24] [cursor=pointer]
+      - button "02 Diagram" [active] [ref=e25] [cursor=pointer]
+      - button "03 Nodes" [ref=e26] [cursor=pointer]
+      - button "04 Edges" [ref=e27] [cursor=pointer]
+      - button "05 Data & Services" [ref=e28] [cursor=pointer]
+    - text: §
+    - generic [ref=e1326]:
+      - generic [ref=e1327]:
+        - heading "The graph, plotted." [level=2] [ref=e1328]:
+          - text: The
+          - emphasis [ref=e1329]: graph
+          - text: ", plotted."
+        - paragraph [ref=e1330]: Layer-grouped Mermaid render. Pan with scroll. Expand the full graph only when you need the wiring of every node.
+      - group [ref=e1331]:
+        - generic "→ Top-level cross-layer edges" [ref=e1332] [cursor=pointer]:
+          - text: → Top-level
+          - emphasis [ref=e1333]: cross-layer edges
+        - document [ref=e1335]:
+          - generic [ref=e1337]:
+            - generic [ref=e1364]:
+              - generic [ref=e1368]: "22"
+              - generic [ref=e1372]: "3"
+              - generic [ref=e1376]: "3"
+              - generic [ref=e1380]: "1"
+              - generic [ref=e1384]: "13"
+              - generic [ref=e1388]: "20"
+              - generic [ref=e1392]: "6"
+              - generic [ref=e1396]: "5"
+              - generic [ref=e1400]: "10"
+              - generic [ref=e1404]: "5"
+              - generic [ref=e1408]: "30"
+              - generic [ref=e1412]: "8"
+              - generic [ref=e1416]: "1"
+              - generic [ref=e1420]: "1"
+              - generic [ref=e1424]: "1"
+              - generic [ref=e1428]: "2"
+              - generic [ref=e1432]: "1"
+              - generic [ref=e1436]: "1"
+              - generic [ref=e1440]: "1"
+              - generic [ref=e1444]: "1"
+              - generic [ref=e1448]: "3"
+              - generic [ref=e1452]: "1"
+              - generic [ref=e1456]: "1"
+              - generic [ref=e1460]: "1"
+              - generic [ref=e1464]: "1"
+              - generic [ref=e1468]: "7"
+            - generic [ref=e1469]:
+              - generic [ref=e1473]: Entry / Bootstrap
+              - generic [ref=e1477]: Screens (React)
+              - generic [ref=e1481]: Feature Components
+              - generic [ref=e1485]: Shared UI Primitives
+              - generic [ref=e1489]: Client Library
+              - generic [ref=e1493]: API Routes (Vercel fn)
+              - generic [ref=e1497]: Server Core
+              - generic [ref=e1501]: "Server: Auth"
+              - generic [ref=e1505]: "Server: AI"
+              - generic [ref=e1509]: "Server: Email"
+              - generic [ref=e1513]: "Server: SMS"
+              - generic [ref=e1517]: "Server: POI"
+              - generic [ref=e1521]: "Server: Storage"
+              - generic [ref=e1525]: Shared (client+server)
+              - generic [ref=e1529]: Infra / Config / DB
+      - group [ref=e1530]:
+        - generic "→ Full graph all 166 nodes · large" [ref=e1531] [cursor=pointer]:
+          - text: → Full graph
+          - emphasis [ref=e1532]: all 166 nodes · large
+  - contentinfo [ref=e145]:
+    - text: African Data Layer · Architecture Atlas · rendered from
+    - code [ref=e146]: architecture.json
