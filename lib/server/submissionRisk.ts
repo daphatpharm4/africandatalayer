@@ -695,26 +695,9 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
 
   behavioralRisk = Math.min(100, behavioralRisk);
 
-  const riskComponents: RiskComponents = {
-    locationRisk,
-    photoRisk,
-    temporalRisk,
-    userRisk,
-    behavioralRisk,
-  };
-
-  const riskScore = buildRiskScore(riskComponents);
-  const shouldReview = reviewFlags.size > 0 || riskScore >= REVIEW_RISK_THRESHOLD;
-
-  if (input.isAdmin && blockingCodes.size > 0) {
-    for (const code of blockingCodes) {
-      reviewFlags.add(`admin_bypass_${code}`);
-    }
-    reviewFlags.add("admin_bypass");
-    blockingCodes.clear();
-  }
-
   // Perceptual hash duplicate detection (pHash + dHash AND-rule).
+  // Must run BEFORE riskComponents/riskScore are built so the +30 bump
+  // is reflected in the final score and xpAction tier.
   // Stage C policy (cross-agent/cross-point matrix) lands in PR #2.
   try {
     const [phash, dhash] = await Promise.all([
@@ -733,6 +716,25 @@ export async function evaluateSubmissionRisk(input: SubmissionRiskInput): Promis
     }
   } catch {
     // Perceptual hashing is best-effort; don't block submissions if sharp fails
+  }
+
+  const riskComponents: RiskComponents = {
+    locationRisk,
+    photoRisk,
+    temporalRisk,
+    userRisk,
+    behavioralRisk,
+  };
+
+  const riskScore = buildRiskScore(riskComponents);
+  const shouldReview = reviewFlags.size > 0 || riskScore >= REVIEW_RISK_THRESHOLD;
+
+  if (input.isAdmin && blockingCodes.size > 0) {
+    for (const code of blockingCodes) {
+      reviewFlags.add(`admin_bypass_${code}`);
+    }
+    reviewFlags.add("admin_bypass");
+    blockingCodes.clear();
   }
 
   const firstBlockCode = blockingCodes.values().next().value ?? null;
