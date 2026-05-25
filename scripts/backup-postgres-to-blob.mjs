@@ -91,8 +91,8 @@ async function main() {
     const sizeBytes = statSync(dumpPath).size;
     const blob = await openAsBlob(dumpPath);
     const result = await put(blobPath, blob, {
-      access: "public",
-      addRandomSuffix: true,
+      access: "private",
+      addRandomSuffix: false,
       token: blobToken,
       contentType: "application/octet-stream",
     });
