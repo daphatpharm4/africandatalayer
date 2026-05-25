@@ -1,0 +1,36 @@
+name: Campaign Drain
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: campaign-drain
+  cancel-in-progress: false
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger drain endpoint
+        env:
+          DRAIN_URL: ${{ secrets.CAMPAIGN_DRAIN_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DRAIN_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing CAMPAIGN_DRAIN_URL or CRON_SECRET secret" >&2
+            exit 1
+          fi
+          response=$(curl -sS -w "\n%{http_code}" -X GET \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${DRAIN_URL}")
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "Status: $status"
+          echo "Body: $body"
+          if [ "$status" != "200" ]; then
+            exit 1
+          fi
