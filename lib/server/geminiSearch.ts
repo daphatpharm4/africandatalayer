@@ -1,3 +1,5 @@
+import type { GoogleGenAI as GoogleGenAIClass } from "@google/genai";
+
 const SEARCH_MODEL = "gemini-2.5-flash";
 
 export class GeminiConfigError extends Error {
@@ -22,7 +24,7 @@ export interface GeminiSearchResult {
   grounding: unknown[];
 }
 
-type GoogleGenAIClient = InstanceType<typeof import("@google/genai").GoogleGenAI>;
+type GoogleGenAIClient = InstanceType<typeof GoogleGenAIClass>;
 
 let client: GoogleGenAIClient | null = null;
 

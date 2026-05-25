@@ -4,7 +4,6 @@ import type {
   ExternalPoiMatchStatus,
   SubmissionCategory,
   SubmissionDetails,
-  SubmissionLocation,
 } from "../../../shared/types.js";
 import type { NormalizedPoiDraft } from "./normalizePoi.js";
 import type { PoiMatchResult } from "./candidateMatcher.js";

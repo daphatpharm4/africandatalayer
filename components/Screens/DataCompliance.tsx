@@ -26,7 +26,7 @@ const DataCompliance: React.FC<Props> = ({ onBack, language }) => {
           subjectReference: '',
           notes: t(
             `Self-service ${requestType} request from in-app screen.`,
-            `Demande ${requestType} initiée depuis l\'application.`,
+            `Demande ${requestType} initiée depuis l'application.`,
           ),
         }),
       });

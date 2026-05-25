@@ -12,7 +12,7 @@
  */
 
 import { readFile, mkdir } from 'node:fs/promises';
-import { resolve, dirname } from 'node:path';
+import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 
 const WIDTH = 1080;

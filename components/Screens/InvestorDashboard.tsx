@@ -139,7 +139,7 @@ const InvestorDashboard: React.FC<Props> = ({ onBack, language }) => {
   const [weekly, setWeekly] = useState<WeeklyRow[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [fromCache, setFromCache] = useState(false);
+  const [_fromCache, setFromCache] = useState(false);
 
   useEffect(() => {
     let cancelled = false;

@@ -71,15 +71,19 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
     }
 
     if (receivedHtml) {
-      throw new Error(
+      const wrapped = new Error(
         `Expected JSON from ${path} but received HTML. This usually means the request hit the SPA fallback instead of the API route.`,
       );
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      throw wrapped;
     }
 
     if (!contentType.includes('application/json')) {
-      throw new Error(
+      const wrapped = new Error(
         `Expected JSON from ${path} but received ${contentType || 'a non-JSON response'}.`,
       );
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      throw wrapped;
     }
 
     throw error;

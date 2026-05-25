@@ -1,5 +1,9 @@
+import type * as SentryNode from "@sentry/node";
+
+type SentryNodeModule = typeof SentryNode;
+
 let initialized = false;
-let sentryModulePromise: Promise<typeof import("@sentry/node")> | null = null;
+let sentryModulePromise: Promise<SentryNodeModule> | null = null;
 
 function scrubString(value: string): string {
   return value
@@ -54,12 +58,12 @@ export function initServerSentry(): void {
     });
 }
 
-function loadSentryModule(): Promise<typeof import("@sentry/node")> {
+function loadSentryModule(): Promise<SentryNodeModule> {
   sentryModulePromise ??= import("@sentry/node");
   return sentryModulePromise;
 }
 
-function ensureSentryInitialized(Sentry: typeof import("@sentry/node")): boolean {
+function ensureSentryInitialized(Sentry: SentryNodeModule): boolean {
   if (initialized) return true;
   const dsn = process.env.SENTRY_DSN;
   if (!dsn) return false;
