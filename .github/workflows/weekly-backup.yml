@@ -38,6 +38,7 @@ jobs:
       - name: Run Backup
         run: node scripts/backup-postgres-to-blob.mjs
         env:
+          PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
           POSTGRES_BACKUP_URL: ${{ secrets.POSTGRES_BACKUP_URL }}
           ADL_POSTGRES_URL: ${{ secrets.ADL_POSTGRES_URL }}
           POSTGRES_URL_NON_POOLING: ${{ secrets.POSTGRES_URL_NON_POOLING }}
