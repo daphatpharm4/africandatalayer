@@ -91,8 +91,8 @@ async function main() {
     const sizeBytes = statSync(dumpPath).size;
     const blob = await openAsBlob(dumpPath);
     const result = await put(blobPath, blob, {
-      access: "private",
-      addRandomSuffix: false,
+      access: "public",
+      addRandomSuffix: true,
       token: blobToken,
       contentType: "application/octet-stream",
     });
@@ -100,8 +100,7 @@ async function main() {
     log("backup.complete", {
       blobPath,
       sizeBytes,
-      url: result.url,
-      downloadedUrl: result.downloadUrl,
+      pathname: result.pathname,
     });
   } finally {
     rmSync(workdir, { recursive: true, force: true });
