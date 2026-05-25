@@ -256,7 +256,16 @@ export async function dispatchCampaignSendBatch(params: {
   let suppressed = 0;
   let duplicate = 0;
 
+  const sendsPerSecond = Number(process.env.EMAIL_SEND_RATE_PER_SECOND ?? "4") || 4;
+  const minGapMs = Math.ceil(1000 / Math.max(1, sendsPerSecond));
+  let lastSendStart = 0;
+
   for (const row of pending.rows) {
+    const elapsed = Date.now() - lastSendStart;
+    if (lastSendStart > 0 && elapsed < minGapMs) {
+      await new Promise((resolve) => setTimeout(resolve, minGapMs - elapsed));
+    }
+    lastSendStart = Date.now();
     const unsubscribeUrl = buildUnsubscribeUrl(params.baseUrl, row.unsubscribe_token);
     const idempotencyKey = `email_campaign:${params.campaignId}:${row.user_id}`;
     const firstName = row.name ? row.name.split(/\s+/)[0] : "";

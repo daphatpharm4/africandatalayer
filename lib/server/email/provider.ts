@@ -196,28 +196,58 @@ export async function sendTransactional(params: SendTransactionalParams): Promis
     headers: Object.keys(headers).length > 0 ? headers : undefined,
   };
 
-  let response: Response;
-  try {
-    response = await fetch(RESEND_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-        "Idempotency-Key": params.idempotencyKey,
-      },
-      body: JSON.stringify(body),
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "fetch_failed";
-    await markLogStatus(row.id, "failed", null, message);
-    logError("email.send_failed", { templateId: params.templateId, error: message });
-    return { status: "failed", providerMessageId: null, reason: message };
+  const MAX_ATTEMPTS = 5;
+  let response: Response | null = null;
+  let parsed: ResendSendResponse | null = null;
+  let lastError: string | null = null;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      response = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+          "Idempotency-Key": params.idempotencyKey,
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "fetch_failed";
+      response = null;
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+        continue;
+      }
+      await markLogStatus(row.id, "failed", null, lastError);
+      logError("email.send_failed", { templateId: params.templateId, error: lastError });
+      return { status: "failed", providerMessageId: null, reason: lastError };
+    }
+
+    parsed = await response
+      .json()
+      .then((value) => value as ResendSendResponse)
+      .catch(() => null);
+
+    if (response.status === 429 && attempt < MAX_ATTEMPTS) {
+      const retryAfterHeader = response.headers.get("retry-after");
+      const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+      const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+        ? Math.min(retryAfterSec * 1000, 5000)
+        : Math.min(500 * 2 ** (attempt - 1), 4000);
+      logInfo("email.rate_limited", { templateId: params.templateId, attempt, waitMs });
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+      continue;
+    }
+
+    break;
   }
 
-  const parsed: ResendSendResponse | null = await response
-    .json()
-    .then((value) => value as ResendSendResponse)
-    .catch(() => null);
+  if (!response) {
+    const reason = lastError ?? "no_response";
+    await markLogStatus(row.id, "failed", null, reason);
+    return { status: "failed", providerMessageId: null, reason };
+  }
 
   if (!response.ok) {
     const reason = parsed?.message ?? `resend_status_${response.status}`;
