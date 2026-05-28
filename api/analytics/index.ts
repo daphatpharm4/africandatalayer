@@ -52,7 +52,6 @@ interface CronDispatchSummary {
     dailyRoadSnapshot: CronJobSummary;
     dailyTrustDecay: CronJobSummary;
     dailyGpsAnomaly: CronJobSummary;
-    imageSimilarityDrain: CronJobSummary;
   };
 }
 
@@ -119,11 +118,6 @@ async function runDailyGpsAnomalyCron(): Promise<unknown> {
   return analyzeAgentMovementPatterns();
 }
 
-async function runImageSimilarityDrainCron(): Promise<unknown> {
-  const { runImageSimilarityDrain } = await import("../../lib/server/imageSimilarityCron.js");
-  return runImageSimilarityDrain();
-}
-
 async function handleCronDispatch(url: URL): Promise<Response> {
   const now = resolveCronDispatchInstant(url.searchParams.get("at"));
   if (!now) {
@@ -138,7 +132,6 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     dailyRoadSnapshot: { due: schedule.dailyRoadSnapshot, status: "skipped", message: "Not scheduled for this run" },
     dailyTrustDecay: { due: schedule.dailyTrustDecay, status: "skipped", message: "Not scheduled for this run" },
     dailyGpsAnomaly: { due: schedule.dailyGpsAnomaly, status: "skipped", message: "Not scheduled for this run" },
-    imageSimilarityDrain: { due: true, status: "skipped", message: "Not yet executed" },
   };
 
   let hasFailures = false;
@@ -236,25 +229,6 @@ async function handleCronDispatch(url: URL): Promise<Response> {
       };
       console.error("Cron dispatch daily GPS anomaly detection failed:", error);
     }
-  }
-
-  // Image-similarity drain runs every dispatch tick (no schedule gating).
-  // Backfill processes 200 legacy rows; embedding drain processes 50 pending.
-  try {
-    jobs.imageSimilarityDrain = {
-      due: true,
-      status: "ok",
-      message: "Image similarity drain executed",
-      result: await runImageSimilarityDrainCron(),
-    };
-  } catch (error) {
-    hasFailures = true;
-    jobs.imageSimilarityDrain = {
-      due: true,
-      status: "error",
-      message: asErrorMessage(error),
-    };
-    console.error("Cron dispatch image similarity drain failed:", error);
   }
 
   const summary: CronDispatchSummary = {
