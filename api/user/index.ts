@@ -23,6 +23,7 @@ import {
   userUpdateSchema,
 } from "../../lib/server/validation.js";
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
+import { hashRequestPayload, postgresIdempotencyStore, resolveIdempotency } from "../../lib/server/idempotencyGeneric.js";
 import type {
   CollectionAssignmentCreateInput,
   CollectionAssignmentStatus,
@@ -320,6 +321,23 @@ export async function PUT(request: Request): Promise<Response> {
   }
   const body = validation.data;
 
+  const idempotencyKey = request.headers.get("Idempotency-Key")?.trim() || null;
+  if (idempotencyKey) {
+    const requestHash = hashRequestPayload(body);
+    const decision = await resolveIdempotency(postgresIdempotencyStore, {
+      scope: "user:put",
+      userId: auth.id,
+      idempotencyKey,
+      requestHash,
+    });
+    if (decision.status === "conflict") {
+      return errorResponse("Idempotency-Key reused with a different body", 409, { code: "idempotency_conflict" });
+    }
+    if (decision.status === "replay") {
+      return jsonResponse(decision.responseJson, { status: decision.responseStatus });
+    }
+  }
+
   try {
     const profile = await getUserProfile(auth.id);
     if (!profile) return errorResponse("Profile not found", 404);
@@ -346,7 +364,12 @@ export async function PUT(request: Request): Promise<Response> {
     }
 
     await upsertUserProfile(auth.id, profile);
-    return jsonResponse(sanitizeProfile(profile), { status: 200 });
+    const sanitized = sanitizeProfile(profile);
+
+    if (idempotencyKey) {
+      await postgresIdempotencyStore.complete("user:put", auth.id, idempotencyKey, sanitized, 200);
+    }
+    return jsonResponse(sanitized, { status: 200 });
   } catch (error) {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
