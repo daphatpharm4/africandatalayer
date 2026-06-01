@@ -2,7 +2,7 @@ import { ZodError } from "zod";
 import { requireUser } from "../../lib/auth.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { GeminiConfigError, GeminiUpstreamError, searchLocationsServer } from "../../lib/server/geminiSearch.js";
-import { consumeRateLimit, extractRateLimitIp } from "../../lib/server/rateLimit.js";
+import { consumeBucket, consumeRateLimit, extractRateLimitIp, resolveBucketStore } from "../../lib/server/rateLimit.js";
 import { buildAiAuditMetadata } from "../../lib/server/ai/audit.js";
 import { answerAnalyticsQuestion, draftAnalyticsReport } from "../../lib/server/ai/analyticsAssistant.js";
 import { buildAnalyticsQueryPlan, gatherAggregateAnalyticsFacts } from "../../lib/server/ai/analyticsFacts.js";
@@ -371,6 +371,19 @@ export function createAiSearchHandler(
         { error: "Too many requests", code: "rate_limited" },
         { status: 429, headers: { "retry-after": String(retryAfterSeconds) } },
       );
+    }
+
+    const burstStore = await resolveBucketStore();
+    const burst = await consumeBucket({
+      store: burstStore,
+      route: "ai:search",
+      key: requestIp ?? "anon",
+      strategy: "token",
+      capacity: 5,
+      refillPerSec: 1,
+    });
+    if (!burst.allowed) {
+      return errorResponse("Too many requests, slow down", 429, { code: "rate_limited" });
     }
 
     try {
