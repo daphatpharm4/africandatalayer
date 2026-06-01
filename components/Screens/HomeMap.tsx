@@ -73,6 +73,7 @@ interface Props {
   viewportTopInsetPx?: number;
   viewportBottomInsetPx?: number;
   userRole?: 'agent' | 'admin' | 'client';
+  onPrefetchDetails?: () => void;
 }
 
 const createMarkerIcon = (color: string) =>
@@ -210,6 +211,7 @@ const HomeMap: React.FC<Props> = ({
   mapPointGroups,
   selectedCityLabel,
   onSelectPoint,
+  onPrefetchDetails,
   categoryLabel,
   formatExplorerPrimaryMeta,
   formatPharmacyOpenStatus,
@@ -316,6 +318,7 @@ const HomeMap: React.FC<Props> = ({
               key={group.key}
               position={[group.latitude, group.longitude]}
               icon={icon}
+              eventHandlers={{ mouseover: () => onPrefetchDetails?.() }}
             >
               <Popup>
                 {singlePoint ? (

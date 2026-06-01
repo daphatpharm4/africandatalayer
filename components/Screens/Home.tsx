@@ -35,6 +35,7 @@ import type { MissionCard } from '../MissionCards';
 
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
+  onPrefetchDetails?: () => void;
   isAuthenticated: boolean;
   isAdmin?: boolean;
   userRole?: UserRole;
@@ -104,7 +105,7 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRole = 'agent', onAuth, onContribute, onProfile, activeCategory, onCategoryChange, language }) => {
+const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticated, isAdmin, userRole = 'agent', onAuth, onContribute, onProfile, activeCategory, onCategoryChange, language }) => {
   const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
   const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
   const [isVerticalPickerOpen, setIsVerticalPickerOpen] = useState(false);
@@ -771,6 +772,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
               mapPointGroups={mapPointGroups}
               selectedCityLabel={selectedCityLabel}
               onSelectPoint={onSelectPoint}
+              onPrefetchDetails={onPrefetchDetails}
               categoryLabel={categoryLabel}
               formatExplorerPrimaryMeta={formatExplorerPrimaryMeta}
               formatPharmacyOpenStatus={formatPharmacyOpenStatus}
@@ -880,6 +882,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, isAuthenticated, isAdmin, userRo
                     key={point.id}
                     type="button"
                     onClick={() => onSelectPoint(point)}
+                    onMouseEnter={() => onPrefetchDetails?.()}
                     className="card-soft motion-pressable flex w-full items-center gap-3 p-3.5 text-left"
                   >
                     <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${getListCardTone(point)}`}>

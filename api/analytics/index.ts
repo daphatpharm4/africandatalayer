@@ -1,6 +1,6 @@
 import { requireUser } from "../../lib/auth.js";
 import { query } from "../../lib/server/db.js";
-import { jsonResponse, errorResponse } from "../../lib/server/http.js";
+import { cachedJsonResponse, computeWeakEtag, errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { computeMovingAverage } from "../../lib/server/snapshotEngine.js";
 import { getSpatialIntelligence } from "../../lib/server/spatialIntelligence.js";
 import type { SpatialIntelligenceSort } from "../../shared/types.js";
@@ -343,7 +343,7 @@ export async function GET(request: Request): Promise<Response> {
 
   switch (view) {
     case "snapshots":
-      return handleSnapshots(url);
+      return handleSnapshots(url, request);
     case "deltas":
       return handleDeltas(url);
     case "monthly":
@@ -366,7 +366,7 @@ export async function GET(request: Request): Promise<Response> {
   }
 }
 
-async function handleSnapshots(url: URL): Promise<Response> {
+async function handleSnapshots(url: URL, request: Request): Promise<Response> {
   const vertical = url.searchParams.get("vertical");
   const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "12", 10), 52);
 
@@ -387,7 +387,13 @@ async function handleSnapshots(url: URL): Promise<Response> {
     values,
   );
 
-  return jsonResponse(result.rows);
+  const etag = computeWeakEtag(result.rows);
+  return cachedJsonResponse(result.rows, {
+    sMaxAge: 300,
+    staleWhileRevalidate: 600,
+    etag,
+    ifNoneMatch: request.headers.get("If-None-Match"),
+  });
 }
 
 async function handleDeltas(url: URL): Promise<Response> {

@@ -31,7 +31,8 @@ import SyncStatusBar from './components/SyncStatusBar';
 import HelpCenter from './components/docs/HelpCenter';
 import { docsPathForAudience } from './lib/docs/helpCenter';
 
-const Details = lazy(() => import('./components/Screens/Details'));
+const importDetails = () => import('./components/Screens/Details');
+const Details = lazy(importDetails);
 const Auth = lazy(() => import('./components/Screens/Auth'));
 const ContributionFlow = lazy(() => import('./components/Screens/ContributionFlow'));
 const Profile = lazy(() => import('./components/Screens/Profile'));
@@ -391,6 +392,7 @@ const App: React.FC = () => {
         return (
           <Home
             onSelectPoint={(point) => navigateTo(Screen.DETAILS, point)}
+            onPrefetchDetails={importDetails}
             isAuthenticated={isAuthenticated}
             isAdmin={isAdmin}
             userRole={userRole}

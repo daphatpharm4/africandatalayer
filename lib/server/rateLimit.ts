@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { query } from "./db.js";
 import { logSecurityEvent } from "./securityAudit.js";
+import { evaluateTokenBucket, type TokenBucketState } from "./rateLimit/tokenBucket.js";
+import { evaluateLeakyBucket, type LeakyBucketState } from "./rateLimit/leakyBucket.js";
+import type { BucketStore } from "./rateLimit/store.js";
 
 function hashKey(input: string): string {
   return createHash("sha256").update(input.trim()).digest("hex");
@@ -68,4 +71,65 @@ export async function consumeRateLimit(input: {
     retryAfterSeconds,
     count,
   };
+}
+
+export type BucketStrategy = "token" | "leaky";
+
+export interface ConsumeBucketInput {
+  store: BucketStore;
+  route: string;
+  key: string;
+  strategy: BucketStrategy;
+  capacity: number;
+  /** token strategy only */
+  refillPerSec?: number;
+  /** leaky strategy only */
+  leakPerSec?: number;
+  nowFn?: () => number;
+}
+
+export interface ConsumeBucketResult {
+  allowed: boolean;
+  retryAfterSeconds: number;
+}
+
+function bucketStorageKey(route: string, key: string, strategy: BucketStrategy): string {
+  return `rl:${strategy}:${route}:${hashKey(key)}`;
+}
+
+export async function consumeBucket(input: ConsumeBucketInput): Promise<ConsumeBucketResult> {
+  const now = (input.nowFn ?? Date.now)();
+  const storageKey = bucketStorageKey(input.route, input.key, input.strategy);
+  const prev = await input.store.get(storageKey);
+
+  if (input.strategy === "token") {
+    const rate = input.refillPerSec ?? 1;
+    const result = evaluateTokenBucket(
+      prev as unknown as TokenBucketState | null,
+      { capacity: input.capacity, refillPerSec: rate },
+      now,
+    );
+    const ttl = Math.ceil(input.capacity / rate) + 1;
+    await input.store.set(storageKey, result.state as unknown as Record<string, number>, ttl);
+    return { allowed: result.allowed, retryAfterSeconds: result.retryAfterSeconds };
+  }
+
+  const leak = input.leakPerSec ?? 1;
+  const result = evaluateLeakyBucket(
+    prev as unknown as LeakyBucketState | null,
+    { capacity: input.capacity, leakPerSec: leak },
+    now,
+  );
+  const ttl = Math.ceil(input.capacity / leak) + 1;
+  await input.store.set(storageKey, result.state as unknown as Record<string, number>, ttl);
+  return { allowed: result.allowed, retryAfterSeconds: result.retryAfterSeconds };
+}
+
+/** Resolves the active bucket store: Redis when configured, else in-memory. */
+let cachedStore: BucketStore | null = null;
+export async function resolveBucketStore(): Promise<BucketStore> {
+  if (cachedStore) return cachedStore;
+  const { createRedisBucketStore, createInMemoryBucketStore } = await import("./rateLimit/store.js");
+  cachedStore = (await createRedisBucketStore()) ?? createInMemoryBucketStore();
+  return cachedStore;
 }
