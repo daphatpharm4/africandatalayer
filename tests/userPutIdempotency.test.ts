@@ -3,11 +3,19 @@ import test from "node:test";
 import { hashRequestPayload, resolveIdempotency, type IdempotencyStore } from "../lib/server/idempotencyGeneric.ts";
 
 function memStore(): IdempotencyStore {
-  const rows = new Map<string, { requestHash: string; responseJson: unknown; responseStatus: number }>();
+  const rows = new Map<string, { requestHash: string; responseJson: unknown; responseStatus: number; createdAtMs: number }>();
   return {
     async find(s, u, k) { return rows.get(`${s}:${u}:${k}`) ?? null; },
-    async insert(s, u, k, h) { rows.set(`${s}:${u}:${k}`, { requestHash: h, responseJson: null, responseStatus: 0 }); },
-    async complete(s, u, k, j, st) { const e = rows.get(`${s}:${u}:${k}`)!; rows.set(`${s}:${u}:${k}`, { requestHash: e.requestHash, responseJson: j, responseStatus: st }); },
+    async insert(s, u, k, h) {
+      const id = `${s}:${u}:${k}`;
+      if (rows.has(id)) return false;
+      rows.set(id, { requestHash: h, responseJson: null, responseStatus: 0, createdAtMs: Date.now() });
+      return true;
+    },
+    async reclaim(s, u, k, h) {
+      rows.set(`${s}:${u}:${k}`, { requestHash: h, responseJson: null, responseStatus: 0, createdAtMs: Date.now() });
+    },
+    async complete(s, u, k, j, st) { const e = rows.get(`${s}:${u}:${k}`)!; rows.set(`${s}:${u}:${k}`, { ...e, responseJson: j, responseStatus: st }); },
   };
 }
 

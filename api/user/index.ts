@@ -24,6 +24,7 @@ import {
 } from "../../lib/server/validation.js";
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import { hashRequestPayload, postgresIdempotencyStore, resolveIdempotency } from "../../lib/server/idempotencyGeneric.js";
+import { readIdempotencyKey } from "../../lib/server/idempotencyCore.js";
 import type {
   CollectionAssignmentCreateInput,
   CollectionAssignmentStatus,
@@ -321,7 +322,7 @@ export async function PUT(request: Request): Promise<Response> {
   }
   const body = validation.data;
 
-  const idempotencyKey = request.headers.get("Idempotency-Key")?.trim() || null;
+  const idempotencyKey = readIdempotencyKey(request.headers);
   if (idempotencyKey) {
     const requestHash = hashRequestPayload(body);
     const decision = await resolveIdempotency(postgresIdempotencyStore, {
@@ -332,6 +333,12 @@ export async function PUT(request: Request): Promise<Response> {
     });
     if (decision.status === "conflict") {
       return errorResponse("Idempotency-Key reused with a different body", 409, { code: "idempotency_conflict" });
+    }
+    if (decision.status === "in_flight") {
+      return errorResponse("A request with this idempotency key is already in progress", 409, {
+        code: "idempotency_in_flight",
+        retryAfterSeconds: 2,
+      });
     }
     if (decision.status === "replay") {
       return jsonResponse(decision.responseJson, { status: decision.responseStatus });
