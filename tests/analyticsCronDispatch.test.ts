@@ -14,6 +14,7 @@ test("getCronDispatchSchedule enables weekly snapshot on Monday at daily cron ti
     dailyRoadSnapshot: true,
     dailyTrustDecay: true,
     dailyGpsAnomaly: true,
+    dailyPurge: true,
   });
 });
 
@@ -25,6 +26,7 @@ test("getCronDispatchSchedule enables monthly rollup on day 1 at daily cron time
     dailyRoadSnapshot: true,
     dailyTrustDecay: true,
     dailyGpsAnomaly: true,
+    dailyPurge: true,
   });
 });
 
@@ -37,6 +39,7 @@ test("getCronDispatchSchedule enables daily jobs anywhere in the 06:XX hour", ()
     dailyRoadSnapshot: true,
     dailyTrustDecay: true,
     dailyGpsAnomaly: true,
+    dailyPurge: true,
   });
 
   // Vercel cron jitter: a few minutes late
@@ -47,6 +50,7 @@ test("getCronDispatchSchedule enables daily jobs anywhere in the 06:XX hour", ()
     dailyRoadSnapshot: true,
     dailyTrustDecay: true,
     dailyGpsAnomaly: true,
+    dailyPurge: true,
   });
 });
 
@@ -58,6 +62,7 @@ test("getCronDispatchSchedule handles non-matching hours", () => {
     dailyRoadSnapshot: false,
     dailyTrustDecay: false,
     dailyGpsAnomaly: false,
+    dailyPurge: false,
   });
 
   const nonMatchingHour = getCronDispatchSchedule(utc("2026-03-02T05:00:00.000Z"));
@@ -67,6 +72,7 @@ test("getCronDispatchSchedule handles non-matching hours", () => {
     dailyRoadSnapshot: false,
     dailyTrustDecay: false,
     dailyGpsAnomaly: false,
+    dailyPurge: false,
   });
 });
 
@@ -78,6 +84,7 @@ test("getCronDispatchSchedule does not trigger outside the 06:XX hour", () => {
     dailyRoadSnapshot: false,
     dailyTrustDecay: false,
     dailyGpsAnomaly: false,
+    dailyPurge: false,
   });
 });
 
@@ -89,5 +96,6 @@ test("getCronDispatchSchedule prioritizes the configured UTC hours on combined c
     dailyRoadSnapshot: true,
     dailyTrustDecay: true,
     dailyGpsAnomaly: true,
+    dailyPurge: true,
   });
 });
