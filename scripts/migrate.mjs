@@ -32,6 +32,24 @@ function resolveDatabaseUrl() {
   );
 }
 
+/**
+ * Mirror lib/server/db.ts: the pool is created with rejectUnauthorized:false
+ * (no-verify intent), but a connection string carrying sslmode=verify-full or an
+ * sslrootcert can override that and make pg verify against a CA the Supabase
+ * self-signed cert doesn't chain to. Force sslmode=no-verify and drop
+ * sslrootcert so the no-verify intent actually takes effect.
+ */
+function applyNoVerifySslMode(connectionString) {
+  try {
+    const parsed = new URL(connectionString);
+    parsed.searchParams.set("sslmode", "no-verify");
+    parsed.searchParams.delete("sslrootcert");
+    return parsed.toString();
+  } catch {
+    return connectionString;
+  }
+}
+
 function parseArgs(argv) {
   const args = {
     dryRun: false,
@@ -96,7 +114,10 @@ async function main() {
     process.exit(1);
   }
 
-  const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+  const pool = new Pool({
+    connectionString: applyNoVerifySslMode(connectionString),
+    ssl: { rejectUnauthorized: false },
+  });
   try {
     await ensureMigrationsTable(pool);
     const applied = await getAppliedMigrations(pool);
