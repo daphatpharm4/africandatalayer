@@ -4,6 +4,7 @@ import { edgeConfigStore } from "./edgeConfigStore.js";
 import { edgeFallbackStore } from "./edgeFallbackStore.js";
 import { postgresStore, getUserProfilesBatch as postgresGetUserProfilesBatch } from "./postgresStore.js";
 import type { StorageStore } from "./types.js";
+import type { PointEventFilter } from "./pointEventsQuery.js";
 
 type StorageDriver = "postgres" | "edge";
 
@@ -54,11 +55,11 @@ export async function upsertUserProfile(userId: string, profile: UserProfile): P
   await primary.upsertUserProfile(userId, profile);
 }
 
-export async function getPointEvents(): Promise<PointEvent[]> {
+export async function getPointEvents(filter?: PointEventFilter): Promise<PointEvent[]> {
   const primary = getPrimaryStore();
-  const primaryEvents = await primary.getPointEvents();
+  const primaryEvents = await primary.getPointEvents(filter);
   if (!shouldUseFallback()) return primaryEvents;
-  const fallbackEvents = await edgeFallbackStore.getPointEvents();
+  const fallbackEvents = await edgeFallbackStore.getPointEvents(filter);
   return mergeEvents(primaryEvents, fallbackEvents);
 }
 

@@ -2,6 +2,7 @@ import { BONAMOUSSADI_CURATED_SEED_EVENTS } from "../../shared/bonamoussadiSeedE
 import type { PointEvent } from "../../shared/types.js";
 import { mergePointEventsWithLegacy } from "./pointProjection.js";
 import { getLegacySubmissions, getPointEvents } from "./storage/index.js";
+import type { PointEventFilter } from "./storage/pointEventsQuery.js";
 
 const INLINE_PHOTO_PREFIX = "data:image/";
 
@@ -13,14 +14,14 @@ export function stripInlinePhotoData(event: PointEvent): PointEvent {
   return { ...rest, details };
 }
 
-export async function buildContributionEvents(): Promise<PointEvent[]> {
-  const pointEvents = (await getPointEvents()).map(stripInlinePhotoData);
+export async function buildContributionEvents(filter?: PointEventFilter): Promise<PointEvent[]> {
+  const pointEvents = (await getPointEvents(filter)).map(stripInlinePhotoData);
   const legacySubmissions = await getLegacySubmissions();
   return mergePointEventsWithLegacy(pointEvents, legacySubmissions);
 }
 
-export async function buildReadableEvents(): Promise<PointEvent[]> {
-  const merged = await buildContributionEvents();
+export async function buildReadableEvents(filter?: PointEventFilter): Promise<PointEvent[]> {
+  const merged = await buildContributionEvents(filter);
   const seenExternalIds = new Set(
     merged
       .map((event) => (typeof event.externalId === "string" ? event.externalId.trim() : ""))

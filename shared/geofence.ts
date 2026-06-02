@@ -24,6 +24,19 @@ export const CAMEROON_CENTER = {
   longitude: 12.3547,
 } as const;
 
+/**
+ * Bounding box for a map scope, in the shape the point_events read path uses to
+ * push a spatial filter down to Postgres. Returns null for "global" (admin-only,
+ * unbounded) so callers omit the WHERE and fall back to a full scan deliberately.
+ */
+export function mapScopeBbox(
+  scope: "bonamoussadi" | "cameroon" | "global",
+): { minLat: number; maxLat: number; minLng: number; maxLng: number } | null {
+  if (scope === "global") return null;
+  const b = scope === "cameroon" ? CAMEROON_BOUNDS : BONAMOUSSADI_BOUNDS;
+  return { minLat: b.south, maxLat: b.north, minLng: b.west, maxLng: b.east };
+}
+
 export function isWithinBonamoussadi(location: SubmissionLocation | null | undefined): boolean {
   if (!location) return false;
   return (

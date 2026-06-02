@@ -65,7 +65,7 @@ import {
 import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
 import { getTrustTier } from "../../lib/server/userTrust.js";
 import { submissionInputSchema } from "../../lib/server/validation.js";
-import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../../shared/geofence.js";
+import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon, mapScopeBbox } from "../../shared/geofence.js";
 import type {
   AdminSubmissionEvent,
   ClientDeviceInfo,
@@ -637,7 +637,11 @@ export async function GET(request: Request): Promise<Response> {
       return jsonResponse(await buildSchemaGuardView(), { status: 200 });
     }
 
-    const allEvents = await buildReadableEvents();
+    // Push the scope bounding box down to Postgres so a map load no longer scans
+    // every point_events row. The per-event JS filter below is retained because
+    // it still applies to in-memory seed/legacy events merged after the DB read.
+    const bbox = mapScopeBbox(effectiveScope) ?? undefined;
+    const allEvents = await buildReadableEvents(bbox ? { bbox } : undefined);
     const scopedEvents = allEvents.filter((event) => {
       if (effectiveScope === "global") return true;
       if (effectiveScope === "cameroon") return isWithinCameroon(event.location);
