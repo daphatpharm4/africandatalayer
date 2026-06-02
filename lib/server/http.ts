@@ -11,10 +11,18 @@ export function jsonResponse(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), { ...init, headers });
 }
 
-export function errorResponse(message: string, status: number, options: { code?: string } = {}): Response {
+export function errorResponse(
+  message: string,
+  status: number,
+  options: { code?: string; retryAfterSeconds?: number } = {},
+): Response {
   const body: { error: string; code?: string } = { error: message };
   if (options.code) body.code = options.code;
-  return jsonResponse(body, { status });
+  const headers = new Headers();
+  if (typeof options.retryAfterSeconds === "number" && options.retryAfterSeconds > 0) {
+    headers.set("retry-after", String(Math.ceil(options.retryAfterSeconds)));
+  }
+  return jsonResponse(body, { status, headers });
 }
 
 export function computeWeakEtag(body: unknown): string {

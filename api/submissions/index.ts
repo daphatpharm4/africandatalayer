@@ -18,6 +18,7 @@ import { query } from "../../lib/server/db.js";
 import { diffCategorySets, parseConstraintCategories } from "../../lib/server/schemaGuard.js";
 import { incrementAssignmentsForEvent } from "../../lib/server/collectionAssignments.js";
 import { completeIdempotencyKey, hashIdempotencyPayload, reserveIdempotencyKey } from "../../lib/server/idempotency.js";
+import { readIdempotencyKey } from "../../lib/server/idempotencyCore.js";
 import { stripPiiDetails, toPublicProjectedPoint } from "../../lib/server/privacy.js";
 import { consumeRateLimit } from "../../lib/server/rateLimit.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
@@ -65,7 +66,7 @@ import {
 import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
 import { getTrustTier } from "../../lib/server/userTrust.js";
 import { submissionInputSchema } from "../../lib/server/validation.js";
-import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon } from "../../shared/geofence.js";
+import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon, mapScopeBbox } from "../../shared/geofence.js";
 import type {
   AdminSubmissionEvent,
   ClientDeviceInfo,
@@ -637,7 +638,11 @@ export async function GET(request: Request): Promise<Response> {
       return jsonResponse(await buildSchemaGuardView(), { status: 200 });
     }
 
-    const allEvents = await buildReadableEvents();
+    // Push the scope bounding box down to Postgres so a map load no longer scans
+    // every point_events row. The per-event JS filter below is retained because
+    // it still applies to in-memory seed/legacy events merged after the DB read.
+    const bbox = mapScopeBbox(effectiveScope) ?? undefined;
+    const allEvents = await buildReadableEvents(bbox ? { bbox } : undefined);
     const scopedEvents = allEvents.filter((event) => {
       if (effectiveScope === "global") return true;
       if (effectiveScope === "cameroon") return isWithinCameroon(event.location);
@@ -988,7 +993,7 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
 
-  const idempotencyKey = trimString(request.headers.get("x-idempotency-key"), 160);
+  const idempotencyKey = readIdempotencyKey(request.headers);
   if (idempotencyKey) {
     const requestHash = hashIdempotencyPayload(body);
     const reservation = await reserveIdempotencyKey({
@@ -1005,6 +1010,15 @@ export async function POST(request: Request): Promise<Response> {
       });
       return errorResponse("This idempotency key was already used for a different submission", 409, {
         code: "idempotency_conflict",
+      });
+    }
+    if (reservation.status === "in_flight") {
+      // A duplicate with the same key is still executing. Do not create a second
+      // submission — tell the client to retry, by which point the original will
+      // have completed and this key will replay (single-flight, bd-ke3).
+      return errorResponse("A request with this idempotency key is already in progress", 409, {
+        code: "idempotency_in_flight",
+        retryAfterSeconds: 2,
       });
     }
     if (reservation.status === "replay" && reservation.eventId) {

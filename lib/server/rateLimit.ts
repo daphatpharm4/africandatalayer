@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { query } from "./db.js";
 import { logSecurityEvent } from "./securityAudit.js";
-import { evaluateTokenBucket, type TokenBucketState } from "./rateLimit/tokenBucket.js";
 import { evaluateLeakyBucket, type LeakyBucketState } from "./rateLimit/leakyBucket.js";
 import type { BucketStore } from "./rateLimit/store.js";
 
@@ -100,20 +99,23 @@ function bucketStorageKey(route: string, key: string, strategy: BucketStrategy):
 export async function consumeBucket(input: ConsumeBucketInput): Promise<ConsumeBucketResult> {
   const now = (input.nowFn ?? Date.now)();
   const storageKey = bucketStorageKey(input.route, input.key, input.strategy);
-  const prev = await input.store.get(storageKey);
 
   if (input.strategy === "token") {
     const rate = input.refillPerSec ?? 1;
-    const result = evaluateTokenBucket(
-      prev as unknown as TokenBucketState | null,
-      { capacity: input.capacity, refillPerSec: rate },
-      now,
-    );
     const ttl = Math.ceil(input.capacity / rate) + 1;
-    await input.store.set(storageKey, result.state as unknown as Record<string, number>, ttl);
+    // Atomic single-op consume — avoids the read-modify-write race that get/set
+    // suffers across concurrent requests and Fluid Compute instances (bd-4jl).
+    const result = await input.store.consumeTokenBucket(storageKey, {
+      capacity: input.capacity,
+      refillPerSec: rate,
+      nowMs: now,
+      ttlSeconds: ttl,
+    });
     return { allowed: result.allowed, retryAfterSeconds: result.retryAfterSeconds };
   }
 
+  // Leaky strategy retains get/set (no caller today; documented best-effort).
+  const prev = await input.store.get(storageKey);
   const leak = input.leakPerSec ?? 1;
   const result = evaluateLeakyBucket(
     prev as unknown as LeakyBucketState | null,
@@ -127,9 +129,23 @@ export async function consumeBucket(input: ConsumeBucketInput): Promise<ConsumeB
 
 /** Resolves the active bucket store: Redis when configured, else in-memory. */
 let cachedStore: BucketStore | null = null;
+let warnedNoRedisInProd = false;
 export async function resolveBucketStore(): Promise<BucketStore> {
   if (cachedStore) return cachedStore;
   const { createRedisBucketStore, createInMemoryBucketStore } = await import("./rateLimit/store.js");
-  cachedStore = (await createRedisBucketStore()) ?? createInMemoryBucketStore();
+  const redis = await createRedisBucketStore();
+  if (!redis && !warnedNoRedisInProd) {
+    const isProd = process.env.VERCEL_ENV === "production" || process.env.NODE_ENV === "production";
+    if (isProd) {
+      warnedNoRedisInProd = true;
+      // bd-4jl: in-memory buckets are per-instance heap; under Fluid Compute the
+      // effective limit becomes (instances × capacity). Upstash is REQUIRED in
+      // prod for a globally-consistent limit — surface its absence loudly.
+      console.warn(
+        "[rateLimit] UPSTASH_REDIS_REST_URL/_TOKEN unset in production — token-bucket limits are per-instance (best-effort) and will under-enforce across instances. Provision Upstash Redis.",
+      );
+    }
+  }
+  cachedStore = redis ?? createInMemoryBucketStore();
   return cachedStore;
 }

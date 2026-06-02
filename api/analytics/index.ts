@@ -30,6 +30,7 @@ export interface CronDispatchSchedule {
   dailyRoadSnapshot: boolean;
   dailyTrustDecay: boolean;
   dailyGpsAnomaly: boolean;
+  dailyPurge: boolean;
 }
 
 type CronJobSummaryStatus = "skipped" | "ok" | "error";
@@ -52,6 +53,7 @@ interface CronDispatchSummary {
     dailyRoadSnapshot: CronJobSummary;
     dailyTrustDecay: CronJobSummary;
     dailyGpsAnomaly: CronJobSummary;
+    dailyPurge: CronJobSummary;
   };
 }
 
@@ -83,6 +85,7 @@ export function getCronDispatchSchedule(now: Date): CronDispatchSchedule {
     dailyRoadSnapshot: isDailyCronWindow,
     dailyTrustDecay: isDailyCronWindow,
     dailyGpsAnomaly: isDailyCronWindow,
+    dailyPurge: isDailyCronWindow,
   };
 }
 
@@ -118,6 +121,11 @@ async function runDailyGpsAnomalyCron(): Promise<unknown> {
   return analyzeAgentMovementPatterns();
 }
 
+async function runDailyPurgeCron(): Promise<unknown> {
+  const { purgeExpiredMaintenanceRecords } = await import("../../lib/server/maintenance.js");
+  return purgeExpiredMaintenanceRecords();
+}
+
 async function handleCronDispatch(url: URL): Promise<Response> {
   const now = resolveCronDispatchInstant(url.searchParams.get("at"));
   if (!now) {
@@ -132,6 +140,7 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     dailyRoadSnapshot: { due: schedule.dailyRoadSnapshot, status: "skipped", message: "Not scheduled for this run" },
     dailyTrustDecay: { due: schedule.dailyTrustDecay, status: "skipped", message: "Not scheduled for this run" },
     dailyGpsAnomaly: { due: schedule.dailyGpsAnomaly, status: "skipped", message: "Not scheduled for this run" },
+    dailyPurge: { due: schedule.dailyPurge, status: "skipped", message: "Not scheduled for this run" },
   };
 
   let hasFailures = false;
@@ -231,10 +240,35 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     }
   }
 
+  if (schedule.dailyPurge) {
+    try {
+      jobs.dailyPurge = {
+        due: true,
+        status: "ok",
+        message: "Daily maintenance purge executed",
+        result: await runDailyPurgeCron(),
+      };
+    } catch (error) {
+      hasFailures = true;
+      jobs.dailyPurge = {
+        due: true,
+        status: "error",
+        message: asErrorMessage(error),
+      };
+      console.error("Cron dispatch daily maintenance purge failed:", error);
+    }
+  }
+
   const summary: CronDispatchSummary = {
     evaluatedAtUtc: now.toISOString(),
     schedule,
-    executedAnyJob: schedule.weeklySnapshot || schedule.monthlyRollup || schedule.dailyRoadSnapshot || schedule.dailyTrustDecay || schedule.dailyGpsAnomaly,
+    executedAnyJob:
+      schedule.weeklySnapshot ||
+      schedule.monthlyRollup ||
+      schedule.dailyRoadSnapshot ||
+      schedule.dailyTrustDecay ||
+      schedule.dailyGpsAnomaly ||
+      schedule.dailyPurge,
     hasFailures,
     jobs,
   };

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { query } from "../db.js";
+import { buildPointEventsQuery, type PointEventFilter } from "./pointEventsQuery.js";
 import type {
   ConsentStatus,
   LegacySubmission,
@@ -442,16 +443,9 @@ async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProf
   return new Map(rows.map((profile) => [profile.id, profile]));
 }
 
-async function getPointEvents(): Promise<PointEvent[]> {
-  const result = await query<Record<string, unknown>>(
-    `
-      select id, point_id, event_type, user_id, category, latitude, longitude, details, photo_url, created_at, source, external_id
-             , consent_status, consent_recorded_at, erased_at, erased_by, erasure_reason
-      from point_events
-      order by created_at asc
-    `,
-  );
-
+async function getPointEvents(filter?: PointEventFilter): Promise<PointEvent[]> {
+  const { text, values } = buildPointEventsQuery(filter);
+  const result = await query<Record<string, unknown>>(text, values);
   return result.rows.map(rowToPointEvent);
 }
 
