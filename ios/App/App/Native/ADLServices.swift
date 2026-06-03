@@ -14,6 +14,9 @@ final class AppState: ObservableObject {
     @Published var drafts: [ContributionDraft] = []
     @Published var queueSnapshot = QueueSnapshot.empty
     @Published var lastSyncMessage = "Native Swift rewrite started"
+    @Published var authError: String?
+    @Published var isSigningIn = false
+    @Published var isSyncingQueue = false
 
     private let queueStore = OfflineQueueStore()
     let apiClient = ADLAPIClient()
@@ -25,8 +28,41 @@ final class AppState: ObservableObject {
 
     func bootstrap() async {
         guard isBootstrapping else { return }
-        try? await Task.sleep(nanoseconds: 450_000_000)
+        try? await Task.sleep(nanoseconds: 250_000_000)
+        await restoreSession()
         isBootstrapping = false
+    }
+
+    func restoreSession() async {
+        do {
+            guard let session = try await apiClient.currentSession(), let user = session.user else { return }
+            applyAuthenticatedUser(user)
+        } catch {
+            authError = nil
+        }
+    }
+
+    func signIn(identifier: String, password: String) async {
+        let normalizedIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedIdentifier.isEmpty, !password.isEmpty else {
+            authError = "Enter phone/email and password."
+            return
+        }
+
+        isSigningIn = true
+        authError = nil
+        defer { isSigningIn = false }
+
+        do {
+            let session = try await apiClient.signIn(identifier: normalizedIdentifier, password: password)
+            guard let user = session.user else {
+                authError = "Unable to load session."
+                return
+            }
+            applyAuthenticatedUser(user)
+        } catch {
+            authError = (error as? APIError)?.message ?? "Unable to sign in."
+        }
     }
 
     func signInDemo() {
@@ -36,8 +72,13 @@ final class AppState: ObservableObject {
     }
 
     func signOut() {
-        isAuthenticated = false
-        selectedTab = .home
+        Task {
+            try? await apiClient.signOut()
+            await MainActor.run {
+                self.isAuthenticated = false
+                self.selectedTab = .home
+            }
+        }
     }
 
     func switchRole(_ role: UserRole) {
@@ -51,7 +92,8 @@ final class AppState: ObservableObject {
         notes: String,
         category: SubmissionCategory,
         location: SubmissionLocation?,
-        image: UIImage?
+        image: UIImage?,
+        payload: SubmissionPayload
     ) {
         let photoFilename = image.flatMap { queueStore.persistImage($0, id: UUID()) }
         let draft = ContributionDraft(
@@ -61,14 +103,57 @@ final class AppState: ObservableObject {
             notes: notes,
             location: location,
             capturedPhotoFilename: photoFilename,
+            payload: payload,
             createdAt: Date(),
-            syncState: .queued
+            syncState: .queued,
+            lastError: nil
         )
         drafts.insert(draft, at: 0)
         queueStore.saveDrafts(drafts)
         refreshQueueSnapshot()
         lastSyncMessage = "Contribution queued for sync"
         selectedTab = .queue
+    }
+
+    func syncQueuedDrafts() async {
+        guard !isSyncingQueue else { return }
+        isSyncingQueue = true
+        defer { isSyncingQueue = false }
+
+        let candidates = drafts.filter { $0.syncState == .queued || $0.syncState == .failed }
+        if candidates.isEmpty {
+            lastSyncMessage = "No queued drafts"
+            return
+        }
+
+        for draft in candidates {
+            await syncDraft(draft)
+        }
+    }
+
+    func syncDraft(_ draft: ContributionDraft) async {
+        updateDraft(draft.id, state: .syncing, error: nil)
+        do {
+            let payload = try queueStore.hydratedPayload(for: draft)
+            try await apiClient.submit(payload)
+            updateDraft(draft.id, state: .synced, error: nil)
+            lastSyncMessage = "Synced \(draft.displayTitle)"
+        } catch {
+            updateDraft(draft.id, state: .failed, error: (error as? APIError)?.message ?? "Sync failed")
+            lastSyncMessage = "Sync failed for \(draft.displayTitle)"
+        }
+    }
+
+    private func updateDraft(_ id: UUID, state: SyncState, error: String?) {
+        drafts = drafts.map { item in
+            guard item.id == id else { return item }
+            var updated = item
+            updated.syncState = state
+            updated.lastError = error
+            return updated
+        }
+        queueStore.saveDrafts(drafts)
+        refreshQueueSnapshot()
     }
 
     func markDraftSynced(_ draft: ContributionDraft) {
@@ -100,10 +185,32 @@ final class AppState: ObservableObject {
             synced: drafts.filter { $0.syncState == .synced }.count
         )
     }
+
+    private func applyAuthenticatedUser(_ user: AuthUser) {
+        let resolvedRole = user.role ?? (user.isAdmin == true ? .admin : selectedRole)
+        selectedRole = resolvedRole
+        profile = SessionProfile(
+            name: user.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? user.name! : SessionProfile.demo(role: resolvedRole).name,
+            role: resolvedRole,
+            trustTier: SessionProfile.demo(role: resolvedRole).trustTier,
+            xp: SessionProfile.demo(role: resolvedRole).xp,
+            streakDays: SessionProfile.demo(role: resolvedRole).streakDays
+        )
+        isAuthenticated = true
+        selectedTab = defaultTab(for: resolvedRole)
+    }
 }
 
 final class ADLAPIClient {
     private let baseURL = URL(string: "https://africandatalayer.vercel.app")!
+    private let urlSession: URLSession = {
+        let configuration = URLSessionConfiguration.default
+        configuration.httpCookieStorage = .shared
+        configuration.httpCookieAcceptPolicy = .always
+        configuration.httpShouldSetCookies = true
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -116,27 +223,139 @@ final class ADLAPIClient {
     }
 
     func fetchJSON<T: Decodable>(_ type: T.Type, path: String) async throws -> T {
-        let (data, response) = try await URLSession.shared.data(from: url(path: path))
-        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
-            throw APIError.requestFailed
-        }
+        let (data, response) = try await urlSession.data(from: url(path: path))
+        try validate(response: response, data: data)
         return try decoder.decode(T.self, from: data)
     }
 
-    func submit(_ draft: ContributionDraft) async throws {
+    func currentSession() async throws -> AuthSession? {
+        let authSession = try await fetchJSON(AuthSession.self, path: "/api/auth/session")
+        return authSession.user == nil ? nil : authSession
+    }
+
+    func signIn(identifier: String, password: String) async throws -> AuthSession {
+        let csrf = try await csrfToken()
+        let callbackURL = baseURL.absoluteString
+        var request = URLRequest(url: url(path: "/api/auth/callback/credentials"))
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("1", forHTTPHeaderField: "X-Auth-Return-Redirect")
+        request.httpBody = formURLEncoded([
+            "csrfToken": csrf,
+            "identifier": identifier,
+            "email": identifier,
+            "password": password,
+            "callbackUrl": callbackURL,
+            "json": "true"
+        ])
+
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+        let redirect = try decoder.decode(AuthRedirectPayload.self, from: data)
+        if let authError = authError(from: redirect.url) {
+            throw APIError.requestFailed(authError)
+        }
+        guard let session = try await currentSession() else {
+            throw APIError.requestFailed("No session returned after sign in.")
+        }
+        return session
+    }
+
+    func signOut() async throws {
+        let csrf = try await csrfToken()
+        var request = URLRequest(url: url(path: "/api/auth/signout"))
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.httpBody = formURLEncoded([
+            "csrfToken": csrf,
+            "callbackUrl": baseURL.absoluteString,
+            "json": "true"
+        ])
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    func submit(_ payload: SubmissionPayload) async throws {
         var request = URLRequest(url: url(path: "/api/submissions"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(draft)
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
-            throw APIError.requestFailed
+        request.httpBody = try JSONEncoder().encode(payload)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    private func csrfToken() async throws -> String {
+        let response = try await fetchJSON(CsrfResponse.self, path: "/api/auth/csrf")
+        return response.csrfToken
+    }
+
+    private func validate(response: URLResponse, data: Data) throws {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.requestFailed("Invalid server response.")
         }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            let message = parseErrorMessage(data: data) ?? "Request failed with status \(httpResponse.statusCode)."
+            throw APIError.requestFailed(message)
+        }
+    }
+
+    private func parseErrorMessage(data: Data) -> String? {
+        if let payload = try? JSONDecoder().decode(APIErrorPayload.self, from: data) {
+            return payload.error ?? payload.message
+        }
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func formURLEncoded(_ values: [String: String]) -> Data {
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&+="))
+        let body = values
+            .map { key, value in
+                let encodedKey = key.addingPercentEncoding(withAllowedCharacters: allowed) ?? key
+                let encodedValue = value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+                return "\(encodedKey)=\(encodedValue)"
+            }
+            .joined(separator: "&")
+        return Data(body.utf8)
+    }
+
+    private func authError(from redirectURL: String?) -> String? {
+        guard
+            let redirectURL,
+            let components = URLComponents(string: redirectURL)
+        else { return nil }
+        let params = Dictionary(uniqueKeysWithValues: components.queryItems?.map { ($0.name, $0.value ?? "") } ?? [])
+        if params["error"] == "CredentialsSignin" || params["code"] == "credentials" {
+            return "Invalid phone/email or password."
+        }
+        if params["error"] != nil || params["code"] != nil {
+            return "Unable to sign in."
+        }
+        return nil
     }
 }
 
+struct CsrfResponse: Codable {
+    var csrfToken: String
+}
+
+struct AuthRedirectPayload: Codable {
+    var url: String?
+}
+
+struct APIErrorPayload: Codable {
+    var error: String?
+    var message: String?
+}
+
 enum APIError: Error {
-    case requestFailed
+    case requestFailed(String)
+
+    var message: String {
+        switch self {
+        case .requestFailed(let message):
+            return message
+        }
+    }
 }
 
 final class OfflineQueueStore {
@@ -151,6 +370,19 @@ final class OfflineQueueStore {
     func saveDrafts(_ drafts: [ContributionDraft]) {
         guard let data = try? JSONEncoder().encode(drafts) else { return }
         defaults.set(data, forKey: draftsKey)
+    }
+
+    func hydratedPayload(for draft: ContributionDraft) throws -> SubmissionPayload {
+        guard var payload = draft.payload else {
+            throw APIError.requestFailed("Draft is missing submission payload.")
+        }
+        if payload.imageBase64 == nil, let filename = draft.capturedPhotoFilename {
+            payload.imageBase64 = try imageDataURL(filename: filename)
+        }
+        guard payload.imageBase64 != nil else {
+            throw APIError.requestFailed("Photo is required before sync.")
+        }
+        return payload
     }
 
     func persistImage(_ image: UIImage, id: UUID) -> String? {
@@ -169,6 +401,12 @@ final class OfflineQueueStore {
     private func imageDirectory() -> URL {
         FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("ADLContributionPhotos", isDirectory: true)
+    }
+
+    private func imageDataURL(filename: String) throws -> String {
+        let url = imageDirectory().appendingPathComponent(filename)
+        let data = try Data(contentsOf: url)
+        return "data:image/jpeg;base64,\(data.base64EncodedString())"
     }
 }
 

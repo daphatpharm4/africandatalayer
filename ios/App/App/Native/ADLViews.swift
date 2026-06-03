@@ -44,6 +44,8 @@ struct SplashView: View {
 struct AuthView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedRole: UserRole = .agent
+    @State private var identifier = ""
+    @State private var password = ""
 
     var body: some View {
         NavigationView {
@@ -78,9 +80,47 @@ struct AuthView: View {
                                 appState.switchRole(selectedRole)
                                 appState.signInDemo()
                             } label: {
-                                Label("Enter App", systemImage: "arrow.right.circle.fill")
+                                Label("Enter Demo", systemImage: "arrow.right.circle.fill")
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                        }
+                    }
+
+                    ADLCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Production sign in")
+                                .font(.headline)
+                                .foregroundColor(ADLColor.ink)
+                            TextField("Phone or email", text: $identifier)
+                                .textContentType(.username)
+                                .keyboardType(.emailAddress)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .textFieldStyle(.roundedBorder)
+                            SecureField("Password", text: $password)
+                                .textContentType(.password)
+                                .textFieldStyle(.roundedBorder)
+
+                            if let authError = appState.authError {
+                                Text(authError)
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundColor(ADLColor.terracotta)
+                            }
+
+                            Button {
+                                Task {
+                                    await appState.signIn(identifier: identifier, password: password)
+                                }
+                            } label: {
+                                if appState.isSigningIn {
+                                    ProgressView()
+                                        .tint(.white)
+                                } else {
+                                    Label("Sign In", systemImage: "lock.fill")
+                                }
                             }
                             .buttonStyle(PrimaryButtonStyle())
+                            .disabled(appState.isSigningIn)
                         }
                     }
 
@@ -293,10 +333,36 @@ struct ContributionView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var locationProvider = LocationProvider()
     @State private var category: SubmissionCategory = .pharmacy
-    @State private var title = ""
+    @State private var siteName = ""
+    @State private var roadName = ""
     @State private var notes = ""
+    @State private var openingHours = ""
+    @State private var isOpenNow = true
+    @State private var isOnDuty = false
+    @State private var providerText = "Orange Money, MTN MoMo"
+    @State private var merchantId = ""
+    @State private var paymentMethodsText = "Cash, Mobile Money"
+    @State private var hasFuelAvailable = true
+    @State private var fuelTypesText = "Super, Gasoil"
+    @State private var fuelPriceText = ""
+    @State private var quality = "Standard"
+    @State private var outletType = "Bar"
+    @State private var isFormal = true
+    @State private var billboardType = "Standard"
+    @State private var isOccupied = true
+    @State private var advertiserBrand = ""
+    @State private var roadCondition = "Good"
+    @State private var roadSurface = "Asphalt"
+    @State private var roadBlocked = false
+    @State private var blockageType = "Flooding"
+    @State private var buildingType = "Residential"
+    @State private var occupancyStatus = "Occupied"
+    @State private var storeyCount = ""
+    @State private var estimatedUnits = ""
+    @State private var consentStatus: ConsentStatus = .notRequired
     @State private var capturedImage: UIImage?
     @State private var showingCamera = false
+    @State private var validationMessage: String?
 
     var body: some View {
         ScrollView {
@@ -313,8 +379,8 @@ struct ContributionView: View {
                             }
                         }
 
-                        TextField("Site name", text: $title)
-                            .textFieldStyle(.roundedBorder)
+                        RequiredFieldsView(category: category)
+                        detailsFields
 
                         TextEditor(text: $notes)
                             .frame(minHeight: 110)
@@ -323,6 +389,13 @@ struct ContributionView: View {
                                     .stroke(ADLColor.line, lineWidth: 1)
                             )
                             .accessibilityLabel("Notes")
+
+                        Picker("Consent", selection: $consentStatus) {
+                            ForEach(ConsentStatus.allCases) { status in
+                                Text(status.title).tag(status)
+                            }
+                        }
+                        .pickerStyle(.menu)
 
                         HStack(spacing: 10) {
                             Button {
@@ -347,6 +420,12 @@ struct ContributionView: View {
                             }
                         }
 
+                        if let validationMessage {
+                            Text(validationMessage)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundColor(ADLColor.terracotta)
+                        }
+
                         if let capturedImage {
                             Image(uiImage: capturedImage)
                                 .resizable()
@@ -357,16 +436,20 @@ struct ContributionView: View {
                         }
 
                         Button {
+                            guard let payload = buildPayload() else { return }
                             appState.enqueueContribution(
-                                title: title,
+                                title: displayTitle,
                                 notes: notes,
                                 category: category,
                                 location: locationProvider.lastLocation,
-                                image: capturedImage
+                                image: capturedImage,
+                                payload: payload
                             )
-                            title = ""
+                            siteName = ""
+                            roadName = ""
                             notes = ""
                             capturedImage = nil
+                            validationMessage = nil
                         } label: {
                             Label("Queue Contribution", systemImage: "tray.and.arrow.down.fill")
                         }
@@ -382,6 +465,232 @@ struct ContributionView: View {
             CameraPicker(image: $capturedImage)
         }
     }
+
+    @ViewBuilder
+    private var detailsFields: some View {
+        switch category {
+        case .pharmacy:
+            TextField("Pharmacy name", text: $siteName)
+                .textFieldStyle(.roundedBorder)
+            Toggle("Open now", isOn: $isOpenNow)
+            Toggle("On duty", isOn: $isOnDuty)
+            TextField("Opening hours", text: $openingHours)
+                .textFieldStyle(.roundedBorder)
+        case .mobileMoney:
+            TextField("Providers", text: $providerText)
+                .textFieldStyle(.roundedBorder)
+            TextField("Merchant ID", text: $merchantId)
+                .textFieldStyle(.roundedBorder)
+            TextField("Payment methods", text: $paymentMethodsText)
+                .textFieldStyle(.roundedBorder)
+            TextField("Opening hours", text: $openingHours)
+                .textFieldStyle(.roundedBorder)
+        case .fuelStation:
+            TextField("Station name", text: $siteName)
+                .textFieldStyle(.roundedBorder)
+            Toggle("Fuel available", isOn: $hasFuelAvailable)
+            TextField("Fuel types", text: $fuelTypesText)
+                .textFieldStyle(.roundedBorder)
+            TextField("Super price", text: $fuelPriceText)
+                .keyboardType(.decimalPad)
+                .textFieldStyle(.roundedBorder)
+            TextField("Quality", text: $quality)
+                .textFieldStyle(.roundedBorder)
+        case .alcoholOutlet:
+            TextField("Outlet name", text: $siteName)
+                .textFieldStyle(.roundedBorder)
+            TextField("Outlet type", text: $outletType)
+                .textFieldStyle(.roundedBorder)
+            Toggle("Formal outlet", isOn: $isFormal)
+            TextField("Payment methods", text: $paymentMethodsText)
+                .textFieldStyle(.roundedBorder)
+        case .billboard:
+            TextField("Billboard name", text: $siteName)
+                .textFieldStyle(.roundedBorder)
+            TextField("Billboard type", text: $billboardType)
+                .textFieldStyle(.roundedBorder)
+            Toggle("Occupied", isOn: $isOccupied)
+            TextField("Advertiser brand", text: $advertiserBrand)
+                .textFieldStyle(.roundedBorder)
+        case .transportRoad:
+            TextField("Road name", text: $roadName)
+                .textFieldStyle(.roundedBorder)
+            TextField("Condition", text: $roadCondition)
+                .textFieldStyle(.roundedBorder)
+            TextField("Surface", text: $roadSurface)
+                .textFieldStyle(.roundedBorder)
+            Toggle("Blocked", isOn: $roadBlocked)
+            if roadBlocked {
+                TextField("Blockage type", text: $blockageType)
+                    .textFieldStyle(.roundedBorder)
+            }
+        case .censusProxy:
+            TextField("Building type", text: $buildingType)
+                .textFieldStyle(.roundedBorder)
+            TextField("Occupancy status", text: $occupancyStatus)
+                .textFieldStyle(.roundedBorder)
+            TextField("Storey count", text: $storeyCount)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+            TextField("Estimated units", text: $estimatedUnits)
+                .keyboardType(.numberPad)
+                .textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private var displayTitle: String {
+        let site = siteName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let road = roadName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if category == .transportRoad && !road.isEmpty { return road }
+        if !site.isEmpty { return site }
+        if category == .censusProxy { return "\(buildingType) building" }
+        return category.title
+    }
+
+    private func buildPayload() -> SubmissionPayload? {
+        guard let location = locationProvider.lastLocation else {
+            validationMessage = "Capture GPS before queuing."
+            return nil
+        }
+        guard capturedImage != nil else {
+            validationMessage = "Capture a photo before queuing."
+            return nil
+        }
+
+        var details = SubmissionDetails()
+        details.clientDevice = ClientDeviceInfo.current()
+        details.consentStatus = consentStatus
+        let recordedAt = ISO8601DateFormatter().string(from: Date())
+        details.consentRecordedAt = recordedAt
+
+        switch category {
+        case .pharmacy:
+            let name = trimmed(siteName)
+            guard !name.isEmpty else {
+                validationMessage = "Pharmacy name is required."
+                return nil
+            }
+            details.name = name
+            details.siteName = name
+            details.isOpenNow = isOpenNow
+            details.isOnDuty = isOnDuty
+            details.openingHours = optionalTrimmed(openingHours)
+        case .mobileMoney:
+            let providers = csv(providerText)
+            guard !providers.isEmpty else {
+                validationMessage = "At least one provider is required."
+                return nil
+            }
+            details.providers = providers
+            details.paymentMethods = csv(paymentMethodsText)
+            details.openingHours = optionalTrimmed(openingHours)
+            if let provider = providers.first, let merchant = optionalTrimmed(merchantId) {
+                details.merchantIdByProvider = [provider: merchant]
+            }
+        case .fuelStation:
+            let name = trimmed(siteName)
+            guard !name.isEmpty else {
+                validationMessage = "Station name is required."
+                return nil
+            }
+            details.name = name
+            details.siteName = name
+            details.hasFuelAvailable = hasFuelAvailable
+            details.fuelTypes = csv(fuelTypesText)
+            details.quality = optionalTrimmed(quality)
+            details.paymentMethods = csv(paymentMethodsText)
+            if let price = Double(trimmed(fuelPriceText)), price > 0 {
+                details.pricesByFuel = ["super": price]
+            }
+        case .alcoholOutlet:
+            let name = trimmed(siteName)
+            guard !name.isEmpty else {
+                validationMessage = "Outlet name is required."
+                return nil
+            }
+            details.name = name
+            details.siteName = name
+            details.outletType = optionalTrimmed(outletType)
+            details.isFormal = isFormal
+            details.paymentMethods = csv(paymentMethodsText)
+        case .billboard:
+            let name = trimmed(siteName)
+            guard !name.isEmpty else {
+                validationMessage = "Billboard name is required."
+                return nil
+            }
+            details.name = name
+            details.billboardType = optionalTrimmed(billboardType)
+            details.isOccupied = isOccupied
+            details.advertiserBrand = optionalTrimmed(advertiserBrand)
+        case .transportRoad:
+            let road = trimmed(roadName)
+            guard !road.isEmpty else {
+                validationMessage = "Road name is required."
+                return nil
+            }
+            details.roadName = road
+            details.name = road
+            details.condition = optionalTrimmed(roadCondition)
+            details.surfaceType = optionalTrimmed(roadSurface)
+            details.isBlocked = roadBlocked
+            details.blockageType = roadBlocked ? optionalTrimmed(blockageType) : nil
+        case .censusProxy:
+            details.buildingType = optionalTrimmed(buildingType)
+            details.occupancyStatus = optionalTrimmed(occupancyStatus)
+            details.storeyCount = Int(trimmed(storeyCount))
+            details.estimatedUnits = Int(trimmed(estimatedUnits))
+        }
+
+        validationMessage = nil
+        return SubmissionPayload(
+            eventType: .create,
+            pointId: "ios-\(UUID().uuidString)",
+            category: category,
+            location: location,
+            details: details,
+            imageBase64: nil,
+            consentStatus: consentStatus,
+            consentRecordedAt: recordedAt,
+            gpsIntegrity: GpsIntegrityReport.from(location: location),
+            photoEvidenceSha256: nil
+        )
+    }
+
+    private func trimmed(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func optionalTrimmed(_ value: String) -> String? {
+        let trimmed = trimmed(value)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func csv(_ value: String) -> [String] {
+        value
+            .split(separator: ",")
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+}
+
+struct RequiredFieldsView: View {
+    let category: SubmissionCategory
+
+    var body: some View {
+        let fields = VerticalConfig.all[category]?.requiredFields ?? []
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checklist")
+                .foregroundColor(category.tint)
+            Text(fields.isEmpty ? "No required fields" : "Required: \(fields.joined(separator: ", "))")
+                .font(.footnote.weight(.medium))
+                .foregroundColor(.secondary)
+            Spacer()
+        }
+        .padding(10)
+        .background(category.tint.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
 }
 
 struct SubmissionQueueView: View {
@@ -392,6 +701,9 @@ struct SubmissionQueueView: View {
             Section {
                 MetricTile(title: "Queued", value: "\(appState.queueSnapshot.queued)", systemImage: "tray.full.fill", tint: ADLColor.forest)
                 MetricTile(title: "Failed", value: "\(appState.queueSnapshot.failed)", systemImage: "exclamationmark.triangle.fill", tint: ADLColor.terracotta)
+                Text(appState.lastSyncMessage)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
             }
 
             Section("Drafts") {
@@ -410,6 +722,22 @@ struct SubmissionQueueView: View {
                             Text(draft.notes.isEmpty ? draft.category.title : draft.notes)
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
+                            if let lastError = draft.lastError {
+                                Text(lastError)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(ADLColor.terracotta)
+                            }
+                            if draft.syncState != .synced {
+                                Button {
+                                    Task {
+                                        await appState.syncDraft(draft)
+                                    }
+                                } label: {
+                                    Label("Sync Draft", systemImage: "arrow.triangle.2.circlepath")
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(draft.syncState == .syncing)
+                            }
                         }
                         .padding(.vertical, 6)
                     }
@@ -417,6 +745,22 @@ struct SubmissionQueueView: View {
             }
         }
         .navigationTitle("Offline Queue")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    Task {
+                        await appState.syncQueuedDrafts()
+                    }
+                } label: {
+                    if appState.isSyncingQueue {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                }
+                .accessibilityLabel("Sync all")
+            }
+        }
     }
 }
 
