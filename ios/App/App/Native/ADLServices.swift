@@ -17,6 +17,7 @@ final class AppState: ObservableObject {
     @Published var authError: String?
     @Published var isSigningIn = false
     @Published var isSyncingQueue = false
+    @Published var mapCaptureContext: MapCaptureContext?
 
     private let queueStore = OfflineQueueStore()
     let apiClient = ADLAPIClient()
@@ -66,9 +67,11 @@ final class AppState: ObservableObject {
     }
 
     func signInDemo() {
+        let role = AppReleaseMode.normalizedRole(selectedRole)
+        selectedRole = role
         isAuthenticated = true
-        profile = SessionProfile.demo(role: selectedRole)
-        selectedTab = defaultTab(for: selectedRole)
+        profile = SessionProfile.demo(role: role)
+        selectedTab = defaultTab(for: role)
     }
 
     func signOut() {
@@ -82,9 +85,33 @@ final class AppState: ObservableObject {
     }
 
     func switchRole(_ role: UserRole) {
-        selectedRole = role
-        profile = SessionProfile.demo(role: role)
-        selectedTab = defaultTab(for: role)
+        let nextRole = AppReleaseMode.normalizedRole(role)
+        selectedRole = nextRole
+        profile = SessionProfile.demo(role: nextRole)
+        selectedTab = defaultTab(for: nextRole)
+    }
+
+    func enforceVisibleNavigation() {
+        let nextRole = AppReleaseMode.normalizedRole(selectedRole)
+
+        if selectedRole != nextRole {
+            selectedRole = nextRole
+        }
+
+        if profile.role != nextRole {
+            let roleDefaults = SessionProfile.demo(role: nextRole)
+            profile = SessionProfile(
+                name: profile.name,
+                role: nextRole,
+                trustTier: roleDefaults.trustTier,
+                xp: roleDefaults.xp,
+                streakDays: roleDefaults.streakDays
+            )
+        }
+
+        if !AppReleaseMode.canShow(selectedTab, for: nextRole) {
+            selectedTab = defaultTab(for: nextRole)
+        }
     }
 
     func enqueueContribution(
@@ -113,6 +140,35 @@ final class AppState: ObservableObject {
         refreshQueueSnapshot()
         lastSyncMessage = "Contribution queued for sync"
         selectedTab = .queue
+    }
+
+    func startMapCapture(for point: DataPoint) {
+        mapCaptureContext = MapCaptureContext(
+            category: point.category,
+            location: point.location,
+            pointId: point.id,
+            title: point.name
+        )
+        selectedTab = .contribute
+    }
+
+    func startMapCapture(at coordinate: CLLocationCoordinate2D) {
+        mapCaptureContext = MapCaptureContext(
+            category: nil,
+            location: SubmissionLocation(
+                latitude: coordinate.latitude,
+                longitude: coordinate.longitude,
+                accuracyMeters: nil
+            ),
+            pointId: nil,
+            title: ""
+        )
+        selectedTab = .contribute
+    }
+
+    func consumeMapCaptureContext() -> MapCaptureContext? {
+        defer { mapCaptureContext = nil }
+        return mapCaptureContext
     }
 
     func syncQueuedDrafts() async {
@@ -168,14 +224,7 @@ final class AppState: ObservableObject {
     }
 
     private func defaultTab(for role: UserRole) -> AppRoute {
-        switch role {
-        case .agent:
-            return .home
-        case .admin:
-            return .adminReview
-        case .client:
-            return .clientDashboard
-        }
+        AppReleaseMode.defaultTab(for: role)
     }
 
     private func refreshQueueSnapshot() {
@@ -187,14 +236,16 @@ final class AppState: ObservableObject {
     }
 
     private func applyAuthenticatedUser(_ user: AuthUser) {
-        let resolvedRole = user.role ?? (user.isAdmin == true ? .admin : selectedRole)
+        let accountRole = user.role ?? (user.isAdmin == true ? .admin : selectedRole)
+        let resolvedRole = AppReleaseMode.normalizedRole(accountRole)
+        let roleDefaults = SessionProfile.demo(role: resolvedRole)
         selectedRole = resolvedRole
         profile = SessionProfile(
-            name: user.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? user.name! : SessionProfile.demo(role: resolvedRole).name,
+            name: user.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? user.name! : roleDefaults.name,
             role: resolvedRole,
-            trustTier: SessionProfile.demo(role: resolvedRole).trustTier,
-            xp: SessionProfile.demo(role: resolvedRole).xp,
-            streakDays: SessionProfile.demo(role: resolvedRole).streakDays
+            trustTier: roleDefaults.trustTier,
+            xp: roleDefaults.xp,
+            streakDays: roleDefaults.streakDays
         )
         isAuthenticated = true
         selectedTab = defaultTab(for: resolvedRole)
@@ -415,6 +466,7 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
     @Published var statusText = "Location not captured"
 
     private let manager = CLLocationManager()
+    private var pendingLocationRequest = false
 
     override init() {
         super.init()
@@ -424,10 +476,25 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
 
     func requestCurrentLocation() {
         statusText = "Requesting location"
-        if manager.authorizationStatus == .notDetermined {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            pendingLocationRequest = true
             manager.requestWhenInUseAuthorization()
+        case .authorizedAlways, .authorizedWhenInUse:
+            pendingLocationRequest = false
+            manager.requestLocation()
+        case .denied, .restricted:
+            pendingLocationRequest = false
+            statusText = "Location permission needed"
+        @unknown default:
+            pendingLocationRequest = false
+            statusText = "Location unavailable"
         }
-        manager.requestLocation()
+    }
+
+    func setLocation(_ location: SubmissionLocation, status: String) {
+        lastLocation = location
+        statusText = status
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -445,6 +512,32 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         DispatchQueue.main.async {
             self.statusText = "Location unavailable"
+        }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        handleAuthorizationChange(manager.authorizationStatus)
+    }
+
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        handleAuthorizationChange(status)
+    }
+
+    private func handleAuthorizationChange(_ status: CLAuthorizationStatus) {
+        guard pendingLocationRequest else { return }
+
+        switch status {
+        case .authorizedAlways, .authorizedWhenInUse:
+            pendingLocationRequest = false
+            manager.requestLocation()
+        case .denied, .restricted:
+            pendingLocationRequest = false
+            statusText = "Location permission needed"
+        case .notDetermined:
+            break
+        @unknown default:
+            pendingLocationRequest = false
+            statusText = "Location unavailable"
         }
     }
 }

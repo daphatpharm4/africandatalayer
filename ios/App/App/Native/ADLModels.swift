@@ -164,6 +164,58 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
     var id: String { rawValue }
 }
 
+enum AppReleaseMode {
+#if DEBUG
+    static let allowsDemoAccess = true
+    static let allowsRoleSwitching = true
+#else
+    static let allowsDemoAccess = false
+    static let allowsRoleSwitching = false
+#endif
+
+    static var demoRoles: [UserRole] {
+#if DEBUG
+        return UserRole.allCases
+#else
+        return [.agent]
+#endif
+    }
+
+    static func normalizedRole(_ role: UserRole) -> UserRole {
+#if DEBUG
+        return role
+#else
+        return .agent
+#endif
+    }
+
+    static func defaultTab(for role: UserRole) -> AppRoute {
+        switch normalizedRole(role) {
+        case .agent:
+            return .home
+        case .admin:
+            return .adminReview
+        case .client:
+            return .clientDashboard
+        }
+    }
+
+    static func tabs(for role: UserRole) -> [AppRoute] {
+        switch normalizedRole(role) {
+        case .agent:
+            return [.home, .contribute, .queue, .profile]
+        case .admin:
+            return [.adminReview, .agentPerformance, .profile]
+        case .client:
+            return [.clientDashboard, .analytics, .profile]
+        }
+    }
+
+    static func canShow(_ route: AppRoute, for role: UserRole) -> Bool {
+        tabs(for: role).contains(route)
+    }
+}
+
 enum SyncState: String, Codable {
     case queued
     case syncing
@@ -198,18 +250,12 @@ struct ClientDeviceInfo: Codable, Hashable {
     var deviceId: String
     var platform: String?
     var userAgent: String?
-    var deviceMemoryGb: Double?
-    var hardwareConcurrency: Int?
-    var isLowEnd: Bool?
 
     static func current() -> ClientDeviceInfo {
         ClientDeviceInfo(
             deviceId: UIDevice.current.identifierForVendor?.uuidString ?? "ios-native-unknown",
             platform: "ios",
-            userAgent: "AfricanDataLayer-iOS-Swift",
-            deviceMemoryGb: nil,
-            hardwareConcurrency: ProcessInfo.processInfo.processorCount,
-            isLowEnd: ProcessInfo.processInfo.processorCount <= 4
+            userAgent: "AfricanDataLayer-iOS-Swift"
         )
     }
 }
@@ -288,6 +334,13 @@ struct SubmissionPayload: Codable, Hashable {
     var consentRecordedAt: String
     var gpsIntegrity: GpsIntegrityReport?
     var photoEvidenceSha256: String?
+}
+
+struct MapCaptureContext: Hashable {
+    var category: SubmissionCategory?
+    var location: SubmissionLocation
+    var pointId: String?
+    var title: String
 }
 
 struct DataPoint: Codable, Hashable, Identifiable {

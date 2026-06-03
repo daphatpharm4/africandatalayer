@@ -59,30 +59,32 @@ struct AuthView: View {
                         Text("African Data Layer")
                             .font(.largeTitle.weight(.bold))
                             .foregroundColor(ADLColor.ink)
-                        Text("Capture, review, and export trusted infrastructure data.")
+                        Text(AppReleaseMode.allowsDemoAccess ? "Capture, review, and export trusted infrastructure data." : "Capture and sync trusted infrastructure data.")
                             .font(.body)
                             .foregroundColor(.secondary)
                     }
 
-                    ADLCard {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("Demo role")
-                                .font(.headline)
-                                .foregroundColor(ADLColor.ink)
-                            Picker("Role", selection: $selectedRole) {
-                                ForEach(UserRole.allCases) { role in
-                                    Text(role.title).tag(role)
+                    if AppReleaseMode.allowsDemoAccess {
+                        ADLCard {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("Demo role")
+                                    .font(.headline)
+                                    .foregroundColor(ADLColor.ink)
+                                Picker("Role", selection: $selectedRole) {
+                                    ForEach(AppReleaseMode.demoRoles) { role in
+                                        Text(role.title).tag(role)
+                                    }
                                 }
-                            }
-                            .pickerStyle(.segmented)
+                                .pickerStyle(.segmented)
 
-                            Button {
-                                appState.switchRole(selectedRole)
-                                appState.signInDemo()
-                            } label: {
-                                Label("Enter Demo", systemImage: "arrow.right.circle.fill")
+                                Button {
+                                    appState.switchRole(selectedRole)
+                                    appState.signInDemo()
+                                } label: {
+                                    Label("Enter Demo", systemImage: "arrow.right.circle.fill")
+                                }
+                                .buttonStyle(SecondaryButtonStyle())
                             }
-                            .buttonStyle(SecondaryButtonStyle())
                         }
                     }
 
@@ -142,7 +144,7 @@ struct AppShellView: View {
 
     var body: some View {
         TabView(selection: $appState.selectedTab) {
-            ForEach(tabs(for: appState.selectedRole)) { route in
+            ForEach(AppReleaseMode.tabs(for: appState.selectedRole)) { route in
                 NavigationView {
                     screen(for: route)
                 }
@@ -151,6 +153,15 @@ struct AppShellView: View {
                 }
                 .tag(route)
             }
+        }
+        .onAppear {
+            appState.enforceVisibleNavigation()
+        }
+        .onChange(of: appState.selectedRole) { _ in
+            appState.enforceVisibleNavigation()
+        }
+        .onChange(of: appState.selectedTab) { _ in
+            appState.enforceVisibleNavigation()
         }
     }
 
@@ -175,17 +186,6 @@ struct AppShellView: View {
             ClientDashboardView()
         case .analytics:
             AnalyticsView()
-        }
-    }
-
-    private func tabs(for role: UserRole) -> [AppRoute] {
-        switch role {
-        case .agent:
-            return [.home, .contribute, .queue, .profile]
-        case .admin:
-            return [.adminReview, .agentPerformance, .profile]
-        case .client:
-            return [.clientDashboard, .analytics, .profile]
         }
     }
 
@@ -238,93 +238,437 @@ struct AppShellView: View {
 
 struct AgentHomeView: View {
     @EnvironmentObject private var appState: AppState
+    @StateObject private var locationProvider = LocationProvider()
     @State private var region = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 4.0887, longitude: 9.7403),
         span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
     )
+    @State private var trackingMode: MapUserTrackingMode = .none
+    @State private var selectedPoint: DataPoint?
+
+    private let collectionZone = [
+        CLLocationCoordinate2D(latitude: 4.0933, longitude: 9.7342),
+        CLLocationCoordinate2D(latitude: 4.0938, longitude: 9.7454),
+        CLLocationCoordinate2D(latitude: 4.0858, longitude: 9.7472),
+        CLLocationCoordinate2D(latitude: 4.0829, longitude: 9.7371)
+    ]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ADLCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Bonamoussadi field map")
-                                    .font(.title2.weight(.bold))
-                                    .foregroundColor(ADLColor.ink)
-                                Text("Next useful captures are marked in operational order.")
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
-                            }
-                            Spacer()
-                            StatusPill(title: "Live", tint: ADLColor.forest)
-                        }
+        ZStack(alignment: .top) {
+            FieldMapKitView(
+                points: appState.points,
+                collectionZone: collectionZone,
+                region: $region,
+                trackingMode: $trackingMode,
+                selectedPoint: $selectedPoint
+            )
+            .ignoresSafeArea(edges: .bottom)
+            .accessibilityLabel("Apple Maps field map")
 
-                        Map(coordinateRegion: $region, annotationItems: appState.points) { point in
-                            MapMarker(coordinate: point.location.coordinate, tint: point.category.tint)
-                        }
-                        .frame(height: 260)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            VStack(spacing: 12) {
+                FieldMapHeader(
+                    pointCount: appState.points.count,
+                    refreshCount: appState.points.filter(\.requiresRefresh).count,
+                    locationStatus: locationProvider.statusText
+                )
+
+                HStack(spacing: 10) {
+                    Button {
+                        locationProvider.requestCurrentLocation()
+                        trackingMode = .follow
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .frame(width: 46, height: 46)
                     }
+                    .background(Color.white)
+                    .foregroundColor(ADLColor.navy)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
+                    .accessibilityLabel("Center on user location")
+
+                    Button {
+                        region = MKCoordinateRegion(
+                            center: CLLocationCoordinate2D(latitude: 4.0887, longitude: 9.7403),
+                            span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
+                        )
+                        trackingMode = .none
+                    } label: {
+                        Image(systemName: "scope")
+                            .frame(width: 46, height: 46)
+                    }
+                    .background(Color.white)
+                    .foregroundColor(ADLColor.navy)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
+                    .accessibilityLabel("Recenter Bonamoussadi zone")
+
+                    Spacer()
                 }
 
-                ForEach(appState.points) { point in
-                    PointCard(point: point)
-                }
+                Spacer()
+
+                FieldMapActionBar(
+                    selectedPoint: selectedPoint,
+                    onCaptureMapCenter: {
+                        appState.startMapCapture(at: region.center)
+                    },
+                    onCaptureSelectedPoint: { point in
+                        appState.startMapCapture(for: point)
+                    }
+                )
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Field Work")
+        .navigationTitle("Field Map")
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
-                    appState.selectedTab = .contribute
+                    appState.startMapCapture(at: region.center)
                 } label: {
                     Image(systemName: "plus.circle.fill")
                 }
                 .accessibilityLabel("Start capture")
             }
         }
+        .sheet(item: $selectedPoint) { point in
+            PointDetailSheet(
+                point: point,
+                onCapture: {
+                    selectedPoint = nil
+                    appState.startMapCapture(for: point)
+                },
+                onCenter: {
+                    region = MKCoordinateRegion(
+                        center: point.location.coordinate,
+                        span: MKCoordinateSpan(latitudeDelta: 0.006, longitudeDelta: 0.006)
+                    )
+                    selectedPoint = nil
+                }
+            )
+        }
     }
 }
 
-struct PointCard: View {
+struct FieldMapKitView: UIViewRepresentable {
+    let points: [DataPoint]
+    let collectionZone: [CLLocationCoordinate2D]
+    @Binding var region: MKCoordinateRegion
+    @Binding var trackingMode: MapUserTrackingMode
+    @Binding var selectedPoint: DataPoint?
+
+    func makeUIView(context: Context) -> MKMapView {
+        let mapView = MKMapView(frame: .zero)
+        mapView.delegate = context.coordinator
+        mapView.mapType = .standard
+        mapView.pointOfInterestFilter = .includingAll
+        mapView.showsCompass = true
+        mapView.showsScale = true
+        mapView.showsUserLocation = true
+        mapView.setRegion(region, animated: false)
+        return mapView
+    }
+
+    func updateUIView(_ mapView: MKMapView, context: Context) {
+        context.coordinator.parent = self
+        updateTrackingMode(on: mapView)
+
+        if !mapView.region.isClose(to: region) {
+            mapView.setRegion(region, animated: true)
+        }
+
+        mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
+        mapView.addAnnotations(points.map(FieldPointAnnotation.init(point:)))
+
+        mapView.removeOverlays(mapView.overlays)
+        let polygon = MKPolygon(coordinates: collectionZone, count: collectionZone.count)
+        mapView.addOverlay(polygon, level: .aboveRoads)
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    private func updateTrackingMode(on mapView: MKMapView) {
+        let nextMode: MKUserTrackingMode
+        switch trackingMode {
+        case .follow:
+            nextMode = .follow
+        case .followWithHeading:
+            nextMode = .followWithHeading
+        default:
+            nextMode = .none
+        }
+
+        if mapView.userTrackingMode != nextMode {
+            mapView.setUserTrackingMode(nextMode, animated: true)
+        }
+    }
+
+    final class Coordinator: NSObject, MKMapViewDelegate {
+        var parent: FieldMapKitView
+
+        init(parent: FieldMapKitView) {
+            self.parent = parent
+        }
+
+        func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+            DispatchQueue.main.async {
+                self.parent.region = mapView.region
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, didSelect view: MKAnnotationView) {
+            guard let annotation = view.annotation as? FieldPointAnnotation else { return }
+            DispatchQueue.main.async {
+                self.parent.selectedPoint = annotation.point
+            }
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            guard let pointAnnotation = annotation as? FieldPointAnnotation else { return nil }
+
+            let identifier = "field-point-\(pointAnnotation.point.category.rawValue)"
+            let markerView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
+                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            markerView.annotation = annotation
+            markerView.canShowCallout = false
+            markerView.markerTintColor = UIColor(pointAnnotation.point.category.tint)
+            markerView.glyphImage = UIImage(systemName: pointAnnotation.point.category.systemImage)
+            markerView.glyphTintColor = .white
+            markerView.displayPriority = pointAnnotation.point.requiresRefresh ? .required : .defaultHigh
+            return markerView
+        }
+
+        func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            guard let polygon = overlay as? MKPolygon else {
+                return MKOverlayRenderer(overlay: overlay)
+            }
+
+            let renderer = MKPolygonRenderer(polygon: polygon)
+            renderer.fillColor = UIColor(ADLColor.forest).withAlphaComponent(0.13)
+            renderer.strokeColor = UIColor(ADLColor.gold)
+            renderer.lineWidth = 2
+            renderer.lineDashPattern = [8, 5]
+            return renderer
+        }
+    }
+}
+
+final class FieldPointAnnotation: NSObject, MKAnnotation {
     let point: DataPoint
 
+    var coordinate: CLLocationCoordinate2D {
+        point.location.coordinate
+    }
+
+    var title: String? {
+        point.name
+    }
+
+    var subtitle: String? {
+        point.subtitle
+    }
+
+    init(point: DataPoint) {
+        self.point = point
+    }
+}
+
+private extension MKCoordinateRegion {
+    func isClose(to other: MKCoordinateRegion) -> Bool {
+        abs(center.latitude - other.center.latitude) < 0.000_001 &&
+            abs(center.longitude - other.center.longitude) < 0.000_001 &&
+            abs(span.latitudeDelta - other.span.latitudeDelta) < 0.000_001 &&
+            abs(span.longitudeDelta - other.span.longitudeDelta) < 0.000_001
+    }
+}
+
+struct FieldMapHeader: View {
+    let pointCount: Int
+    let refreshCount: Int
+    let locationStatus: String
+
     var body: some View {
-        ADLCard {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: point.category.systemImage)
-                    .foregroundColor(point.category.tint)
-                    .frame(width: 42, height: 42)
-                    .background(point.category.tint.opacity(0.12))
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(point.name)
-                            .font(.headline)
-                            .foregroundColor(ADLColor.ink)
-                        Spacer()
-                        Text("\(point.trustScore)%")
-                            .font(.subheadline.weight(.bold))
-                            .foregroundColor(point.trustScore >= 85 ? ADLColor.forest : ADLColor.gold)
-                    }
-
-                    Text(point.subtitle)
-                        .font(.subheadline)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Bonamoussadi field map")
+                        .font(.headline.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text("Collection zone, trusted points, and next captures.")
+                        .font(.footnote.weight(.medium))
                         .foregroundColor(.secondary)
+                }
+                Spacer()
+                StatusPill(title: "Apple Maps", tint: ADLColor.forest)
+            }
 
-                    HStack(spacing: 8) {
-                        StatusPill(title: point.category.title, tint: point.category.tint)
-                        if point.requiresRefresh {
-                            StatusPill(title: "Refresh", tint: ADLColor.terracotta)
-                        }
+            HStack(spacing: 8) {
+                StatusPill(title: "\(pointCount) points", tint: ADLColor.navy)
+                StatusPill(title: "\(refreshCount) refresh", tint: refreshCount > 0 ? ADLColor.terracotta : ADLColor.forest)
+                StatusPill(title: locationStatus, tint: ADLColor.gold)
+            }
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 5)
+    }
+}
+
+struct FieldMapActionBar: View {
+    let selectedPoint: DataPoint?
+    let onCaptureMapCenter: () -> Void
+    let onCaptureSelectedPoint: (DataPoint) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let selectedPoint {
+                HStack(spacing: 10) {
+                    Image(systemName: selectedPoint.category.systemImage)
+                        .foregroundColor(selectedPoint.category.tint)
+                        .frame(width: 38, height: 38)
+                        .background(selectedPoint.category.tint.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(selectedPoint.name)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundColor(ADLColor.ink)
+                        Text(selectedPoint.requiresRefresh ? "Ready for refresh capture" : "Verified point")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+
+                Button {
+                    onCaptureSelectedPoint(selectedPoint)
+                } label: {
+                    Label("Capture Selected Point", systemImage: "camera.fill")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            } else {
+                Button {
+                    onCaptureMapCenter()
+                } label: {
+                    Label("Capture Map Center", systemImage: "camera.viewfinder")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.97))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+    }
+}
+
+struct PointDetailSheet: View {
+    let point: DataPoint
+    let onCapture: () -> Void
+    let onCenter: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: point.category.systemImage)
+                        .font(.title3.weight(.bold))
+                        .foregroundColor(.white)
+                        .frame(width: 48, height: 48)
+                        .background(point.category.tint)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(point.name)
+                            .font(.title3.weight(.bold))
+                            .foregroundColor(ADLColor.ink)
+                        Text(point.subtitle)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                }
+
+                HStack(spacing: 8) {
+                    StatusPill(title: point.category.title, tint: point.category.tint)
+                    StatusPill(title: "\(point.trustScore)% trust", tint: point.trustScore >= 85 ? ADLColor.forest : ADLColor.gold)
+                    if point.requiresRefresh {
+                        StatusPill(title: "Refresh due", tint: ADLColor.terracotta)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    DetailRow(title: "Events", value: "\(point.eventsCount)")
+                    DetailRow(title: "Latitude", value: String(format: "%.5f", point.location.latitude))
+                    DetailRow(title: "Longitude", value: String(format: "%.5f", point.location.longitude))
+                    if let accuracy = point.location.accuracyMeters {
+                        DetailRow(title: "Accuracy", value: "\(Int(accuracy)) m")
+                    }
+                }
+                .padding(12)
+                .background(ADLColor.paper)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                    onCapture()
+                } label: {
+                    Label(point.requiresRefresh ? "Capture Refresh" : "Enrich Point", systemImage: "camera.fill")
+                }
+                .buttonStyle(PrimaryButtonStyle())
+
+                Button {
+                    dismiss()
+                    onCenter()
+                } label: {
+                    Label("Center on Map", systemImage: "scope")
+                }
+                .buttonStyle(SecondaryButtonStyle())
+            }
+            .padding(16)
+            .background(Color.white.ignoresSafeArea())
+            .navigationTitle("Point Detail")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
                     }
                 }
             }
+        }
+    }
+}
+
+struct DetailRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.footnote.weight(.medium))
+                .foregroundColor(.secondary)
+            Spacer()
+            Text(value)
+                .font(.footnote.weight(.semibold))
+                .foregroundColor(ADLColor.ink)
         }
     }
 }
@@ -363,6 +707,7 @@ struct ContributionView: View {
     @State private var capturedImage: UIImage?
     @State private var showingCamera = false
     @State private var validationMessage: String?
+    @State private var mapPointId: String?
 
     var body: some View {
         ScrollView {
@@ -450,6 +795,7 @@ struct ContributionView: View {
                             notes = ""
                             capturedImage = nil
                             validationMessage = nil
+                            mapPointId = nil
                         } label: {
                             Label("Queue Contribution", systemImage: "tray.and.arrow.down.fill")
                         }
@@ -463,6 +809,9 @@ struct ContributionView: View {
         .navigationTitle("Capture")
         .sheet(isPresented: $showingCamera) {
             CameraPicker(image: $capturedImage)
+        }
+        .onAppear {
+            applyMapCaptureContextIfNeeded()
         }
     }
 
@@ -643,9 +992,10 @@ struct ContributionView: View {
         }
 
         validationMessage = nil
+        let eventType: SubmissionEventType = mapPointId == nil ? .create : .enrich
         return SubmissionPayload(
-            eventType: .create,
-            pointId: "ios-\(UUID().uuidString)",
+            eventType: eventType,
+            pointId: mapPointId ?? "ios-\(UUID().uuidString)",
             category: category,
             location: location,
             details: details,
@@ -671,6 +1021,66 @@ struct ContributionView: View {
             .split(separator: ",")
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+
+    private func applyMapCaptureContextIfNeeded() {
+        guard let context = appState.consumeMapCaptureContext() else { return }
+
+        if context.pointId == nil {
+            resetFormForNewCapture()
+        }
+
+        mapPointId = context.pointId
+
+        if let contextCategory = context.category {
+            category = contextCategory
+        }
+
+        let contextTitle = trimmed(context.title)
+        if !contextTitle.isEmpty {
+            if context.category == .transportRoad {
+                roadName = contextTitle
+            } else {
+                siteName = contextTitle
+            }
+        }
+
+        locationProvider.setLocation(context.location, status: "Map location selected")
+        validationMessage = nil
+    }
+
+    private func resetFormForNewCapture() {
+        category = .pharmacy
+        siteName = ""
+        roadName = ""
+        notes = ""
+        openingHours = ""
+        isOpenNow = true
+        isOnDuty = false
+        providerText = "Orange Money, MTN MoMo"
+        merchantId = ""
+        paymentMethodsText = "Cash, Mobile Money"
+        hasFuelAvailable = true
+        fuelTypesText = "Super, Gasoil"
+        fuelPriceText = ""
+        quality = "Standard"
+        outletType = "Bar"
+        isFormal = true
+        billboardType = "Standard"
+        isOccupied = true
+        advertiserBrand = ""
+        roadCondition = "Good"
+        roadSurface = "Asphalt"
+        roadBlocked = false
+        blockageType = "Flooding"
+        buildingType = "Residential"
+        occupancyStatus = "Occupied"
+        storeyCount = ""
+        estimatedUnits = ""
+        consentStatus = .notRequired
+        capturedImage = nil
+        validationMessage = nil
+        mapPointId = nil
     }
 }
 
@@ -907,13 +1317,15 @@ struct ProfileView: View {
                 .padding(.vertical, 8)
             }
 
-            Section("Role") {
-                Picker("Role", selection: Binding(
-                    get: { appState.selectedRole },
-                    set: { appState.switchRole($0) }
-                )) {
-                    ForEach(UserRole.allCases) { role in
-                        Text(role.title).tag(role)
+            if AppReleaseMode.allowsRoleSwitching {
+                Section("Role") {
+                    Picker("Role", selection: Binding(
+                        get: { appState.selectedRole },
+                        set: { appState.switchRole($0) }
+                    )) {
+                        ForEach(AppReleaseMode.demoRoles) { role in
+                            Text(role.title).tag(role)
+                        }
                     }
                 }
             }
