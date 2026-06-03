@@ -1174,6 +1174,38 @@ struct SubmissionQueueView: View {
     }
 }
 
+/// Percentage and day formatting shared by the analytics-backed dashboards.
+private enum KpiFormat {
+    static func pct(_ value: Double) -> String { "\(Int(value.rounded()))%" }
+    static func days(_ value: Double) -> String { "\(Int(value.rounded()))d" }
+}
+
+/// Subtle inline banner shown while live analytics load or when they fail.
+private struct AnalyticsStatusNote: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        if appState.analyticsSummary == nil {
+            if appState.isLoadingAnalytics {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Loading live metrics…")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            } else if let error = appState.analyticsError {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(ADLColor.terracotta)
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+    }
+}
+
 struct AdminReviewView: View {
     @EnvironmentObject private var appState: AppState
 
@@ -1181,11 +1213,39 @@ struct AdminReviewView: View {
         List {
             Section {
                 HStack(spacing: 12) {
-                    MetricTile(title: "Needs review", value: "\(appState.points.filter(\.requiresRefresh).count)", systemImage: "checkmark.shield.fill", tint: ADLColor.terracotta)
-                    MetricTile(title: "Trusted avg", value: "84%", systemImage: "gauge.with.dots.needle.67percent", tint: ADLColor.forest)
+                    MetricTile(
+                        title: "Pending review",
+                        value: "\(appState.analyticsSummary?.reviewQueue.pendingReview ?? appState.points.filter(\.requiresRefresh).count)",
+                        systemImage: "checkmark.shield.fill",
+                        tint: ADLColor.terracotta
+                    )
+                    MetricTile(
+                        title: "High-risk events",
+                        value: "\(appState.analyticsSummary?.reviewQueue.highRiskEvents ?? 0)",
+                        systemImage: "exclamationmark.octagon.fill",
+                        tint: ADLColor.gold
+                    )
                 }
                 .listRowInsets(EdgeInsets())
                 .listRowBackground(Color.clear)
+            }
+
+            if let summary = appState.analyticsSummary {
+                Section {
+                    HStack(spacing: 12) {
+                        MetricTile(title: "Verified", value: KpiFormat.pct(summary.verification.verificationRatePct), systemImage: "checkmark.seal.fill", tint: ADLColor.forest)
+                        MetricTile(title: "Fraud rate", value: KpiFormat.pct(summary.fraud.fraudRatePct), systemImage: "shield.lefthalf.filled", tint: ADLColor.terracotta)
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            }
+
+            if appState.analyticsSummary == nil {
+                Section {
+                    AnalyticsStatusNote()
+                        .listRowBackground(Color.clear)
+                }
             }
 
             Section("Review queue") {
@@ -1215,15 +1275,47 @@ struct AdminReviewView: View {
             }
         }
         .navigationTitle("Review")
+        .task { await appState.loadAnalytics() }
+        .refreshable { await appState.loadAnalytics(force: true) }
     }
 }
 
 struct AgentPerformanceView: View {
+    @EnvironmentObject private var appState: AppState
+
     var body: some View {
         ScrollView {
             VStack(spacing: 14) {
-                MetricTile(title: "Verified submissions", value: "148", systemImage: "checkmark.seal.fill", tint: ADLColor.forest)
-                MetricTile(title: "Median review time", value: "18m", systemImage: "timer", tint: ADLColor.gold)
+                AnalyticsStatusNote()
+                let summary = appState.analyticsSummary
+                HStack(spacing: 12) {
+                    MetricTile(
+                        title: "Verified points",
+                        value: "\(summary?.verification.verifiedPoints ?? 0)",
+                        systemImage: "checkmark.seal.fill",
+                        tint: ADLColor.forest
+                    )
+                    MetricTile(
+                        title: "Active contributors",
+                        value: "\(summary?.weeklyActiveContributors ?? 0)",
+                        systemImage: "person.2.fill",
+                        tint: ADLColor.navySoft
+                    )
+                }
+                HStack(spacing: 12) {
+                    MetricTile(
+                        title: "Pending review",
+                        value: "\(summary?.reviewQueue.pendingReview ?? 0)",
+                        systemImage: "tray.full.fill",
+                        tint: ADLColor.gold
+                    )
+                    MetricTile(
+                        title: "Enrichment rate",
+                        value: KpiFormat.pct(summary?.enrichmentRatePct ?? 0),
+                        systemImage: "arrow.triangle.2.circlepath",
+                        tint: ADLColor.terracotta
+                    )
+                }
                 ADLCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Agent coaching")
@@ -1237,16 +1329,46 @@ struct AgentPerformanceView: View {
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .navigationTitle("Agents")
+        .task { await appState.loadAnalytics() }
+        .refreshable { await appState.loadAnalytics(force: true) }
     }
 }
 
 struct ClientDashboardView: View {
+    @EnvironmentObject private var appState: AppState
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                AnalyticsStatusNote()
+                let summary = appState.analyticsSummary
                 HStack(spacing: 12) {
-                    MetricTile(title: "Coverage", value: "72%", systemImage: "map.fill", tint: ADLColor.forest)
-                    MetricTile(title: "Deltas", value: "31", systemImage: "arrow.triangle.2.circlepath", tint: ADLColor.gold)
+                    MetricTile(
+                        title: "Verified",
+                        value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0),
+                        systemImage: "checkmark.seal.fill",
+                        tint: ADLColor.forest
+                    )
+                    MetricTile(
+                        title: "Total points",
+                        value: "\(summary?.verification.totalPoints ?? 0)",
+                        systemImage: "map.fill",
+                        tint: ADLColor.navySoft
+                    )
+                }
+                HStack(spacing: 12) {
+                    MetricTile(
+                        title: "Median age",
+                        value: KpiFormat.days(summary?.freshness.medianAgeDays ?? 0),
+                        systemImage: "clock.arrow.circlepath",
+                        tint: ADLColor.gold
+                    )
+                    MetricTile(
+                        title: "Enriched",
+                        value: KpiFormat.pct(summary?.enrichmentRatePct ?? 0),
+                        systemImage: "arrow.triangle.2.circlepath",
+                        tint: ADLColor.terracotta
+                    )
                 }
                 ADLCard {
                     VStack(alignment: .leading, spacing: 12) {
@@ -1261,32 +1383,50 @@ struct ClientDashboardView: View {
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .navigationTitle("Delta")
+        .task { await appState.loadAnalytics() }
+        .refreshable { await appState.loadAnalytics(force: true) }
     }
 }
 
 struct AnalyticsView: View {
-    private let values = [0.42, 0.68, 0.54, 0.81, 0.76, 0.93, 0.72]
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         ScrollView {
             ADLCard {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Coverage trend")
+                    Text("Weekly capture trend")
                         .font(.title3.weight(.bold))
-                    HStack(alignment: .bottom, spacing: 10) {
-                        ForEach(Array(values.enumerated()), id: \.offset) { _, value in
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(ADLColor.forest)
-                                .frame(height: CGFloat(value) * 150)
+
+                    if appState.weeklyTrend.isEmpty {
+                        AnalyticsStatusNote()
+                        Text("No weekly activity yet.")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                    } else {
+                        let maxValue = max(appState.weeklyTrend.map(\.totalEvents).max() ?? 1, 1)
+                        HStack(alignment: .bottom, spacing: 10) {
+                            ForEach(appState.weeklyTrend) { bar in
+                                VStack(spacing: 6) {
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .fill(ADLColor.forest)
+                                        .frame(height: CGFloat(bar.totalEvents) / CGFloat(maxValue) * 150 + 4)
+                                    Text(bar.totalEvents.description)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
                         }
+                        .frame(height: 190, alignment: .bottom)
                     }
-                    .frame(height: 170, alignment: .bottom)
                 }
             }
             .padding(16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .navigationTitle("Analytics")
+        .task { await appState.loadAnalytics() }
+        .refreshable { await appState.loadAnalytics(force: true) }
     }
 }
 

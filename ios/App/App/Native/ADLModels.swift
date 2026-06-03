@@ -448,3 +448,71 @@ struct AuthUser: Codable, Hashable {
     var isAdmin: Bool?
     var role: UserRole?
 }
+
+// MARK: - Analytics
+
+/// Mirrors the `view=kpi_summary` payload from `api/analytics/index.ts`.
+struct AnalyticsSummary: Codable, Hashable {
+    struct Verification: Codable, Hashable {
+        var totalPoints: Int
+        var verifiedPoints: Int
+        var verificationRatePct: Double
+    }
+
+    struct Freshness: Codable, Hashable {
+        var medianAgeDays: Double
+        var avgAgeDays: Double
+    }
+
+    struct Fraud: Codable, Hashable {
+        var eventsWithFraudCheck: Int
+        var mismatchEvents: Int
+        var fraudRatePct: Double
+    }
+
+    struct ReviewQueue: Codable, Hashable {
+        var pendingReview: Int
+        var highRiskEvents: Int
+    }
+
+    var generatedAt: String?
+    var weeklyActiveContributors: Int
+    var verification: Verification
+    var freshness: Freshness
+    var fraud: Fraud
+    var reviewQueue: ReviewQueue
+    var enrichmentRatePct: Double
+}
+
+/// Mirrors a row from the `view=kpi_weekly` array in `api/analytics/index.ts`.
+/// Only the integer columns are decoded; `pg` returns NUMERIC columns
+/// (avg_completeness_pct, median_freshness_days) as strings, so they are
+/// intentionally omitted to keep decoding total.
+struct WeeklyKpiRow: Codable, Hashable, Identifiable {
+    var weekStart: String
+    var category: String?
+    var totalEvents: Int
+    var totalCreates: Int
+    var totalEnrichments: Int
+    var uniqueUsers: Int
+    var uniquePoints: Int
+
+    var id: String { "\(weekStart)-\(category ?? "all")" }
+
+    enum CodingKeys: String, CodingKey {
+        case weekStart = "week_start"
+        case category
+        case totalEvents = "total_events"
+        case totalCreates = "total_creates"
+        case totalEnrichments = "total_enrichments"
+        case uniqueUsers = "unique_users"
+        case uniquePoints = "unique_points"
+    }
+}
+
+/// One bar in the analytics weekly trend, aggregated across categories.
+struct WeeklyTrendBar: Identifiable, Hashable {
+    var id: String { weekStart }
+    var weekStart: String
+    var totalEvents: Int
+}

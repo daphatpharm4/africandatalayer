@@ -18,6 +18,10 @@ final class AppState: ObservableObject {
     @Published var isSigningIn = false
     @Published var isSyncingQueue = false
     @Published var mapCaptureContext: MapCaptureContext?
+    @Published var analyticsSummary: AnalyticsSummary?
+    @Published var weeklyTrend: [WeeklyTrendBar] = []
+    @Published var isLoadingAnalytics = false
+    @Published var analyticsError: String?
 
     private let queueStore = OfflineQueueStore()
     let apiClient = ADLAPIClient()
@@ -140,6 +144,38 @@ final class AppState: ObservableObject {
         refreshQueueSnapshot()
         lastSyncMessage = "Contribution queued for sync"
         selectedTab = .queue
+    }
+
+    func loadAnalytics(force: Bool = false) async {
+        guard !isLoadingAnalytics else { return }
+        if analyticsSummary != nil, !force { return }
+        isLoadingAnalytics = true
+        analyticsError = nil
+        defer { isLoadingAnalytics = false }
+
+        do {
+            async let summaryTask = apiClient.fetchAnalyticsSummary()
+            async let weeklyTask = apiClient.fetchWeeklyKpis(limit: 24)
+            let (summary, weekly) = try await (summaryTask, weeklyTask)
+            analyticsSummary = summary
+            weeklyTrend = Self.aggregateWeeklyTrend(weekly, weeks: 7)
+        } catch {
+            analyticsError = (error as? APIError)?.message ?? "Unable to load analytics."
+        }
+    }
+
+    /// Collapse per-category weekly rows into one ascending series of the most
+    /// recent `weeks`, summing total events across categories per week.
+    static func aggregateWeeklyTrend(_ rows: [WeeklyKpiRow], weeks: Int) -> [WeeklyTrendBar] {
+        var totalsByWeek: [String: Int] = [:]
+        for row in rows {
+            totalsByWeek[row.weekStart, default: 0] += row.totalEvents
+        }
+        return totalsByWeek
+            .map { WeeklyTrendBar(weekStart: $0.key, totalEvents: $0.value) }
+            .sorted { $0.weekStart < $1.weekStart }
+            .suffix(weeks)
+            .map { $0 }
     }
 
     func startMapCapture(for point: DataPoint) {
@@ -269,8 +305,11 @@ final class ADLAPIClient {
     }()
 
     func url(path: String) -> URL {
+        // Resolve relative to baseURL so query strings (e.g. "?view=kpi_summary")
+        // are preserved. appendingPathComponent would percent-encode "?".
         let normalizedPath = path.hasPrefix("/") ? path : "/\(path)"
-        return baseURL.appendingPathComponent(String(normalizedPath.dropFirst()))
+        return URL(string: normalizedPath, relativeTo: baseURL)?.absoluteURL
+            ?? baseURL.appendingPathComponent(String(normalizedPath.dropFirst()))
     }
 
     func fetchJSON<T: Decodable>(_ type: T.Type, path: String) async throws -> T {
@@ -324,6 +363,14 @@ final class ADLAPIClient {
         ])
         let (data, response) = try await urlSession.data(for: request)
         try validate(response: response, data: data)
+    }
+
+    func fetchAnalyticsSummary() async throws -> AnalyticsSummary {
+        try await fetchJSON(AnalyticsSummary.self, path: "/api/analytics?view=kpi_summary")
+    }
+
+    func fetchWeeklyKpis(limit: Int = 24) async throws -> [WeeklyKpiRow] {
+        try await fetchJSON([WeeklyKpiRow].self, path: "/api/analytics?view=kpi_weekly&limit=\(limit)")
     }
 
     func submit(_ payload: SubmissionPayload) async throws {
