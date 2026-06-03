@@ -163,6 +163,14 @@ struct AppShellView: View {
         .onChange(of: appState.selectedTab) { _ in
             appState.enforceVisibleNavigation()
         }
+        .overlay {
+            if let event = appState.levelUpEvent {
+                LevelUpCelebration(tier: event.tier) {
+                    appState.dismissLevelUp()
+                }
+                .transition(.opacity)
+            }
+        }
     }
 
     @ViewBuilder
@@ -271,6 +279,8 @@ struct AgentHomeView: View {
                     refreshCount: appState.points.filter(\.requiresRefresh).count,
                     locationStatus: locationProvider.statusText
                 )
+
+                DailyProgressWidget(goal: appState.dailyGoal)
 
                 HStack(spacing: 10) {
                     Button {
@@ -1431,13 +1441,299 @@ struct AnalyticsView: View {
 }
 
 struct RewardsView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var pendingReward: Reward?
+    @State private var redeemedVoucher: Voucher?
+    @State private var redeemError: String?
+
     var body: some View {
-        List {
-            Label("Quality streak bonus", systemImage: "flame.fill")
-            Label("Verified refresh reward", systemImage: "star.circle.fill")
-            Label("Zone completion bonus", systemImage: "mappin.circle.fill")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                ADLGradientHero {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("YOUR BALANCE")
+                                .font(.caption2.weight(.bold))
+                                .tracking(1.2)
+                                .foregroundColor(.white.opacity(0.75))
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text("\(appState.spendableXP)")
+                                    .font(.system(size: 34, weight: .bold))
+                                    .foregroundColor(.white)
+                                Text("XP")
+                                    .font(.subheadline.weight(.medium))
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                            if appState.spentXP > 0 {
+                                Text("\(appState.spentXP) XP redeemed so far")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "gift.fill")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .padding(12)
+                            .background(Color.white.opacity(0.18))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+
+                if let redeemError {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(ADLColor.terracotta)
+                        Text(redeemError)
+                            .font(.footnote.weight(.semibold))
+                            .foregroundColor(ADLColor.ink)
+                    }
+                }
+
+                ADLSectionHeader(title: "Redeemable rewards")
+                ForEach(appState.catalog) { reward in
+                    RewardCard(reward: reward, affordable: appState.spendableXP >= reward.costXP) {
+                        redeemError = nil
+                        pendingReward = reward
+                    }
+                }
+
+                if !appState.vouchers.isEmpty {
+                    ADLSectionHeader(title: "Your wallet")
+                    ForEach(appState.vouchers) { voucher in
+                        VoucherRow(voucher: voucher)
+                    }
+                }
+            }
+            .padding(16)
         }
+        .background(ADLColor.paper.ignoresSafeArea())
         .navigationTitle("Rewards")
+        .task { await appState.loadProfile() }
+        .refreshable { await appState.loadProfile(force: true) }
+        .sheet(item: $pendingReward) { reward in
+            RedeemConfirmSheet(reward: reward, balance: appState.spendableXP) {
+                do {
+                    let voucher = try appState.redeem(reward)
+                    pendingReward = nil
+                    redeemedVoucher = voucher
+                } catch {
+                    pendingReward = nil
+                    redeemError = error.localizedDescription
+                }
+            }
+        }
+        .sheet(item: $redeemedVoucher) { voucher in
+            VoucherSuccessSheet(voucher: voucher)
+        }
+    }
+}
+
+struct RedeemConfirmSheet: View {
+    let reward: Reward
+    let balance: Int
+    let onConfirm: () -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    private var affordable: Bool { balance >= reward.costXP }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Confirm redemption")
+                .font(.title3.weight(.bold))
+                .foregroundColor(ADLColor.ink)
+
+            ADLCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(reward.name, systemImage: reward.category.systemImage)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
+                    HStack {
+                        Text("Cost")
+                        Spacer()
+                        Text("\(reward.costXP) XP").fontWeight(.bold)
+                    }
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    HStack {
+                        Text("Balance after")
+                        Spacer()
+                        Text("\(max(0, balance - reward.costXP)) XP").fontWeight(.bold)
+                    }
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                }
+            }
+
+            if !affordable {
+                Text("You need \(reward.costXP - balance) more XP for this reward.")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(ADLColor.terracotta)
+            }
+
+            Button {
+                onConfirm()
+            } label: {
+                Label("Confirm redeem", systemImage: "checkmark.seal.fill")
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(!affordable)
+
+            Button("Cancel") { dismiss() }
+                .buttonStyle(SecondaryButtonStyle())
+        }
+        .padding(20)
+    }
+}
+
+struct VoucherSuccessSheet: View {
+    let voucher: Voucher
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 52))
+                .foregroundColor(ADLColor.forest)
+            Text("Reward redeemed")
+                .font(.title3.weight(.bold))
+                .foregroundColor(ADLColor.ink)
+            Text(voucher.rewardName)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+
+            ADLCard {
+                VStack(spacing: 6) {
+                    Text("VOUCHER CODE")
+                        .font(.caption2.weight(.bold))
+                        .tracking(1.2)
+                        .foregroundColor(.secondary)
+                    Text(voucher.code)
+                        .font(.system(.title2, design: .monospaced).weight(.bold))
+                        .foregroundColor(ADLColor.navy)
+                }
+                .frame(maxWidth: .infinity)
+            }
+
+            Text("Show this code to claim your reward. It's saved in your wallet.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+
+            Button("Done") { dismiss() }
+                .buttonStyle(PrimaryButtonStyle())
+        }
+        .padding(24)
+    }
+}
+
+struct VoucherRow: View {
+    let voucher: Voucher
+
+    var body: some View {
+        ADLCard {
+            HStack(spacing: 12) {
+                Image(systemName: "ticket.fill")
+                    .foregroundColor(ADLColor.gold)
+                    .frame(width: 36, height: 36)
+                    .background(ADLColor.gold.opacity(0.14))
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(voucher.rewardName)
+                        .font(.footnote.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(voucher.code)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
+                Text("\(voucher.costXP) XP")
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
+struct BadgesView: View {
+    @EnvironmentObject private var appState: AppState
+    private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                let earned = appState.badges.filter(\.unlocked).count
+                Text("\(earned) of \(appState.badges.count) earned")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundColor(.secondary)
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(appState.badges) { badge in
+                        BadgeTile(badge: badge)
+                    }
+                }
+            }
+            .padding(16)
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .navigationTitle("Badges")
+        .task { await appState.loadProfile() }
+    }
+}
+
+struct MissionsView: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                ADLSectionHeader(title: "Daily")
+                ForEach(appState.missions.filter { $0.period == .daily }) { mission in
+                    MissionRow(mission: mission)
+                }
+                ADLSectionHeader(title: "Weekly")
+                ForEach(appState.missions.filter { $0.period == .weekly }) { mission in
+                    MissionRow(mission: mission)
+                }
+            }
+            .padding(16)
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .navigationTitle("Missions")
+        .task { await appState.loadProfile() }
+    }
+}
+
+struct ProfileRow: View {
+    let title: String
+    let systemImage: String
+    var trailing: String?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .foregroundColor(ADLColor.navy)
+                .frame(width: 26)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(ADLColor.ink)
+            Spacer()
+            if let trailing {
+                Text(trailing)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.bold))
+                .foregroundColor(.secondary)
+        }
+        .padding(14)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
     }
 }
 
@@ -1445,54 +1741,201 @@ struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        Form {
-            Section {
-                VStack(alignment: .leading, spacing: 8) {
+        ScrollView {
+            VStack(spacing: 18) {
+                VStack(spacing: 10) {
+                    IdentityCircle(name: appState.profile.name, size: 78)
                     Text(appState.profile.name)
                         .font(.title2.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
                     Text(appState.profile.role.title)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
-                    StatusPill(title: appState.profile.trustTier.capitalized, tint: ADLColor.forest)
+                    HStack(spacing: 8) {
+                        StatusPill(title: appState.tierProgress.current.title, tint: ADLColor.gold)
+                        StatusPill(title: appState.profile.trustTier.capitalized, tint: ADLColor.forest)
+                    }
                 }
-                .padding(.vertical, 8)
-            }
+                .padding(.top, 8)
 
-            if AppReleaseMode.allowsRoleSwitching {
-                Section("Role") {
-                    Picker("Role", selection: Binding(
-                        get: { appState.selectedRole },
-                        set: { appState.switchRole($0) }
-                    )) {
-                        ForEach(AppReleaseMode.demoRoles) { role in
-                            Text(role.title).tag(role)
+                ADLCard {
+                    let tier = appState.tierProgress
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text(tier.current.title)
+                                .font(.subheadline.weight(.bold))
+                                .foregroundColor(ADLColor.ink)
+                            Spacer()
+                            if let next = tier.next {
+                                Text(next.title)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        ADLProgressBar(value: tier.fraction, tint: ADLColor.gold)
+                        Text(tier.next != nil ? "\(tier.xpToNext) XP to \(tier.next!.title)" : "Top tier reached")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                HStack(spacing: 12) {
+                    StatTile(value: "\(appState.serverXP)", label: "XP", tint: ADLColor.navy)
+                    StatTile(value: "\(appState.profile.streakDays)", label: "Day streak", tint: ADLColor.terracotta)
+                }
+                HStack(spacing: 12) {
+                    StatTile(value: "\(appState.badges.filter(\.unlocked).count)", label: "Badges", tint: ADLColor.gold)
+                    StatTile(value: "\(appState.queueSnapshot.synced)", label: "Synced", tint: ADLColor.forest)
+                }
+
+                VStack(spacing: 10) {
+                    NavigationLink { RewardsView() } label: {
+                        ProfileRow(title: "Rewards wallet", systemImage: "gift.fill", trailing: "\(appState.spendableXP) XP")
+                    }
+                    NavigationLink { BadgesView() } label: {
+                        ProfileRow(title: "Badges", systemImage: "rosette", trailing: "\(appState.badges.filter(\.unlocked).count)/\(appState.badges.count)")
+                    }
+                    NavigationLink { MissionsView() } label: {
+                        ProfileRow(title: "Missions", systemImage: "target", trailing: nil)
+                    }
+                }
+
+                if AppReleaseMode.allowsRoleSwitching {
+                    ADLCard {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Demo role")
+                                .font(.caption.weight(.bold))
+                                .foregroundColor(.secondary)
+                            Picker("Role", selection: Binding(
+                                get: { appState.selectedRole },
+                                set: { appState.switchRole($0) }
+                            )) {
+                                ForEach(AppReleaseMode.demoRoles) { role in
+                                    Text(role.title).tag(role)
+                                }
+                            }
+                            .pickerStyle(.segmented)
                         }
                     }
                 }
-            }
 
-            Section("Progress") {
-                HStack {
-                    Text("XP")
-                    Spacer()
-                    Text("\(appState.profile.xp)")
-                        .fontWeight(.semibold)
-                }
-                HStack {
-                    Text("Streak")
-                    Spacer()
-                    Text("\(appState.profile.streakDays) days")
-                        .fontWeight(.semibold)
-                }
-            }
-
-            Section {
-                Button("Sign Out") {
+                Button {
                     appState.signOut()
+                } label: {
+                    Text("Sign Out")
+                        .foregroundColor(ADLColor.terracotta)
                 }
-                .foregroundColor(ADLColor.terracotta)
+                .buttonStyle(SecondaryButtonStyle())
+            }
+            .padding(16)
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .navigationTitle("Profile")
+        .task { await appState.loadProfile() }
+        .refreshable { await appState.loadProfile(force: true) }
+    }
+}
+
+struct DailyProgressWidget: View {
+    let goal: DailyGoal
+
+    var body: some View {
+        ADLCard {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().stroke(ADLColor.line, lineWidth: 7)
+                    Circle()
+                        .trim(from: 0, to: goal.fraction)
+                        .stroke(ADLColor.forest, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(goal.completed)/\(goal.target)")
+                        .font(.caption.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
+                }
+                .frame(width: 52, height: 52)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Today's goal")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(goal.completed >= goal.target
+                         ? "Goal complete — nice work."
+                         : "\(goal.target - goal.completed) more captures to go.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                Spacer()
             }
         }
-        .navigationTitle("Profile")
+    }
+}
+
+struct LevelUpCelebration: View {
+    let tier: AgentTier
+    let onDismiss: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown = false
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.45)
+                .ignoresSafeArea()
+                .onTapGesture { onDismiss() }
+
+            if !reduceMotion {
+                ConfettiView()
+                    .allowsHitTesting(false)
+            }
+
+            VStack(spacing: 14) {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 52))
+                    .foregroundColor(ADLColor.gold)
+                Text("Level up!")
+                    .font(.title2.weight(.bold))
+                    .foregroundColor(ADLColor.ink)
+                Text("You reached \(tier.title)")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                Button("Keep going") { onDismiss() }
+                    .buttonStyle(PrimaryButtonStyle())
+            }
+            .padding(28)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .padding(40)
+            .scaleEffect(shown || reduceMotion ? 1 : 0.7)
+            .opacity(shown || reduceMotion ? 1 : 0)
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.7)) { shown = true }
+        }
+    }
+}
+
+/// Lightweight falling-confetti layer for celebrations.
+struct ConfettiView: View {
+    private let pieces = 18
+    private let palette: [Color] = [ADLColor.gold, ADLColor.terracotta, ADLColor.forest, ADLColor.navySoft]
+    @State private var animate = false
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(0..<pieces, id: \.self) { index in
+                let x = CGFloat.random(in: 0...geo.size.width)
+                let delay = Double.random(in: 0...0.4)
+                let size = CGFloat.random(in: 6...11)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(palette[index % palette.count])
+                    .frame(width: size, height: size * 1.6)
+                    .position(x: x, y: animate ? geo.size.height + 40 : -40)
+                    .rotationEffect(.degrees(animate ? 220 : 0))
+                    .opacity(animate ? 0 : 1)
+                    .animation(.easeIn(duration: 1.6).delay(delay), value: animate)
+            }
+        }
+        .onAppear { animate = true }
     }
 }
 

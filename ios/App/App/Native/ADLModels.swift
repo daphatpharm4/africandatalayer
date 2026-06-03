@@ -1,5 +1,6 @@
 import CoreLocation
 import Foundation
+import SwiftUI
 import UIKit
 
 enum UserRole: String, CaseIterable, Codable, Identifiable {
@@ -515,4 +516,235 @@ struct WeeklyTrendBar: Identifiable, Hashable {
     var id: String { weekStart }
     var weekStart: String
     var totalEvents: Int
+}
+
+// MARK: - User profile
+
+/// Lenient decode of `GET /api/user` — only the fields the native app uses.
+struct UserProfile: Codable, Hashable {
+    var id: String?
+    var name: String?
+    var role: UserRole?
+    var trustTier: String?
+    var trustScore: Int?
+    var xp: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, role, trustTier, trustScore
+        case xp = "XP"
+    }
+}
+
+// MARK: - Rewards
+
+enum RewardCategory: String, Codable, CaseIterable, Identifiable {
+    case mobileCredit
+    case fuelDiscount
+    case giftCard
+    case recognition
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .mobileCredit: return "Mobile credit"
+        case .fuelDiscount: return "Fuel discount"
+        case .giftCard: return "Gift card"
+        case .recognition: return "Recognition"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .mobileCredit: return "antenna.radiowaves.left.and.right"
+        case .fuelDiscount: return "fuelpump.fill"
+        case .giftCard: return "giftcard.fill"
+        case .recognition: return "rosette"
+        }
+    }
+}
+
+enum RewardStock: String, Codable {
+    case inStock
+    case lowStock
+    case outOfStock
+
+    var title: String {
+        switch self {
+        case .inStock: return "In stock"
+        case .lowStock: return "Low stock"
+        case .outOfStock: return "Out of stock"
+        }
+    }
+
+    var isAvailable: Bool { self != .outOfStock }
+}
+
+struct Reward: Identifiable, Codable, Hashable {
+    var id: String
+    var name: String
+    var category: RewardCategory
+    var costXP: Int
+    var stock: RewardStock
+
+    static let catalog: [Reward] = [
+        Reward(id: "mtn-credit-5k", name: "Mobile credit · 5,000 FCFA", category: .mobileCredit, costXP: 5_000, stock: .inStock),
+        Reward(id: "fuel-10", name: "Fuel discount · 10%", category: .fuelDiscount, costXP: 12_000, stock: .lowStock),
+        Reward(id: "grocer-card", name: "Gift card · Local grocer", category: .giftCard, costXP: 8_500, stock: .inStock),
+        Reward(id: "data-2gb", name: "Data bundle · 2 GB", category: .mobileCredit, costXP: 3_500, stock: .inStock),
+        Reward(id: "badge-boost", name: "Community badge boost", category: .recognition, costXP: 2_000, stock: .inStock)
+    ]
+}
+
+/// A redeemed reward, persisted locally in the on-device wallet.
+struct Voucher: Identifiable, Codable, Hashable {
+    var id: UUID
+    var rewardId: String
+    var rewardName: String
+    var costXP: Int
+    var code: String
+    var redeemedAt: Date
+
+    static func generateCode() -> String {
+        let alphabet = Array("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+        func block() -> String { String((0..<4).map { _ in alphabet.randomElement()! }) }
+        return "ADL-\(block())-\(block())"
+    }
+}
+
+enum RedeemError: LocalizedError {
+    case insufficientBalance
+    case outOfStock
+
+    var errorDescription: String? {
+        switch self {
+        case .insufficientBalance: return "Not enough XP for this reward yet."
+        case .outOfStock: return "This reward is out of stock."
+        }
+    }
+}
+
+// MARK: - Gamification
+
+/// XP-threshold progression used for the profile bar and level-up celebration.
+enum AgentTier: Int, CaseIterable, Identifiable {
+    case starter
+    case contributor
+    case trusted
+    case expert
+    case elite
+    case legend
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .starter: return "Starter"
+        case .contributor: return "Contributor"
+        case .trusted: return "Trusted"
+        case .expert: return "Expert"
+        case .elite: return "Elite"
+        case .legend: return "Legend"
+        }
+    }
+
+    /// Minimum XP to hold this tier.
+    var threshold: Int {
+        switch self {
+        case .starter: return 0
+        case .contributor: return 500
+        case .trusted: return 1_500
+        case .expert: return 4_000
+        case .elite: return 8_000
+        case .legend: return 15_000
+        }
+    }
+
+    static func tier(forXP xp: Int) -> AgentTier {
+        allCases.last { xp >= $0.threshold } ?? .starter
+    }
+
+    var next: AgentTier? {
+        AgentTier(rawValue: rawValue + 1)
+    }
+}
+
+/// Derived progress toward the next XP tier.
+struct TierProgress: Hashable {
+    var current: AgentTier
+    var next: AgentTier?
+    var xp: Int
+
+    init(xp: Int) {
+        self.xp = xp
+        self.current = AgentTier.tier(forXP: xp)
+        self.next = current.next
+    }
+
+    /// 0…1 progress from the current tier threshold to the next.
+    var fraction: Double {
+        guard let next else { return 1 }
+        let span = Double(next.threshold - current.threshold)
+        guard span > 0 else { return 1 }
+        return min(1, max(0, Double(xp - current.threshold) / span))
+    }
+
+    var xpToNext: Int {
+        guard let next else { return 0 }
+        return max(0, next.threshold - xp)
+    }
+}
+
+struct Badge: Identifiable, Hashable {
+    var id: String
+    var title: String
+    var detail: String
+    var systemImage: String
+    var tint: Color
+    var unlocked: Bool
+    var progress: Double
+}
+
+enum MissionPeriod: String, Hashable {
+    case daily
+    case weekly
+
+    var title: String {
+        switch self {
+        case .daily: return "Daily"
+        case .weekly: return "Weekly"
+        }
+    }
+}
+
+struct Mission: Identifiable, Hashable {
+    var id: String
+    var title: String
+    var detail: String
+    var period: MissionPeriod
+    var goal: Int
+    var current: Int
+    var rewardXP: Int
+
+    var fraction: Double {
+        guard goal > 0 else { return 0 }
+        return min(1, Double(current) / Double(goal))
+    }
+
+    var isComplete: Bool { current >= goal }
+}
+
+struct DailyGoal: Hashable {
+    var target: Int
+    var completed: Int
+
+    var fraction: Double {
+        guard target > 0 else { return 0 }
+        return min(1, Double(completed) / Double(target))
+    }
+}
+
+/// Emitted when the agent crosses into a new tier, to trigger the celebration.
+struct LevelUpEvent: Equatable {
+    var tier: AgentTier
 }

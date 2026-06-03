@@ -96,6 +96,249 @@ struct StatusPill: View {
     }
 }
 
+// MARK: - Composed primitives
+
+/// Navy gradient container used for balance / identity heroes.
+struct ADLGradientHero<Content: View>: View {
+    var colors: [Color]
+    let content: Content
+
+    init(colors: [Color] = [ADLColor.navy, ADLColor.navySoft], @ViewBuilder content: () -> Content) {
+        self.colors = colors
+        self.content = content()
+    }
+
+    var body: some View {
+        content
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+/// Thin rounded progress track + fill.
+struct ADLProgressBar: View {
+    var value: Double
+    var tint: Color = ADLColor.forest
+    var height: CGFloat = 8
+    var track: Color = ADLColor.line
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(track)
+                Capsule()
+                    .fill(tint)
+                    .frame(width: max(0, min(1, value)) * geo.size.width)
+            }
+        }
+        .frame(height: height)
+        .accessibilityValue("\(Int((max(0, min(1, value))) * 100)) percent")
+    }
+}
+
+/// Uppercase micro-label section header with optional trailing action.
+struct ADLSectionHeader: View {
+    let title: String
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        HStack {
+            Text(title.uppercased())
+                .font(.caption.weight(.bold))
+                .tracking(1.1)
+                .foregroundColor(.secondary)
+            Spacer()
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(ADLColor.terracotta)
+            }
+        }
+    }
+}
+
+/// Letter-initial identity mark on a navy→terra gradient (per CLAUDE identity rule).
+struct IdentityCircle: View {
+    let name: String
+    var size: CGFloat = 64
+
+    private var initial: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.first.map(Character.init) ?? "A").uppercased()
+    }
+
+    var body: some View {
+        Text(initial)
+            .font(.system(size: size * 0.42, weight: .bold))
+            .foregroundColor(.white)
+            .frame(width: size, height: size)
+            .background(
+                LinearGradient(
+                    colors: [ADLColor.navy, ADLColor.terracotta],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .clipShape(Circle())
+            .accessibilityLabel("Profile for \(name)")
+    }
+}
+
+/// Compact value + label stat block.
+struct StatTile: View {
+    let value: String
+    let label: String
+    var tint: Color = ADLColor.navy
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value)
+                .font(.title3.weight(.bold))
+                .foregroundColor(tint)
+            Text(label.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.8)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+    }
+}
+
+/// Catalog reward row with affordability state.
+struct RewardCard: View {
+    let reward: Reward
+    let affordable: Bool
+    let action: () -> Void
+
+    private var enabled: Bool { affordable && reward.stock.isAvailable }
+
+    var body: some View {
+        ADLCard {
+            HStack(spacing: 14) {
+                Image(systemName: reward.category.systemImage)
+                    .font(.title3.weight(.semibold))
+                    .foregroundColor(ADLColor.navy)
+                    .frame(width: 44, height: 44)
+                    .background(ADLColor.navy.opacity(0.10))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(reward.name)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(reward.category.title)
+                        .font(.caption2.weight(.semibold))
+                        .tracking(0.6)
+                        .foregroundColor(.secondary)
+                    Text(reward.stock.title)
+                        .font(.caption2.weight(.bold))
+                        .foregroundColor(stockTint)
+                }
+
+                Spacer()
+
+                Button(action: action) {
+                    Text("\(reward.costXP) XP")
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                }
+                .background(enabled ? ADLColor.navy : ADLColor.line)
+                .foregroundColor(enabled ? .white : .secondary)
+                .clipShape(Capsule())
+                .disabled(!enabled)
+            }
+        }
+    }
+
+    private var stockTint: Color {
+        switch reward.stock {
+        case .inStock: return ADLColor.forest
+        case .lowStock: return ADLColor.terracotta
+        case .outOfStock: return .secondary
+        }
+    }
+}
+
+/// Square badge tile with locked/unlocked treatment.
+struct BadgeTile: View {
+    let badge: Badge
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Image(systemName: badge.unlocked ? badge.systemImage : "lock.fill")
+                .font(.title2.weight(.semibold))
+                .foregroundColor(badge.unlocked ? badge.tint : .secondary)
+                .frame(width: 52, height: 52)
+                .background((badge.unlocked ? badge.tint : ADLColor.line).opacity(0.14))
+                .clipShape(Circle())
+
+            Text(badge.title)
+                .font(.caption.weight(.bold))
+                .foregroundColor(ADLColor.ink)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+
+            if badge.unlocked {
+                Text("Earned")
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(ADLColor.forest)
+            } else {
+                ADLProgressBar(value: badge.progress, tint: ADLColor.gold, height: 5)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 8)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+        .opacity(badge.unlocked ? 1 : 0.85)
+    }
+}
+
+/// Mission row with progress bar and reward chip.
+struct MissionRow: View {
+    let mission: Mission
+
+    var body: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text(mission.title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundColor(ADLColor.ink)
+                    Spacer()
+                    StatusPill(title: "+\(mission.rewardXP) XP", tint: mission.isComplete ? ADLColor.forest : ADLColor.gold)
+                }
+                Text(mission.detail)
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                ADLProgressBar(value: mission.fraction, tint: mission.isComplete ? ADLColor.forest : ADLColor.navy)
+                Text("\(mission.current)/\(mission.goal)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label

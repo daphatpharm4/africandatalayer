@@ -1,6 +1,7 @@
 import Combine
 import CoreLocation
 import Foundation
+import SwiftUI
 import UIKit
 
 @MainActor
@@ -22,13 +23,122 @@ final class AppState: ObservableObject {
     @Published var weeklyTrend: [WeeklyTrendBar] = []
     @Published var isLoadingAnalytics = false
     @Published var analyticsError: String?
+    @Published var userProfile: UserProfile?
+    @Published var serverXP = 0
+    @Published var spentXP = 0
+    @Published var vouchers: [Voucher] = []
+    @Published var badges: [Badge] = []
+    @Published var missions: [Mission] = []
+    @Published var dailyGoal = DailyGoal(target: 5, completed: 0)
+    @Published var levelUpEvent: LevelUpEvent?
+    @Published var isLoadingProfile = false
+    @Published var profileError: String?
 
     private let queueStore = OfflineQueueStore()
+    private let rewardsService: RewardsService = LocalRewardsService()
     let apiClient = ADLAPIClient()
+
+    /// Spendable balance = server-canonical XP minus locally-recorded redemptions.
+    var spendableXP: Int { max(0, serverXP - spentXP) }
+    var tierProgress: TierProgress { TierProgress(xp: serverXP) }
+    var catalog: [Reward] { rewardsService.catalog() }
 
     init() {
         drafts = queueStore.loadDrafts()
+        serverXP = profile.xp
+        spentXP = rewardsService.loadSpentXP()
+        vouchers = rewardsService.loadVouchers()
         refreshQueueSnapshot()
+        refreshGamification()
+    }
+
+    func loadProfile(force: Bool = false) async {
+        guard !isLoadingProfile else { return }
+        if userProfile != nil, !force { return }
+        isLoadingProfile = true
+        profileError = nil
+        defer { isLoadingProfile = false }
+        do {
+            let fetched = try await apiClient.fetchUserProfile()
+            userProfile = fetched
+            applyServerXP(fetched.xp)
+        } catch {
+            profileError = (error as? APIError)?.message ?? "Unable to load profile."
+        }
+    }
+
+    func redeem(_ reward: Reward) throws -> Voucher {
+        guard reward.stock.isAvailable else { throw RedeemError.outOfStock }
+        guard spendableXP >= reward.costXP else { throw RedeemError.insufficientBalance }
+        let voucher = Voucher(
+            id: UUID(),
+            rewardId: reward.id,
+            rewardName: reward.name,
+            costXP: reward.costXP,
+            code: Voucher.generateCode(),
+            redeemedAt: Date()
+        )
+        spentXP += reward.costXP
+        vouchers.insert(voucher, at: 0)
+        rewardsService.recordRedemption(voucher, spentXP: spentXP)
+        return voucher
+    }
+
+    func dismissLevelUp() { levelUpEvent = nil }
+
+    private var didEstablishXPBaseline = false
+
+    private func applyServerXP(_ xp: Int) {
+        let previousTier = AgentTier.tier(forXP: serverXP)
+        serverXP = xp
+        profile.xp = xp
+        let newTier = AgentTier.tier(forXP: xp)
+        // Only celebrate genuine tier increases after the first real load — the
+        // initial demo→server XP swap should not trigger a false celebration.
+        if didEstablishXPBaseline, newTier.rawValue > previousTier.rawValue {
+            levelUpEvent = LevelUpEvent(tier: newTier)
+        }
+        didEstablishXPBaseline = true
+        refreshGamification()
+    }
+
+    func refreshGamification() {
+        badges = Self.deriveBadges(xp: serverXP, profile: userProfile, drafts: drafts, streakDays: profile.streakDays)
+        missions = Self.deriveMissions(drafts: drafts)
+        dailyGoal = DailyGoal(target: 5, completed: Self.capturesToday(drafts))
+    }
+
+    static func capturesToday(_ drafts: [ContributionDraft]) -> Int {
+        let calendar = Calendar.current
+        return drafts.filter { calendar.isDateInToday($0.createdAt) }.count
+    }
+
+    static func deriveMissions(drafts: [ContributionDraft]) -> [Mission] {
+        let calendar = Calendar.current
+        let today = capturesToday(drafts)
+        let weekCount = drafts.filter { calendar.isDate($0.createdAt, equalTo: Date(), toGranularity: .weekOfYear) }.count
+        let syncedWeek = drafts.filter {
+            $0.syncState == .synced && calendar.isDate($0.createdAt, equalTo: Date(), toGranularity: .weekOfYear)
+        }.count
+        return [
+            Mission(id: "daily-capture", title: "Capture 3 points", detail: "Add three field submissions today.", period: .daily, goal: 3, current: today, rewardXP: 150),
+            Mission(id: "weekly-sync", title: "Sync 10 submissions", detail: "Get ten captures synced this week.", period: .weekly, goal: 10, current: syncedWeek, rewardXP: 500),
+            Mission(id: "weekly-capture", title: "Field 15 points", detail: "Capture fifteen points this week.", period: .weekly, goal: 15, current: weekCount, rewardXP: 700)
+        ]
+    }
+
+    static func deriveBadges(xp: Int, profile: UserProfile?, drafts: [ContributionDraft], streakDays: Int) -> [Badge] {
+        let syncedCount = drafts.filter { $0.syncState == .synced }.count
+        let trustTier = (profile?.trustTier ?? "").lowercased()
+        let isTrusted = ["trusted", "elite"].contains(trustTier)
+        return [
+            Badge(id: "first-capture", title: "First Capture", detail: "Submit your first point.", systemImage: "mappin.and.ellipse", tint: ADLColor.forest, unlocked: xp > 0 || syncedCount > 0, progress: (xp > 0 || syncedCount > 0) ? 1 : 0),
+            Badge(id: "streak-5", title: "5-Day Streak", detail: "Capture five days running.", systemImage: "flame.fill", tint: ADLColor.terracotta, unlocked: streakDays >= 5, progress: min(1, Double(streakDays) / 5)),
+            Badge(id: "trusted", title: "Trusted Agent", detail: "Reach the trusted tier.", systemImage: "checkmark.seal.fill", tint: ADLColor.navy, unlocked: isTrusted, progress: isTrusted ? 1 : 0.5),
+            Badge(id: "xp-2500", title: "Field Veteran", detail: "Earn 2,500 XP.", systemImage: "star.circle.fill", tint: ADLColor.gold, unlocked: xp >= 2_500, progress: min(1, Double(xp) / 2_500)),
+            Badge(id: "synced-25", title: "Quarter Century", detail: "Sync 25 submissions.", systemImage: "tray.full.fill", tint: ADLColor.navySoft, unlocked: syncedCount >= 25, progress: min(1, Double(syncedCount) / 25)),
+            Badge(id: "elite", title: "Elite Mapper", detail: "Earn 8,000 XP.", systemImage: "trophy.fill", tint: ADLColor.gold, unlocked: xp >= 8_000, progress: min(1, Double(xp) / 8_000))
+        ]
     }
 
     func bootstrap() async {
@@ -269,6 +379,7 @@ final class AppState: ObservableObject {
             failed: drafts.filter { $0.syncState == .failed }.count,
             synced: drafts.filter { $0.syncState == .synced }.count
         )
+        refreshGamification()
     }
 
     private func applyAuthenticatedUser(_ user: AuthUser) {
@@ -371,6 +482,10 @@ final class ADLAPIClient {
 
     func fetchWeeklyKpis(limit: Int = 24) async throws -> [WeeklyKpiRow] {
         try await fetchJSON([WeeklyKpiRow].self, path: "/api/analytics?view=kpi_weekly&limit=\(limit)")
+    }
+
+    func fetchUserProfile() async throws -> UserProfile {
+        try await fetchJSON(UserProfile.self, path: "/api/user")
     }
 
     func submit(_ payload: SubmissionPayload) async throws {
@@ -505,6 +620,39 @@ final class OfflineQueueStore {
         let url = imageDirectory().appendingPathComponent(filename)
         let data = try Data(contentsOf: url)
         return "data:image/jpeg;base64,\(data.base64EncodedString())"
+    }
+}
+
+/// Seam for the rewards economy. The local implementation persists redemptions
+/// on-device; a future backend ledger can replace it without touching the UI.
+protocol RewardsService {
+    func catalog() -> [Reward]
+    func loadVouchers() -> [Voucher]
+    func loadSpentXP() -> Int
+    func recordRedemption(_ voucher: Voucher, spentXP: Int)
+}
+
+final class LocalRewardsService: RewardsService {
+    private let defaults = UserDefaults.standard
+    private let vouchersKey = "adl.native.vouchers"
+    private let spentKey = "adl.native.spentXP"
+
+    func catalog() -> [Reward] { Reward.catalog }
+
+    func loadVouchers() -> [Voucher] {
+        guard let data = defaults.data(forKey: vouchersKey) else { return [] }
+        return (try? JSONDecoder().decode([Voucher].self, from: data)) ?? []
+    }
+
+    func loadSpentXP() -> Int { defaults.integer(forKey: spentKey) }
+
+    func recordRedemption(_ voucher: Voucher, spentXP: Int) {
+        var current = loadVouchers()
+        current.insert(voucher, at: 0)
+        if let data = try? JSONEncoder().encode(current) {
+            defaults.set(data, forKey: vouchersKey)
+        }
+        defaults.set(spentXP, forKey: spentKey)
     }
 }
 
