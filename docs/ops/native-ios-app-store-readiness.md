@@ -52,7 +52,8 @@ Scope: native Swift iOS target `ios/App/App.xcodeproj`, bundle identifier `com.a
 
 ### Known Blockers
 
-- [ ] Full Xcode 26 build/archive verification is blocked until full Xcode is selected and the matching iOS 26 platform/simulator components are installed. Track follow-up in `africandatalayer-723`.
+- [ ] Full Xcode 26 build/archive verification is blocked until the matching iOS 26.5 platform/simulator runtime is installed. Xcode 26 ships the iOS 26.5 SDK, but only the iOS 26.4 simulator runtime is present, so `xcodebuild` cannot resolve a simulator destination and falls back to the "Any iOS Device" placeholder. Install the runtime from Xcode > Settings > Components (or run `xcodebuild -downloadPlatform iOS` in a privileged terminal — it is a no-op under a sandboxed/non-interactive shell). Track follow-up in `africandatalayer-723`.
+- Status (2026-06-03): all native Swift sources compile clean via whole-module `swiftc -c -wmo` against `iphonesimulator26.5`; `Info.plist` and `PrivacyInfo.xcprivacy` pass `plutil -lint`. The remaining gap is solely the device/simulator archive, which depends on the runtime install above.
 - [ ] Native admin/client dashboards are placeholders and are intentionally gated out of Release. Track parity work in `africandatalayer-g4a`.
 - [ ] Production or review-safe API availability, support URL, privacy policy URL, terms URL, and demo account readiness must be confirmed before App Review submission.
 
