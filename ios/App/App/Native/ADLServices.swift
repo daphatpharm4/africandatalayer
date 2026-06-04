@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     @Published var isBootstrapping = true
     @Published var isAuthenticated = false
     @Published var isGuest = false
+    @Published var isAuthRequested = false
     @Published var selectedRole: UserRole = .agent
     @Published var selectedTab: AppRoute = .home
     @Published var profile = SessionProfile.demo(role: .agent)
@@ -22,6 +23,9 @@ final class AppState: ObservableObject {
     @Published var mapCaptureContext: MapCaptureContext?
     @Published var analyticsSummary: AnalyticsSummary?
     @Published var weeklyTrend: [WeeklyTrendBar] = []
+    @Published var leaderboard: [LeaderboardEntry] = []
+    @Published var isLoadingLeaderboard = false
+    @Published var leaderboardError: String?
     @Published var isLoadingAnalytics = false
     @Published var analyticsError: String?
     @Published var userProfile: UserProfile?
@@ -154,6 +158,9 @@ final class AppState: ObservableObject {
             if let raw = env["ADL_TAB"], let route = AppRoute(rawValue: raw) { selectedTab = route }
         }
         #endif
+        if !isAuthenticated && !isGuest && !isAuthRequested {
+            continueAsGuest()
+        }
         isBootstrapping = false
     }
 
@@ -194,6 +201,7 @@ final class AppState: ObservableObject {
         selectedRole = role
         isAuthenticated = true
         isGuest = false
+        isAuthRequested = false
         profile = SessionProfile.demo(role: role)
         selectedTab = defaultTab(for: role)
     }
@@ -203,17 +211,22 @@ final class AppState: ObservableObject {
         selectedRole = .agent
         isGuest = true
         isAuthenticated = false
+        isAuthRequested = false
         profile = SessionProfile.demo(role: .agent)
         selectedTab = .home
+    }
+
+    func requestAuth() {
+        isGuest = false
+        isAuthenticated = false
+        isAuthRequested = true
     }
 
     func signOut() {
         Task {
             try? await apiClient.signOut()
             await MainActor.run {
-                self.isAuthenticated = false
-                self.isGuest = false
-                self.selectedTab = .home
+                self.continueAsGuest()
             }
         }
     }
@@ -291,6 +304,20 @@ final class AppState: ObservableObject {
             weeklyTrend = Self.aggregateWeeklyTrend(weekly, weeks: 7)
         } catch {
             analyticsError = (error as? APIError)?.message ?? "Unable to load analytics."
+        }
+    }
+
+    func loadLeaderboard(force: Bool = false) async {
+        guard !isLoadingLeaderboard else { return }
+        if !leaderboard.isEmpty, !force { return }
+        isLoadingLeaderboard = true
+        leaderboardError = nil
+        defer { isLoadingLeaderboard = false }
+
+        do {
+            leaderboard = try await apiClient.fetchLeaderboard()
+        } catch {
+            leaderboardError = (error as? APIError)?.message ?? "Unable to load leaderboard."
         }
     }
 
@@ -415,6 +442,8 @@ final class AppState: ObservableObject {
             streakDays: roleDefaults.streakDays
         )
         isAuthenticated = true
+        isGuest = false
+        isAuthRequested = false
         selectedTab = defaultTab(for: resolvedRole)
     }
 }
@@ -509,6 +538,10 @@ final class ADLAPIClient {
 
     func fetchWeeklyKpis(limit: Int = 24) async throws -> [WeeklyKpiRow] {
         try await fetchJSON([WeeklyKpiRow].self, path: "/api/analytics?view=kpi_weekly&limit=\(limit)")
+    }
+
+    func fetchLeaderboard() async throws -> [LeaderboardEntry] {
+        try await fetchJSON([LeaderboardEntry].self, path: "/api/leaderboard")
     }
 
     func fetchUserProfile() async throws -> UserProfile {

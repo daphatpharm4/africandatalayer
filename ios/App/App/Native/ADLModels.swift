@@ -518,6 +518,64 @@ struct WeeklyTrendBar: Identifiable, Hashable {
     var totalEvents: Int
 }
 
+/// Mirrors `/api/leaderboard`, used by the native leaderboard/analytics surface.
+struct LeaderboardEntry: Codable, Hashable, Identifiable {
+    var id: String { userId }
+    var rank: Int
+    var userId: String
+    var name: String
+    var xp: Int
+    var contributions: Int
+    var lastContributionAt: String?
+    var lastLocation: String
+    var averageQualityScore: Int
+    var rankingScore: Int
+    var verticalBreakdown: [String: Int]
+
+    enum CodingKeys: String, CodingKey {
+        case rank, userId, name, xp, contributions, lastContributionAt, lastLocation
+        case averageQualityScore, rankingScore, verticalBreakdown
+    }
+
+    init(
+        rank: Int,
+        userId: String,
+        name: String,
+        xp: Int,
+        contributions: Int,
+        lastContributionAt: String?,
+        lastLocation: String,
+        averageQualityScore: Int,
+        rankingScore: Int,
+        verticalBreakdown: [String: Int] = [:]
+    ) {
+        self.rank = rank
+        self.userId = userId
+        self.name = name
+        self.xp = xp
+        self.contributions = contributions
+        self.lastContributionAt = lastContributionAt
+        self.lastLocation = lastLocation
+        self.averageQualityScore = averageQualityScore
+        self.rankingScore = rankingScore
+        self.verticalBreakdown = verticalBreakdown
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        rank = try container.decodeIfPresent(Int.self, forKey: .rank) ?? 0
+        userId = try container.decodeIfPresent(String.self, forKey: .userId) ?? "contributor"
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? "Contributor"
+        xp = try container.decodeIfPresent(Int.self, forKey: .xp) ?? 0
+        contributions = try container.decodeIfPresent(Int.self, forKey: .contributions) ?? 0
+        lastContributionAt = try container.decodeIfPresent(String.self, forKey: .lastContributionAt)
+        lastLocation = try container.decodeIfPresent(String.self, forKey: .lastLocation) ?? "Location unavailable"
+        averageQualityScore = try container.decodeIfPresent(Int.self, forKey: .averageQualityScore) ?? 0
+        rankingScore = try container.decodeIfPresent(Int.self, forKey: .rankingScore) ?? 0
+        verticalBreakdown = try container.decodeIfPresent([String: Int].self, forKey: .verticalBreakdown) ?? [:]
+    }
+}
+
 // MARK: - User profile
 
 /// Lenient decode of `GET /api/user` — only the fields the native app uses.

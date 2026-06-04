@@ -12,25 +12,17 @@ struct RootView: View {
         Group {
             if appState.isBootstrapping {
                 BootSplashView()
+            } else if appState.isAuthRequested || showAuth {
+                AuthView(onBack: {
+                    showAuth = false
+                    hasSeenSplash = true
+                    appState.continueAsGuest()
+                })
             } else if appState.isAuthenticated || appState.isGuest {
                 AppShellView()
-            } else if hasSeenSplash || showAuth {
-                AuthView(onBack: {
-                    // Back arrow returns to the onboarding carousel.
-                    showAuth = false
-                    hasSeenSplash = false
-                })
             } else {
-                SplashView(
-                    onContinue: {
-                        hasSeenSplash = true
-                        showAuth = true
-                    },
-                    onGuest: {
-                        hasSeenSplash = true
-                        appState.continueAsGuest()
-                    }
-                )
+                AppShellView()
+                    .onAppear { appState.continueAsGuest() }
             }
         }
         .task {
@@ -1784,6 +1776,571 @@ struct SubmissionQueueView: View {
     }
 }
 
+// MARK: - Web parity primitives
+
+struct ADLScreenHeader<Trailing: View>: View {
+    let title: String
+    var subtitle: String?
+    var onBack: (() -> Void)?
+    let trailing: Trailing
+
+    init(
+        title: String,
+        subtitle: String? = nil,
+        onBack: (() -> Void)? = nil,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.onBack = onBack
+        self.trailing = trailing()
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let onBack {
+                    Button(action: onBack) {
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(hex: 0x374151))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear.frame(width: 44, height: 44)
+                }
+            }
+            .frame(width: 44)
+
+            VStack(spacing: 2) {
+                Text(title)
+                    .font(ADLFont.inter(15, .bold))
+                    .foregroundColor(ADLColor.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(ADLFont.inter(11, .regular))
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+            trailing
+                .frame(width: 44, height: 44, alignment: .trailing)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 60)
+        .background(Color.white)
+        .overlay(Rectangle().fill(ADLColor.line).frame(height: 1), alignment: .bottom)
+    }
+}
+
+extension ADLScreenHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String? = nil, onBack: (() -> Void)? = nil) {
+        self.init(title: title, subtitle: subtitle, onBack: onBack) { EmptyView() }
+    }
+}
+
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.reduce(CGFloat.zero) { total, subview in
+            total + subview.sizeThatFits(.unspecified).width + spacing
+        }
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+
+        return CGSize(width: width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(
+                at: CGPoint(x: x, y: y),
+                proposal: ProposedViewSize(width: size.width, height: size.height)
+            )
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+    }
+}
+
+private enum ADLKpiTone {
+    case navy, terra, forest, streak, amber, gold
+
+    var background: Color {
+        switch self {
+        case .navy: return ADLColor.navyWash
+        case .terra: return ADLColor.terraWash
+        case .forest: return ADLColor.forestWash
+        case .streak: return ADLColor.streakWash
+        case .amber: return ADLColor.amberWash
+        case .gold: return ADLColor.goldWash
+        }
+    }
+
+    var foreground: Color {
+        switch self {
+        case .navy: return ADLColor.navy
+        case .terra: return ADLColor.terracotta
+        case .forest: return ADLColor.forestDark
+        case .streak: return ADLColor.streak
+        case .amber, .gold: return ADLColor.amber
+        }
+    }
+}
+
+private struct ADLKpiTile: View {
+    let label: String
+    let value: String
+    var tone: ADLKpiTone = .navy
+    var systemImage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(tone.foreground)
+                    .frame(width: 28, height: 28)
+                    .background(Color.white.opacity(0.7))
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            Text(value)
+                .font(ADLFont.inter(22, .black))
+                .foregroundColor(tone.foreground)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Text(label.uppercased())
+                .font(ADLFont.inter(11, .semibold))
+                .tracking(2.2)
+                .foregroundColor(tone.foreground.opacity(0.7))
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(tone.background)
+        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.statTile, style: .continuous))
+    }
+}
+
+private struct ADLShortcutTile: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    var filled = false
+    var action: (() -> Void)?
+
+    var body: some View {
+        Button {
+            action?()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 18, weight: .semibold))
+                    .frame(width: 40, height: 40)
+                    .background(filled ? Color.white.opacity(0.12) : ADLColor.navyWash)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(ADLFont.inter(13, .bold))
+                        .lineLimit(1)
+                    Text(subtitle)
+                        .font(ADLFont.inter(11, .regular))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .foregroundColor(filled ? Color.white.opacity(0.72) : .secondary)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 15, weight: .bold))
+            }
+            .foregroundColor(filled ? .white : ADLColor.navy)
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(filled ? ADLColor.navy : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous)
+                    .stroke(filled ? Color.clear : ADLColor.line, lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(action == nil)
+    }
+}
+
+private struct ADLMiniStat: View {
+    let label: String
+    let value: String
+    var suffix: String?
+    var suffixTint: Color = ADLColor.forest
+
+    var body: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(label.uppercased())
+                    .font(ADLFont.inter(11, .semibold))
+                    .foregroundColor(ADLColor.inkMuted)
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(value)
+                        .font(ADLFont.inter(22, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    if let suffix {
+                        Text(suffix)
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(suffixTint)
+                            .lineLimit(1)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ProfileHeroCard: View {
+    let name: String
+    let subtitle: String
+    let tier: String
+    let level: Int
+    let rank: String?
+    let xp: Int
+    let xpTarget: Int
+    let progress: Double
+
+    private var initial: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.first.map(Character.init) ?? "A").uppercased()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(alignment: .top, spacing: 14) {
+                Text(initial)
+                    .font(ADLFont.inter(22, .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 60, height: 60)
+                    .background(
+                        LinearGradient(colors: [ADLColor.terracotta, ADLColor.navy], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .clipShape(Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 3))
+                    .shadow(color: ADLColor.navy.opacity(0.3), radius: 8, x: 0, y: 4)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(name)
+                            .font(ADLFont.inter(20, .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        Text(tier)
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(ADLColor.gold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(ADLColor.gold.opacity(0.2))
+                            .clipShape(Capsule())
+                    }
+                    HStack(spacing: 6) {
+                        Text("Level \(level)")
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(.white.opacity(0.72))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(Color.white.opacity(0.1))
+                            .clipShape(Capsule())
+                        Text(subtitle)
+                            .font(ADLFont.inter(14, .regular))
+                            .foregroundColor(.white.opacity(0.72))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                if let rank {
+                    Text(rank)
+                        .font(ADLFont.inter(22, .black))
+                        .foregroundColor(ADLColor.gold)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("LEVEL")
+                    Spacer()
+                    Text("\(xp.formatted()) / \(xpTarget.formatted()) XP")
+                }
+                .font(ADLFont.inter(11, .bold))
+                .tracking(0.7)
+                .foregroundColor(.white.opacity(0.72))
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.15))
+                        Capsule()
+                            .fill(LinearGradient(colors: [ADLColor.gold, ADLColor.amber], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: max(0, min(1, progress)) * proxy.size.width)
+                    }
+                }
+                .frame(height: 8)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 20)
+        .padding(.bottom, 28)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ADLColor.navy)
+    }
+}
+
+private struct ProfileBalanceCard: View {
+    let xp: Int
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("XP BALANCE")
+                    .font(ADLFont.inter(11, .bold))
+                    .tracking(0.9)
+                    .foregroundColor(.white.opacity(0.78))
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(xp.formatted())
+                        .font(ADLFont.inter(30, .black))
+                        .foregroundColor(.white)
+                    Text("XP")
+                        .font(ADLFont.inter(18, .bold))
+                        .foregroundColor(.white.opacity(0.62))
+                }
+            }
+            Spacer()
+            Image(systemName: "medal.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundColor(.white)
+                .frame(width: 48, height: 48)
+                .background(Color.white.opacity(0.25))
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                )
+        }
+        .padding(24)
+        .background(ADLColor.navy)
+        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+        .shadow(color: ADLColor.navy.opacity(0.18), radius: 18, x: 0, y: 8)
+    }
+}
+
+private struct ProfileBadgeChip: View {
+    let badge: Badge
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: badge.unlocked ? badge.systemImage : "lock.fill")
+                .font(.system(size: 12, weight: .bold))
+            Text(badge.title)
+                .font(ADLFont.inter(11, .semibold))
+                .lineLimit(1)
+        }
+        .foregroundColor(foreground)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(background)
+        .clipShape(Capsule())
+    }
+
+    private var foreground: Color {
+        if !badge.unlocked { return ADLColor.inkMuted }
+        return badge.tint
+    }
+
+    private var background: Color {
+        if !badge.unlocked { return ADLColor.line }
+        return badge.tint.opacity(0.12)
+    }
+}
+
+private struct ProfileStreakTracker: View {
+    let streakDays: Int
+
+    var body: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("STREAK")
+                        .font(ADLFont.inter(11, .bold))
+                        .tracking(0.9)
+                        .foregroundColor(ADLColor.inkMuted)
+                    Spacer()
+                    Text("\(streakDays)d")
+                        .font(ADLFont.inter(13, .bold))
+                        .foregroundColor(ADLColor.terracotta)
+                }
+                HStack(spacing: 8) {
+                    ForEach(0..<7, id: \.self) { index in
+                        Circle()
+                            .fill(index < min(streakDays, 7) ? ADLColor.terracotta : ADLColor.line)
+                            .frame(width: 28, height: 28)
+                            .overlay(
+                                Text(String(Calendar.current.shortWeekdaySymbols[(index + 1) % 7].prefix(1)))
+                                    .font(ADLFont.inter(10, .bold))
+                                    .foregroundColor(index < min(streakDays, 7) ? .white : .secondary)
+                            )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ProfileWeekSummaryCard: View {
+    let rows: [(String, String)]
+
+    var body: some View {
+        ADLCard {
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    HStack {
+                        Text(row.0)
+                            .font(ADLFont.inter(13, .regular))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text(row.1)
+                            .font(ADLFont.inter(13, .bold))
+                            .foregroundColor(ADLColor.ink)
+                    }
+                    .padding(.vertical, 9)
+                    if index < rows.count - 1 {
+                        Divider().background(ADLColor.line)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ADLLeaderboardRow: View {
+    let entry: LeaderboardEntry
+    var compact = false
+
+    private var rankTint: Color {
+        switch entry.rank {
+        case 1: return ADLColor.gold
+        case 2: return ADLColor.navyMid
+        case 3: return ADLColor.terracotta
+        default: return ADLColor.ink
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("#\(entry.rank) \(entry.name)")
+                    .font(ADLFont.inter(compact ? 14.0 : 16.0, .bold))
+                    .foregroundColor(ADLColor.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text("\(entry.contributions.formatted()) submissions - \(RelativeDate.short(entry.lastContributionAt))")
+                    .font(ADLFont.inter(11, .semibold))
+                    .foregroundColor(ADLColor.inkMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(entry.lastLocation)
+                    .font(ADLFont.inter(12, .regular))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                if !compact {
+                    Text("Verified value score: \(entry.rankingScore.formatted())")
+                        .font(ADLFont.inter(12, .regular))
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 5) {
+                Text("Score: \(entry.rankingScore.formatted())")
+                    .font(ADLFont.inter(12, .bold))
+                    .foregroundColor(ADLColor.navy)
+                    .lineLimit(1)
+                Text("\(entry.xp.formatted()) XP")
+                    .font(ADLFont.inter(12, .bold))
+                    .foregroundColor(ADLColor.forest)
+                    .lineLimit(1)
+                Text("\(entry.averageQualityScore)% quality")
+                    .font(ADLFont.inter(11, .semibold))
+                    .foregroundColor(ADLColor.inkMuted)
+                    .lineLimit(1)
+            }
+        }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(entry.rank <= 3 ? rankTint : Color.clear)
+                .frame(width: 3)
+                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+        }
+        .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+    }
+}
+
+private enum RelativeDate {
+    static func short(_ iso: String?) -> String {
+        guard let iso, let date = parse(iso) else { return "No recent activity" }
+        let minutes = max(1, Int(Date().timeIntervalSince(date) / 60))
+        if minutes < 60 { return "\(minutes)m ago" }
+        let hours = max(1, minutes / 60)
+        if hours < 24 { return "\(hours)h ago" }
+        return "\(max(1, hours / 24))d ago"
+    }
+
+    private static func parse(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) { return date }
+        return ISO8601DateFormatter().date(from: value)
+    }
+}
+
 /// Percentage and day formatting shared by the analytics-backed dashboards.
 private enum KpiFormat {
     static func pct(_ value: Double) -> String { "\(Int(value.rounded()))%" }
@@ -2002,41 +2559,487 @@ struct AnalyticsView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        ScrollView {
-            ADLCard {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Weekly capture trend")
-                        .font(.title3.weight(.bold))
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: headerTitle, onBack: goBack) {
+                if isClient {
+                    Color.clear
+                } else {
+                    Button(action: {}) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(Color(hex: 0x9ca3af))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
 
-                    if appState.weeklyTrend.isEmpty {
-                        AnalyticsStatusNote()
-                        Text("No weekly activity yet.")
-                            .font(.footnote)
-                            .foregroundColor(.secondary)
+            ScrollView {
+                Group {
+                    if isAdmin {
+                        adminContent
+                    } else if isClient {
+                        clientContent
                     } else {
-                        let maxValue = max(appState.weeklyTrend.map(\.totalEvents).max() ?? 1, 1)
-                        HStack(alignment: .bottom, spacing: 10) {
-                            ForEach(appState.weeklyTrend) { bar in
-                                VStack(spacing: 6) {
-                                    RoundedRectangle(cornerRadius: 4)
-                                        .fill(ADLColor.forest)
-                                        .frame(height: CGFloat(bar.totalEvents) / CGFloat(maxValue) * 150 + 4)
-                                    Text(bar.totalEvents.description)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                        }
-                        .frame(height: 190, alignment: .bottom)
+                        contributorContent
                     }
                 }
             }
-            .padding(16)
+            .refreshable {
+                await appState.loadAnalytics(force: true)
+                await appState.loadLeaderboard(force: true)
+            }
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Analytics")
-        .task { await appState.loadAnalytics() }
-        .refreshable { await appState.loadAnalytics(force: true) }
+        .task {
+            await appState.loadAnalytics()
+            await appState.loadLeaderboard()
+        }
+    }
+
+    private var isAdmin: Bool { appState.selectedRole == .admin }
+    private var isClient: Bool { appState.selectedRole == .client }
+
+    private var headerTitle: String {
+        if isAdmin { return "Investor Analytics" }
+        if isClient { return "Insights Center" }
+        return "Leaderboard"
+    }
+
+    private func goBack() {
+        appState.selectedTab = AppReleaseMode.defaultTab(for: appState.selectedRole)
+    }
+
+    private var topVerticalChampion: (String, Int)? {
+        var totals: [String: Int] = [:]
+        for entry in appState.leaderboard {
+            for (vertical, count) in entry.verticalBreakdown {
+                totals[vertical, default: 0] += count
+            }
+        }
+        return totals.max { $0.value < $1.value }
+    }
+
+    private var categoryRows: [(SubmissionCategory, Int)] {
+        let grouped = Dictionary(grouping: appState.points, by: \.category).mapValues(\.count)
+        return SubmissionCategory.allCases.map { ($0, grouped[$0] ?? 0) }
+    }
+
+    private var contributorContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("LEADERBOARD")
+                    .font(ADLFont.inter(11, .bold))
+                    .foregroundColor(ADLColor.inkMuted)
+                Text("Top contributors near you")
+                    .font(ADLFont.inter(18, .bold))
+                    .foregroundColor(ADLColor.ink)
+            }
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+
+            leaderboardPanel(title: "Top contributors near you", scope: "Local", entries: appState.leaderboard, compact: false)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 24)
+    }
+
+    private var clientContent: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("CLIENT INSIGHTS")
+                    .font(ADLFont.inter(11, .bold))
+                    .foregroundColor(ADLColor.inkMuted)
+                Text("Your data, two ways - map-level context or executive summary")
+                    .font(ADLFont.inter(14, .semibold))
+                    .foregroundColor(ADLColor.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.top, 2)
+
+            VStack(spacing: 12) {
+                ADLShortcutTile(
+                    title: "Delta Intelligence",
+                    subtitle: "Neighborhood shifts, top cells, and export-ready map context",
+                    systemImage: "map.fill",
+                    filled: true
+                ) {
+                    appState.selectedTab = .clientDashboard
+                }
+                ADLShortcutTile(
+                    title: "Investor Dashboard",
+                    subtitle: "Executive KPIs for trust, growth, and reporting confidence",
+                    systemImage: "chart.line.uptrend.xyaxis"
+                )
+            }
+
+            clientKpiGrid
+
+            ADLCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack {
+                        Label("HOW CLIENTS USE THIS SURFACE", systemImage: "chart.bar.fill")
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        Spacer()
+                        Text("ROLE-SPECIFIC")
+                            .font(ADLFont.inter(11, .semibold))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(clientTopCategoryText)
+                            .font(ADLFont.inter(14, .semibold))
+                            .foregroundColor(ADLColor.ink)
+                        Text("Start with Delta Intelligence when you need exact map location, cluster drivers, and exportable context. Move to Investor Dashboard when the conversation shifts to trust, growth, and executive KPIs.")
+                            .font(ADLFont.inter(12, .regular))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(16)
+                    .background(ADLColor.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                }
+            }
+
+            networkPulsePanel
+        }
+        .padding(16)
+        .padding(.bottom, 24)
+    }
+
+    private var adminContent: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            HStack(spacing: 12) {
+                IdentityCircle(name: appState.profile.name, size: 48)
+                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                    .shadow(color: Color.black.opacity(0.12), radius: 3, x: 0, y: 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appState.profile.name)
+                        .font(ADLFont.inter(14, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Label("Senior Contributor", systemImage: "checkmark.shield.fill")
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                Spacer()
+                Text("ADMIN")
+                    .font(ADLFont.inter(11, .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(ADLColor.ink)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+
+            VStack(spacing: 12) {
+                ADLShortcutTile(
+                    title: "Delta Intelligence",
+                    subtitle: "Snapshots, trends & anomalies",
+                    systemImage: "chart.bar.fill",
+                    filled: true
+                ) {
+                    appState.selectedTab = .clientDashboard
+                }
+                ADLShortcutTile(
+                    title: "Agent Performance",
+                    subtitle: "Quality, fraud & assignment pace",
+                    systemImage: "person.2.fill"
+                ) {
+                    appState.selectedTab = .agentPerformance
+                }
+            }
+
+            adminKpiGrid
+            categoryBarsCard
+            xpDistributionCard
+            freshnessHeatmapCard
+            leaderboardPanel(title: "Top Contributor Leaderboard", scope: "Monthly", entries: appState.leaderboard, compact: true)
+
+            VStack(spacing: 10) {
+                Text("ENTERPRISE API ACCESS")
+                    .font(ADLFont.inter(11, .bold))
+                    .foregroundColor(ADLColor.navy)
+                Text("Structured data access for municipalities, NGOs, and logistics teams - with guaranteed uptime.")
+                    .font(ADLFont.inter(12, .regular))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity)
+            .background(ADLColor.paper)
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous)
+                    .stroke(ADLColor.lineStrong, style: StrokeStyle(lineWidth: 2, dash: [7, 5]))
+            )
+        }
+        .padding(16)
+        .padding(.bottom, 24)
+    }
+
+    private var clientKpiGrid: some View {
+        let summary = appState.analyticsSummary
+        let tracked = summary?.verification.totalPoints ?? appState.points.count
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ADLMiniStat(label: "Tracked points", value: tracked.formatted(), suffix: "latest", suffixTint: ADLColor.navy)
+            ADLMiniStat(label: "Completion rate", value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0), suffix: appState.isLoadingAnalytics ? "..." : "live")
+            ADLMiniStat(label: "Anomaly flags", value: "\(summary?.reviewQueue.highRiskEvents ?? 0)", suffix: "watchlist", suffixTint: ADLColor.terracotta)
+            ADLMiniStat(label: "Avg WoW growth", value: weeklyGrowth, suffix: "tracked", suffixTint: ADLColor.forest)
+        }
+    }
+
+    private var adminKpiGrid: some View {
+        let summary = appState.analyticsSummary
+        return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ADLMiniStat(label: "Data complete", value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0), suffix: appState.isLoadingAnalytics ? "..." : "live")
+            ADLMiniStat(label: "Active contributors", value: "\(summary?.weeklyActiveContributors ?? 0)", suffix: "30d", suffixTint: ADLColor.navy)
+            ADLMiniStat(label: "Pending review", value: "\(summary?.reviewQueue.pendingReview ?? 0)", suffix: "queue", suffixTint: ADLColor.gold)
+            ADLMiniStat(label: "Fraud rate", value: KpiFormat.pct(summary?.fraud.fraudRatePct ?? 0), suffix: "risk", suffixTint: ADLColor.terracotta)
+        }
+    }
+
+    private var categoryBarsCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Label("CONTRIBUTIONS BY CATEGORY", systemImage: "chart.bar.fill")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Spacer()
+                    Text("LIVE")
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                let maxValue = max(categoryRows.map(\.1).max() ?? 1, 1)
+                VStack(spacing: 10) {
+                    ForEach(categoryRows, id: \.0.id) { category, value in
+                        HStack(spacing: 10) {
+                            Text(category.title)
+                                .font(ADLFont.inter(10, .semibold))
+                                .foregroundColor(.secondary)
+                                .frame(width: 86, alignment: .leading)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.65)
+                            GeometryReader { proxy in
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .fill(category.tint)
+                                    .frame(width: max(8, CGFloat(value) / CGFloat(maxValue) * proxy.size.width))
+                            }
+                            .frame(height: 18)
+                            Text("\(value)")
+                                .font(ADLFont.inter(11, .bold))
+                                .foregroundColor(ADLColor.inkMuted)
+                                .frame(width: 24, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var xpDistributionCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Label("XP DISTRIBUTION", systemImage: "medal.fill")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Spacer()
+                    Text("ALL USERS")
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                HStack(spacing: 14) {
+                    ForEach(xpBuckets, id: \.label) { bucket in
+                        VStack(spacing: 8) {
+                            ZStack(alignment: .bottom) {
+                                Capsule().fill(ADLColor.line)
+                                Capsule()
+                                    .fill(bucket.color)
+                                    .frame(height: CGFloat(max(bucket.count, 1)) / CGFloat(maxXPBucketCount) * 92)
+                            }
+                            .frame(width: 32, height: 92)
+                            Text(bucket.label)
+                                .font(ADLFont.inter(10, .bold))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+    }
+
+    private var freshnessHeatmapCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Label("DATA FRESHNESS HEATMAP", systemImage: "thermometer.sun.fill")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Spacer()
+                    Text("LAST 24H")
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
+                    ForEach(0..<16, id: \.self) { index in
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(heatColor(index))
+                            .frame(height: 32)
+                    }
+                }
+            }
+        }
+    }
+
+    private var networkPulsePanel: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Label("FIELD NETWORK PULSE", systemImage: "person.2.fill")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Spacer()
+                    Text("TOP 3 CONTRIBUTORS")
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                leaderboardRows(entries: Array(appState.leaderboard.prefix(3)), compact: true)
+            }
+        }
+    }
+
+    private func leaderboardPanel(title: String, scope: String, entries: [LeaderboardEntry], compact: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title.uppercased())
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(scope.uppercased())
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                Spacer()
+                Text("LIVE")
+                    .font(ADLFont.inter(11, .semibold))
+                    .foregroundColor(ADLColor.inkMuted)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("HOW RANKINGS WORK")
+                    .font(ADLFont.inter(11, .semibold))
+                    .foregroundColor(ADLColor.inkMuted)
+                Text(compact ? "Ranking score = submissions x average quality" : "Score = verified submissions x average quality")
+                    .font(ADLFont.inter(14, .semibold))
+                    .foregroundColor(ADLColor.ink)
+                if let topVerticalChampion {
+                    Text("Busiest category: \(categoryTitle(topVerticalChampion.0)) (\(topVerticalChampion.1))")
+                        .font(ADLFont.inter(12, .regular))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(16)
+            .background(ADLColor.paper)
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(ADLColor.line, lineWidth: 1)
+            )
+
+            leaderboardRows(entries: entries, compact: compact)
+        }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: compact ? ADLRadius.card : ADLRadius.pill, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: compact ? ADLRadius.card : ADLRadius.pill, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+    }
+
+    @ViewBuilder
+    private func leaderboardRows(entries: [LeaderboardEntry], compact: Bool) -> some View {
+        if appState.isLoadingLeaderboard && entries.isEmpty {
+            Text("Loading contributors...")
+                .font(ADLFont.inter(11, .semibold))
+                .foregroundColor(ADLColor.inkMuted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(ADLColor.paper)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(ADLColor.line, lineWidth: 1))
+        } else if entries.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("No contributors yet.")
+                    .font(ADLFont.inter(13, .semibold))
+                    .foregroundColor(Color(hex: 0x374151))
+                Text("Score = verified submissions x average quality. Submit your first capture to appear here.")
+                    .font(ADLFont.inter(12, .regular))
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(ADLColor.paper)
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(ADLColor.line, lineWidth: 1))
+        } else {
+            VStack(spacing: 12) {
+                ForEach(entries.prefix(compact ? 6 : 20)) { entry in
+                    ADLLeaderboardRow(entry: entry, compact: compact)
+                }
+            }
+        }
+    }
+
+    private var clientTopCategoryText: String {
+        guard let topVerticalChampion else { return "No category data yet" }
+        return "Top tracked category: \(categoryTitle(topVerticalChampion.0))"
+    }
+
+    private var weeklyGrowth: String {
+        guard appState.weeklyTrend.count >= 2,
+              let previous = appState.weeklyTrend.dropLast().last?.totalEvents,
+              let latest = appState.weeklyTrend.last?.totalEvents,
+              previous > 0
+        else { return "0%" }
+        let growth = (Double(latest - previous) / Double(previous)) * 100
+        return KpiFormat.pct(growth)
+    }
+
+    private func categoryTitle(_ raw: String) -> String {
+        SubmissionCategory(rawValue: raw)?.title ?? raw
+    }
+
+    private var xpBuckets: [(label: String, count: Int, color: Color)] {
+        let rows = appState.leaderboard
+        let buckets = [
+            ("0-1k", rows.filter { $0.xp < 1_000 }.count, ADLColor.navy),
+            ("1-5k", rows.filter { (1_000..<5_000).contains($0.xp) }.count, ADLColor.terracotta),
+            ("5-10k", rows.filter { (5_000..<10_000).contains($0.xp) }.count, ADLColor.forest),
+            ("10k+", rows.filter { $0.xp >= 10_000 }.count, ADLColor.gold)
+        ]
+        return buckets
+    }
+
+    private var maxXPBucketCount: Int {
+        max(xpBuckets.map(\.count).max() ?? 1, 1)
+    }
+
+    private func heatColor(_ index: Int) -> Color {
+        let total = appState.weeklyTrend.map(\.totalEvents).reduce(0, +)
+        let level = (index + total) % 4
+        switch level {
+        case 0: return ADLColor.line
+        case 1: return ADLColor.forestWash
+        case 2: return ADLColor.gold.opacity(0.55)
+        default: return ADLColor.terracotta.opacity(0.72)
+        }
     }
 }
 
@@ -2341,99 +3344,435 @@ struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 18) {
-                VStack(spacing: 10) {
-                    IdentityCircle(name: appState.profile.name, size: 78)
-                    Text(appState.profile.name)
-                        .font(.title2.weight(.bold))
-                        .foregroundColor(ADLColor.ink)
-                    Text(appState.profile.role.title)
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    HStack(spacing: 8) {
-                        StatusPill(title: appState.tierProgress.current.title, tint: ADLColor.gold)
-                        StatusPill(title: appState.profile.trustTier.capitalized, tint: ADLColor.forest)
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: "Profile", onBack: goBack) {
+                Button(action: {}) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(ADLColor.navy)
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if appState.isGuest {
+                guestProfilePrompt
+            } else {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ProfileHeroCard(
+                            name: displayName,
+                            subtitle: heroSubtitle,
+                            tier: tierLabel,
+                            level: level,
+                            rank: rankDisplay,
+                            xp: xpCurrent,
+                            xpTarget: xpTarget,
+                            progress: xpProgress
+                        )
+
+                        VStack(alignment: .leading, spacing: 24) {
+                            if let profileError = appState.profileError {
+                                Text(profileError)
+                                    .font(ADLFont.inter(11, .semibold))
+                                    .foregroundColor(ADLColor.terracotta)
+                                    .padding(.top, 2)
+                            }
+
+                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                ADLKpiTile(label: "Points", value: pointsTotal.formatted(), tone: .navy)
+                                ADLKpiTile(label: "XP", value: xpCurrent.formatted(), tone: .terra)
+                                ADLKpiTile(label: "Streak", value: "\(appState.profile.streakDays)d", tone: .streak)
+                                ADLKpiTile(label: "Rank", value: rankDisplay ?? "N/A", tone: .amber)
+                            }
+
+                            quickActions
+                            ProfileBalanceCard(xp: appState.spendableXP)
+                            DailyProgressWidget(goal: appState.dailyGoal)
+                            ProfileStreakTracker(streakDays: appState.profile.streakDays)
+
+                            if appState.selectedRole == .admin {
+                                adminMapAccessCard
+                            }
+
+                            assignmentsCard
+                            rewardButtons
+                            weeklyTargetCard
+                            badgesSection
+                            weekSummarySection
+                            contributionHistorySection
+                            uploadIssuesSection
+
+                            Button {
+                                appState.signOut()
+                            } label: {
+                                Text("Sign Out")
+                                    .foregroundColor(ADLColor.terracotta)
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                        }
+                        .padding(16)
+                        .padding(.bottom, 24)
                     }
                 }
-                .padding(.top, 8)
+                .refreshable { await appState.loadProfile(force: true) }
+            }
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .task {
+            if !appState.isGuest {
+                await appState.loadProfile()
+            }
+        }
+    }
 
+    private var displayName: String {
+        nonEmpty(appState.userProfile?.name) ?? appState.profile.name
+    }
+
+    private var xpCurrent: Int {
+        appState.userProfile?.xp ?? appState.serverXP
+    }
+
+    private var level: Int {
+        max(1, Int(floor(Double(xpCurrent) / 250.0)) + 1)
+    }
+
+    private var xpTarget: Int {
+        max(level * 250, 250)
+    }
+
+    private var xpProgress: Double {
+        guard xpTarget > 0 else { return 0 }
+        return min(1, Double(xpCurrent) / Double(xpTarget))
+    }
+
+    private var tierLabel: String {
+        nonEmpty(appState.userProfile?.trustTier)?.capitalized ?? appState.tierProgress.current.title
+    }
+
+    private var heroSubtitle: String {
+        if appState.isLoadingProfile { return "Loading profile" }
+        return "\(appState.profile.role.title) - Bonamoussadi"
+    }
+
+    private var rankDisplay: String? {
+        nil
+    }
+
+    private var pointsTotal: Int {
+        appState.queueSnapshot.synced + appState.drafts.count
+    }
+
+    private var failedDrafts: [ContributionDraft] {
+        appState.drafts.filter { $0.syncState == .failed }
+    }
+
+    private var pointsThisWeek: Int {
+        let calendar = Calendar.current
+        return appState.drafts.filter { calendar.isDate($0.createdAt, equalTo: Date(), toGranularity: .weekOfYear) }.count
+    }
+
+    private var weeklyTarget: Int { 50 }
+
+    private func goBack() {
+        appState.selectedTab = AppReleaseMode.defaultTab(for: appState.selectedRole)
+    }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    private var guestProfilePrompt: some View {
+        VStack(spacing: 18) {
+            Spacer(minLength: 18)
+            ADLCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    Image(systemName: "lock.shield.fill")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundColor(ADLColor.navy)
+                        .frame(width: 52, height: 52)
+                        .background(ADLColor.navyWash)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Sign in to view your profile")
+                            .font(ADLFont.inter(20, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        Text("Guest mode can explore public map context. Profile, rewards, XP, upload history, and account settings require a signed-in account.")
+                            .font(ADLFont.inter(13, .regular))
+                            .foregroundColor(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Button {
+                        appState.requestAuth()
+                    } label: {
+                        Label("Sign In", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                }
+            }
+            Spacer()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(ADLColor.paper)
+    }
+
+    private var quickActions: some View {
+        VStack(spacing: 12) {
+            NavigationLink { SubmissionQueueView() } label: {
                 ADLCard {
-                    let tier = appState.tierProgress
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text(tier.current.title)
-                                .font(.subheadline.weight(.bold))
-                                .foregroundColor(ADLColor.ink)
-                            Spacer()
-                            if let next = tier.next {
-                                Text(next.title)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundColor(.secondary)
-                            }
-                        }
-                        ADLProgressBar(value: tier.fraction, tint: ADLColor.gold)
-                        Text(tier.next != nil ? "\(tier.xpToNext) XP to \(tier.next!.title)" : "Top tier reached")
-                            .font(.caption)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Pending Uploads")
+                            .font(ADLFont.inter(14, .bold))
+                            .foregroundColor(ADLColor.navy)
+                        Text("\(appState.queueSnapshot.queued) queued - \(appState.queueSnapshot.failed) failed")
+                            .font(ADLFont.inter(12, .regular))
                             .foregroundColor(.secondary)
                     }
                 }
+            }
+            .buttonStyle(.plain)
 
+            ADLCard {
                 HStack(spacing: 12) {
-                    StatTile(value: "\(appState.serverXP)", label: "XP", tint: ADLColor.navy)
-                    StatTile(value: "\(appState.profile.streakDays)", label: "Day streak", tint: ADLColor.terracotta)
+                    Image(systemName: "book.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(ADLColor.navy)
+                        .frame(width: 40, height: 40)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Help Center")
+                            .font(ADLFont.inter(14, .bold))
+                            .foregroundColor(ADLColor.navy)
+                        Text("Guides for your current role and workflow.")
+                            .font(ADLFont.inter(12, .regular))
+                            .foregroundColor(.secondary)
+                    }
                 }
-                HStack(spacing: 12) {
-                    StatTile(value: "\(appState.badges.filter(\.unlocked).count)", label: "Badges", tint: ADLColor.gold)
-                    StatTile(value: "\(appState.queueSnapshot.synced)", label: "Synced", tint: ADLColor.forest)
-                }
+            }
+            .background(ADLColor.goldWash)
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+        }
+    }
 
-                VStack(spacing: 10) {
-                    NavigationLink { RewardsView() } label: {
-                        ProfileRow(title: "Rewards wallet", systemImage: "gift.fill", trailing: "\(appState.spendableXP) XP")
+    private var adminMapAccessCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ADMIN MAP ACCESS")
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(.secondary)
+                        Text("Unlock worldwide map")
+                            .font(ADLFont.inter(14, .bold))
+                            .foregroundColor(ADLColor.ink)
                     }
-                    NavigationLink { BadgesView() } label: {
-                        ProfileRow(title: "Badges", systemImage: "rosette", trailing: "\(appState.badges.filter(\.unlocked).count)/\(appState.badges.count)")
-                    }
-                    NavigationLink { MissionsView() } label: {
-                        ProfileRow(title: "Missions", systemImage: "target", trailing: nil)
-                    }
+                    Spacer()
+                    StatusPill(title: "Enabled", tint: ADLColor.forest)
                 }
+                Text("Explorer map is unlocked worldwide.")
+                    .font(ADLFont.inter(12, .regular))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
 
-                if AppReleaseMode.allowsRoleSwitching {
-                    ADLCard {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Demo role")
-                                .font(.caption.weight(.bold))
-                                .foregroundColor(.secondary)
-                            Picker("Role", selection: Binding(
-                                get: { appState.selectedRole },
-                                set: { appState.switchRole($0) }
-                            )) {
-                                ForEach(AppReleaseMode.demoRoles) { role in
-                                    Text(role.title).tag(role)
+    private var assignmentsCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("ASSIGNMENTS")
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(.secondary)
+                        Text("My Weekly Assignments")
+                            .font(ADLFont.inter(14, .bold))
+                            .foregroundColor(ADLColor.ink)
+                    }
+                    Spacer()
+                    Text("0")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(ADLColor.navy)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(ADLColor.navyLight)
+                        .clipShape(Capsule())
+                }
+                Text("No active assignments yet.")
+                    .font(ADLFont.inter(12, .regular))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var rewardButtons: some View {
+        VStack(spacing: 12) {
+            NavigationLink { RewardsView() } label: {
+                Label("Redeem XP", systemImage: "gift.fill")
+            }
+            .buttonStyle(SecondaryButtonStyle())
+
+            Button(action: {}) {
+                Label("Convert to Rewards", systemImage: "wallet.pass.fill")
+            }
+            .buttonStyle(CTAButtonStyle())
+        }
+    }
+
+    private var weeklyTargetCard: some View {
+        let progress = min(1, Double(pointsThisWeek) / Double(weeklyTarget))
+        return ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("WEEKLY TARGET")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(pointsThisWeek)/\(weeklyTarget)")
+                        .font(ADLFont.inter(12, .bold))
+                        .foregroundColor(ADLColor.ink)
+                }
+                ADLProgressBar(value: progress, tint: ADLColor.navy, height: 12)
+                Text(pointsThisWeek >= weeklyTarget ? "Target reached! +20 XP bonus earned." : "Complete 50 this week for a 20 XP bonus!")
+                    .font(ADLFont.inter(11, .regular))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
+    private var badgesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("BADGES")
+                    .font(ADLFont.inter(11, .semibold))
+                    .tracking(2.2)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(appState.badges.filter(\.unlocked).count)/\(appState.badges.count) earned")
+                    .font(ADLFont.inter(11, .semibold))
+                    .foregroundColor(.secondary)
+            }
+            FlowLayout(spacing: 8) {
+                ForEach(appState.badges) { badge in
+                    ProfileBadgeChip(badge: badge)
+                }
+            }
+        }
+    }
+
+    private var weekSummarySection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("THIS WEEK")
+                .font(ADLFont.inter(11, .semibold))
+                .tracking(2.2)
+                .foregroundColor(.secondary)
+            ProfileWeekSummaryCard(rows: [
+                ("Submitted", "\(pointsThisWeek)"),
+                ("Verified", "\(appState.queueSnapshot.synced)"),
+                ("XP earned", "\(xpCurrent.formatted()) XP"),
+                ("Best day", pointsThisWeek > 0 ? "Today" : "No activity yet")
+            ])
+        }
+    }
+
+    private var contributionHistorySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("CONTRIBUTION HISTORY")
+                    .font(ADLFont.inter(11, .bold))
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+
+            if appState.drafts.isEmpty {
+                ADLCard {
+                    Text("No contributions yet. Add your first report to build your history.")
+                        .font(ADLFont.inter(12, .regular))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(appState.drafts.prefix(5)) { draft in
+                        ADLCard {
+                            HStack(spacing: 12) {
+                                Image(systemName: "calendar")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(ADLColor.navy)
+                                    .frame(width: 40, height: 40)
+                                    .background(ADLColor.navyWash)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(draft.category.title)
+                                        .font(ADLFont.inter(12, .bold))
+                                        .foregroundColor(ADLColor.ink)
+                                    Text(draft.createdAt.formatted(date: .abbreviated, time: .omitted).uppercased())
+                                        .font(ADLFont.inter(11, .bold))
+                                        .foregroundColor(ADLColor.navy.opacity(0.5))
+                                    Text(draft.displayTitle)
+                                        .font(ADLFont.inter(11, .medium))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
                                 }
+                                Spacer()
+                                Text(draft.syncState.rawValue.capitalized)
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(draft.syncState == .failed ? ADLColor.terracotta : ADLColor.forest)
                             }
-                            .pickerStyle(.segmented)
                         }
                     }
                 }
+            }
+        }
+    }
 
-                Button {
-                    appState.signOut()
-                } label: {
-                    Text("Sign Out")
+    private var uploadIssuesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("UPLOAD ISSUES")
+                    .font(ADLFont.inter(11, .bold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                if !failedDrafts.isEmpty {
+                    Label("Clear", systemImage: "trash")
+                        .font(ADLFont.inter(11, .bold))
                         .foregroundColor(ADLColor.terracotta)
                 }
-                .buttonStyle(SecondaryButtonStyle())
             }
-            .padding(16)
+
+            if failedDrafts.isEmpty {
+                ADLCard {
+                    Text("All clear! No upload issues.")
+                        .font(ADLFont.inter(12, .regular))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                VStack(spacing: 12) {
+                    ForEach(failedDrafts) { draft in
+                        ADLCard {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label(draft.lastError ?? "Upload failed", systemImage: "exclamationmark.triangle.fill")
+                                    .font(ADLFont.inter(12, .semibold))
+                                    .foregroundColor(ADLColor.danger)
+                                Text("\(draft.createdAt.formatted(date: .abbreviated, time: .shortened)) - \(draft.category.title)")
+                                    .font(ADLFont.inter(11, .bold))
+                                    .foregroundColor(.secondary)
+                                if let location = draft.location {
+                                    Text("GPS: \(location.latitude, specifier: "%.4f"), \(location.longitude, specifier: "%.4f")")
+                                        .font(ADLFont.inter(11, .regular))
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
-        .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Profile")
-        .task { await appState.loadProfile() }
-        .refreshable { await appState.loadProfile(force: true) }
     }
+
 }
 
 struct DailyProgressWidget: View {
