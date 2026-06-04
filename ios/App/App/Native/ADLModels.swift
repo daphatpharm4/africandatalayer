@@ -204,9 +204,9 @@ enum AppReleaseMode {
     static func tabs(for role: UserRole) -> [AppRoute] {
         switch normalizedRole(role) {
         case .agent:
-            return [.home, .contribute, .queue, .profile]
+            return [.home, .contribute, .analytics, .profile]
         case .admin:
-            return [.adminReview, .agentPerformance, .profile]
+            return [.adminReview, .home, .agentPerformance, .profile]
         case .client:
             return [.clientDashboard, .analytics, .profile]
         }

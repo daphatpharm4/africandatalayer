@@ -4,18 +4,33 @@ import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var passedSplash = ProcessInfo.processInfo.environment["ADL_START_AUTH"] == "1"
+    /// Persisted so the onboarding splash shows only on first launch (mirrors web localStorage flag).
+    @AppStorage("adl_has_seen_splash") private var hasSeenSplash = false
+    @State private var showAuth = ProcessInfo.processInfo.environment["ADL_START_AUTH"] == "1"
 
     var body: some View {
         Group {
             if appState.isBootstrapping {
                 BootSplashView()
-            } else if appState.isAuthenticated {
+            } else if appState.isAuthenticated || appState.isGuest {
                 AppShellView()
-            } else if !passedSplash {
-                SplashView(onContinue: { passedSplash = true })
+            } else if hasSeenSplash || showAuth {
+                AuthView(onBack: {
+                    // Back arrow returns to the onboarding carousel.
+                    showAuth = false
+                    hasSeenSplash = false
+                })
             } else {
-                AuthView()
+                SplashView(
+                    onContinue: {
+                        hasSeenSplash = true
+                        showAuth = true
+                    },
+                    onGuest: {
+                        hasSeenSplash = true
+                        appState.continueAsGuest()
+                    }
+                )
             }
         }
         .task {
@@ -85,6 +100,7 @@ struct BrandDiamond: View {
 
 struct SplashView: View {
     let onContinue: () -> Void
+    var onGuest: () -> Void = {}
     @State private var idx = 0
 
     private struct Slide: Identifiable {
@@ -262,7 +278,7 @@ struct SplashView: View {
                     }
                     .buttonStyle(SecondaryButtonStyle())
 
-                    Button { onContinue() } label: {
+                    Button { onGuest() } label: {
                         Text("Browse as Guest")
                             .font(ADLFont.inter(11, .bold))
                             .tracking(1.6)
@@ -471,6 +487,7 @@ private struct FlowPills: View {
 /// Auth screen mirroring web Auth.tsx — centered, light, OAuth + credentials.
 struct AuthView: View {
     @EnvironmentObject private var appState: AppState
+    var onBack: (() -> Void)? = nil
 
     private enum Mode { case signin, signup }
     @State private var mode: Mode = .signin
@@ -487,7 +504,7 @@ struct AuthView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: .topLeading) {
             ADLColor.paper.ignoresSafeArea()
 
             ScrollView {
@@ -642,6 +659,17 @@ struct AuthView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 40)
             }
+
+            if let onBack {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(ADLColor.ink)
+                        .frame(width: 44, height: 44)
+                }
+                .padding(.leading, 8)
+                .padding(.top, 8)
+            }
         }
     }
 
@@ -699,27 +727,28 @@ struct ADLInputField: View {
 struct AppShellView: View {
     @EnvironmentObject private var appState: AppState
 
+    private var routes: [AppRoute] { AppReleaseMode.tabs(for: appState.selectedRole) }
+
     var body: some View {
-        TabView(selection: $appState.selectedTab) {
-            ForEach(AppReleaseMode.tabs(for: appState.selectedRole)) { route in
-                NavigationView {
-                    screen(for: route)
-                }
-                .tabItem {
-                    Label(tabTitle(for: route), systemImage: tabImage(for: route))
-                }
-                .tag(route)
+        VStack(spacing: 0) {
+            ADLSyncBar(message: appState.lastSyncMessage)
+            NavigationStack {
+                screen(for: appState.selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(ADLColor.paper)
+                    .toolbar(.hidden, for: .navigationBar)
             }
+            ADLTabBar(
+                routes: routes,
+                selection: appState.selectedTab,
+                isAdmin: appState.selectedRole == .admin,
+                onSelect: { appState.selectedTab = $0 }
+            )
         }
-        .onAppear {
-            appState.enforceVisibleNavigation()
-        }
-        .onChange(of: appState.selectedRole) { _ in
-            appState.enforceVisibleNavigation()
-        }
-        .onChange(of: appState.selectedTab) { _ in
-            appState.enforceVisibleNavigation()
-        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .onAppear { appState.enforceVisibleNavigation() }
+        .onChange(of: appState.selectedRole) { _ in appState.enforceVisibleNavigation() }
+        .onChange(of: appState.selectedTab) { _ in appState.enforceVisibleNavigation() }
         .overlay {
             if let event = appState.levelUpEvent {
                 LevelUpCelebration(tier: event.tier) {
@@ -733,70 +762,113 @@ struct AppShellView: View {
     @ViewBuilder
     private func screen(for route: AppRoute) -> some View {
         switch route {
-        case .home:
-            AgentHomeView()
-        case .contribute:
-            ContributionView()
-        case .queue:
-            SubmissionQueueView()
-        case .rewards:
-            RewardsView()
-        case .profile:
-            ProfileView()
-        case .adminReview:
-            AdminReviewView()
-        case .agentPerformance:
-            AgentPerformanceView()
-        case .clientDashboard:
-            ClientDashboardView()
-        case .analytics:
-            AnalyticsView()
+        case .home: AgentHomeView()
+        case .contribute: ContributionView()
+        case .queue: SubmissionQueueView()
+        case .rewards: RewardsView()
+        case .profile: ProfileView()
+        case .adminReview: AdminReviewView()
+        case .agentPerformance: AgentPerformanceView()
+        case .clientDashboard: ClientDashboardView()
+        case .analytics: AnalyticsView()
+        }
+    }
+}
+
+/// Green "all synced" status strip mirroring the web SyncStatusBar.
+struct ADLSyncBar: View {
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 14))
+                .foregroundColor(ADLColor.forest)
+            Text(message.isEmpty ? "All synced. Ready to capture." : message)
+                .font(ADLFont.inter(12, .semibold))
+                .foregroundColor(ADLColor.forestDark)
+            Spacer()
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(ADLColor.forest)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity)
+        .background(ADLColor.forestWash)
+    }
+}
+
+/// Custom bottom tab bar mirroring web Navigation.tsx (navy-wash active pill, terra Contribute).
+struct ADLTabBar: View {
+    let routes: [AppRoute]
+    let selection: AppRoute
+    let isAdmin: Bool
+    let onSelect: (AppRoute) -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 4) {
+            ForEach(routes) { route in
+                let active = route == selection
+                let isContribute = route == .contribute
+                Button { onSelect(route) } label: {
+                    VStack(spacing: 4) {
+                        Image(systemName: icon(for: route))
+                            .font(.system(size: 19, weight: .medium))
+                        Text(title(for: route))
+                            .font(ADLFont.inter(11, .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundColor(active ? ADLColor.navy : (isContribute ? ADLColor.terracotta : Color(hex: 0x6b7280)))
+                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .background(
+                        RoundedRectangle(cornerRadius: 21, style: .continuous)
+                            .fill(active ? ADLColor.navyWash : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 21, style: .continuous)
+                            .stroke(active ? ADLColor.navy.opacity(0.06) : Color.clear, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .background(
+            Color.white
+                .overlay(Rectangle().fill(ADLColor.lineStrong).frame(height: 1), alignment: .top)
+                .shadow(color: ADLColor.navy.opacity(0.1), radius: 16, x: 0, y: -8)
+                .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    private func title(for route: AppRoute) -> String {
+        switch route {
+        case .home: return isAdmin ? "Map" : "Explore"
+        case .contribute: return "Contribute"
+        case .queue: return "Queue"
+        case .rewards: return "Rewards"
+        case .profile: return "Profile"
+        case .adminReview: return "Queue"
+        case .agentPerformance: return "Agents"
+        case .clientDashboard: return "Delta"
+        case .analytics: return isAdmin ? "Impact" : "Leaderboard"
         }
     }
 
-    private func tabTitle(for route: AppRoute) -> String {
+    private func icon(for route: AppRoute) -> String {
         switch route {
-        case .home:
-            return "Map"
-        case .contribute:
-            return "Capture"
-        case .queue:
-            return "Queue"
-        case .rewards:
-            return "Rewards"
-        case .profile:
-            return "Profile"
-        case .adminReview:
-            return "Review"
-        case .agentPerformance:
-            return "Agents"
-        case .clientDashboard:
-            return "Delta"
-        case .analytics:
-            return "Analytics"
-        }
-    }
-
-    private func tabImage(for route: AppRoute) -> String {
-        switch route {
-        case .home:
-            return "map.fill"
-        case .contribute:
-            return "camera.fill"
-        case .queue:
-            return "tray.full.fill"
-        case .rewards:
-            return "star.circle.fill"
-        case .profile:
-            return "person.crop.circle.fill"
-        case .adminReview:
-            return "checkmark.shield.fill"
-        case .agentPerformance:
-            return "chart.bar.fill"
-        case .clientDashboard:
-            return "chart.line.uptrend.xyaxis"
-        case .analytics:
-            return "waveform.path.ecg.rectangle.fill"
+        case .home: return "map"
+        case .contribute: return "plus.circle.fill"
+        case .queue: return "tray.full"
+        case .rewards: return "star.circle"
+        case .profile: return "person"
+        case .adminReview: return "checkmark.square"
+        case .agentPerformance: return "person.2"
+        case .clientDashboard: return "chart.bar"
+        case .analytics: return isAdmin ? "chart.bar" : "medal"
         }
     }
 }

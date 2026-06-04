@@ -8,13 +8,14 @@ import UIKit
 final class AppState: ObservableObject {
     @Published var isBootstrapping = true
     @Published var isAuthenticated = false
+    @Published var isGuest = false
     @Published var selectedRole: UserRole = .agent
     @Published var selectedTab: AppRoute = .home
     @Published var profile = SessionProfile.demo(role: .agent)
     @Published var points: [DataPoint] = DataPoint.bonamoussadiSeed
     @Published var drafts: [ContributionDraft] = []
     @Published var queueSnapshot = QueueSnapshot.empty
-    @Published var lastSyncMessage = "Native Swift rewrite started"
+    @Published var lastSyncMessage = "All synced. Ready to capture."
     @Published var authError: String?
     @Published var isSigningIn = false
     @Published var isSyncingQueue = false
@@ -145,6 +146,14 @@ final class AppState: ObservableObject {
         guard isBootstrapping else { return }
         try? await Task.sleep(nanoseconds: 250_000_000)
         await restoreSession()
+        #if DEBUG
+        let env = ProcessInfo.processInfo.environment
+        if env["ADL_DEMO"] == "1" {
+            if let raw = env["ADL_ROLE"], let role = UserRole(rawValue: raw) { selectedRole = role }
+            signInDemo()
+            if let raw = env["ADL_TAB"], let route = AppRoute(rawValue: raw) { selectedTab = route }
+        }
+        #endif
         isBootstrapping = false
     }
 
@@ -184,8 +193,18 @@ final class AppState: ObservableObject {
         let role = AppReleaseMode.normalizedRole(selectedRole)
         selectedRole = role
         isAuthenticated = true
+        isGuest = false
         profile = SessionProfile.demo(role: role)
         selectedTab = defaultTab(for: role)
+    }
+
+    /// Browse the app without an account (read-only public data).
+    func continueAsGuest() {
+        selectedRole = .agent
+        isGuest = true
+        isAuthenticated = false
+        profile = SessionProfile.demo(role: .agent)
+        selectedTab = .home
     }
 
     func signOut() {
@@ -193,6 +212,7 @@ final class AppState: ObservableObject {
             try? await apiClient.signOut()
             await MainActor.run {
                 self.isAuthenticated = false
+                self.isGuest = false
                 self.selectedTab = .home
             }
         }
@@ -400,7 +420,14 @@ final class AppState: ObservableObject {
 }
 
 final class ADLAPIClient {
-    private let baseURL = URL(string: "https://africandatalayer.vercel.app")!
+    /// Production app host (real database + envs). Override with ADL_API_BASE for staging/local.
+    private let baseURL: URL = {
+        if let override = ProcessInfo.processInfo.environment["ADL_API_BASE"],
+           let url = URL(string: override) {
+            return url
+        }
+        return URL(string: "https://www.app.africandatalayer.com")!
+    }()
     private let urlSession: URLSession = {
         let configuration = URLSessionConfiguration.default
         configuration.httpCookieStorage = .shared
