@@ -1023,6 +1023,14 @@ struct FieldMapKitView: UIViewRepresentable {
         mapView.showsScale = true
         mapView.showsUserLocation = true
         mapView.setRegion(region, animated: false)
+
+        // CARTO light_all basemap — matches web Home map tile layer
+        let cartoTiles = MKTileOverlay(
+            urlTemplate: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"
+        )
+        cartoTiles.canReplaceMapContent = true
+        mapView.addOverlay(cartoTiles, level: .aboveLabels)
+
         return mapView
     }
 
@@ -1037,7 +1045,14 @@ struct FieldMapKitView: UIViewRepresentable {
         mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
         mapView.addAnnotations(points.map(FieldPointAnnotation.init(point:)))
 
-        mapView.removeOverlays(mapView.overlays)
+        // Remove only polygon overlays so the CARTO tile overlay added in makeUIView persists
+        let polygonsToRemove = mapView.overlays.filter { $0 is MKPolygon }
+        mapView.removeOverlays(polygonsToRemove)
+
+        if !collectionZone.isEmpty {
+            let polygon = MKPolygon(coordinates: collectionZone, count: collectionZone.count)
+            mapView.addOverlay(polygon, level: .aboveLabels)
+        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -1091,6 +1106,10 @@ struct FieldMapKitView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            if let tileOverlay = overlay as? MKTileOverlay {
+                return MKTileOverlayRenderer(tileOverlay: tileOverlay)
+            }
+
             guard let polygon = overlay as? MKPolygon else {
                 return MKOverlayRenderer(overlay: overlay)
             }
