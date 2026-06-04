@@ -2452,6 +2452,86 @@ private struct ADLLeaderboardRow: View {
     }
 }
 
+/// Agent-leaderboard row: rank circle + initials + name + XP bar + XP value.
+/// Matches the plan Task 2.2 design and web Analytics.tsx contributorMode rows.
+private struct AgentLeaderboardRow: View {
+    let entry: LeaderboardEntry
+    let maxXP: Int
+
+    private var rankBg: Color {
+        switch entry.rank {
+        case 1: return ADLColor.gold
+        case 2: return Color(hex: 0xcbd5e1) // silver
+        case 3: return ADLColor.terracotta  // bronze/terra
+        default: return ADLColor.navyWash
+        }
+    }
+
+    private var rankFg: Color {
+        switch entry.rank {
+        case 1: return Color.white
+        case 2: return Color(hex: 0x374151)
+        case 3: return Color.white
+        default: return ADLColor.navy
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Rank circle
+            Text("\(entry.rank)")
+                .font(ADLFont.inter(12, .bold))
+                .foregroundColor(rankFg)
+                .frame(width: 28, height: 28)
+                .background(rankBg)
+                .clipShape(Circle())
+
+            // Initials circle
+            IdentityCircle(name: entry.name, size: 32)
+
+            // Name + XP bar
+            VStack(alignment: .leading, spacing: 5) {
+                Text(entry.name)
+                    .font(ADLFont.inter(13, .bold))
+                    .foregroundColor(ADLColor.ink)
+                    .lineLimit(1)
+
+                let ratio = maxXP > 0 ? Double(max(0, entry.xp)) / Double(maxXP) : 0
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(ADLColor.line).frame(height: 6)
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [ADLColor.gold, ADLColor.terracotta],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(width: max(6, geo.size.width * ratio), height: 6)
+                    }
+                }
+                .frame(height: 6)
+            }
+
+            Spacer(minLength: 4)
+
+            // XP value
+            Text("\(entry.xp.formatted()) XP")
+                .font(ADLFont.inter(11, .bold))
+                .foregroundColor(ADLColor.navy)
+                .lineLimit(1)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 1, x: 0, y: 1)
+    }
+}
+
 private enum RelativeDate {
     static func short(_ iso: String?) -> String {
         guard let iso, let date = parse(iso) else { return "No recent activity" }
@@ -2756,18 +2836,56 @@ struct AnalyticsView: View {
 
     private var contributorContent: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // Section eyebrow + title — mirrors web Analytics contributorMode header
             VStack(alignment: .leading, spacing: 5) {
-                Text("LEADERBOARD")
-                    .font(ADLFont.inter(11, .bold))
-                    .foregroundColor(ADLColor.inkMuted)
+                SectionLabel(text: "Leaderboard")
                 Text("Top contributors near you")
-                    .font(ADLFont.inter(18, .bold))
+                    .font(ADLFont.inter(20, .bold))
                     .foregroundColor(ADLColor.ink)
             }
             .padding(.horizontal, 4)
             .padding(.top, 4)
 
-            leaderboardPanel(title: "Top contributors near you", scope: "Local", entries: appState.leaderboard, compact: false)
+            // "How scoring works" card
+            ADLCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionLabel(text: "How scoring works")
+                    Text("Score = verified submissions × average quality")
+                        .font(ADLFont.inter(14, .semibold))
+                        .foregroundColor(ADLColor.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            // Loading / empty / rows
+            if appState.isLoadingLeaderboard && appState.leaderboard.isEmpty {
+                ADLCard {
+                    ProgressView()
+                        .tint(ADLColor.terracotta)
+                        .frame(maxWidth: .infinity)
+                        .padding(8)
+                }
+            } else if let errorMsg = appState.leaderboardError {
+                ADLCard {
+                    Text(errorMsg)
+                        .font(ADLFont.inter(13, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else if appState.leaderboard.isEmpty {
+                ADLCard {
+                    Text("No contributor data yet.")
+                        .font(ADLFont.inter(13, .semibold))
+                        .foregroundColor(Color(hex: 0x374151))
+                }
+            } else {
+                let maxXP = max(appState.leaderboard.map(\.xp).max() ?? 1, 1)
+                VStack(spacing: 10) {
+                    ForEach(appState.leaderboard.prefix(20)) { entry in
+                        AgentLeaderboardRow(entry: entry, maxXP: maxXP)
+                    }
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
