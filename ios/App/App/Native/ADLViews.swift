@@ -3474,7 +3474,8 @@ struct ProfileView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ADLScreenHeader(title: "Profile", onBack: goBack) {
+            // MARK: Header — title "Profile" + gear → SettingsView
+            ADLScreenHeader(title: "Profile") {
                 NavigationLink {
                     SettingsView()
                 } label: {
@@ -3493,16 +3494,8 @@ struct ProfileView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 0) {
-                        ProfileHeroCard(
-                            name: displayName,
-                            subtitle: heroSubtitle,
-                            tier: tierLabel,
-                            level: level,
-                            rank: rankDisplay,
-                            xp: xpCurrent,
-                            xpTarget: xpTarget,
-                            progress: xpProgress
-                        )
+                        // MARK: Hero banner — navy, IdentityCircle(96), name inter(24,.bold)
+                        profileHero
 
                         VStack(alignment: .leading, spacing: 24) {
                             if let profileError = appState.profileError {
@@ -3512,15 +3505,27 @@ struct ProfileView: View {
                                     .padding(.top, 2)
                             }
 
-                            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                                ADLKpiTile(label: "Points", value: pointsTotal.formatted(), tone: .navy)
-                                ADLKpiTile(label: "XP", value: xpCurrent.formatted(), tone: .terra)
-                                ADLKpiTile(label: "Streak", value: "\(appState.profile.streakDays)d", tone: .streak)
-                                ADLKpiTile(label: "Rank", value: rankDisplay ?? "N/A", tone: .amber)
+                            // MARK: Trust-progress card
+                            trustProgressCard
+
+                            // MARK: KPI 2x2 grid — shared KpiTile (ADLComponents), spacing 12
+                            LazyVGrid(
+                                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                                spacing: 12
+                            ) {
+                                KpiTile(label: "Points", value: pointsTotal.formatted(), tone: .navy)
+                                KpiTile(label: "XP", value: xpCurrent.formatted(), tone: .terra)
+                                KpiTile(label: "Streak", value: "\(appState.profile.streakDays)d", tone: .streak)
+                                KpiTile(label: "Rank", value: rankDisplay, tone: .amber)
                             }
 
-                            quickActions
+                            // MARK: Quick-action rows (Pending Uploads, Help Center)
+                            quickActionRows
+
+                            // MARK: XP Balance card
                             ProfileBalanceCard(xp: appState.spendableXP)
+
+                            // MARK: Daily progress + streak tracker
                             DailyProgressWidget(goal: appState.dailyGoal)
                             ProfileStreakTracker(streakDays: appState.profile.streakDays)
 
@@ -3529,18 +3534,19 @@ struct ProfileView: View {
                             }
 
                             assignmentsCard
-                            rewardButtons
+                            rewardActionRows
                             weeklyTargetCard
                             badgesSection
                             weekSummarySection
                             contributionHistorySection
                             uploadIssuesSection
 
+                            // MARK: Sign-out — danger text, SecondaryButtonStyle
                             Button {
                                 appState.signOut()
                             } label: {
                                 Text("Sign Out")
-                                    .foregroundColor(ADLColor.terracotta)
+                                    .foregroundColor(ADLColor.danger)
                             }
                             .buttonStyle(SecondaryButtonStyle())
                         }
@@ -3558,6 +3564,8 @@ struct ProfileView: View {
             }
         }
     }
+
+    // MARK: - Computed properties
 
     private var displayName: String {
         nonEmpty(appState.userProfile?.name) ?? appState.profile.name
@@ -3586,11 +3594,11 @@ struct ProfileView: View {
 
     private var heroSubtitle: String {
         if appState.isLoadingProfile { return "Loading profile" }
-        return "\(appState.profile.role.title) - Bonamoussadi"
+        return "\(appState.profile.role.title) · Bonamoussadi"
     }
 
-    private var rankDisplay: String? {
-        nil
+    private var rankDisplay: String {
+        "N/A"
     }
 
     private var pointsTotal: Int {
@@ -3617,22 +3625,157 @@ struct ProfileView: View {
         return trimmed
     }
 
-    private var quickActions: some View {
+    // MARK: - Hero banner (mirrors Profile.tsx hero section)
+
+    /// Full-bleed navy banner: IdentityCircle(96) + name inter(24,.bold)
+    /// + role/location inter(14) white/70 + tier pill gold/20 + level pill white/10
+    /// + XP progress bar gold to amber gradient (web: h-2 rounded-full bg-gradient-to-r from-gold to-amber)
+    private var profileHero: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 14) {
+                // 96-pt identity circle (web: h-[60px] w-[60px] in hero → plan specifies size:96)
+                IdentityCircle(name: displayName, size: 96)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    // Name + tier pill (web: text-xl font-bold + micro-label bg-gold/20 text-gold)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(appState.isLoadingProfile ? "Loading profile" : displayName)
+                            .font(ADLFont.inter(24, .bold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        Text(tierLabel)
+                            .font(ADLFont.inter(11, .bold))
+                            .tracking(1.2)
+                            .foregroundColor(ADLColor.gold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(ADLColor.gold.opacity(0.2))
+                            .clipShape(Capsule())
+                    }
+
+                    // Role · location subtitle (web: text-sm text-white/70)
+                    Text(heroSubtitle)
+                        .font(ADLFont.inter(14))
+                        .foregroundColor(.white.opacity(0.7))
+                        .lineLimit(1)
+
+                    // Level pill (web: micro-label bg-white/10 text-white/70)
+                    Text("Level \(level)")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.1))
+                        .clipShape(Capsule())
+                }
+
+                Spacer(minLength: 4)
+            }
+            .padding(.top, 20)
+            .padding(.horizontal, 20)
+
+            // XP progress bar (web: mt-5, LEVEL label xs tracking-wide, h-2 bar)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("LEVEL")
+                        .font(ADLFont.inter(11, .medium))
+                        .tracking(0.9)
+                        .foregroundColor(.white.opacity(0.7))
+                    Spacer()
+                    Text("\(xpCurrent.formatted()) / \(xpTarget.formatted()) XP")
+                        .font(ADLFont.inter(11, .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.15))
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [ADLColor.gold, ADLColor.amber],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(0, min(1, xpProgress)) * proxy.size.width)
+                    }
+                }
+                .frame(height: 8)
+            }
+            .padding(.top, 20)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 28)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(ADLColor.navy)
+    }
+
+    // MARK: - Trust-progress card
+
+    /// Tier label + ADLProgressBar(tint:.gold) + "X XP to next tier" caption
+    private var trustProgressCard: some View {
+        let progress = appState.tierProgress
+        let xpToNext = progress.xpToNext
+        let nextTierName = progress.next?.title ?? "Max tier"
+        return ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Trust Progress")
+                        .font(ADLFont.inter(15, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Spacer()
+                    Text(progress.current.title.uppercased())
+                        .font(ADLFont.inter(10, .bold))
+                        .tracking(1.2)
+                        .foregroundColor(ADLColor.amber)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(ADLColor.goldWash)
+                        .clipShape(Capsule())
+                }
+                ADLProgressBar(value: progress.fraction, tint: ADLColor.gold, height: 8)
+                Text(xpToNext > 0
+                     ? "\(xpToNext.formatted()) XP to \(nextTierName)"
+                     : "You've reached the top tier!")
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.inkMuted)
+            }
+        }
+    }
+
+    // MARK: - Quick-action rows
+
+    private var quickActionRows: some View {
         VStack(spacing: 12) {
+            // Pending Uploads — leading icon + title inter(15,.semibold) + trailing chevron
             NavigationLink { SubmissionQueueView() } label: {
                 ADLCard {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Pending Uploads")
-                            .font(ADLFont.inter(14, .bold))
+                    HStack(spacing: 12) {
+                        Image(systemName: "icloud.and.arrow.up")
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(ADLColor.navy)
-                        Text("\(appState.queueSnapshot.queued) queued - \(appState.queueSnapshot.failed) failed")
-                            .font(ADLFont.inter(12, .regular))
-                            .foregroundColor(.secondary)
+                            .frame(width: 40, height: 40)
+                            .background(ADLColor.navyWash)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Pending Uploads")
+                                .font(ADLFont.inter(15, .semibold))
+                                .foregroundColor(ADLColor.navy)
+                            Text("\(appState.queueSnapshot.queued) queued · \(appState.queueSnapshot.failed) failed")
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(ADLColor.inkMuted)
                     }
                 }
             }
             .buttonStyle(.plain)
 
+            // Help Center — gold-wash background
             ADLCard {
                 HStack(spacing: 12) {
                     Image(systemName: "book.fill")
@@ -3640,16 +3783,20 @@ struct ProfileView: View {
                         .foregroundColor(ADLColor.navy)
                         .frame(width: 40, height: 40)
                         .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text("Help Center")
-                            .font(ADLFont.inter(14, .bold))
+                            .font(ADLFont.inter(15, .semibold))
                             .foregroundColor(ADLColor.navy)
                         Text("Guides for your current role and workflow.")
-                            .font(ADLFont.inter(12, .regular))
-                            .foregroundColor(.secondary)
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
                     }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(ADLColor.inkMuted)
                 }
             }
             .background(ADLColor.goldWash)
@@ -3657,14 +3804,14 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: - Admin map access card
+
     private var adminMapAccessCard: some View {
         ADLCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("ADMIN MAP ACCESS")
-                            .font(ADLFont.inter(11, .bold))
-                            .foregroundColor(.secondary)
+                        SectionLabel(text: "Admin Map Access")
                         Text("Unlock worldwide map")
                             .font(ADLFont.inter(14, .bold))
                             .foregroundColor(ADLColor.ink)
@@ -3673,22 +3820,22 @@ struct ProfileView: View {
                     StatusPill(title: "Enabled", tint: ADLColor.forest)
                 }
                 Text("Explorer map is unlocked worldwide.")
-                    .font(ADLFont.inter(12, .regular))
-                    .foregroundColor(.secondary)
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.inkMuted)
             }
         }
     }
+
+    // MARK: - Assignments card
 
     private var assignmentsCard: some View {
         ADLCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("ASSIGNMENTS")
-                            .font(ADLFont.inter(11, .bold))
-                            .foregroundColor(.secondary)
+                        SectionLabel(text: "Assignments")
                         Text("My Weekly Assignments")
-                            .font(ADLFont.inter(14, .bold))
+                            .font(ADLFont.inter(15, .semibold))
                             .foregroundColor(ADLColor.ink)
                     }
                     Spacer()
@@ -3701,58 +3848,89 @@ struct ProfileView: View {
                         .clipShape(Capsule())
                 }
                 Text("No active assignments yet.")
-                    .font(ADLFont.inter(12, .regular))
-                    .foregroundColor(.secondary)
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.inkMuted)
             }
         }
     }
 
-    private var rewardButtons: some View {
-        VStack(spacing: 12) {
+    // MARK: - Reward action rows (web: 2-col h-14 row)
+
+    private var rewardActionRows: some View {
+        HStack(spacing: 12) {
+            // Redeem XP — white bg, navy border (web: border-navy-border bg-white)
             NavigationLink { RewardsView() } label: {
-                Label("Redeem XP", systemImage: "gift.fill")
+                HStack(spacing: 8) {
+                    Image(systemName: "gift.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Redeem XP")
+                        .font(ADLFont.inter(14, .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .foregroundColor(ADLColor.navy)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous)
+                        .stroke(ADLColor.navyBorder, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
             }
-            .buttonStyle(SecondaryButtonStyle())
+            .buttonStyle(.plain)
 
+            // Convert to Rewards — terra CTA (web: bg-terra text-white shadow-lg)
             Button(action: {}) {
-                Label("Convert to Rewards", systemImage: "wallet.pass.fill")
+                HStack(spacing: 8) {
+                    Image(systemName: "wallet.pass.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text("Convert to Rewards")
+                        .font(ADLFont.inter(14, .semibold))
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 56)
+                .foregroundColor(.white)
+                .background(ADLColor.terracotta)
+                .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                .shadow(color: ADLColor.terracotta.opacity(0.3), radius: 8, x: 0, y: 4)
             }
-            .buttonStyle(CTAButtonStyle())
+            .buttonStyle(.plain)
         }
     }
+
+    // MARK: - Weekly target card
 
     private var weeklyTargetCard: some View {
         let progress = min(1, Double(pointsThisWeek) / Double(weeklyTarget))
         return ADLCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("WEEKLY TARGET")
-                        .font(ADLFont.inter(11, .bold))
-                        .foregroundColor(.secondary)
+                    SectionLabel(text: "Weekly Target")
                     Spacer()
                     Text("\(pointsThisWeek)/\(weeklyTarget)")
                         .font(ADLFont.inter(12, .bold))
                         .foregroundColor(ADLColor.ink)
                 }
                 ADLProgressBar(value: progress, tint: ADLColor.navy, height: 12)
-                Text(pointsThisWeek >= weeklyTarget ? "Target reached! +20 XP bonus earned." : "Complete 50 this week for a 20 XP bonus!")
-                    .font(ADLFont.inter(11, .regular))
-                    .foregroundColor(.secondary)
+                Text(pointsThisWeek >= weeklyTarget
+                     ? "Target reached! +20 XP bonus earned."
+                     : "Complete 50 this week for a 20 XP bonus!")
+                    .font(ADLFont.inter(11))
+                    .foregroundColor(ADLColor.inkMuted)
             }
         }
     }
 
+    // MARK: - Badges section
+
     private var badgesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("BADGES")
-                    .font(ADLFont.inter(11, .semibold))
-                    .tracking(2.2)
-                    .foregroundColor(.secondary)
+                SectionLabel(text: "Badges", wide: true)
                 Spacer()
                 Text("\(appState.badges.filter(\.unlocked).count)/\(appState.badges.count) earned")
                     .font(ADLFont.inter(11, .semibold))
-                    .foregroundColor(.secondary)
+                    .foregroundColor(ADLColor.inkMuted)
             }
             FlowLayout(spacing: 8) {
                 ForEach(appState.badges) { badge in
@@ -3762,12 +3940,11 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: - This-week summary
+
     private var weekSummarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("THIS WEEK")
-                .font(ADLFont.inter(11, .semibold))
-                .tracking(2.2)
-                .foregroundColor(.secondary)
+            SectionLabel(text: "This week", wide: true)
             ProfileWeekSummaryCard(rows: [
                 ("Submitted", "\(pointsThisWeek)"),
                 ("Verified", "\(appState.queueSnapshot.synced)"),
@@ -3777,20 +3954,20 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: - Contribution history
+
     private var contributionHistorySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("CONTRIBUTION HISTORY")
-                    .font(ADLFont.inter(11, .bold))
-                    .foregroundColor(.secondary)
+                SectionLabel(text: "Contribution History")
                 Spacer()
             }
 
             if appState.drafts.isEmpty {
                 ADLCard {
                     Text("No contributions yet. Add your first report to build your history.")
-                        .font(ADLFont.inter(12, .regular))
-                        .foregroundColor(.secondary)
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
                 }
             } else {
                 VStack(spacing: 12) {
@@ -3812,7 +3989,7 @@ struct ProfileView: View {
                                         .foregroundColor(ADLColor.navy.opacity(0.5))
                                     Text(draft.displayTitle)
                                         .font(ADLFont.inter(11, .medium))
-                                        .foregroundColor(.secondary)
+                                        .foregroundColor(ADLColor.inkMuted)
                                         .lineLimit(1)
                                 }
                                 Spacer()
@@ -3827,12 +4004,12 @@ struct ProfileView: View {
         }
     }
 
+    // MARK: - Upload issues
+
     private var uploadIssuesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("UPLOAD ISSUES")
-                    .font(ADLFont.inter(11, .bold))
-                    .foregroundColor(.secondary)
+                SectionLabel(text: "Upload Issues")
                 Spacer()
                 if !failedDrafts.isEmpty {
                     Label("Clear", systemImage: "trash")
@@ -3844,8 +4021,8 @@ struct ProfileView: View {
             if failedDrafts.isEmpty {
                 ADLCard {
                     Text("All clear! No upload issues.")
-                        .font(ADLFont.inter(12, .regular))
-                        .foregroundColor(.secondary)
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
                 }
             } else {
                 VStack(spacing: 12) {
@@ -3855,13 +4032,13 @@ struct ProfileView: View {
                                 Label(draft.lastError ?? "Upload failed", systemImage: "exclamationmark.triangle.fill")
                                     .font(ADLFont.inter(12, .semibold))
                                     .foregroundColor(ADLColor.danger)
-                                Text("\(draft.createdAt.formatted(date: .abbreviated, time: .shortened)) - \(draft.category.title)")
+                                Text("\(draft.createdAt.formatted(date: .abbreviated, time: .shortened)) · \(draft.category.title)")
                                     .font(ADLFont.inter(11, .bold))
-                                    .foregroundColor(.secondary)
+                                    .foregroundColor(ADLColor.inkMuted)
                                 if let location = draft.location {
-                                    Text("GPS: \(location.latitude, specifier: "%.4f"), \(location.longitude, specifier: "%.4f")")
-                                        .font(ADLFont.inter(11, .regular))
-                                        .foregroundColor(.secondary)
+                                    Text(String(format: "GPS: %.4f°, %.4f°", location.latitude, location.longitude))
+                                        .font(ADLFont.inter(11))
+                                        .foregroundColor(ADLColor.inkMuted)
                                 }
                             }
                         }
@@ -3872,6 +4049,7 @@ struct ProfileView: View {
     }
 
 }
+
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
