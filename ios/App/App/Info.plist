@@ -45,5 +45,9 @@
 	<string>African Data Layer uses your location to attach GPS coordinates to field submissions and verify you are within the authorised collection zone. Location is only recorded when you actively submit data.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>African Data Layer may access your photo library to attach existing photos to field submissions when a new photo is not required.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Inter-VariableFont.ttf</string>
+	</array>
 </dict>
 </plist>

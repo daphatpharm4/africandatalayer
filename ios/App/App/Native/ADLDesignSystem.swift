@@ -1,14 +1,87 @@
 import SwiftUI
 
+// MARK: - Typography (Inter, mirrors web font stack)
+
+/// Inter is bundled as a variable font (`Inter-VariableFont.ttf`, family name "Inter").
+/// `Font.custom(_:size:).weight(_:)` drives the `wght` axis on iOS 16+.
+enum ADLFont {
+    static let family = "Inter"
+
+    static func inter(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .custom(family, size: size).weight(weight)
+    }
+
+    // Scale roughly matching the web (Tailwind) type ramp.
+    static var largeTitle: Font { inter(30, .bold) }   // text-3xl
+    static var title: Font { inter(24, .bold) }        // text-2xl
+    static var title2: Font { inter(20, .bold) }       // text-xl
+    static var title3: Font { inter(18, .semibold) }   // text-lg
+    static var headline: Font { inter(15, .semibold) } // btn / emphasis
+    static var body: Font { inter(15, .regular) }      // text-base-ish
+    static var subheadline: Font { inter(14, .semibold) }
+    static var footnote: Font { inter(13, .regular) }  // text-sm
+    static var caption: Font { inter(12, .medium) }    // text-xs
+    static var caption2: Font { inter(11, .semibold) } // micro-label
+}
+
+extension View {
+    /// Apply Inter as the cascading default font (overridden by explicit `.font` calls).
+    func adlBaseFont() -> some View { self.font(ADLFont.body) }
+}
+
+extension Color {
+    /// Hex like 0x0f2b46 — mirrors web hex tokens exactly.
+    init(hex: UInt32) {
+        self.init(
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255
+        )
+    }
+}
+
+/// Exact mirror of tailwind.config.js tokens.
 enum ADLColor {
-    static let navy = Color(red: 15 / 255, green: 43 / 255, blue: 70 / 255)
-    static let navySoft = Color(red: 31 / 255, green: 67 / 255, blue: 100 / 255)
-    static let gold = Color(red: 209 / 255, green: 151 / 255, blue: 54 / 255)
-    static let terracotta = Color(red: 190 / 255, green: 83 / 255, blue: 55 / 255)
-    static let forest = Color(red: 37 / 255, green: 108 / 255, blue: 77 / 255)
-    static let ink = Color(red: 20 / 255, green: 28 / 255, blue: 37 / 255)
-    static let paper = Color(red: 246 / 255, green: 248 / 255, blue: 244 / 255)
-    static let line = Color(red: 220 / 255, green: 226 / 255, blue: 232 / 255)
+    static let navy = Color(hex: 0x0f2b46)        // navy.DEFAULT
+    static let navyDark = Color(hex: 0x0b2236)    // navy.dark
+    static let navyMid = Color(hex: 0x1d4565)     // navy.mid
+    static let navyLight = Color(hex: 0xe7eef4)   // navy.light
+    static let navyWash = Color(hex: 0xf2f6fa)    // navy.wash
+    static let navyBorder = Color(hex: 0xd5e1eb)  // navy.border
+    static let navySoft = Color(hex: 0x1d4565)    // alias → navy.mid
+
+    static let terracotta = Color(hex: 0xc86b4a)  // terra.DEFAULT
+    static let terraDark = Color(hex: 0xb85f3f)   // terra.dark
+    static let terraWash = Color(hex: 0xfff8f4)   // terra.wash
+
+    static let forest = Color(hex: 0x4c7c59)      // forest.DEFAULT
+    static let forestDark = Color(hex: 0x3a6145)  // forest.dark
+    static let forestWash = Color(hex: 0xeaf3ee)  // forest.wash
+
+    static let gold = Color(hex: 0xf4c317)        // gold.DEFAULT
+    static let goldWash = Color(hex: 0xfef9e7)    // gold.wash
+
+    static let amber = Color(hex: 0xd97706)       // amber.DEFAULT
+    static let amberWash = Color(hex: 0xfef3c7)   // amber.wash
+
+    static let streak = Color(hex: 0x6b46c1)      // streak.DEFAULT (purple)
+    static let streakWash = Color(hex: 0xf7f4ff)  // streak.wash
+
+    static let ink = Color(hex: 0x1f2933)         // ink.DEFAULT
+    static let inkMuted = Color(hex: 0x4b5563)    // ink.muted
+    static let danger = Color(hex: 0xc53030)      // danger
+
+    static let paper = Color(hex: 0xf9fafb)       // page.DEFAULT (bg)
+    static let line = Color(hex: 0xf3f4f6)        // gray-100 (card border)
+    static let lineStrong = Color(hex: 0xe5e7eb)  // gray-200 (ghost btn border)
+}
+
+/// Corner radii mirroring tailwind: rounded-2xl=16, rounded-[28px]=28, rounded-[14px]=14.
+enum ADLRadius {
+    static let card: CGFloat = 16        // rounded-2xl
+    static let pill: CGFloat = 28        // rounded-[28px]
+    static let statTile: CGFloat = 14    // rounded-[14px]
+    static let button: CGFloat = 16      // rounded-2xl
 }
 
 extension SubmissionCategory {
@@ -44,11 +117,13 @@ struct ADLCard<Content: View>: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous)
                     .stroke(ADLColor.line, lineWidth: 1)
             )
+            // shadow-sm: 0 1px 2px rgba(0,0,0,0.05)
+            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
     }
 }
 
@@ -209,11 +284,12 @@ struct StatTile: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 14)
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.statTile, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: ADLRadius.statTile, style: .continuous)
                 .stroke(ADLColor.line, lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
     }
 }
 
@@ -304,11 +380,12 @@ struct BadgeTile: View {
         .padding(.vertical, 14)
         .padding(.horizontal, 8)
         .background(Color.white)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous)
                 .stroke(ADLColor.line, lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
         .opacity(badge.unlocked ? 1 : 0.85)
     }
 }
@@ -339,28 +416,53 @@ struct MissionRow: View {
     }
 }
 
+/// Web `.btn-primary`: h-14 rounded-2xl bg-navy text-sm font-semibold shadow-sm hover:bg-navy-dark active:scale-95.
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(.system(size: 15, weight: .semibold))
+            .tracking(0.15)
             .foregroundColor(.white)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(configuration.isPressed ? ADLColor.navySoft : ADLColor.navy)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(configuration.isPressed ? ADLColor.navyDark : ADLColor.navy)
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.button, style: .continuous))
+            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 
+/// Web `.btn-cta`: h-14 rounded-2xl bg-terra text-sm font-semibold shadow-sm hover:bg-terra-dark active:scale-95.
+struct CTAButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .semibold))
+            .tracking(0.15)
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(configuration.isPressed ? ADLColor.terraDark : ADLColor.terracotta)
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.button, style: .continuous))
+            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// Web `.btn-ghost`: h-14 rounded-2xl border border-gray-200 bg-white text-navy text-sm font-semibold.
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.headline)
+            .font(.system(size: 15, weight: .semibold))
+            .tracking(0.15)
             .foregroundColor(ADLColor.navy)
-            .frame(maxWidth: .infinity, minHeight: 50)
-            .background(configuration.isPressed ? ADLColor.line : Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(maxWidth: .infinity, minHeight: 56)
+            .background(configuration.isPressed ? ADLColor.navyWash : Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.button, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(ADLColor.line, lineWidth: 1)
+                RoundedRectangle(cornerRadius: ADLRadius.button, style: .continuous)
+                    .stroke(ADLColor.lineStrong, lineWidth: 1)
             )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }

@@ -16,6 +16,7 @@
 		A10000000000000000000003 /* ADLServices.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000013 /* ADLServices.swift */; };
 		A10000000000000000000004 /* ADLDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* ADLDesignSystem.swift */; };
 		A10000000000000000000005 /* ADLViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* ADLViews.swift */; };
+		A10000000000000000000007 /* Inter-VariableFont.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* Inter-VariableFont.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +32,7 @@
 		A10000000000000000000013 /* ADLServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLServices.swift; sourceTree = "<group>"; };
 		A10000000000000000000014 /* ADLDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLDesignSystem.swift; sourceTree = "<group>"; };
 		A10000000000000000000015 /* ADLViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLViews.swift; sourceTree = "<group>"; };
+		A10000000000000000000017 /* Inter-VariableFont.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/Inter-VariableFont.ttf"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,6 +72,7 @@
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
 				A10000000000000000000016 /* PrivacyInfo.xcprivacy */,
+				A10000000000000000000017 /* Inter-VariableFont.ttf */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -152,6 +155,7 @@
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
 				A10000000000000000000006 /* PrivacyInfo.xcprivacy in Resources */,
+				A10000000000000000000007 /* Inter-VariableFont.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -234,7 +238,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -285,7 +289,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -302,7 +306,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -324,7 +328,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

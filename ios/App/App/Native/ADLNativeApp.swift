@@ -9,7 +9,8 @@ struct ADLNativeApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(appState)
-                .accentColor(ADLColor.navy)
+                .environment(\.font, ADLFont.body)
+                .tint(ADLColor.navy)
         }
     }
 }

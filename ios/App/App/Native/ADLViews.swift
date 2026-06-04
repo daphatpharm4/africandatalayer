@@ -4,13 +4,16 @@ import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
+    @State private var passedSplash = false
 
     var body: some View {
         Group {
             if appState.isBootstrapping {
-                SplashView()
+                BootSplashView()
             } else if appState.isAuthenticated {
                 AppShellView()
+            } else if !passedSplash {
+                SplashView(onContinue: { passedSplash = true })
             } else {
                 AuthView()
             }
@@ -21,23 +24,447 @@ struct RootView: View {
     }
 }
 
-struct SplashView: View {
+/// Brief navy loading splash shown only during bootstrap.
+struct BootSplashView: View {
     var body: some View {
         ZStack {
-            ADLColor.navy.ignoresSafeArea()
-            VStack(spacing: 18) {
-                Image(systemName: "map.fill")
-                    .font(.system(size: 54, weight: .bold))
-                    .foregroundColor(ADLColor.gold)
+            LinearGradient(
+                colors: [ADLColor.navyDark, ADLColor.navy, ADLColor.navyMid],
+                startPoint: .top, endPoint: .bottom
+            ).ignoresSafeArea()
+            VStack(spacing: 14) {
+                BrandDiamond(size: 84)
                 Text("African Data Layer")
-                    .font(.largeTitle.weight(.bold))
+                    .font(ADLFont.inter(17, .bold))
                     .foregroundColor(.white)
-                Text("Ground truth capture for field teams")
-                    .font(.headline)
-                    .foregroundColor(.white.opacity(0.76))
+                Text("DOUALA · CAMEROON")
+                    .font(ADLFont.inter(11, .bold))
+                    .tracking(2)
+                    .foregroundColor(.white.opacity(0.55))
             }
-            .padding(28)
         }
+    }
+}
+
+// MARK: - Layered ADL brand diamond (mirrors BrandLogo SVG)
+
+struct BrandDiamond: View {
+    var size: CGFloat = 88
+
+    var body: some View {
+        Canvas { ctx, sz in
+            let s = sz.width / 128
+            func diamond(cx: CGFloat, cy: CGFloat, hw: CGFloat, hh: CGFloat) -> Path {
+                var p = Path()
+                p.move(to: CGPoint(x: cx, y: cy - hh))
+                p.addLine(to: CGPoint(x: cx + hw, y: cy))
+                p.addLine(to: CGPoint(x: cx, y: cy + hh))
+                p.addLine(to: CGPoint(x: cx - hw, y: cy))
+                p.closeSubpath()
+                return p
+            }
+            let stroke = 6 * s
+            // bottom navy
+            let bottom = diamond(cx: 64 * s, cy: 88 * s, hw: 48 * s, hh: 26 * s)
+            ctx.fill(bottom, with: .color(ADLColor.navy))
+            ctx.stroke(bottom, with: .color(.white), lineWidth: stroke)
+            // middle gold
+            let mid = diamond(cx: 64 * s, cy: 70 * s, hw: 48 * s, hh: 26 * s)
+            ctx.fill(mid, with: .color(ADLColor.gold))
+            ctx.stroke(mid, with: .color(.white), lineWidth: stroke)
+            // top navy
+            let top = diamond(cx: 64 * s, cy: 40 * s, hw: 48 * s, hh: 26 * s)
+            ctx.fill(top, with: .color(ADLColor.navy))
+            ctx.stroke(top, with: .color(.white), lineWidth: stroke)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Splash onboarding carousel (mirrors web Splash.tsx)
+
+struct SplashView: View {
+    let onContinue: () -> Void
+    @State private var idx = 0
+
+    private struct Slide: Identifiable {
+        let id = UUID()
+        let eyebrow: String
+        let title: String
+        let body: String
+    }
+
+    private let slides: [Slide] = [
+        Slide(eyebrow: "Welcome",
+              title: "The city, mapped\nfrom the ground up.",
+              body: "African Data Layer turns everyday movement in Bonamoussadi into verified infrastructure data."),
+        Slide(eyebrow: "Before you start",
+              title: "Camera + GPS,\nverified at capture.",
+              body: "We need your camera and location to verify each capture. Only live photos are accepted — no gallery uploads."),
+        Slide(eyebrow: "7 Verticals",
+              title: "Every corner\nof the city counts.",
+              body: "Pharmacies, mobile money, fuel, alcohol, billboards, roads, buildings — all mapped and verified in real time."),
+        Slide(eyebrow: "Rewards",
+              title: "Map more.\nClimb higher.",
+              body: "Earn XP on every verified submission. Rise up the leaderboard. Unlock badges and real rewards."),
+        Slide(eyebrow: "Ready?",
+              title: "Join the\nmission.",
+              body: "Sign in or create your account to start contributing. Data collection starts now."),
+    ]
+
+    private var isFinal: Bool { idx == slides.count - 1 }
+
+    var body: some View {
+        GeometryReader { geo in
+            let heroH = geo.size.height * 0.58
+            ZStack(alignment: .top) {
+                Color.white.ignoresSafeArea()
+
+                VStack(spacing: 0) {
+                    heroRegion(height: heroH)
+                    Spacer(minLength: 0)
+                }
+
+                sheet
+                    .padding(.top, heroH - 24)
+            }
+            .ignoresSafeArea(edges: .top)
+        }
+    }
+
+    // MARK: Hero
+
+    private func heroRegion(height: CGFloat) -> some View {
+        ZStack {
+            LinearGradient(
+                stops: [
+                    .init(color: ADLColor.navyDark, location: 0),
+                    .init(color: ADLColor.navy, location: 0.6),
+                    .init(color: ADLColor.navyMid, location: 1),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+
+            TabView(selection: $idx) {
+                ForEach(Array(slides.enumerated()), id: \.offset) { pair in
+                    heroScene(for: pair.offset)
+                        .tag(pair.offset)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
+            // top chrome
+            VStack {
+                HStack {
+                    HStack(spacing: 6) {
+                        BrandDiamond(size: 18)
+                        Text("ADL")
+                            .font(ADLFont.inter(11, .bold))
+                            .tracking(1.6)
+                            .foregroundColor(.white.opacity(0.9))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(Capsule())
+
+                    Spacer()
+
+                    if !isFinal {
+                        Button {
+                            withAnimation { idx = slides.count - 1 }
+                        } label: {
+                            Text("Skip")
+                                .font(ADLFont.inter(11, .bold))
+                                .tracking(1.6)
+                                .foregroundColor(.white.opacity(0.9))
+                                .padding(.horizontal, 16)
+                                .frame(height: 36)
+                                .background(Color.white.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 56)
+                Spacer()
+            }
+        }
+        .frame(height: height)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func heroScene(for index: Int) -> some View {
+        switch index {
+        case 0: HeroWelcome()
+        case 1: HeroPermissions()
+        case 2: HeroVerticals()
+        case 3: HeroRewards()
+        default: HeroReady()
+        }
+    }
+
+    // MARK: Sheet
+
+    private var sheet: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(slides[idx].eyebrow.uppercased())
+                .font(ADLFont.inter(11, .bold))
+                .tracking(2.2)
+                .foregroundColor(ADLColor.terracotta)
+
+            Text(slides[idx].title)
+                .font(ADLFont.inter(28, .heavy))
+                .tracking(-0.4)
+                .foregroundColor(ADLColor.ink)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+
+            Text(slides[idx].body)
+                .font(ADLFont.inter(14))
+                .foregroundColor(Color(hex: 0x4b5563))
+                .lineSpacing(4)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 12)
+
+            Spacer(minLength: 24)
+
+            // dots
+            HStack(spacing: 8) {
+                ForEach(0..<slides.count, id: \.self) { j in
+                    Capsule()
+                        .fill(j == idx ? ADLColor.navy : (j < idx ? ADLColor.terracotta.opacity(0.6) : Color(hex: 0xe5e7eb)))
+                        .frame(width: j == idx ? 24 : 12, height: 6)
+                        .animation(.easeOut(duration: 0.3), value: idx)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 20)
+
+            // CTA
+            if isFinal {
+                VStack(spacing: 12) {
+                    Button { onContinue() } label: {
+                        Text("Sign In · Connexion")
+                            .font(ADLFont.inter(13, .bold))
+                            .tracking(1.4)
+                            .textCase(.uppercase)
+                    }
+                    .buttonStyle(CTAButtonStyle())
+
+                    Button { onContinue() } label: {
+                        Text("Create Account · Créer un compte")
+                            .font(ADLFont.inter(13, .bold))
+                            .tracking(1.0)
+                            .textCase(.uppercase)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+
+                    Button { onContinue() } label: {
+                        Text("Browse as Guest")
+                            .font(ADLFont.inter(11, .bold))
+                            .tracking(1.6)
+                            .textCase(.uppercase)
+                            .foregroundColor(Color(hex: 0x6b7280))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }
+                }
+            } else {
+                Button {
+                    withAnimation { idx = min(idx + 1, slides.count - 1) }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Next")
+                            .font(ADLFont.inter(13, .bold))
+                            .tracking(1.6)
+                            .textCase(.uppercase)
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 16, weight: .bold))
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 28)
+        .padding(.bottom, 24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(
+            UnevenRoundedRectangle(topLeadingRadius: 28, topTrailingRadius: 28, style: .continuous)
+                .fill(Color.white)
+                .shadow(color: ADLColor.navy.opacity(0.12), radius: 22, x: 0, y: -12)
+        )
+    }
+}
+
+// MARK: - Splash hero scenes
+
+private struct HeroWelcome: View {
+    var body: some View {
+        ZStack {
+            // faint grid
+            GeometryReader { g in
+                Path { p in
+                    let step: CGFloat = 38
+                    var y: CGFloat = 40
+                    while y < g.size.height { p.move(to: CGPoint(x: 0, y: y)); p.addLine(to: CGPoint(x: g.size.width, y: y)); y += step }
+                    var x: CGFloat = 20
+                    while x < g.size.width { p.move(to: CGPoint(x: x, y: 0)); p.addLine(to: CGPoint(x: x, y: g.size.height)); x += 40 }
+                }
+                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            }
+            // gold glow
+            Circle()
+                .fill(RadialGradient(colors: [ADLColor.gold.opacity(0.4), ADLColor.gold.opacity(0)], center: .center, startRadius: 0, endRadius: 170))
+                .frame(width: 360, height: 360)
+            // pulse ring
+            Circle().stroke(ADLColor.gold.opacity(0.35), lineWidth: 1.5).frame(width: 128, height: 128)
+            Circle().fill(ADLColor.navy).overlay(Circle().stroke(ADLColor.gold.opacity(0.5), lineWidth: 1)).frame(width: 96, height: 96)
+            BrandDiamond(size: 64)
+        }
+    }
+}
+
+private struct HeroPermissions: View {
+    var body: some View {
+        ZStack {
+            Ellipse()
+                .fill(RadialGradient(colors: [ADLColor.terracotta.opacity(0.35), ADLColor.terracotta.opacity(0)], center: .center, startRadius: 0, endRadius: 180))
+                .frame(width: 360, height: 280)
+            HStack(spacing: 24) {
+                glassIcon("camera.fill")
+                glassIcon("location.fill")
+            }
+        }
+    }
+
+    private func glassIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 40, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(width: 96, height: 96)
+            .background(Color.white.opacity(0.1))
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .shadow(color: ADLColor.navy.opacity(0.6), radius: 20, x: 0, y: 18)
+    }
+}
+
+private struct HeroVerticals: View {
+    private let cats = SubmissionCategory.allCases
+    private let cols = Array(repeating: GridItem(.flexible(), spacing: 8), count: 4)
+
+    var body: some View {
+        VStack {
+            LazyVGrid(columns: cols, spacing: 8) {
+                ForEach(cats) { cat in
+                    VStack(spacing: 6) {
+                        Image(systemName: cat.systemImage)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(cat.tint)
+                            .frame(width: 28, height: 28)
+                            .background(Color.white.opacity(0.08))
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        Text(cat.title)
+                            .font(ADLFont.inter(9, .bold))
+                            .foregroundColor(.white.opacity(0.85))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .frame(height: 78)
+                    .frame(maxWidth: .infinity)
+                    .background(cat.tint.opacity(0.13))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 64)
+            Spacer()
+        }
+    }
+}
+
+private struct HeroRewards: View {
+    var body: some View {
+        ZStack {
+            Ellipse()
+                .fill(RadialGradient(colors: [ADLColor.gold.opacity(0.35), ADLColor.gold.opacity(0)], center: .center, startRadius: 0, endRadius: 180))
+                .frame(width: 360, height: 280)
+            VStack(spacing: 18) {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 46, weight: .semibold))
+                    .foregroundColor(ADLColor.gold)
+                    .frame(width: 112, height: 112)
+                    .background(Color.white.opacity(0.1))
+                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                    .shadow(color: ADLColor.gold.opacity(0.4), radius: 20, x: 0, y: 18)
+                Text("Be the first verified.")
+                    .font(ADLFont.inter(14, .semibold))
+                    .foregroundColor(.white.opacity(0.85))
+            }
+        }
+    }
+}
+
+private struct HeroReady: View {
+    private let pills: [SubmissionCategory] = [.pharmacy, .fuelStation, .mobileMoney, .transportRoad, .censusProxy]
+
+    var body: some View {
+        ZStack {
+            ForEach([60, 110, 160, 220], id: \.self) { r in
+                Circle().stroke(Color.white.opacity(0.04), lineWidth: 1)
+                    .frame(width: CGFloat(r) * 2, height: CGFloat(r) * 2)
+            }
+            VStack(spacing: 0) {
+                Spacer().frame(height: 56)
+                BrandDiamond(size: 88)
+                Text("African Data Layer")
+                    .font(ADLFont.inter(16, .heavy))
+                    .foregroundColor(.white)
+                    .padding(.top, 12)
+                Text("DOUALA · CAMEROON")
+                    .font(ADLFont.inter(11, .bold))
+                    .tracking(2.2)
+                    .foregroundColor(.white.opacity(0.55))
+                    .padding(.top, 4)
+                Spacer()
+                HStack {
+                    FlowPills(items: pills.map { $0.title })
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+            }
+        }
+    }
+}
+
+/// Simple centered wrapping pill row.
+private struct FlowPills: View {
+    let items: [String]
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(items.prefix(3), id: \.self) { pill($0) }
+        }
+        .overlay(alignment: .bottom) {
+            HStack(spacing: 6) {
+                ForEach(items.dropFirst(3), id: \.self) { pill($0) }
+            }
+            .offset(y: 32)
+        }
+    }
+    private func pill(_ text: String) -> some View {
+        Text(text.uppercased())
+            .font(ADLFont.inter(10, .bold))
+            .tracking(0.8)
+            .foregroundColor(.white.opacity(0.85))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.1))
+            .overlay(Capsule().stroke(Color.white.opacity(0.2), lineWidth: 1))
+            .clipShape(Capsule())
     }
 }
 
