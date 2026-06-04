@@ -1362,82 +1362,363 @@ struct PointDetailSheet: View {
     let onCapture: () -> Void
     let onCenter: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
+
+    // Staleness: web uses 7-day default threshold
+    private var staleDays: Int {
+        max(0, Calendar.current.dateComponents([.day], from: point.updatedAt, to: Date()).day ?? 0)
+    }
+    private var stalenessThreshold: Int { 7 }
+    private var isStale: Bool { staleDays >= stalenessThreshold }
+    private var staleTier: String {
+        if !isStale { return "fresh" }
+        if staleDays >= stalenessThreshold * 4 { return "critical" }
+        if staleDays >= stalenessThreshold * 2 { return "warning" }
+        return "stale"
+    }
+    private var staleXP: Int {
+        staleTier == "critical" ? 25 : staleTier == "warning" ? 15 : 10
+    }
+    private var freshnessBg: Color {
+        switch staleTier {
+        case "critical": return Color(hex: 0xfee2e2)
+        case "warning":  return ADLColor.amberWash
+        case "stale":    return ADLColor.goldWash
+        default:         return ADLColor.forestWash
+        }
+    }
+    private var freshnessFg: Color {
+        switch staleTier {
+        case "critical": return ADLColor.danger
+        case "warning":  return ADLColor.amber
+        case "stale":    return ADLColor.terracotta
+        default:         return ADLColor.forestDark
+        }
+    }
+    private var freshnessLabel: String {
+        if isStale {
+            return appState.t("\(staleDays)d old", "\(staleDays)j")
+        }
+        return appState.t("Recently verified", "Vérifié récemment")
+    }
+    private var freshnessCaption: String {
+        if isStale {
+            return appState.t("Needs a fresh field check", "Demande une nouvelle vérification")
+        }
+        return appState.t("Recently verified on the ground", "Récemment vérifié sur le terrain")
+    }
+    private var primaryCtaLabel: String {
+        if !canContribute {
+            return appState.t("Sign in to contribute", "Connectez-vous pour contribuer")
+        }
+        if point.requiresRefresh {
+            return appState.t("Complete this point · +15 XP", "Compléter · +15 XP")
+        }
+        return appState.t("Update this point · +15 XP", "Mettre à jour · +15 XP")
+    }
 
     var body: some View {
         NavigationView {
-            VStack(alignment: .leading, spacing: 16) {
-                pointPhoto
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // Gold→terra accent stripe (web: mx-4 h-1 gradient from-gold to-terra)
+                        LinearGradient(
+                            colors: [ADLColor.gold, ADLColor.terracotta.opacity(0.70)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .frame(height: 4)
+                        .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
 
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: point.category.systemImage)
-                        .font(.title3.weight(.bold))
-                        .foregroundColor(.white)
-                        .frame(width: 48, height: 48)
-                        .background(point.category.tint)
-                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        // Photo
+                        pointPhoto
 
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(point.name)
-                            .font(.title3.weight(.bold))
-                            .foregroundColor(ADLColor.ink)
-                        Text(point.subtitle)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
+                        // Name + category chips card (web: card-soft)
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(alignment: .top, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(point.name)
+                                        .font(ADLFont.inter(18, .bold))
+                                        .foregroundColor(ADLColor.ink)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                    HStack(spacing: 6) {
+                                        ADLPill(
+                                            text: point.category.title,
+                                            bg: point.category.tint.opacity(0.15),
+                                            fg: point.category.tint
+                                        )
+                                        if point.trustScore >= 85 {
+                                            ADLPill(
+                                                text: appState.t("Verified", "Vérifié"),
+                                                bg: ADLColor.forestWash,
+                                                fg: ADLColor.forestDark
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer()
+                                // Availability badge: derived from requiresRefresh
+                                ADLPill(
+                                    text: point.requiresRefresh
+                                        ? appState.t("Needs Refresh", "À actualiser")
+                                        : appState.t("Current", "À jour"),
+                                    bg: point.requiresRefresh ? ADLColor.terraWash : ADLColor.forestWash,
+                                    fg: point.requiresRefresh ? ADLColor.terracotta : ADLColor.forestDark
+                                )
+                            }
+
+                            // Info rows (web: <dl> with label/value pairs)
+                            Divider()
+                            VStack(spacing: 0) {
+                                detailInfoRow(
+                                    label: appState.t("Last updated", "Dernière mise à jour"),
+                                    value: point.updatedAt.formatted(date: .abbreviated, time: .omitted)
+                                )
+                                Divider().padding(.vertical, 8)
+                                detailInfoRow(
+                                    label: appState.t("Trust score", "Score de confiance"),
+                                    value: "\(point.trustScore) / 100"
+                                )
+                                Divider().padding(.vertical, 8)
+                                detailInfoRow(
+                                    label: appState.t("Events captured", "Événements capturés"),
+                                    value: "\(point.eventsCount)"
+                                )
+                            }
+                        }
+                        .padding(16)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(ADLColor.line, lineWidth: 1)
+                        )
+
+                        // Missing info section — terra wash, matching web's rounded-[28px]
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack {
+                                Text(appState.t("Missing info", "Infos manquantes").uppercased())
+                                    .font(ADLFont.inter(11, .bold))
+                                    .tracking(2.0)
+                                    .foregroundColor(ADLColor.terracotta.opacity(0.70))
+                                Spacer()
+                                if isStale {
+                                    Text("+\(staleXP) XP")
+                                        .font(ADLFont.inter(12, .bold))
+                                        .tracking(1.4)
+                                        .foregroundColor(ADLColor.terracotta)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 4)
+                                        .background(Color.white)
+                                        .clipShape(Capsule())
+                                }
+                            }
+                            Text(point.subtitle.isEmpty
+                                 ? appState.t(
+                                    "No missing fields. You can still update this point.",
+                                    "Aucun champ manquant. Vous pouvez quand même le mettre à jour."
+                                 )
+                                 : point.subtitle)
+                                .font(ADLFont.inter(14))
+                                .foregroundColor(ADLColor.terracotta.opacity(0.85))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(20)
+                        .background(ADLColor.terraWash)
+                        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                                .stroke(ADLColor.terracotta.opacity(0.10), lineWidth: 1)
+                        )
+
+                        // GPS card
+                        HStack(spacing: 12) {
+                            Image(systemName: "mappin.and.ellipse")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(ADLColor.navy)
+                                .frame(width: 40, height: 40)
+                                .background(ADLColor.navyWash)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(appState.t("GPS Validated", "GPS validé"))
+                                    .font(ADLFont.inter(13, .semibold))
+                                    .foregroundColor(ADLColor.ink)
+                                let lat = point.location.latitude
+                                let lng = point.location.longitude
+                                let accuracy = point.location.accuracyMeters.map { Int($0) } ?? 5
+                                Text("\(String(format: "%.4f", abs(lat)))°\(lat >= 0 ? "N" : "S"), \(String(format: "%.4f", abs(lng)))°\(lng >= 0 ? "E" : "W") · ±\(accuracy)m")
+                                    .font(ADLFont.inter(11))
+                                    .foregroundColor(Color(hex: 0x9ca3af))
+                            }
+                            Spacer()
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(ADLColor.forest)
+                        }
+                        .padding(14)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(ADLColor.line, lineWidth: 1)
+                        )
+
+                        // Trust score + Freshness grid (2 cols)
+                        HStack(spacing: 12) {
+                            // Trust score tile
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "shield.checkered")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(Color(hex: 0x9ca3af))
+                                    Text(appState.t("Trust score", "Score de confiance").uppercased())
+                                        .font(ADLFont.inter(11, .bold))
+                                        .tracking(1.6)
+                                        .foregroundColor(Color(hex: 0x9ca3af))
+                                }
+                                Text("\(point.trustScore)%")
+                                    .font(ADLFont.inter(24, .bold))
+                                    .foregroundColor(ADLColor.ink)
+                                Text(appState.t("Community confidence", "Confiance de la communauté"))
+                                    .font(ADLFont.inter(12))
+                                    .foregroundColor(Color(hex: 0x6b7280))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(ADLColor.line, lineWidth: 1)
+                            )
+
+                            // Freshness tile — tinted like web
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: isStale ? "arrow.clockwise" : "clock")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(freshnessFg)
+                                    Text(appState.t("Freshness", "Fraîcheur").uppercased())
+                                        .font(ADLFont.inter(11, .bold))
+                                        .tracking(1.6)
+                                        .foregroundColor(freshnessFg)
+                                }
+                                Text(freshnessLabel)
+                                    .font(ADLFont.inter(20, .bold))
+                                    .foregroundColor(ADLColor.ink)
+                                Text(freshnessCaption)
+                                    .font(ADLFont.inter(12))
+                                    .foregroundColor(Color(hex: 0x6b7280))
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                            .background(freshnessBg)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(freshnessFg.opacity(0.20), lineWidth: 1)
+                            )
+                        }
+
+                        // Critical staleness alert (web: border-danger/20 bg-red-50)
+                        if staleTier == "critical" {
+                            HStack(spacing: 12) {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(ADLColor.danger)
+                                Text(appState.t(
+                                    "Critical: this data may be inaccurate. Re-verify it before relying on it.",
+                                    "Critique : ces données peuvent être inexactes. Revalidez-les avant de vous y fier."
+                                ))
+                                .font(ADLFont.inter(14, .semibold))
+                                .foregroundColor(ADLColor.danger)
+                                .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .padding(16)
+                            .background(Color(hex: 0xfee2e2))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(ADLColor.danger.opacity(0.20), lineWidth: 1)
+                            )
+                        }
+
+                        // Bottom padding so content clears the fixed CTAs
+                        Color.clear.frame(height: 120)
                     }
-                    Spacer()
+                    .padding(16)
                 }
 
-                HStack(spacing: 8) {
-                    StatusPill(title: point.category.title, tint: point.category.tint)
-                    StatusPill(title: "\(point.trustScore)% trust", tint: point.trustScore >= 85 ? ADLColor.forest : ADLColor.gold)
-                    if point.requiresRefresh {
-                        StatusPill(title: "Refresh due", tint: ADLColor.terracotta)
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    DetailRow(title: "Events", value: "\(point.eventsCount)")
-                    DetailRow(title: "Latitude", value: String(format: "%.5f", point.location.latitude))
-                    DetailRow(title: "Longitude", value: String(format: "%.5f", point.location.longitude))
-                    if let accuracy = point.location.accuracyMeters {
-                        DetailRow(title: "Accuracy", value: "\(Int(accuracy)) m")
-                    }
-                }
-                .padding(12)
-                .background(ADLColor.paper)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                Spacer()
-
-                if canContribute {
+                // Fixed CTAs at bottom matching web's btn-cta / btn-ghost
+                VStack(spacing: 10) {
                     Button {
                         dismiss()
                         onCapture()
                     } label: {
-                        Label(point.requiresRefresh ? "Capture Refresh" : "Enrich Point", systemImage: "camera.fill")
+                        HStack(spacing: 10) {
+                            Image(systemName: "shield.checkered")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text(primaryCtaLabel)
+                                .font(ADLFont.inter(15, .semibold))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 56)
                     }
-                    .buttonStyle(PrimaryButtonStyle())
-                }
+                    .background(ADLColor.terracotta)
+                    .foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-                Button {
-                    dismiss()
-                    onCenter()
-                } label: {
-                    Label("Center on Map", systemImage: "scope")
+                    Button {
+                        dismiss()
+                        onCenter()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "plus.circle")
+                                .font(.system(size: 18, weight: .semibold))
+                            Text(appState.t("Add a new point", "Ajouter un nouveau point"))
+                                .font(ADLFont.inter(15, .semibold))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 56)
+                    }
+                    .background(Color.white)
+                    .foregroundColor(ADLColor.ink)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(ADLColor.lineStrong, lineWidth: 1)
+                    )
                 }
-                .buttonStyle(SecondaryButtonStyle())
+                .padding(.horizontal, 16)
+                .padding(.bottom, 24)
+                .padding(.top, 8)
+                .background(.ultraThinMaterial)
             }
-            .padding(16)
-            .background(Color.white.ignoresSafeArea())
-            .navigationTitle("Point Detail")
+            .background(ADLColor.paper.ignoresSafeArea())
+            .navigationTitle(point.category.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(appState.t("Close", "Fermer")) { dismiss() }
+                        .font(ADLFont.inter(14, .semibold))
+                        .foregroundColor(ADLColor.navy)
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
+                    ADLPill(text: point.category.title, bg: ADLColor.navyWash, fg: ADLColor.navy)
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func detailInfoRow(label: String, value: String) -> some View {
+        HStack(alignment: .center) {
+            Text(label)
+                .font(ADLFont.inter(12, .medium))
+                .foregroundColor(Color(hex: 0x9ca3af))
+            Spacer()
+            Text(value)
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.ink)
+                .multilineTextAlignment(.trailing)
         }
     }
 
@@ -1485,7 +1766,7 @@ struct PointDetailSheet: View {
             Image(systemName: "camera.fill")
                 .font(.system(size: 36, weight: .semibold))
                 .foregroundColor(Color(hex: 0x9ca3af))
-            Text("Field photo")
+            Text(appState.t("Field photo", "Photo terrain"))
                 .font(ADLFont.inter(12, .medium))
                 .foregroundColor(Color(hex: 0x9ca3af))
         }
@@ -1960,71 +2241,347 @@ struct RequiredFieldsView: View {
 
 struct SubmissionQueueView: View {
     @EnvironmentObject private var appState: AppState
+    @State private var actionMessage: String?
+    @State private var actionError: String?
+    @State private var activeItemId: UUID?
+
+    private var failedDrafts: [ContributionDraft] {
+        appState.drafts.filter { $0.syncState == .failed }
+    }
+    private var pendingDrafts: [ContributionDraft] {
+        appState.drafts.filter { $0.syncState == .queued || $0.syncState == .syncing }
+    }
 
     var body: some View {
-        List {
-            Section {
-                MetricTile(title: "Queued", value: "\(appState.queueSnapshot.queued)", systemImage: "tray.full.fill", tint: ADLColor.forest)
-                MetricTile(title: "Failed", value: "\(appState.queueSnapshot.failed)", systemImage: "exclamationmark.triangle.fill", tint: ADLColor.terracotta)
-                Text(appState.lastSyncMessage)
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
-            }
-
-            Section("Drafts") {
-                if appState.drafts.isEmpty {
-                    Text("No offline drafts")
-                        .foregroundColor(.secondary)
-                } else {
-                    ForEach(appState.drafts) { draft in
-                        VStack(alignment: .leading, spacing: 6) {
-                            HStack {
-                                Label(draft.displayTitle, systemImage: draft.category.systemImage)
-                                    .font(.headline)
-                                Spacer()
-                                StatusPill(title: draft.syncState.title, tint: draft.syncState == .failed ? ADLColor.terracotta : ADLColor.forest)
-                            }
-                            Text(draft.notes.isEmpty ? draft.category.title : draft.notes)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                            if let lastError = draft.lastError {
-                                Text(lastError)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundColor(ADLColor.terracotta)
-                            }
-                            if draft.syncState != .synced {
-                                Button {
-                                    Task {
-                                        await appState.syncDraft(draft)
-                                    }
-                                } label: {
-                                    Label("Sync Draft", systemImage: "arrow.triangle.2.circlepath")
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(draft.syncState == .syncing)
-                            }
-                        }
-                        .padding(.vertical, 6)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Offline Queue")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Pending Uploads", "Envois en attente")) {
                 Button {
-                    Task {
-                        await appState.syncQueuedDrafts()
-                    }
+                    Task { await handleForceSync() }
                 } label: {
                     if appState.isSyncingQueue {
                         ProgressView()
+                            .frame(width: 20, height: 20)
                     } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(ADLColor.navy)
                     }
                 }
-                .accessibilityLabel("Sync all")
+                .frame(width: 44, height: 44)
+                .accessibilityLabel(appState.t("Upload now", "Envoyer maintenant"))
             }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // KPI stat tiles — 3-col grid matching web
+                    HStack(spacing: 12) {
+                        queueStatTile(
+                            label: appState.t("Pending", "En attente"),
+                            value: "\(appState.queueSnapshot.queued)",
+                            color: ADLColor.navy
+                        )
+                        queueStatTile(
+                            label: appState.t("Failed", "Échecs"),
+                            value: "\(appState.queueSnapshot.failed)",
+                            color: ADLColor.terracotta
+                        )
+                        queueStatTile(
+                            label: appState.t("Uploaded", "Envoyés"),
+                            value: "\(appState.queueSnapshot.synced)",
+                            color: ADLColor.forest
+                        )
+                    }
+
+                    // Connectivity card
+                    ADLCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(appState.t("Sync Queue", "File de synchro").uppercased())
+                                        .font(ADLFont.inter(11, .bold))
+                                        .tracking(1.6)
+                                        .foregroundColor(Color(hex: 0x9ca3af))
+                                    Text(appState.lastSyncMessage.isEmpty
+                                         ? appState.t("Tap ↻ to upload all pending.", "Appuyez sur ↻ pour envoyer.")
+                                         : appState.lastSyncMessage)
+                                        .font(ADLFont.inter(13, .semibold))
+                                        .foregroundColor(ADLColor.ink)
+                                }
+                                Spacer()
+                                HStack(spacing: 6) {
+                                    Image(systemName: "wifi")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(ADLColor.forest)
+                                    Text(appState.t("Online", "En ligne"))
+                                        .font(ADLFont.inter(12, .semibold))
+                                        .foregroundColor(Color(hex: 0x4b5563))
+                                }
+                            }
+                            // progress bar: pending / total
+                            let total = appState.queueSnapshot.queued + appState.queueSnapshot.synced + appState.queueSnapshot.failed
+                            let pending = appState.queueSnapshot.queued
+                            let fraction = total > 0 ? Double(pending) / Double(total) : 0
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .fill(ADLColor.line)
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .fill(ADLColor.navy)
+                                        .frame(width: geo.size.width * fraction)
+                                }
+                            }
+                            .frame(height: 8)
+                        }
+                    }
+
+                    // Action feedback banners
+                    if let msg = actionMessage {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(ADLColor.forest)
+                            Text(msg)
+                                .font(ADLFont.inter(13))
+                                .foregroundColor(ADLColor.forestDark)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(ADLColor.forestWash)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+                    if let err = actionError {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(ADLColor.danger)
+                            Text(err)
+                                .font(ADLFont.inter(13))
+                                .foregroundColor(ADLColor.danger)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(hex: 0xfee2e2))
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    }
+
+                    // FAILED UPLOADS section
+                    HStack {
+                        Text(appState.t("Failed Uploads", "Envois échoués").uppercased())
+                            .font(ADLFont.inter(12, .bold))
+                            .tracking(1.6)
+                            .foregroundColor(ADLColor.navy)
+                        Spacer()
+                        Text("\(failedDrafts.count)")
+                            .font(ADLFont.inter(12, .bold))
+                            .tracking(1.6)
+                            .foregroundColor(Color(hex: 0x9ca3af))
+                    }
+
+                    if failedDrafts.isEmpty {
+                        ADLCard {
+                            Text(appState.t(
+                                "No issues here. All uploads are good.",
+                                "Aucun problème. Tous les envois sont bons."
+                            ))
+                            .font(ADLFont.inter(13))
+                            .foregroundColor(Color(hex: 0x6b7280))
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            ForEach(failedDrafts) { draft in
+                                failedDraftRow(draft)
+                            }
+                        }
+                    }
+
+                    // WAITING TO UPLOAD section
+                    HStack {
+                        Text(appState.t("Waiting to Upload", "En attente d'envoi").uppercased())
+                            .font(ADLFont.inter(12, .bold))
+                            .tracking(1.6)
+                            .foregroundColor(ADLColor.navy)
+                        Spacer()
+                        Text("\(pendingDrafts.count)")
+                            .font(ADLFont.inter(12, .bold))
+                            .tracking(1.6)
+                            .foregroundColor(Color(hex: 0x9ca3af))
+                    }
+
+                    if pendingDrafts.isEmpty {
+                        ADLCard {
+                            Text(appState.t(
+                                "All clear! No uploads waiting.",
+                                "Tout est envoyé ! Rien en attente."
+                            ))
+                            .font(ADLFont.inter(13))
+                            .foregroundColor(Color(hex: 0x6b7280))
+                        }
+                    } else {
+                        VStack(spacing: 8) {
+                            ForEach(pendingDrafts) { draft in
+                                pendingDraftRow(draft)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 32)
+            }
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+    }
+
+    // MARK: - Sub-views
+
+    @ViewBuilder
+    private func queueStatTile(label: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label.uppercased())
+                .font(ADLFont.inter(11, .bold))
+                .tracking(1.6)
+                .foregroundColor(Color(hex: 0x9ca3af))
+            Text(value)
+                .font(ADLFont.inter(24, .bold))
+                .foregroundColor(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func failedDraftRow(_ draft: ContributionDraft) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(draft.displayTitle)
+                        .font(ADLFont.inter(14, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(draft.category.title.uppercased())
+                        .font(ADLFont.inter(11, .bold))
+                        .tracking(1.6)
+                        .foregroundColor(ADLColor.terracotta)
+                    Text(draft.createdAt, style: .relative)
+                        .font(ADLFont.inter(11))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                }
+                Spacer()
+                ADLPill(
+                    text: appState.t("Failed", "Échoué"),
+                    bg: ADLColor.terraWash,
+                    fg: ADLColor.terracotta
+                )
+            }
+
+            if let lastError = draft.lastError, !lastError.isEmpty {
+                Text(lastError)
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.danger)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(hex: 0xfee2e2))
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            HStack(spacing: 8) {
+                Button {
+                    Task {
+                        activeItemId = draft.id
+                        actionError = nil; actionMessage = nil
+                        await appState.syncDraft(draft)
+                        actionMessage = appState.t("Retrying now…", "Nouvelle tentative…")
+                        activeItemId = nil
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 12, weight: .bold))
+                        Text(appState.t("Retry", "Relancer"))
+                            .font(ADLFont.inter(12, .bold))
+                            .tracking(1.2)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .background(activeItemId == draft.id ? ADLColor.line : ADLColor.navy)
+                .foregroundColor(activeItemId == draft.id ? Color(hex: 0x9ca3af) : .white)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .disabled(activeItemId == draft.id)
+
+                Button {
+                    actionError = nil; actionMessage = nil
+                    appState.deleteDraft(draft)
+                    actionMessage = appState.t("Upload removed.", "Envoi supprimé.")
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "trash")
+                            .font(.system(size: 12, weight: .bold))
+                        Text(appState.t("Delete", "Supprimer"))
+                            .font(ADLFont.inter(12, .bold))
+                            .tracking(1.2)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .background(Color(hex: 0xfee2e2))
+                .foregroundColor(ADLColor.danger)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .disabled(activeItemId == draft.id)
+            }
+        }
+        .padding(16)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(ADLColor.terraWash, lineWidth: 1.5)
+        )
+    }
+
+    @ViewBuilder
+    private func pendingDraftRow(_ draft: ContributionDraft) -> some View {
+        ADLCard {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(draft.displayTitle)
+                        .font(ADLFont.inter(14, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(draft.category.title.uppercased())
+                        .font(ADLFont.inter(11, .bold))
+                        .tracking(1.6)
+                        .foregroundColor(ADLColor.navy)
+                    Text(draft.createdAt, style: .relative)
+                        .font(ADLFont.inter(11))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                }
+                Spacer()
+                ADLPill(
+                    text: draft.syncState == .syncing
+                        ? appState.t("Uploading", "Envoi")
+                        : appState.t("Waiting", "En attente"),
+                    bg: ADLColor.navyWash,
+                    fg: ADLColor.navy
+                )
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func handleForceSync() async {
+        actionError = nil; actionMessage = nil
+        await appState.syncQueuedDrafts()
+        if appState.queueSnapshot.synced > 0 {
+            actionMessage = appState.t(
+                "\(appState.queueSnapshot.synced) item(s) uploaded.",
+                "\(appState.queueSnapshot.synced) élément(s) envoyé(s)."
+            )
+        } else {
+            actionMessage = appState.t(
+                "Everything is already uploaded.",
+                "Tout est déjà envoyé."
+            )
         }
     }
 }
@@ -3780,68 +4337,85 @@ struct RewardsView: View {
     @State private var redeemError: String?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                ADLGradientHero {
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Rewards", "Récompenses"))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    // XP balance hero — navy card matching web's bg-navy p-6 rounded-2xl
                     HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text("YOUR BALANCE")
-                                .font(.caption2.weight(.bold))
-                                .tracking(1.2)
-                                .foregroundColor(.white.opacity(0.75))
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(appState.t("Your Balance", "Votre solde").uppercased())
+                                .font(ADLFont.inter(11, .bold))
+                                .tracking(2.0)
+                                .foregroundColor(.white.opacity(0.80))
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text("\(appState.spendableXP)")
-                                    .font(.system(size: 34, weight: .bold))
+                                Text("\(appState.spendableXP.formatted())")
+                                    .font(ADLFont.inter(30, .bold))
                                     .foregroundColor(.white)
                                 Text("XP")
-                                    .font(.subheadline.weight(.medium))
-                                    .foregroundColor(.white.opacity(0.7))
+                                    .font(ADLFont.inter(14, .medium))
+                                    .foregroundColor(.white.opacity(0.60))
                             }
                             if appState.spentXP > 0 {
-                                Text("\(appState.spentXP) XP redeemed so far")
-                                    .font(.caption)
-                                    .foregroundColor(.white.opacity(0.7))
+                                Text(appState.t("\(appState.spentXP) XP redeemed so far",
+                                               "\(appState.spentXP) XP échangés jusqu'ici"))
+                                    .font(ADLFont.inter(12))
+                                    .foregroundColor(.white.opacity(0.70))
                             }
                         }
                         Spacer()
                         Image(systemName: "gift.fill")
-                            .font(.title2)
+                            .font(.system(size: 22, weight: .semibold))
                             .foregroundColor(.white)
                             .padding(12)
-                            .background(Color.white.opacity(0.18))
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .background(Color.white.opacity(0.20))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
-                }
+                    .padding(24)
+                    .background(ADLColor.navy)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(color: ADLColor.navy.opacity(0.28), radius: 14, x: 0, y: 6)
 
-                if let redeemError {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(ADLColor.terracotta)
-                        Text(redeemError)
-                            .font(.footnote.weight(.semibold))
-                            .foregroundColor(ADLColor.ink)
+                    if let redeemError {
+                        HStack(spacing: 8) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(ADLColor.terracotta)
+                            Text(redeemError)
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(ADLColor.ink)
+                        }
+                        .padding(12)
+                        .background(ADLColor.terraWash)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
-                }
 
-                ADLSectionHeader(title: "Redeemable rewards")
-                ForEach(appState.catalog) { reward in
-                    RewardCard(reward: reward, affordable: appState.spendableXP >= reward.costXP) {
-                        redeemError = nil
-                        pendingReward = reward
-                    }
-                }
+                    SectionLabel(text: appState.t("Redeemable Rewards", "Récompenses échangeables"))
+                        .padding(.horizontal, 4)
 
-                if !appState.vouchers.isEmpty {
-                    ADLSectionHeader(title: "Your wallet")
-                    ForEach(appState.vouchers) { voucher in
-                        VoucherRow(voucher: voucher)
+                    VStack(spacing: 12) {
+                        ForEach(appState.catalog) { reward in
+                            RewardCard(reward: reward, affordable: appState.spendableXP >= reward.costXP) {
+                                redeemError = nil
+                                pendingReward = reward
+                            }
+                        }
+                    }
+
+                    if !appState.vouchers.isEmpty {
+                        SectionLabel(text: appState.t("Your Wallet", "Votre portefeuille"))
+                            .padding(.horizontal, 4)
+                        VStack(spacing: 8) {
+                            ForEach(appState.vouchers) { voucher in
+                                VoucherRow(voucher: voucher)
+                            }
+                        }
                     }
                 }
+                .padding(16)
+                .padding(.bottom, 32)
             }
-            .padding(16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Rewards")
         .task { await appState.loadProfile() }
         .refreshable { await appState.loadProfile(force: true) }
         .sheet(item: $pendingReward) { reward in
@@ -3867,53 +4441,67 @@ struct RedeemConfirmSheet: View {
     let balance: Int
     let onConfirm: () -> Void
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     private var affordable: Bool { balance >= reward.costXP }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Confirm redemption")
-                .font(.title3.weight(.bold))
-                .foregroundColor(ADLColor.ink)
+            HStack {
+                Text(appState.t("Confirm Redemption", "Confirmer l'échange"))
+                    .font(ADLFont.inter(15, .bold))
+                    .foregroundColor(ADLColor.ink)
+                Spacer()
+                Button(appState.t("Close", "Fermer")) { dismiss() }
+                    .font(ADLFont.inter(12, .bold))
+                    .foregroundColor(Color(hex: 0x9ca3af))
+            }
 
             ADLCard {
                 VStack(alignment: .leading, spacing: 10) {
-                    Label(reward.name, systemImage: reward.category.systemImage)
-                        .font(.subheadline.weight(.bold))
+                    Text(reward.name)
+                        .font(ADLFont.inter(14, .bold))
                         .foregroundColor(ADLColor.ink)
                     HStack {
-                        Text("Cost")
+                        Text(appState.t("Cost", "Coût").uppercased())
+                            .font(ADLFont.inter(11, .bold))
+                            .tracking(1.6)
+                            .foregroundColor(Color(hex: 0x9ca3af))
                         Spacer()
-                        Text("\(reward.costXP) XP").fontWeight(.bold)
+                        Text("\(reward.costXP) XP")
+                            .font(ADLFont.inter(13, .bold))
+                            .foregroundColor(ADLColor.ink)
                     }
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
                     HStack {
-                        Text("Balance after")
+                        Text(appState.t("Balance after", "Solde restant").uppercased())
+                            .font(ADLFont.inter(11, .bold))
+                            .tracking(1.6)
+                            .foregroundColor(Color(hex: 0x9ca3af))
                         Spacer()
-                        Text("\(max(0, balance - reward.costXP)) XP").fontWeight(.bold)
+                        Text("\(max(0, balance - reward.costXP)) XP")
+                            .font(ADLFont.inter(13, .bold))
+                            .foregroundColor(ADLColor.ink)
                     }
-                    .font(.footnote)
-                    .foregroundColor(.secondary)
                 }
             }
 
             if !affordable {
-                Text("You need \(reward.costXP - balance) more XP for this reward.")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundColor(ADLColor.terracotta)
+                Text(appState.t(
+                    "You need \(reward.costXP - balance) more XP for this reward.",
+                    "Il vous faut \(reward.costXP - balance) XP supplémentaires."
+                ))
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.terracotta)
             }
 
             Button {
                 onConfirm()
             } label: {
-                Label("Confirm redeem", systemImage: "checkmark.seal.fill")
+                Label(appState.t("Confirm Redeem", "Confirmer échange"),
+                      systemImage: "checkmark.seal.fill")
             }
             .buttonStyle(PrimaryButtonStyle())
             .disabled(!affordable)
-
-            Button("Cancel") { dismiss() }
-                .buttonStyle(SecondaryButtonStyle())
         }
         .padding(20)
     }
@@ -3922,26 +4510,31 @@ struct RedeemConfirmSheet: View {
 struct VoucherSuccessSheet: View {
     let voucher: Voucher
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         VStack(spacing: 18) {
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 52))
                 .foregroundColor(ADLColor.forest)
-            Text("Reward redeemed")
-                .font(.title3.weight(.bold))
+                .padding(16)
+                .background(ADLColor.forestWash)
+                .clipShape(Circle())
+
+            Text(appState.t("Reward Redeemed", "Récompense échangée"))
+                .font(ADLFont.inter(18, .bold))
                 .foregroundColor(ADLColor.ink)
             Text(voucher.rewardName)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .font(ADLFont.inter(14))
+                .foregroundColor(Color(hex: 0x6b7280))
                 .multilineTextAlignment(.center)
 
             ADLCard {
                 VStack(spacing: 6) {
-                    Text("VOUCHER CODE")
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.2)
-                        .foregroundColor(.secondary)
+                    Text(appState.t("VOUCHER CODE", "CODE BON"))
+                        .font(ADLFont.inter(11, .bold))
+                        .tracking(2.0)
+                        .foregroundColor(Color(hex: 0x9ca3af))
                     Text(voucher.code)
                         .font(.system(.title2, design: .monospaced).weight(.bold))
                         .foregroundColor(ADLColor.navy)
@@ -3949,12 +4542,15 @@ struct VoucherSuccessSheet: View {
                 .frame(maxWidth: .infinity)
             }
 
-            Text("Show this code to claim your reward. It's saved in your wallet.")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
+            Text(appState.t(
+                "Your voucher is available in the Rewards wallet.",
+                "Votre bon est disponible dans le portefeuille récompenses."
+            ))
+            .font(ADLFont.inter(12))
+            .foregroundColor(Color(hex: 0x6b7280))
+            .multilineTextAlignment(.center)
 
-            Button("Done") { dismiss() }
+            Button(appState.t("Done", "Terminé")) { dismiss() }
                 .buttonStyle(PrimaryButtonStyle())
         }
         .padding(24)

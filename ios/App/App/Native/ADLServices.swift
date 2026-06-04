@@ -453,6 +453,12 @@ final class AppState: ObservableObject {
         refreshQueueSnapshot()
     }
 
+    func deleteDraft(_ draft: ContributionDraft) {
+        drafts.removeAll { $0.id == draft.id }
+        queueStore.saveDrafts(drafts)
+        refreshQueueSnapshot()
+    }
+
     private func defaultTab(for role: UserRole) -> AppRoute {
         AppReleaseMode.defaultTab(for: role)
     }
