@@ -94,6 +94,7 @@ struct SplashView: View {
     let onContinue: () -> Void
     var onGuest: () -> Void = {}
     @State private var idx = 0
+    @EnvironmentObject private var appState: AppState
 
     private struct Slide: Identifiable {
         let id = UUID()
@@ -102,23 +103,40 @@ struct SplashView: View {
         let body: String
     }
 
-    private let slides: [Slide] = [
-        Slide(eyebrow: "Welcome",
-              title: "The city, mapped\nfrom the ground up.",
-              body: "African Data Layer turns everyday movement in Bonamoussadi into verified infrastructure data."),
-        Slide(eyebrow: "Before you start",
-              title: "Camera + GPS,\nverified at capture.",
-              body: "We need your camera and location to verify each capture. Only live photos are accepted — no gallery uploads."),
-        Slide(eyebrow: "7 Verticals",
-              title: "Every corner\nof the city counts.",
-              body: "Pharmacies, mobile money, fuel, alcohol, billboards, roads, buildings — all mapped and verified in real time."),
-        Slide(eyebrow: "Rewards",
-              title: "Map more.\nClimb higher.",
-              body: "Earn XP on every verified submission. Rise up the leaderboard. Unlock badges and real rewards."),
-        Slide(eyebrow: "Ready?",
-              title: "Join the\nmission.",
-              body: "Sign in or create your account to start contributing. Data collection starts now."),
-    ]
+    private var slides: [Slide] {
+        [
+            Slide(eyebrow: appState.t("Welcome", "Bienvenue"),
+                  title: appState.t("The city, mapped\nfrom the ground up.", "La ville cartographiée\ndepuis le terrain."),
+                  body: appState.t(
+                      "African Data Layer turns everyday movement in Bonamoussadi into verified infrastructure data.",
+                      "African Data Layer transforme les déplacements quotidiens à Bonamoussadi en données d'infrastructure vérifiées."
+                  )),
+            Slide(eyebrow: appState.t("Before you start", "Avant de commencer"),
+                  title: appState.t("Camera + GPS,\nverified at capture.", "Caméra + GPS,\nvérifiés à la capture."),
+                  body: appState.t(
+                      "We need your camera and location to verify each capture. Only live photos are accepted — no gallery uploads.",
+                      "Nous avons besoin de votre caméra et de votre position pour vérifier chaque capture. Seules les photos en direct sont acceptées."
+                  )),
+            Slide(eyebrow: appState.t("7 Verticals", "7 catégories"),
+                  title: appState.t("Every corner\nof the city counts.", "Chaque coin\nde la ville compte."),
+                  body: appState.t(
+                      "Pharmacies, mobile money, fuel, alcohol, billboards, roads, buildings — all mapped and verified in real time.",
+                      "Pharmacies, mobile money, carburant, alcool, panneaux, routes, bâtiments — tout cartographié et vérifié en temps réel."
+                  )),
+            Slide(eyebrow: appState.t("Rewards", "Récompenses"),
+                  title: appState.t("Map more.\nClimb higher.", "Cartographiez plus.\nMontez plus haut."),
+                  body: appState.t(
+                      "Earn XP on every verified submission. Rise up the leaderboard. Unlock badges and real rewards.",
+                      "Gagnez des XP à chaque contribution vérifiée. Grimpez le classement. Débloquez des badges et de vraies récompenses."
+                  )),
+            Slide(eyebrow: appState.t("Ready?", "Prêt ?"),
+                  title: appState.t("Join the\nmission.", "Rejoignez la\nmission."),
+                  body: appState.t(
+                      "Sign in or create your account to start contributing. Data collection starts now.",
+                      "Connectez-vous ou créez un compte pour commencer à contribuer. La collecte démarre maintenant."
+                  )),
+        ]
+    }
 
     private var isFinal: Bool { idx == slides.count - 1 }
 
@@ -182,7 +200,7 @@ struct SplashView: View {
                         Button {
                             withAnimation { idx = slides.count - 1 }
                         } label: {
-                            Text("Skip")
+                            Text(appState.t("Skip", "Passer"))
                                 .font(ADLFont.inter(11, .bold))
                                 .tracking(1.6)
                                 .foregroundColor(.white.opacity(0.9))
@@ -255,7 +273,7 @@ struct SplashView: View {
             if isFinal {
                 VStack(spacing: 12) {
                     Button { onContinue() } label: {
-                        Text("Sign In · Connexion")
+                        Text(appState.t("Sign In", "Connexion"))
                             .font(ADLFont.inter(13, .bold))
                             .tracking(1.4)
                             .textCase(.uppercase)
@@ -263,7 +281,7 @@ struct SplashView: View {
                     .buttonStyle(CTAButtonStyle())
 
                     Button { onContinue() } label: {
-                        Text("Create Account · Créer un compte")
+                        Text(appState.t("Create Account", "Créer un compte"))
                             .font(ADLFont.inter(13, .bold))
                             .tracking(1.0)
                             .textCase(.uppercase)
@@ -271,7 +289,7 @@ struct SplashView: View {
                     .buttonStyle(SecondaryButtonStyle())
 
                     Button { onGuest() } label: {
-                        Text("Browse as Guest")
+                        Text(appState.t("Browse as Guest", "Continuer en invité"))
                             .font(ADLFont.inter(11, .bold))
                             .tracking(1.6)
                             .textCase(.uppercase)
@@ -284,7 +302,7 @@ struct SplashView: View {
                     withAnimation { idx = min(idx + 1, slides.count - 1) }
                 } label: {
                     HStack(spacing: 8) {
-                        Text("Next")
+                        Text(appState.t("Next", "Suivant"))
                             .font(ADLFont.inter(13, .bold))
                             .tracking(1.6)
                             .textCase(.uppercase)
@@ -487,11 +505,21 @@ struct AuthView: View {
     @State private var password = ""
     @State private var showPassword = false
 
-    private var title: String { mode == .signin ? "Welcome back" : "Join the network" }
+    private var title: String {
+        mode == .signin
+            ? appState.t("Welcome back", "Bon retour")
+            : appState.t("Join the network", "Rejoignez le réseau")
+    }
     private var subtitle: String {
         mode == .signin
-            ? "Sign in to continue capturing verified field data on the ground."
-            : "Create a field account to capture locations, services, and infrastructure changes on the ground."
+            ? appState.t(
+                "Sign in to continue capturing verified field data on the ground.",
+                "Connectez-vous pour continuer à capturer des données terrain vérifiées."
+              )
+            : appState.t(
+                "Create a field account to capture locations, services, and infrastructure changes on the ground.",
+                "Créez un compte terrain pour capturer des lieux, services et changements d'infrastructure."
+              )
     }
 
     var body: some View {
@@ -524,19 +552,19 @@ struct AuthView: View {
                         .padding(.horizontal, 8)
 
                     // OAuth buttons
-                    Button { appState.authError = "Apple sign-in is available in the production build." } label: {
+                    Button { appState.authError = appState.t("Apple sign-in is available in the production build.", "La connexion Apple est disponible dans la version de production.") } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "applelogo").font(.system(size: 17, weight: .medium))
-                            Text("Sign in with Apple").font(ADLFont.inter(15, .semibold))
+                            Text(appState.t("Sign in with Apple", "Se connecter avec Apple")).font(ADLFont.inter(15, .semibold))
                         }
                     }
                     .buttonStyle(PrimaryButtonStyle())
                     .padding(.top, 28)
 
-                    Button { appState.authError = "Google sign-in is available in the production build." } label: {
+                    Button { appState.authError = appState.t("Google sign-in is available in the production build.", "La connexion Google est disponible dans la version de production.") } label: {
                         HStack(spacing: 8) {
                             Image(systemName: "globe").font(.system(size: 16, weight: .semibold))
-                            Text("Continue with Google").font(ADLFont.inter(15, .semibold))
+                            Text(appState.t("Continue with Google", "Continuer avec Google")).font(ADLFont.inter(15, .semibold))
                         }
                     }
                     .buttonStyle(SecondaryButtonStyle())
@@ -544,13 +572,13 @@ struct AuthView: View {
 
                     // Credentials form
                     VStack(alignment: .leading, spacing: 16) {
-                        fieldLabel("Phone number or email")
+                        fieldLabel(appState.t("Phone number or email", "Numéro de téléphone ou email"))
                         ADLInputField(icon: "envelope", placeholder: "+2376XXXXXXXX or name@email.com", text: $identifier, isSecure: false, keyboard: .emailAddress)
 
-                        fieldLabel("Password")
+                        fieldLabel(appState.t("Password", "Mot de passe"))
                         ADLInputField(
                             icon: "lock",
-                            placeholder: mode == .signup ? "Min. 10 chars, A-Z, a-z, 0-9" : "Your password",
+                            placeholder: mode == .signup ? appState.t("Min. 10 chars, A-Z, a-z, 0-9", "Min. 10 caractères, A-Z, a-z, 0-9") : appState.t("Your password", "Votre mot de passe"),
                             text: $password,
                             isSecure: !showPassword,
                             keyboard: .default,
@@ -571,7 +599,7 @@ struct AuthView: View {
                                 if appState.isSigningIn {
                                     ProgressView().tint(.white)
                                 } else {
-                                    Text(mode == .signin ? "Sign in" : "Create account")
+                                    Text(mode == .signin ? appState.t("Sign in", "Connexion") : appState.t("Create account", "Créer un compte"))
                                         .font(ADLFont.inter(15, .semibold))
                                     Image(systemName: "arrow.right").font(.system(size: 16, weight: .bold))
                                 }
@@ -584,7 +612,7 @@ struct AuthView: View {
 
                     if mode == .signin {
                         Button { } label: {
-                            Text("Forgot your password?")
+                            Text(appState.t("Forgot your password?", "Mot de passe oublié ?"))
                                 .font(ADLFont.inter(13, .semibold))
                                 .foregroundColor(ADLColor.navy)
                         }
@@ -594,7 +622,7 @@ struct AuthView: View {
                     // Shield reassurance
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.shield.fill").font(.system(size: 12))
-                        Text("Encrypted sign-in keeps your field account secure.")
+                        Text(appState.t("Encrypted sign-in keeps your field account secure.", "La connexion chiffrée sécurise votre compte terrain."))
                             .font(ADLFont.inter(12, .semibold))
                     }
                     .foregroundColor(ADLColor.inkMuted)
@@ -602,14 +630,14 @@ struct AuthView: View {
 
                     // Mode toggle
                     HStack(spacing: 4) {
-                        Text(mode == .signin ? "Don't have an account?" : "Already have an account?")
+                        Text(mode == .signin ? appState.t("Don't have an account?", "Vous n'avez pas de compte ?") : appState.t("Already have an account?", "Vous avez déjà un compte ?"))
                             .font(ADLFont.inter(12))
                             .foregroundColor(ADLColor.inkMuted)
                         Button {
                             withAnimation { mode = mode == .signin ? .signup : .signin }
                             appState.authError = nil
                         } label: {
-                            Text(mode == .signin ? "Create an account" : "Sign in instead")
+                            Text(mode == .signin ? appState.t("Create an account", "Créer un compte") : appState.t("Sign in instead", "Se connecter plutôt"))
                                 .font(ADLFont.inter(12, .bold))
                                 .foregroundColor(ADLColor.navy)
                         }
@@ -747,13 +775,14 @@ struct AppShellView: View {
 /// Green "all synced" status strip mirroring the web SyncStatusBar.
 struct ADLSyncBar: View {
     let message: String
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark.seal.fill")
                 .font(.system(size: 14))
                 .foregroundColor(ADLColor.forest)
-            Text(message.isEmpty ? "All synced. Ready to capture." : message)
+            Text(message.isEmpty ? appState.t("All synced. Ready to capture.", "Tout synchronisé. Prêt à capturer.") : message)
                 .font(ADLFont.inter(12, .semibold))
                 .foregroundColor(ADLColor.forestDark)
             Spacer()
@@ -774,6 +803,7 @@ struct ADLTabBar: View {
     let selection: AppRoute
     let isAdmin: Bool
     let onSelect: (AppRoute) -> Void
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         HStack(alignment: .top, spacing: 4) {
@@ -815,15 +845,15 @@ struct ADLTabBar: View {
 
     private func title(for route: AppRoute) -> String {
         switch route {
-        case .home: return isAdmin ? "Map" : "Explore"
-        case .contribute: return "Contribute"
-        case .queue: return "Queue"
-        case .rewards: return "Rewards"
-        case .profile: return "Profile"
-        case .adminReview: return "Queue"
-        case .agentPerformance: return "Agents"
+        case .home: return isAdmin ? appState.t("Map", "Carte") : appState.t("Explore", "Explorer")
+        case .contribute: return appState.t("Contribute", "Contribuer")
+        case .queue: return appState.t("Queue", "File")
+        case .rewards: return appState.t("Rewards", "Récompenses")
+        case .profile: return appState.t("Profile", "Profil")
+        case .adminReview: return appState.t("Queue", "File")
+        case .agentPerformance: return appState.t("Agents", "Agents")
         case .clientDashboard: return "Delta"
-        case .analytics: return isAdmin ? "Impact" : "Leaderboard"
+        case .analytics: return isAdmin ? appState.t("Impact", "Impact") : appState.t("Leaderboard", "Classement")
         }
     }
 
@@ -893,7 +923,7 @@ struct AgentHomeView: View {
                 if appState.isLoadingPoints {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text("Loading backend points")
+                        Text(appState.t("Loading backend points", "Chargement des points"))
                             .font(ADLFont.inter(12, .semibold))
                             .foregroundColor(ADLColor.navy)
                     }
@@ -970,7 +1000,7 @@ struct AgentHomeView: View {
             .padding(.bottom, 16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Field Map")
+        .navigationTitle(appState.t("Field Map", "Carte terrain"))
         .task { await appState.loadPoints() }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -1206,15 +1236,16 @@ struct FieldMapHeader: View {
     let locationStatus: String
     let activeCategory: SubmissionCategory?
     let onSelectCategory: (SubmissionCategory?) -> Void
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Bonamoussadi field map")
+                    Text(appState.t("Bonamoussadi field map", "Carte terrain Bonamoussadi"))
                         .font(.headline.weight(.bold))
                         .foregroundColor(ADLColor.ink)
-                    Text("Collection zone, trusted points, and next captures.")
+                    Text(appState.t("Collection zone, trusted points, and next captures.", "Zone de collecte, points vérifiés et prochaines captures."))
                         .font(.footnote.weight(.medium))
                         .foregroundColor(.secondary)
                 }
@@ -1223,13 +1254,13 @@ struct FieldMapHeader: View {
             }
 
             HStack(spacing: 8) {
-                StatusPill(title: "\(pointCount) points", tint: ADLColor.navy)
-                StatusPill(title: "\(refreshCount) refresh", tint: refreshCount > 0 ? ADLColor.terracotta : ADLColor.forest)
+                StatusPill(title: appState.t("\(pointCount) points", "\(pointCount) points"), tint: ADLColor.navy)
+                StatusPill(title: appState.t("\(refreshCount) refresh", "\(refreshCount) à actualiser"), tint: refreshCount > 0 ? ADLColor.terracotta : ADLColor.forest)
                 StatusPill(title: locationStatus, tint: ADLColor.gold)
             }
 
             Menu {
-                Button("All verticals") { onSelectCategory(nil) }
+                Button(appState.t("All verticals", "Toutes les catégories")) { onSelectCategory(nil) }
                 ForEach(SubmissionCategory.allCases) { category in
                     Button(category.title) { onSelectCategory(category) }
                 }
@@ -1237,7 +1268,7 @@ struct FieldMapHeader: View {
                 HStack(spacing: 8) {
                     Image(systemName: activeCategory?.systemImage ?? "square.grid.2x2")
                         .font(.system(size: 14, weight: .semibold))
-                    Text(activeCategory?.title ?? "All verticals")
+                    Text(activeCategory?.title ?? appState.t("All verticals", "Toutes les catégories"))
                         .font(ADLFont.inter(13, .bold))
                         .lineLimit(1)
                     Spacer()
@@ -1267,6 +1298,7 @@ struct FieldMapActionBar: View {
     let selectedPoint: DataPoint?
     let onCaptureMapCenter: () -> Void
     let onCaptureSelectedPoint: (DataPoint) -> Void
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1282,7 +1314,7 @@ struct FieldMapActionBar: View {
                         Text(selectedPoint.name)
                             .font(.subheadline.weight(.bold))
                             .foregroundColor(ADLColor.ink)
-                        Text(selectedPoint.requiresRefresh ? "Ready for refresh capture" : "Verified point")
+                        Text(selectedPoint.requiresRefresh ? appState.t("Ready for refresh capture", "Prêt pour une nouvelle capture") : appState.t("Verified point", "Point vérifié"))
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
@@ -1292,14 +1324,14 @@ struct FieldMapActionBar: View {
                 Button {
                     onCaptureSelectedPoint(selectedPoint)
                 } label: {
-                    Label("Capture Selected Point", systemImage: "camera.fill")
+                    Label(appState.t("Capture Selected Point", "Capturer le point sélectionné"), systemImage: "camera.fill")
                 }
                 .buttonStyle(PrimaryButtonStyle())
             } else {
                 Button {
                     onCaptureMapCenter()
                 } label: {
-                    Label("Capture Map Center", systemImage: "camera.viewfinder")
+                    Label(appState.t("Capture Map Center", "Capturer le centre de la carte"), systemImage: "camera.viewfinder")
                 }
                 .buttonStyle(PrimaryButtonStyle())
             }
@@ -2826,9 +2858,9 @@ struct AnalyticsView: View {
     private var isClient: Bool { appState.selectedRole == .client }
 
     private var headerTitle: String {
-        if isAdmin { return "Investor Analytics" }
-        if isClient { return "Insights Center" }
-        return "Leaderboard"
+        if isAdmin { return appState.t("Investor Analytics", "Analytique investisseur") }
+        if isClient { return appState.t("Insights Center", "Centre d'insights") }
+        return appState.t("Leaderboard", "Classement")
     }
 
     private func goBack() {
@@ -2854,8 +2886,8 @@ struct AnalyticsView: View {
         VStack(alignment: .leading, spacing: 16) {
             // Section eyebrow + title — mirrors web Analytics contributorMode header
             VStack(alignment: .leading, spacing: 5) {
-                SectionLabel(text: "Leaderboard")
-                Text("Top contributors near you")
+                SectionLabel(text: appState.t("Leaderboard", "Classement"))
+                Text(appState.t("Top contributors near you", "Top contributeurs près de vous"))
                     .font(ADLFont.inter(20, .bold))
                     .foregroundColor(ADLColor.ink)
             }
@@ -2865,8 +2897,8 @@ struct AnalyticsView: View {
             // "How scoring works" card
             ADLCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    SectionLabel(text: "How scoring works")
-                    Text("Score = verified submissions × average quality")
+                    SectionLabel(text: appState.t("How scoring works", "Comment fonctionne le classement"))
+                    Text(appState.t("Score = verified submissions × average quality", "Score = soumissions vérifiées × qualité moyenne"))
                         .font(ADLFont.inter(14, .semibold))
                         .foregroundColor(ADLColor.ink)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2890,7 +2922,7 @@ struct AnalyticsView: View {
                 }
             } else if appState.leaderboard.isEmpty {
                 ADLCard {
-                    Text("No contributor data yet.")
+                    Text(appState.t("No contributor data yet.", "Aucun contributeur pour l'instant."))
                         .font(ADLFont.inter(13, .semibold))
                         .foregroundColor(Color(hex: 0x374151))
                 }
@@ -3609,7 +3641,7 @@ struct ProfileView: View {
     var body: some View {
         VStack(spacing: 0) {
             // MARK: Header — title "Profile" + gear → SettingsView
-            ADLScreenHeader(title: "Profile") {
+            ADLScreenHeader(title: appState.t("Profile", "Profil")) {
                 NavigationLink {
                     SettingsView()
                 } label: {
@@ -3647,10 +3679,10 @@ struct ProfileView: View {
                                 columns: [GridItem(.flexible()), GridItem(.flexible())],
                                 spacing: 12
                             ) {
-                                KpiTile(label: "Points", value: pointsTotal.formatted(), tone: .navy)
-                                KpiTile(label: "XP", value: xpCurrent.formatted(), tone: .terra)
-                                KpiTile(label: "Streak", value: "\(appState.profile.streakDays)d", tone: .streak)
-                                KpiTile(label: "Rank", value: rankDisplay, tone: .amber)
+                                KpiTile(label: appState.t("Points", "Points"), value: pointsTotal.formatted(), tone: .navy)
+                                KpiTile(label: appState.t("XP", "XP"), value: xpCurrent.formatted(), tone: .terra)
+                                KpiTile(label: appState.t("Streak", "Série"), value: "\(appState.profile.streakDays)d", tone: .streak)
+                                KpiTile(label: appState.t("Rank", "Rang"), value: rankDisplay, tone: .amber)
                             }
 
                             // MARK: Quick-action rows (Pending Uploads, Help Center)
@@ -3719,7 +3751,7 @@ struct ProfileView: View {
     }
 
     private var heroSubtitle: String {
-        if appState.isLoadingProfile { return "Loading profile" }
+        if appState.isLoadingProfile { return appState.t("Loading profile", "Chargement du profil") }
         return "\(appState.profile.role.title) · Bonamoussadi"
     }
 
@@ -3765,7 +3797,7 @@ struct ProfileView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     // Name + tier pill (web: text-xl font-bold + micro-label bg-gold/20 text-gold)
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(appState.isLoadingProfile ? "Loading profile" : displayName)
+                        Text(appState.isLoadingProfile ? appState.t("Loading profile", "Chargement du profil") : displayName)
                             .font(ADLFont.inter(24, .bold))
                             .foregroundColor(.white)
                             .lineLimit(1)
@@ -3843,11 +3875,11 @@ struct ProfileView: View {
     private var trustProgressCard: some View {
         let progress = appState.tierProgress
         let xpToNext = progress.xpToNext
-        let nextTierName = progress.next?.title ?? "Max tier"
+        let nextTierName = progress.next?.title ?? appState.t("Max tier", "Niveau maximum")
         return ADLCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("Trust Progress")
+                    Text(appState.t("Trust Progress", "Progression de confiance"))
                         .font(ADLFont.inter(15, .bold))
                         .foregroundColor(ADLColor.ink)
                     Spacer()
@@ -3862,8 +3894,8 @@ struct ProfileView: View {
                 }
                 ADLProgressBar(value: progress.fraction, tint: ADLColor.gold, height: 8)
                 Text(xpToNext > 0
-                     ? "\(xpToNext.formatted()) XP to \(nextTierName)"
-                     : "You've reached the top tier!")
+                     ? appState.t("\(xpToNext.formatted()) XP to \(nextTierName)", "\(xpToNext.formatted()) XP vers \(nextTierName)")
+                     : appState.t("You've reached the top tier!", "Vous avez atteint le niveau maximum !"))
                     .font(ADLFont.inter(12))
                     .foregroundColor(ADLColor.inkMuted)
             }
@@ -3885,10 +3917,10 @@ struct ProfileView: View {
                             .background(ADLColor.navyWash)
                             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Pending Uploads")
+                            Text(appState.t("Pending Uploads", "Envois en attente"))
                                 .font(ADLFont.inter(15, .semibold))
                                 .foregroundColor(ADLColor.navy)
-                            Text("\(appState.queueSnapshot.queued) queued · \(appState.queueSnapshot.failed) failed")
+                            Text(appState.t("\(appState.queueSnapshot.queued) queued · \(appState.queueSnapshot.failed) failed", "\(appState.queueSnapshot.queued) en file · \(appState.queueSnapshot.failed) échoués"))
                                 .font(ADLFont.inter(12))
                                 .foregroundColor(ADLColor.inkMuted)
                         }
@@ -3912,10 +3944,10 @@ struct ProfileView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Help Center")
+                        Text(appState.t("Help Center", "Centre d'aide"))
                             .font(ADLFont.inter(15, .semibold))
                             .foregroundColor(ADLColor.navy)
-                        Text("Guides for your current role and workflow.")
+                        Text(appState.t("Guides for your current role and workflow.", "Guides pour votre rôle et votre workflow."))
                             .font(ADLFont.inter(12))
                             .foregroundColor(ADLColor.inkMuted)
                     }
@@ -3937,15 +3969,15 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionLabel(text: "Admin Map Access")
-                        Text("Unlock worldwide map")
+                        SectionLabel(text: appState.t("Admin Map Access", "Accès carte admin"))
+                        Text(appState.t("Unlock worldwide map", "Débloquer la carte mondiale"))
                             .font(ADLFont.inter(14, .bold))
                             .foregroundColor(ADLColor.ink)
                     }
                     Spacer()
-                    StatusPill(title: "Enabled", tint: ADLColor.forest)
+                    StatusPill(title: appState.t("Enabled", "Activé"), tint: ADLColor.forest)
                 }
-                Text("Explorer map is unlocked worldwide.")
+                Text(appState.t("Explorer map is unlocked worldwide.", "La carte Explorer est débloquée dans le monde entier."))
                     .font(ADLFont.inter(12))
                     .foregroundColor(ADLColor.inkMuted)
             }
@@ -3959,8 +3991,8 @@ struct ProfileView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        SectionLabel(text: "Assignments")
-                        Text("My Weekly Assignments")
+                        SectionLabel(text: appState.t("Assignments", "Missions"))
+                        Text(appState.t("My Weekly Assignments", "Mes missions de la semaine"))
                             .font(ADLFont.inter(15, .semibold))
                             .foregroundColor(ADLColor.ink)
                     }
@@ -3973,7 +4005,7 @@ struct ProfileView: View {
                         .background(ADLColor.navyLight)
                         .clipShape(Capsule())
                 }
-                Text("No active assignments yet.")
+                Text(appState.t("No active assignments yet.", "Aucune mission active pour le moment."))
                     .font(ADLFont.inter(12))
                     .foregroundColor(ADLColor.inkMuted)
             }
@@ -3989,7 +4021,7 @@ struct ProfileView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "gift.fill")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Redeem XP")
+                    Text(appState.t("Redeem XP", "Échanger des XP"))
                         .font(ADLFont.inter(14, .semibold))
                 }
                 .frame(maxWidth: .infinity)
@@ -4010,7 +4042,7 @@ struct ProfileView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "wallet.pass.fill")
                         .font(.system(size: 16, weight: .semibold))
-                    Text("Convert to Rewards")
+                    Text(appState.t("Convert to Rewards", "Convertir en récompenses"))
                         .font(ADLFont.inter(14, .semibold))
                 }
                 .frame(maxWidth: .infinity)
@@ -4070,12 +4102,12 @@ struct ProfileView: View {
 
     private var weekSummarySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionLabel(text: "This week", wide: true)
+            SectionLabel(text: appState.t("This week", "Cette semaine"), wide: true)
             ProfileWeekSummaryCard(rows: [
-                ("Submitted", "\(pointsThisWeek)"),
-                ("Verified", "\(appState.queueSnapshot.synced)"),
-                ("XP earned", "\(xpCurrent.formatted()) XP"),
-                ("Best day", pointsThisWeek > 0 ? "Today" : "No activity yet")
+                (appState.t("Submitted", "Soumissions"), "\(pointsThisWeek)"),
+                (appState.t("Verified", "Vérifiées"), "\(appState.queueSnapshot.synced)"),
+                (appState.t("XP earned", "XP gagnées"), "\(xpCurrent.formatted()) XP"),
+                (appState.t("Best day", "Meilleur jour"), pointsThisWeek > 0 ? appState.t("Today", "Aujourd'hui") : appState.t("No activity yet", "Aucune activité pour le moment"))
             ])
         }
     }
@@ -4180,9 +4212,10 @@ struct ProfileView: View {
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
-    @AppStorage("adl_language") private var language = "fr"
     @AppStorage("adl_high_contrast") private var highContrast = false
     @AppStorage("adl_sms_notifications") private var smsNotifications = false
+
+    private var language: String { appState.language }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -4247,11 +4280,11 @@ struct SettingsView: View {
         SettingsSection(title: text("Language", "Langue")) {
             VStack(spacing: 0) {
                 SettingsChoiceRow(title: "English", isSelected: language == "en") {
-                    language = "en"
+                    appState.language = "en"
                 }
                 Divider().background(ADLColor.line)
                 SettingsChoiceRow(title: "Français", isSelected: language == "fr") {
-                    language = "fr"
+                    appState.language = "fr"
                 }
             }
             .settingsCard()
@@ -4568,6 +4601,7 @@ private extension View {
 
 struct DailyProgressWidget: View {
     let goal: DailyGoal
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         ADLCard {
@@ -4585,12 +4619,12 @@ struct DailyProgressWidget: View {
                 .frame(width: 52, height: 52)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Today's goal")
+                    Text(appState.t("Today's goal", "Objectif du jour"))
                         .font(.subheadline.weight(.bold))
                         .foregroundColor(ADLColor.ink)
                     Text(goal.completed >= goal.target
-                         ? "Goal complete — nice work."
-                         : "\(goal.target - goal.completed) more captures to go.")
+                         ? appState.t("Goal complete — nice work.", "Objectif atteint — bien joué !")
+                         : appState.t("\(goal.target - goal.completed) more captures to go.", "\(goal.target - goal.completed) captures restantes."))
                         .font(.footnote)
                         .foregroundColor(.secondary)
                 }

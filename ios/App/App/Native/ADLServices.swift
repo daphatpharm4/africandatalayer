@@ -18,7 +18,7 @@ final class AppState: ObservableObject {
     @Published var pointsError: String?
     @Published var drafts: [ContributionDraft] = []
     @Published var queueSnapshot = QueueSnapshot.empty
-    @Published var lastSyncMessage = "All synced. Ready to capture."
+    @Published var lastSyncMessage = ""
     @Published var authError: String?
     @Published var isSigningIn = false
     @Published var isSyncingQueue = false
@@ -40,6 +40,11 @@ final class AppState: ObservableObject {
     @Published var levelUpEvent: LevelUpEvent?
     @Published var isLoadingProfile = false
     @Published var profileError: String?
+    @Published var language: String = UserDefaults.standard.string(forKey: "adl_language") ?? "fr" {
+        didSet { UserDefaults.standard.set(language, forKey: "adl_language") }
+    }
+
+    func t(_ en: String, _ fr: String) -> String { language == "fr" ? fr : en }
 
     private let queueStore = OfflineQueueStore()
     private let rewardsService: RewardsService = LocalRewardsService()
@@ -290,7 +295,7 @@ final class AppState: ObservableObject {
         drafts.insert(draft, at: 0)
         queueStore.saveDrafts(drafts)
         refreshQueueSnapshot()
-        lastSyncMessage = "Contribution queued for sync"
+        lastSyncMessage = t("Contribution queued for sync", "Contribution en file d'attente")
         selectedTab = .queue
     }
 
@@ -403,7 +408,7 @@ final class AppState: ObservableObject {
 
         let candidates = drafts.filter { $0.syncState == .queued || $0.syncState == .failed }
         if candidates.isEmpty {
-            lastSyncMessage = "No queued drafts"
+            lastSyncMessage = t("No queued drafts", "Aucun brouillon en file")
             return
         }
 
@@ -757,7 +762,7 @@ final class LocalRewardsService: RewardsService {
 
 final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var lastLocation: SubmissionLocation?
-    @Published var statusText = "Location not captured"
+    @Published var statusText = UserDefaults.standard.string(forKey: "adl_language") == "fr" ? "Position non capturée" : "Location not captured"
 
     private let manager = CLLocationManager()
     private var pendingLocationRequest = false
