@@ -705,7 +705,13 @@ struct AppShellView: View {
                 routes: routes,
                 selection: appState.selectedTab,
                 isAdmin: appState.selectedRole == .admin,
-                onSelect: { appState.selectedTab = $0 }
+                onSelect: { route in
+                    if appState.isGuest && (route == .contribute || route == .profile) {
+                        appState.requestAuth()
+                    } else {
+                        appState.selectedTab = route
+                    }
+                }
             )
         }
         .background(ADLColor.paper.ignoresSafeArea())
@@ -845,6 +851,7 @@ struct AgentHomeView: View {
     )
     @State private var trackingMode: MapUserTrackingMode = .none
     @State private var selectedPoint: DataPoint?
+    @State private var activeCategory: SubmissionCategory?
 
     private let collectionZone = [
         CLLocationCoordinate2D(latitude: 4.0933, longitude: 9.7342),
@@ -856,7 +863,7 @@ struct AgentHomeView: View {
     var body: some View {
         ZStack(alignment: .top) {
             FieldMapKitView(
-                points: appState.points,
+                points: filteredPoints,
                 collectionZone: collectionZone,
                 region: $region,
                 trackingMode: $trackingMode,
@@ -867,12 +874,49 @@ struct AgentHomeView: View {
 
             VStack(spacing: 12) {
                 FieldMapHeader(
-                    pointCount: appState.points.count,
-                    refreshCount: appState.points.filter(\.requiresRefresh).count,
-                    locationStatus: locationProvider.statusText
+                    pointCount: filteredPoints.count,
+                    refreshCount: filteredPoints.filter(\.requiresRefresh).count,
+                    locationStatus: locationProvider.statusText,
+                    activeCategory: activeCategory,
+                    onSelectCategory: { category in
+                        activeCategory = category
+                        if let selectedPoint, let category, selectedPoint.category != category {
+                            self.selectedPoint = nil
+                        }
+                    }
                 )
 
-                DailyProgressWidget(goal: appState.dailyGoal)
+                if !appState.isGuest {
+                    DailyProgressWidget(goal: appState.dailyGoal)
+                }
+
+                if appState.isLoadingPoints {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("Loading backend points")
+                            .font(ADLFont.inter(12, .semibold))
+                            .foregroundColor(ADLColor.navy)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(Color.white)
+                    .clipShape(Capsule())
+                    .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+                } else if let pointsError = appState.pointsError {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(ADLColor.terracotta)
+                        Text(pointsError)
+                            .font(ADLFont.inter(12, .semibold))
+                            .foregroundColor(ADLColor.ink)
+                            .lineLimit(2)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                    .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+                }
 
                 HStack(spacing: 10) {
                     Button {
@@ -909,15 +953,17 @@ struct AgentHomeView: View {
 
                 Spacer()
 
-                FieldMapActionBar(
-                    selectedPoint: selectedPoint,
-                    onCaptureMapCenter: {
-                        appState.startMapCapture(at: region.center)
-                    },
-                    onCaptureSelectedPoint: { point in
-                        appState.startMapCapture(for: point)
-                    }
-                )
+                if !appState.isGuest {
+                    FieldMapActionBar(
+                        selectedPoint: selectedPoint,
+                        onCaptureMapCenter: {
+                            appState.startMapCapture(at: region.center)
+                        },
+                        onCaptureSelectedPoint: { point in
+                            appState.startMapCapture(for: point)
+                        }
+                    )
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
@@ -925,6 +971,7 @@ struct AgentHomeView: View {
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .navigationTitle("Field Map")
+        .task { await appState.loadPoints() }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -938,6 +985,7 @@ struct AgentHomeView: View {
         .sheet(item: $selectedPoint) { point in
             PointDetailSheet(
                 point: point,
+                canContribute: !appState.isGuest,
                 onCapture: {
                     selectedPoint = nil
                     appState.startMapCapture(for: point)
@@ -952,6 +1000,11 @@ struct AgentHomeView: View {
             )
         }
     }
+
+    private var filteredPoints: [DataPoint] {
+        guard let activeCategory else { return appState.points }
+        return appState.points.filter { $0.category == activeCategory }
+    }
 }
 
 struct FieldMapKitView: UIViewRepresentable {
@@ -965,7 +1018,7 @@ struct FieldMapKitView: UIViewRepresentable {
         let mapView = MKMapView(frame: .zero)
         mapView.delegate = context.coordinator
         mapView.mapType = .standard
-        mapView.pointOfInterestFilter = .includingAll
+        mapView.pointOfInterestFilter = .excludingAll
         mapView.showsCompass = true
         mapView.showsScale = true
         mapView.showsUserLocation = true
@@ -985,8 +1038,6 @@ struct FieldMapKitView: UIViewRepresentable {
         mapView.addAnnotations(points.map(FieldPointAnnotation.init(point:)))
 
         mapView.removeOverlays(mapView.overlays)
-        let polygon = MKPolygon(coordinates: collectionZone, count: collectionZone.count)
-        mapView.addOverlay(polygon, level: .aboveRoads)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -1032,16 +1083,11 @@ struct FieldMapKitView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             guard let pointAnnotation = annotation as? FieldPointAnnotation else { return nil }
 
-            let identifier = "field-point-\(pointAnnotation.point.category.rawValue)"
-            let markerView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? MKMarkerAnnotationView
-                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
-            markerView.annotation = annotation
-            markerView.canShowCallout = false
-            markerView.markerTintColor = UIColor(pointAnnotation.point.category.tint)
-            markerView.glyphImage = UIImage(systemName: pointAnnotation.point.category.systemImage)
-            markerView.glyphTintColor = .white
-            markerView.displayPriority = pointAnnotation.point.requiresRefresh ? .required : .defaultHigh
-            return markerView
+            let identifier = "field-point-dot-\(pointAnnotation.point.category.rawValue)"
+            let dotView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier) as? FieldPointAnnotationView
+                ?? FieldPointAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+            dotView.annotation = annotation
+            return dotView
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
@@ -1056,6 +1102,57 @@ struct FieldMapKitView: UIViewRepresentable {
             renderer.lineDashPattern = [8, 5]
             return renderer
         }
+    }
+}
+
+final class FieldPointAnnotationView: MKAnnotationView {
+    private static let markerDiameter: CGFloat = 18
+    private static let hitInset: CGFloat = -13
+
+    override var annotation: MKAnnotation? {
+        didSet { configure() }
+    }
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        configureBase()
+        configure()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureBase()
+        configure()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        layer.cornerRadius = bounds.width / 2
+        layer.shadowPath = UIBezierPath(ovalIn: bounds).cgPath
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        bounds.insetBy(dx: Self.hitInset, dy: Self.hitInset).contains(point)
+    }
+
+    private func configureBase() {
+        bounds = CGRect(x: 0, y: 0, width: Self.markerDiameter, height: Self.markerDiameter)
+        backgroundColor = .clear
+        canShowCallout = false
+        collisionMode = .circle
+        layer.borderWidth = 2
+        layer.borderColor = UIColor.white.cgColor
+        layer.shadowColor = UIColor(ADLColor.navy).cgColor
+        layer.shadowOpacity = 0.28
+        layer.shadowRadius = 5
+        layer.shadowOffset = CGSize(width: 0, height: 4)
+        layer.masksToBounds = false
+    }
+
+    private func configure() {
+        guard let pointAnnotation = annotation as? FieldPointAnnotation else { return }
+        layer.backgroundColor = UIColor(pointAnnotation.point.category.tint).cgColor
+        displayPriority = pointAnnotation.point.requiresRefresh ? .required : .defaultHigh
     }
 }
 
@@ -1092,6 +1189,8 @@ struct FieldMapHeader: View {
     let pointCount: Int
     let refreshCount: Int
     let locationStatus: String
+    let activeCategory: SubmissionCategory?
+    let onSelectCategory: (SubmissionCategory?) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1113,6 +1212,30 @@ struct FieldMapHeader: View {
                 StatusPill(title: "\(refreshCount) refresh", tint: refreshCount > 0 ? ADLColor.terracotta : ADLColor.forest)
                 StatusPill(title: locationStatus, tint: ADLColor.gold)
             }
+
+            Menu {
+                Button("All verticals") { onSelectCategory(nil) }
+                ForEach(SubmissionCategory.allCases) { category in
+                    Button(category.title) { onSelectCategory(category) }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: activeCategory?.systemImage ?? "square.grid.2x2")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(activeCategory?.title ?? "All verticals")
+                        .font(ADLFont.inter(13, .bold))
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundColor(ADLColor.navy)
+                .padding(.horizontal, 12)
+                .frame(height: 44)
+                .background(ADLColor.navyWash)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
         }
         .padding(14)
         .background(Color.white.opacity(0.96))
@@ -1179,6 +1302,7 @@ struct FieldMapActionBar: View {
 
 struct PointDetailSheet: View {
     let point: DataPoint
+    let canContribute: Bool
     let onCapture: () -> Void
     let onCenter: () -> Void
     @Environment(\.dismiss) private var dismiss
@@ -1186,6 +1310,8 @@ struct PointDetailSheet: View {
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 16) {
+                pointPhoto
+
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: point.category.systemImage)
                         .font(.title3.weight(.bold))
@@ -1227,13 +1353,15 @@ struct PointDetailSheet: View {
 
                 Spacer()
 
-                Button {
-                    dismiss()
-                    onCapture()
-                } label: {
-                    Label(point.requiresRefresh ? "Capture Refresh" : "Enrich Point", systemImage: "camera.fill")
+                if canContribute {
+                    Button {
+                        dismiss()
+                        onCapture()
+                    } label: {
+                        Label(point.requiresRefresh ? "Capture Refresh" : "Enrich Point", systemImage: "camera.fill")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
                 }
-                .buttonStyle(PrimaryButtonStyle())
 
                 Button {
                     dismiss()
@@ -1255,6 +1383,64 @@ struct PointDetailSheet: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var pointPhoto: some View {
+        if let url = resolvedPhotoURL {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .scaledToFill()
+                case .failure:
+                    photoPlaceholder
+                case .empty:
+                    ZStack {
+                        photoPlaceholder
+                        ProgressView()
+                    }
+                @unknown default:
+                    photoPlaceholder
+                }
+            }
+            .frame(height: 200)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        } else {
+            photoPlaceholder
+        }
+    }
+
+    private var resolvedPhotoURL: URL? {
+        guard let raw = point.photoUrl?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        if let absolute = URL(string: raw), absolute.scheme != nil {
+            return absolute
+        }
+        let base = ProcessInfo.processInfo.environment["ADL_API_BASE"] ?? "https://www.app.africandatalayer.com"
+        return URL(string: raw.hasPrefix("/") ? "\(base)\(raw)" : "\(base)/\(raw)")
+    }
+
+    private var photoPlaceholder: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "camera.fill")
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundColor(Color(hex: 0x9ca3af))
+            Text("Field photo")
+                .font(ADLFont.inter(12, .medium))
+                .foregroundColor(Color(hex: 0x9ca3af))
+        }
+        .frame(height: 200)
+        .frame(maxWidth: .infinity)
+        .background(ADLColor.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(ADLColor.lineStrong, lineWidth: 1)
+        )
     }
 }
 
@@ -1312,6 +1498,17 @@ struct ContributionView: View {
     @State private var mapPointId: String?
 
     var body: some View {
+        Group {
+            if appState.isGuest {
+                Color.clear
+                    .onAppear { appState.requestAuth() }
+            } else {
+                contributionForm
+            }
+        }
+    }
+
+    private var contributionForm: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 ADLCard {
@@ -3356,7 +3553,8 @@ struct ProfileView: View {
             }
 
             if appState.isGuest {
-                guestProfilePrompt
+                Color.clear
+                    .onAppear { appState.requestAuth() }
             } else {
                 ScrollView {
                     VStack(spacing: 0) {
@@ -3482,41 +3680,6 @@ struct ProfileView: View {
     private func nonEmpty(_ value: String?) -> String? {
         guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return nil }
         return trimmed
-    }
-
-    private var guestProfilePrompt: some View {
-        VStack(spacing: 18) {
-            Spacer(minLength: 18)
-            ADLCard {
-                VStack(alignment: .leading, spacing: 16) {
-                    Image(systemName: "lock.shield.fill")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundColor(ADLColor.navy)
-                        .frame(width: 52, height: 52)
-                        .background(ADLColor.navyWash)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Sign in to view your profile")
-                            .font(ADLFont.inter(20, .bold))
-                            .foregroundColor(ADLColor.ink)
-                        Text("Guest mode can explore public map context. Profile, rewards, XP, upload history, and account settings require a signed-in account.")
-                            .font(ADLFont.inter(13, .regular))
-                            .foregroundColor(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Button {
-                        appState.requestAuth()
-                    } label: {
-                        Label("Sign In", systemImage: "person.crop.circle.badge.checkmark")
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                }
-            }
-            Spacer()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(ADLColor.paper)
     }
 
     private var quickActions: some View {

@@ -167,8 +167,8 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
 
 enum AppReleaseMode {
 #if DEBUG
-    static let allowsDemoAccess = true
-    static let allowsRoleSwitching = true
+    static let allowsDemoAccess = false
+    static let allowsRoleSwitching = false
 #else
     static let allowsDemoAccess = false
     static let allowsRoleSwitching = false
@@ -214,6 +214,12 @@ enum AppReleaseMode {
 
     static func canShow(_ route: AppRoute, for role: UserRole) -> Bool {
         tabs(for: role).contains(route)
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
 
@@ -295,6 +301,7 @@ struct GpsIntegrityReport: Codable, Hashable {
 struct SubmissionDetails: Codable, Hashable {
     var name: String? = nil
     var siteName: String? = nil
+    var confidenceScore: Double? = nil
     var openingHours: String? = nil
     var isOpenNow: Bool? = nil
     var isOnDuty: Bool? = nil
@@ -344,6 +351,20 @@ struct MapCaptureContext: Hashable {
     var title: String
 }
 
+struct ProjectedPoint: Codable, Hashable, Identifiable {
+    var id: String
+    var pointId: String
+    var category: SubmissionCategory
+    var location: SubmissionLocation
+    var details: SubmissionDetails
+    var photoUrl: String?
+    var createdAt: String
+    var updatedAt: String
+    var gaps: [String]
+    var eventsCount: Int
+    var eventIds: [String]
+}
+
 struct DataPoint: Codable, Hashable, Identifiable {
     var id: String
     var category: SubmissionCategory
@@ -354,6 +375,69 @@ struct DataPoint: Codable, Hashable, Identifiable {
     var eventsCount: Int
     var updatedAt: Date
     var requiresRefresh: Bool
+    var photoUrl: String?
+
+    init(
+        id: String,
+        category: SubmissionCategory,
+        name: String,
+        subtitle: String,
+        location: SubmissionLocation,
+        trustScore: Int,
+        eventsCount: Int,
+        updatedAt: Date,
+        requiresRefresh: Bool,
+        photoUrl: String? = nil
+    ) {
+        self.id = id
+        self.category = category
+        self.name = name
+        self.subtitle = subtitle
+        self.location = location
+        self.trustScore = trustScore
+        self.eventsCount = eventsCount
+        self.updatedAt = updatedAt
+        self.requiresRefresh = requiresRefresh
+        self.photoUrl = photoUrl
+    }
+
+    init(projected point: ProjectedPoint) {
+        let name = point.details.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? point.details.siteName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? point.details.roadName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? point.category.title
+        let date = Self.parseDate(point.updatedAt) ?? Self.parseDate(point.createdAt) ?? Date()
+        let score = point.details.confidenceScore.map { Int(max(0, min(100, $0)).rounded()) } ?? 85
+        self.init(
+            id: point.pointId,
+            category: point.category,
+            name: name,
+            subtitle: Self.subtitle(for: point, updatedAt: date),
+            location: point.location,
+            trustScore: score,
+            eventsCount: point.eventsCount,
+            updatedAt: date,
+            requiresRefresh: !point.gaps.isEmpty,
+            photoUrl: point.photoUrl?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        )
+    }
+
+    private static func subtitle(for point: ProjectedPoint, updatedAt: Date) -> String {
+        if let gap = point.gaps.first?.trimmingCharacters(in: .whitespacesAndNewlines), !gap.isEmpty {
+            return "Needs \(gap.replacingOccurrences(of: "_", with: " ")) refresh"
+        }
+        let days = max(0, Calendar.current.dateComponents([.day], from: updatedAt, to: Date()).day ?? 0)
+        if days == 0 { return "Verified today" }
+        if days == 1 { return "Verified 1 day ago" }
+        return "Verified \(days)d ago"
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: value) { return date }
+        return ISO8601DateFormatter().date(from: value)
+    }
 
     static let bonamoussadiSeed: [DataPoint] = [
         DataPoint(

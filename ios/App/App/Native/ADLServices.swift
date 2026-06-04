@@ -13,7 +13,9 @@ final class AppState: ObservableObject {
     @Published var selectedRole: UserRole = .agent
     @Published var selectedTab: AppRoute = .home
     @Published var profile = SessionProfile.demo(role: .agent)
-    @Published var points: [DataPoint] = DataPoint.bonamoussadiSeed
+    @Published var points: [DataPoint] = []
+    @Published var isLoadingPoints = false
+    @Published var pointsError: String?
     @Published var drafts: [ContributionDraft] = []
     @Published var queueSnapshot = QueueSnapshot.empty
     @Published var lastSyncMessage = "All synced. Ready to capture."
@@ -152,7 +154,7 @@ final class AppState: ObservableObject {
         await restoreSession()
         #if DEBUG
         let env = ProcessInfo.processInfo.environment
-        if env["ADL_DEMO"] == "1" {
+        if env["ADL_DEMO"] == "1", env["ADL_ALLOW_DEMO"] == "1" {
             if let raw = env["ADL_ROLE"], let role = UserRole(rawValue: raw) { selectedRole = role }
             signInDemo()
             if let raw = env["ADL_TAB"], let route = AppRoute(rawValue: raw) { selectedTab = route }
@@ -212,7 +214,10 @@ final class AppState: ObservableObject {
         isGuest = true
         isAuthenticated = false
         isAuthRequested = false
-        profile = SessionProfile.demo(role: .agent)
+        userProfile = nil
+        serverXP = 0
+        profile = SessionProfile(name: "Guest", role: .agent, trustTier: "guest", xp: 0, streakDays: 0)
+        refreshGamification()
         selectedTab = .home
     }
 
@@ -321,6 +326,25 @@ final class AppState: ObservableObject {
         }
     }
 
+    func loadPoints(force: Bool = false) async {
+        guard !isLoadingPoints else { return }
+        if !points.isEmpty, !force { return }
+        isLoadingPoints = true
+        pointsError = nil
+        defer { isLoadingPoints = false }
+
+        do {
+            let projected = try await apiClient.fetchProjectedPoints()
+            points = projected.map(DataPoint.init(projected:))
+            if points.isEmpty {
+                pointsError = "No backend points returned yet."
+            }
+        } catch {
+            points = []
+            pointsError = (error as? APIError)?.message ?? "Unable to load backend points."
+        }
+    }
+
     /// Collapse per-category weekly rows into one ascending series of the most
     /// recent `weeks`, summing total events across categories per week.
     static func aggregateWeeklyTrend(_ rows: [WeeklyKpiRow], weeks: Int) -> [WeeklyTrendBar] {
@@ -336,6 +360,10 @@ final class AppState: ObservableObject {
     }
 
     func startMapCapture(for point: DataPoint) {
+        guard !isGuest else {
+            requestAuth()
+            return
+        }
         mapCaptureContext = MapCaptureContext(
             category: point.category,
             location: point.location,
@@ -346,6 +374,10 @@ final class AppState: ObservableObject {
     }
 
     func startMapCapture(at coordinate: CLLocationCoordinate2D) {
+        guard !isGuest else {
+            requestAuth()
+            return
+        }
         mapCaptureContext = MapCaptureContext(
             category: nil,
             location: SubmissionLocation(
@@ -432,18 +464,21 @@ final class AppState: ObservableObject {
     private func applyAuthenticatedUser(_ user: AuthUser) {
         let accountRole = user.role ?? (user.isAdmin == true ? .admin : selectedRole)
         let resolvedRole = AppReleaseMode.normalizedRole(accountRole)
-        let roleDefaults = SessionProfile.demo(role: resolvedRole)
+        userProfile = nil
+        serverXP = 0
+        spentXP = rewardsService.loadSpentXP()
         selectedRole = resolvedRole
         profile = SessionProfile(
-            name: user.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? user.name! : roleDefaults.name,
+            name: user.name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false ? user.name! : resolvedRole.title,
             role: resolvedRole,
-            trustTier: roleDefaults.trustTier,
-            xp: roleDefaults.xp,
-            streakDays: roleDefaults.streakDays
+            trustTier: "member",
+            xp: 0,
+            streakDays: 0
         )
         isAuthenticated = true
         isGuest = false
         isAuthRequested = false
+        refreshGamification()
         selectedTab = defaultTab(for: resolvedRole)
     }
 }
@@ -542,6 +577,10 @@ final class ADLAPIClient {
 
     func fetchLeaderboard() async throws -> [LeaderboardEntry] {
         try await fetchJSON([LeaderboardEntry].self, path: "/api/leaderboard")
+    }
+
+    func fetchProjectedPoints() async throws -> [ProjectedPoint] {
+        try await fetchJSON([ProjectedPoint].self, path: "/api/submissions")
     }
 
     func fetchUserProfile() async throws -> UserProfile {
