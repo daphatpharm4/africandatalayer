@@ -53,8 +53,11 @@ APP=$(find ~/Library/Developer/Xcode/DerivedData -name App.app -path "*Debug-iph
 xcrun simctl install booted "$APP"
 # jump straight to the screen under test (DEBUG env hooks already exist)
 xcrun simctl spawn booted defaults write com.africandatalayer.app adl_has_seen_splash -bool YES
-SIMCTL_CHILD_ADL_DEMO=1 SIMCTL_CHILD_ADL_ROLE=<agent|admin|client> SIMCTL_CHILD_ADL_TAB=<route> \
+SIMCTL_CHILD_ADL_DEMO=1 SIMCTL_CHILD_ADL_ALLOW_DEMO=1 \
+  SIMCTL_CHILD_ADL_ROLE=<agent|admin|client> SIMCTL_CHILD_ADL_TAB=<route> \
   xcrun simctl launch booted com.africandatalayer.app
+# NOTE: BOTH ADL_DEMO=1 and ADL_ALLOW_DEMO=1 are required, else the app
+# falls back to guest mode on the Home tab. Sim UDID B103631B-81A0-4FE2-8301-C17E1490BFDB.
 sleep 6 && xcrun simctl io booted screenshot /tmp/<screen>.png
 ```
 Capture the web reference at 390×844 with Playwright (or reuse `.playwright-mcp/*`). Compare: title size, card radius, spacing rhythm, colors, icon set. Iterate until they match, then commit.
