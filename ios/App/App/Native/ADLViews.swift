@@ -2455,11 +2455,12 @@ private struct ADLLeaderboardRow: View {
 /// Agent-leaderboard row: rank circle + initials + name + XP bar + XP value.
 /// Matches the plan Task 2.2 design and web Analytics.tsx contributorMode rows.
 private struct AgentLeaderboardRow: View {
+    let rank: Int
     let entry: LeaderboardEntry
     let maxXP: Int
 
     private var rankBg: Color {
-        switch entry.rank {
+        switch rank {
         case 1: return ADLColor.gold
         case 2: return Color(hex: 0xcbd5e1) // silver
         case 3: return ADLColor.terracotta  // bronze/terra
@@ -2468,7 +2469,7 @@ private struct AgentLeaderboardRow: View {
     }
 
     private var rankFg: Color {
-        switch entry.rank {
+        switch rank {
         case 1: return Color.white
         case 2: return Color(hex: 0x374151)
         case 3: return Color.white
@@ -2479,7 +2480,7 @@ private struct AgentLeaderboardRow: View {
     var body: some View {
         HStack(spacing: 10) {
             // Rank circle
-            Text("\(entry.rank)")
+            Text("\(rank)")
                 .font(ADLFont.inter(12, .bold))
                 .foregroundColor(rankFg)
                 .frame(width: 28, height: 28)
@@ -2881,8 +2882,8 @@ struct AnalyticsView: View {
             } else {
                 let maxXP = max(appState.leaderboard.map(\.xp).max() ?? 1, 1)
                 VStack(spacing: 10) {
-                    ForEach(appState.leaderboard.prefix(20)) { entry in
-                        AgentLeaderboardRow(entry: entry, maxXP: maxXP)
+                    ForEach(Array(appState.leaderboard.prefix(20).enumerated()), id: \.offset) { index, entry in
+                        AgentLeaderboardRow(rank: index + 1, entry: entry, maxXP: maxXP)
                     }
                 }
             }
