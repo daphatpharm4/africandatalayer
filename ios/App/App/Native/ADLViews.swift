@@ -1,3 +1,4 @@
+import Charts
 import MapKit
 import SwiftUI
 import UIKit
@@ -845,7 +846,9 @@ struct ADLTabBar: View {
 
     private func title(for route: AppRoute) -> String {
         switch route {
-        case .home: return isAdmin ? appState.t("Map", "Carte") : appState.t("Explore", "Explorer")
+        case .home:
+            if isAdmin || appState.selectedRole == .client { return appState.t("Map", "Carte") }
+            return appState.t("Explore", "Explorer")
         case .contribute: return appState.t("Contribute", "Contribuer")
         case .queue: return appState.t("Queue", "File")
         case .rewards: return appState.t("Rewards", "Récompenses")
@@ -853,7 +856,10 @@ struct ADLTabBar: View {
         case .adminReview: return appState.t("Queue", "File")
         case .agentPerformance: return appState.t("Agents", "Agents")
         case .clientDashboard: return "Delta"
-        case .analytics: return isAdmin ? appState.t("Impact", "Impact") : appState.t("Leaderboard", "Classement")
+        case .analytics:
+            if isAdmin { return appState.t("Impact", "Impact") }
+            if appState.selectedRole == .client { return appState.t("Insights", "Analyses") }
+            return appState.t("Leaderboard", "Classement")
         }
     }
 
@@ -867,7 +873,10 @@ struct ADLTabBar: View {
         case .adminReview: return "checkmark.square"
         case .agentPerformance: return "person.2"
         case .clientDashboard: return "chart.bar"
-        case .analytics: return isAdmin ? "chart.bar" : "medal"
+        case .analytics:
+            if isAdmin { return "chart.bar" }
+            if appState.selectedRole == .client { return "chart.line.uptrend.xyaxis" }
+            return "medal"
         }
     }
 }
@@ -3042,53 +3051,199 @@ struct ClientDashboardView: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                AnalyticsStatusNote()
-                let summary = appState.analyticsSummary
-                HStack(spacing: 12) {
-                    MetricTile(
-                        title: "Verified",
-                        value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0),
-                        systemImage: "checkmark.seal.fill",
-                        tint: ADLColor.forest
-                    )
-                    MetricTile(
-                        title: "Total points",
-                        value: "\(summary?.verification.totalPoints ?? 0)",
-                        systemImage: "map.fill",
-                        tint: ADLColor.navySoft
-                    )
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Delta Intelligence", "Intelligence Delta")) {
+                Button(action: {}) {
+                    Image(systemName: "square.and.arrow.down")
+                        .font(.system(size: 20, weight: .regular))
+                        .foregroundColor(ADLColor.navy)
+                        .frame(width: 44, height: 44)
                 }
-                HStack(spacing: 12) {
-                    MetricTile(
-                        title: "Median age",
-                        value: KpiFormat.days(summary?.freshness.medianAgeDays ?? 0),
-                        systemImage: "clock.arrow.circlepath",
-                        tint: ADLColor.gold
-                    )
-                    MetricTile(
-                        title: "Enriched",
-                        value: KpiFormat.pct(summary?.enrichmentRatePct ?? 0),
-                        systemImage: "arrow.triangle.2.circlepath",
-                        tint: ADLColor.terracotta
-                    )
-                }
-                ADLCard {
+                .buttonStyle(.plain)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Hero card — mirrors the navy gradient hero in DeltaDashboard.tsx
+                    let summary = appState.analyticsSummary
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("Presentation-ready deltas")
-                            .font(.title3.weight(.bold))
-                        Text("Monitor coverage, export deltas, and track trusted infrastructure changes.")
-                            .foregroundColor(.secondary)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(appState.t("Client Dashboard", "Tableau client").uppercased())
+                                .font(ADLFont.inter(11, .bold))
+                                .tracking(2.2)
+                                .foregroundColor(.white.opacity(0.7))
+                            Text(appState.t(
+                                "What changed across the monitored network",
+                                "Ce qui a changé sur le réseau suivi"
+                            ))
+                            .font(ADLFont.inter(22, .heavy))
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                            Text(appState.t(
+                                "Exports inherit the exact current filter state.",
+                                "Les exports reprennent exactement l'état courant des filtres."
+                            ))
+                            .font(ADLFont.inter(14))
+                            .foregroundColor(.white.opacity(0.8))
+                        }
+
+                        // "Latest Report" badge aligned trailing
+                        HStack {
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text(appState.t("Latest Report", "Dernier rapport").uppercased())
+                                    .font(ADLFont.inter(10, .bold))
+                                    .tracking(1.2)
+                                    .foregroundColor(.white.opacity(0.7))
+                                Text(summary != nil
+                                     ? appState.t("This week", "Cette semaine")
+                                     : appState.t("No data yet", "Aucune donnée"))
+                                    .font(ADLFont.inter(15, .bold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .background(Color.white.opacity(0.15))
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(20)
+                    .background(
+                        LinearGradient(
+                            colors: [ADLColor.navy, ADLColor.navyMid],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    // KPI grid — mirrors the 4-tile grid in DeltaDashboard.tsx
+                    let totalPoints = summary?.verification.totalPoints ?? 0
+                    let wowDelta: Int? = {
+                        guard appState.weeklyTrend.count >= 2 else { return nil }
+                        let prev = appState.weeklyTrend[appState.weeklyTrend.count - 2].totalEvents
+                        let curr = appState.weeklyTrend[appState.weeklyTrend.count - 1].totalEvents
+                        guard prev > 0 else { return nil }
+                        return Int(Double(curr - prev) / Double(prev) * 100)
+                    }()
+                    let verificationRate = summary?.verification.verificationRatePct ?? 0
+                    let fraudRate = summary?.fraud.fraudRatePct ?? 0
+
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        KpiTile(
+                            label: appState.t("Total Points", "Points totaux"),
+                            value: "\(totalPoints)",
+                            tone: .navy
+                        )
+                        KpiTile(
+                            label: appState.t("vs Last Week", "vs semaine passée"),
+                            value: wowDelta != nil ? "\(wowDelta! >= 0 ? "+" : "")\(wowDelta!)%" : "--",
+                            tone: .forest
+                        )
+                        KpiTile(
+                            label: appState.t("Verification", "Vérification"),
+                            value: String(format: "%.0f%%", verificationRate),
+                            tone: .navy
+                        )
+                        KpiTile(
+                            label: appState.t("Fraud Rate", "Taux de fraude"),
+                            value: String(format: "%.1f%%", fraudRate),
+                            tone: .amber
+                        )
+                    }
+
+                    // Weekly bar chart — mirrors WeeklyBarChart.tsx (7 bars, navy/navyLight, latest highlighted)
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionLabel(text: appState.t(
+                            "Recent weekly submissions",
+                            "Soumissions hebdomadaires récentes"
+                        ))
+
+                        let trend = appState.weeklyTrend
+                        let dayLabels = ["S", "M", "T", "W", "T", "F", "S"]
+
+                        // Pad or trim to exactly 7 entries
+                        let bars: [WeeklyTrendBar] = {
+                            let raw = trend.suffix(7)
+                            if raw.count < 7 {
+                                let padding = (0..<(7 - raw.count)).map {
+                                    WeeklyTrendBar(weekStart: "pad-\($0)", totalEvents: 0)
+                                }
+                                return padding + Array(raw)
+                            }
+                            return Array(raw)
+                        }()
+
+                        let maxVal = max(bars.map(\.totalEvents).max() ?? 1, 1)
+
+                        ADLCard {
+                            HStack(alignment: .bottom, spacing: 6) {
+                                ForEach(Array(bars.enumerated()), id: \.offset) { index, bar in
+                                    let isHighlight = index == 6  // last bar = terra (latest week)
+                                    let heightFraction = max(CGFloat(bar.totalEvents) / CGFloat(maxVal), 0.03)
+
+                                    VStack(spacing: 4) {
+                                        if bar.totalEvents > 0 {
+                                            Text("\(bar.totalEvents)")
+                                                .font(ADLFont.inter(9, .bold))
+                                                .foregroundColor(Color(hex: 0x9ca3af))
+                                        } else {
+                                            Spacer().frame(height: 12)
+                                        }
+                                        GeometryReader { geo in
+                                            VStack(spacing: 0) {
+                                                Spacer()
+                                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                    .fill(isHighlight ? ADLColor.navy : ADLColor.navyLight)
+                                                    .frame(height: geo.size.height * heightFraction)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        Text(dayLabels[index])
+                                            .font(ADLFont.inter(9))
+                                            .foregroundColor(Color(hex: 0x9ca3af))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .frame(height: 90)
+                        }
+                    }
+
+                    // Data quality row
+                    ADLCard {
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                SectionLabel(text: appState.t("Active Contributors", "Agents actifs"), wide: true)
+                                Text("\(summary?.weeklyActiveContributors ?? 0)")
+                                    .font(ADLFont.inter(22, .heavy))
+                                    .foregroundColor(ADLColor.navy)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Rectangle()
+                                .fill(ADLColor.line)
+                                .frame(width: 1, height: 40)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                SectionLabel(text: appState.t("Enrichment", "Enrichissement"), wide: true)
+                                Text(String(format: "%.0f%%", summary?.enrichmentRatePct ?? 0))
+                                    .font(ADLFont.inter(22, .heavy))
+                                    .foregroundColor(ADLColor.terracotta)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, 4)
                     }
                 }
+                .padding(16)
+                .padding(.bottom, 24)
             }
-            .padding(16)
+            .refreshable { await appState.loadAnalytics(force: true) }
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Delta")
         .task { await appState.loadAnalytics() }
-        .refreshable { await appState.loadAnalytics(force: true) }
     }
 }
 

@@ -208,7 +208,7 @@ enum AppReleaseMode {
         case .admin:
             return [.adminReview, .home, .analytics, .agentPerformance, .profile]
         case .client:
-            return [.clientDashboard, .analytics, .profile]
+            return [.clientDashboard, .home, .analytics, .profile]
         }
     }
 
