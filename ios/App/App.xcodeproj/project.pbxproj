@@ -17,6 +17,7 @@
 		A10000000000000000000004 /* ADLDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000014 /* ADLDesignSystem.swift */; };
 		A10000000000000000000005 /* ADLViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000015 /* ADLViews.swift */; };
 		A10000000000000000000007 /* Inter-VariableFont.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* Inter-VariableFont.ttf */; };
+		A100000000000000000000A1 /* ADLComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* ADLComponents.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 		A10000000000000000000014 /* ADLDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLDesignSystem.swift; sourceTree = "<group>"; };
 		A10000000000000000000015 /* ADLViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLViews.swift; sourceTree = "<group>"; };
 		A10000000000000000000017 /* Inter-VariableFont.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/Inter-VariableFont.ttf"; sourceTree = "<group>"; };
+		A100000000000000000000A2 /* ADLComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLComponents.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +87,7 @@
 				A10000000000000000000013 /* ADLServices.swift */,
 				A10000000000000000000014 /* ADLDesignSystem.swift */,
 				A10000000000000000000015 /* ADLViews.swift */,
+				A100000000000000000000A2 /* ADLComponents.swift */,
 			);
 			path = Native;
 			sourceTree = "<group>";
@@ -168,6 +171,7 @@
 			files = (
 				A10000000000000000000004 /* ADLDesignSystem.swift in Sources */,
 				A10000000000000000000005 /* ADLViews.swift in Sources */,
+				A100000000000000000000A1 /* ADLComponents.swift in Sources */,
 				A10000000000000000000001 /* ADLNativeApp.swift in Sources */,
 				A10000000000000000000003 /* ADLServices.swift in Sources */,
 				A10000000000000000000002 /* ADLModels.swift in Sources */,

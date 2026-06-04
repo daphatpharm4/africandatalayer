@@ -1973,75 +1973,7 @@ struct SubmissionQueueView: View {
     }
 }
 
-// MARK: - Web parity primitives
-
-struct ADLScreenHeader<Trailing: View>: View {
-    let title: String
-    var subtitle: String?
-    var onBack: (() -> Void)?
-    let trailing: Trailing
-
-    init(
-        title: String,
-        subtitle: String? = nil,
-        onBack: (() -> Void)? = nil,
-        @ViewBuilder trailing: () -> Trailing
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.onBack = onBack
-        self.trailing = trailing()
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Group {
-                if let onBack {
-                    Button(action: onBack) {
-                        Image(systemName: "arrow.left")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(Color(hex: 0x374151))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                } else {
-                    Color.clear.frame(width: 44, height: 44)
-                }
-            }
-            .frame(width: 44)
-
-            VStack(spacing: 2) {
-                Text(title)
-                    .font(ADLFont.inter(15, .bold))
-                    .foregroundColor(ADLColor.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                if let subtitle {
-                    Text(subtitle)
-                        .font(ADLFont.inter(11, .regular))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-            }
-            .frame(maxWidth: .infinity)
-
-            trailing
-                .frame(width: 44, height: 44, alignment: .trailing)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .frame(minHeight: 60)
-        .background(Color.white)
-        .overlay(Rectangle().fill(ADLColor.line).frame(height: 1), alignment: .bottom)
-    }
-}
-
-extension ADLScreenHeader where Trailing == EmptyView {
-    init(title: String, subtitle: String? = nil, onBack: (() -> Void)? = nil) {
-        self.init(title: title, subtitle: subtitle, onBack: onBack) { EmptyView() }
-    }
-}
+// MARK: - Web parity primitives (ADLScreenHeader, KpiTile etc. defined in ADLComponents.swift)
 
 private struct FlowLayout: Layout {
     var spacing: CGFloat = 8
