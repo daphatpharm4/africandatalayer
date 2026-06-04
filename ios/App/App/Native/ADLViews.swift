@@ -4,7 +4,7 @@ import UIKit
 
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var passedSplash = false
+    @State private var passedSplash = ProcessInfo.processInfo.environment["ADL_START_AUTH"] == "1"
 
     var body: some View {
         Group {
@@ -468,101 +468,231 @@ private struct FlowPills: View {
     }
 }
 
+/// Auth screen mirroring web Auth.tsx — centered, light, OAuth + credentials.
 struct AuthView: View {
     @EnvironmentObject private var appState: AppState
+
+    private enum Mode { case signin, signup }
+    @State private var mode: Mode = .signin
     @State private var selectedRole: UserRole = .agent
     @State private var identifier = ""
     @State private var password = ""
+    @State private var showPassword = false
+
+    private var title: String { mode == .signin ? "Welcome back" : "Join the network" }
+    private var subtitle: String {
+        mode == .signin
+            ? "Sign in to continue capturing verified field data on the ground."
+            : "Create a field account to capture locations, services, and infrastructure changes on the ground."
+    }
 
     var body: some View {
-        NavigationView {
+        ZStack(alignment: .top) {
+            ADLColor.paper.ignoresSafeArea()
+
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Field Operations")
-                            .font(.caption.weight(.bold))
-                            .foregroundColor(ADLColor.gold)
-                            .textCase(.uppercase)
-                        Text("African Data Layer")
-                            .font(.largeTitle.weight(.bold))
-                            .foregroundColor(ADLColor.ink)
-                        Text(AppReleaseMode.allowsDemoAccess ? "Capture, review, and export trusted infrastructure data." : "Capture and sync trusted infrastructure data.")
-                            .font(.body)
-                            .foregroundColor(.secondary)
-                    }
+                VStack(spacing: 0) {
+                    // Logo tile
+                    BrandDiamond(size: 40)
+                        .frame(width: 72, height: 72)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: ADLColor.navy.opacity(0.08), radius: 12, x: 0, y: 6)
+                        .padding(.top, 40)
 
-                    if AppReleaseMode.allowsDemoAccess {
-                        ADLCard {
-                            VStack(alignment: .leading, spacing: 14) {
-                                Text("Demo role")
-                                    .font(.headline)
-                                    .foregroundColor(ADLColor.ink)
-                                Picker("Role", selection: $selectedRole) {
-                                    ForEach(AppReleaseMode.demoRoles) { role in
-                                        Text(role.title).tag(role)
-                                    }
-                                }
-                                .pickerStyle(.segmented)
+                    Text(title)
+                        .font(ADLFont.inter(28, .heavy))
+                        .tracking(-0.4)
+                        .foregroundColor(ADLColor.ink)
+                        .padding(.top, 20)
 
-                                Button {
-                                    appState.switchRole(selectedRole)
-                                    appState.signInDemo()
-                                } label: {
-                                    Label("Enter Demo", systemImage: "arrow.right.circle.fill")
-                                }
-                                .buttonStyle(SecondaryButtonStyle())
-                            }
+                    Text(subtitle)
+                        .font(ADLFont.inter(14))
+                        .foregroundColor(ADLColor.inkMuted)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(4)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 8)
+                        .padding(.horizontal, 8)
+
+                    // OAuth buttons
+                    Button { appState.authError = "Apple sign-in is available in the production build." } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "applelogo").font(.system(size: 17, weight: .medium))
+                            Text("Sign in with Apple").font(ADLFont.inter(15, .semibold))
                         }
                     }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .padding(.top, 28)
 
-                    ADLCard {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("Production sign in")
-                                .font(.headline)
-                                .foregroundColor(ADLColor.ink)
-                            TextField("Phone or email", text: $identifier)
-                                .textContentType(.username)
-                                .keyboardType(.emailAddress)
-                                .textInputAutocapitalization(.never)
-                                .autocorrectionDisabled()
-                                .textFieldStyle(.roundedBorder)
-                            SecureField("Password", text: $password)
-                                .textContentType(.password)
-                                .textFieldStyle(.roundedBorder)
+                    Button { appState.authError = "Google sign-in is available in the production build." } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "globe").font(.system(size: 16, weight: .semibold))
+                            Text("Continue with Google").font(ADLFont.inter(15, .semibold))
+                        }
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                    .padding(.top, 12)
 
-                            if let authError = appState.authError {
-                                Text(authError)
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundColor(ADLColor.terracotta)
-                            }
+                    // Credentials form
+                    VStack(alignment: .leading, spacing: 16) {
+                        fieldLabel("Phone number or email")
+                        ADLInputField(icon: "envelope", placeholder: "+2376XXXXXXXX or name@email.com", text: $identifier, isSecure: false, keyboard: .emailAddress)
 
-                            Button {
-                                Task {
-                                    await appState.signIn(identifier: identifier, password: password)
-                                }
-                            } label: {
+                        fieldLabel("Password")
+                        ADLInputField(
+                            icon: "lock",
+                            placeholder: mode == .signup ? "Min. 10 chars, A-Z, a-z, 0-9" : "Your password",
+                            text: $password,
+                            isSecure: !showPassword,
+                            keyboard: .default,
+                            trailingToggle: { showPassword.toggle() },
+                            trailingIcon: showPassword ? "eye.slash" : "eye"
+                        )
+
+                        if let authError = appState.authError {
+                            Text(authError)
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(ADLColor.terracotta)
+                        }
+
+                        Button {
+                            Task { await appState.signIn(identifier: identifier, password: password) }
+                        } label: {
+                            HStack(spacing: 8) {
                                 if appState.isSigningIn {
-                                    ProgressView()
-                                        .tint(.white)
+                                    ProgressView().tint(.white)
                                 } else {
-                                    Label("Sign In", systemImage: "lock.fill")
+                                    Text(mode == .signin ? "Sign in" : "Create account")
+                                        .font(ADLFont.inter(15, .semibold))
+                                    Image(systemName: "arrow.right").font(.system(size: 16, weight: .bold))
                                 }
                             }
-                            .buttonStyle(PrimaryButtonStyle())
-                            .disabled(appState.isSigningIn)
                         }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .disabled(appState.isSigningIn)
+                    }
+                    .padding(.top, 24)
+
+                    if mode == .signin {
+                        Button { } label: {
+                            Text("Forgot your password?")
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(ADLColor.navy)
+                        }
+                        .padding(.top, 12)
                     }
 
-                    HStack(spacing: 12) {
-                        MetricTile(title: "Queued offline", value: "\(appState.queueSnapshot.queued)", systemImage: "tray.full.fill", tint: ADLColor.forest)
-                        MetricTile(title: "Seed points", value: "\(appState.points.count)", systemImage: "mappin.and.ellipse", tint: ADLColor.terracotta)
+                    // Shield reassurance
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.shield.fill").font(.system(size: 12))
+                        Text("Encrypted sign-in keeps your field account secure.")
+                            .font(ADLFont.inter(12, .semibold))
+                    }
+                    .foregroundColor(ADLColor.inkMuted)
+                    .padding(.top, 28)
+
+                    // Mode toggle
+                    HStack(spacing: 4) {
+                        Text(mode == .signin ? "Don't have an account?" : "Already have an account?")
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                        Button {
+                            withAnimation { mode = mode == .signin ? .signup : .signin }
+                            appState.authError = nil
+                        } label: {
+                            Text(mode == .signin ? "Create an account" : "Sign in instead")
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(ADLColor.navy)
+                        }
+                    }
+                    .padding(.top, 20)
+
+                    // Demo role access (gated) — preserves multi-role testing
+                    if AppReleaseMode.allowsDemoAccess {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("DEMO ACCESS")
+                                .font(ADLFont.inter(11, .bold))
+                                .tracking(1.6)
+                                .foregroundColor(ADLColor.inkMuted)
+                            Picker("Role", selection: $selectedRole) {
+                                ForEach(AppReleaseMode.demoRoles) { role in
+                                    Text(role.title).tag(role)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            Button {
+                                appState.switchRole(selectedRole)
+                                appState.signInDemo()
+                            } label: {
+                                Text("Enter Demo").font(ADLFont.inter(15, .semibold))
+                            }
+                            .buttonStyle(SecondaryButtonStyle())
+                        }
+                        .padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous).stroke(ADLColor.line, lineWidth: 1))
+                        .padding(.top, 28)
                     }
                 }
-                .padding(20)
+                .frame(maxWidth: 440)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 40)
             }
-            .background(ADLColor.paper.ignoresSafeArea())
-            .navigationBarHidden(true)
         }
+    }
+
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(ADLFont.inter(13, .semibold))
+            .foregroundColor(ADLColor.ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Web-style input: h56 rounded-2xl, leading icon, gray-100 border, shadow-sm, optional trailing toggle.
+struct ADLInputField: View {
+    let icon: String
+    let placeholder: String
+    @Binding var text: String
+    var isSecure: Bool = false
+    var keyboard: UIKeyboardType = .default
+    var trailingToggle: (() -> Void)? = nil
+    var trailingIcon: String? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundColor(ADLColor.inkMuted)
+            Group {
+                if isSecure {
+                    SecureField(placeholder, text: $text)
+                } else {
+                    TextField(placeholder, text: $text)
+                }
+            }
+            .font(ADLFont.inter(16))
+            .keyboardType(keyboard)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            if let trailingToggle, let trailingIcon {
+                Button(action: trailingToggle) {
+                    Image(systemName: trailingIcon)
+                        .font(.system(size: 16))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 56)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous).stroke(ADLColor.line, lineWidth: 1))
+        .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
     }
 }
 
