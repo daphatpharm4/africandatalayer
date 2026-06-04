@@ -3475,13 +3475,16 @@ struct ProfileView: View {
     var body: some View {
         VStack(spacing: 0) {
             ADLScreenHeader(title: "Profile", onBack: goBack) {
-                Button(action: {}) {
+                NavigationLink {
+                    SettingsView()
+                } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(ADLColor.navy)
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
             }
 
             if appState.isGuest {
@@ -3868,6 +3871,395 @@ struct ProfileView: View {
         }
     }
 
+}
+
+struct SettingsView: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("adl_language") private var language = "fr"
+    @AppStorage("adl_high_contrast") private var highContrast = false
+    @AppStorage("adl_sms_notifications") private var smsNotifications = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: text("Settings", "Paramètres"), onBack: { dismiss() })
+
+            ScrollView {
+                VStack(spacing: 24) {
+                    if appState.selectedRole == .client {
+                        clientIdentityCard
+                    }
+
+                    languageSection
+                    displaySection
+
+                    if appState.selectedRole != .client {
+                        notificationsSection
+                    }
+
+                    legalSection
+                    accountSection
+                    appVersion
+                }
+                .padding(16)
+                .padding(.bottom, 24)
+            }
+        }
+        .background((highContrast ? Color.white : ADLColor.paper).ignoresSafeArea())
+        .navigationBarBackButtonHidden(true)
+    }
+
+    private func text(_ en: String, _ fr: String) -> String {
+        language == "fr" ? fr : en
+    }
+
+    private var clientIdentityCard: some View {
+        HStack(spacing: 14) {
+            IdentityCircle(name: "Client", size: 52)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(text("Your Organization", "Votre organisation"))
+                    .font(ADLFont.inter(16, .bold))
+                    .foregroundColor(.white)
+                Text(text("Data client - Bonamoussadi", "Client data - Bonamoussadi"))
+                    .font(ADLFont.inter(11, .medium))
+                    .foregroundColor(.white.opacity(0.55))
+                Text(text("Client", "Client").uppercased())
+                    .font(ADLFont.inter(9, .bold))
+                    .tracking(1.2)
+                    .foregroundColor(.white.opacity(0.75))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+            Spacer()
+        }
+        .padding(20)
+        .background(ADLColor.navy)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var languageSection: some View {
+        SettingsSection(title: text("Language", "Langue")) {
+            VStack(spacing: 0) {
+                SettingsChoiceRow(title: "English", isSelected: language == "en") {
+                    language = "en"
+                }
+                Divider().background(ADLColor.line)
+                SettingsChoiceRow(title: "Français", isSelected: language == "fr") {
+                    language = "fr"
+                }
+            }
+            .settingsCard()
+        }
+    }
+
+    private var displaySection: some View {
+        SettingsSection(title: text("Display", "Affichage")) {
+            SettingsToggleRow(
+                title: text("High Contrast", "Contraste élevé"),
+                icon: "circle.lefthalf.filled",
+                isOn: $highContrast
+            )
+            .settingsCard()
+        }
+    }
+
+    private var notificationsSection: some View {
+        SettingsSection(title: text("Notifications", "Notifications")) {
+            SettingsToggleRow(
+                title: text("SMS notifications", "Notifications SMS"),
+                subtitle: text(
+                    "Receive operational SMS for assignments, payouts, and system notices.",
+                    "Recevoir des SMS pour les missions, paiements et avis système."
+                ),
+                icon: "message.fill",
+                isOn: $smsNotifications
+            )
+            .settingsCard()
+        }
+    }
+
+    private var legalSection: some View {
+        SettingsSection(title: text("Legal", "Légal")) {
+            VStack(spacing: 0) {
+                SettingsNavigationRow(title: text("Privacy Policy", "Politique de confidentialité")) {
+                    SettingsLegalView(kind: .privacy, language: language)
+                }
+                Divider().background(ADLColor.line)
+                SettingsNavigationRow(title: text("Terms of Use", "Conditions d'utilisation")) {
+                    SettingsLegalView(kind: .terms, language: language)
+                }
+                Divider().background(ADLColor.line)
+                SettingsNavigationRow(title: text("Data & Compliance", "Données et conformité")) {
+                    SettingsLegalView(kind: .compliance, language: language)
+                }
+                Divider().background(ADLColor.line)
+                SettingsNavigationRow(title: text("Report IP Infringement", "Signaler une atteinte PI")) {
+                    SettingsLegalView(kind: .ipReport, language: language)
+                }
+            }
+            .settingsCard()
+        }
+    }
+
+    private var accountSection: some View {
+        SettingsSection(title: text("Account", "Compte")) {
+            Button {
+                appState.signOut()
+                dismiss()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .font(.system(size: 16, weight: .semibold))
+                    Text(text("Sign Out", "Déconnexion"))
+                        .font(ADLFont.inter(14, .semibold))
+                }
+                .foregroundColor(ADLColor.danger)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: 52)
+            }
+            .buttonStyle(.plain)
+            .settingsCard()
+        }
+    }
+
+    private var appVersion: some View {
+        VStack(spacing: 8) {
+            BrandDiamond(size: 18)
+            Text("African Data Layer \(versionLabel)")
+                .font(ADLFont.inter(11, .medium))
+                .foregroundColor(Color(hex: 0x9ca3af))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
+    }
+
+    private var versionLabel: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+        let cleanVersion = version?.replacingOccurrences(of: "$(", with: "").replacingOccurrences(of: ")", with: "")
+        guard let cleanVersion, !cleanVersion.isEmpty, cleanVersion != "MARKETING_VERSION" else {
+            return "v2.4.0"
+        }
+        if let build, !build.isEmpty, build != "$(CURRENT_PROJECT_VERSION)" {
+            return "v\(cleanVersion) (\(build))"
+        }
+        return "v\(cleanVersion)"
+    }
+}
+
+struct SettingsSection<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(ADLFont.inter(10, .bold))
+                .tracking(1.2)
+                .foregroundColor(Color(hex: 0x9ca3af))
+                .padding(.horizontal, 4)
+            content()
+        }
+    }
+}
+
+struct SettingsChoiceRow: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(ADLFont.inter(14, .medium))
+                    .foregroundColor(ADLColor.ink)
+                Spacer()
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(ADLColor.navy)
+                }
+            }
+            .frame(minHeight: 52)
+            .padding(.horizontal, 16)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct SettingsToggleRow: View {
+    let title: String
+    var subtitle: String?
+    let icon: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(alignment: subtitle == nil ? .center : .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundColor(Color(hex: 0x6b7280))
+                .frame(width: 22)
+                .padding(.top, subtitle == nil ? 0 : 2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(ADLFont.inter(14, .medium))
+                    .foregroundColor(ADLColor.ink)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(ADLFont.inter(11, .regular))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 12)
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .tint(ADLColor.navy)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .frame(minHeight: 52)
+    }
+}
+
+struct SettingsNavigationRow<Destination: View>: View {
+    let title: String
+    @ViewBuilder let destination: () -> Destination
+
+    var body: some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack {
+                Text(title)
+                    .font(ADLFont.inter(14, .medium))
+                    .foregroundColor(ADLColor.ink)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(Color(hex: 0x9ca3af))
+            }
+            .frame(minHeight: 52)
+            .padding(.horizontal, 16)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+enum SettingsLegalKind {
+    case privacy
+    case terms
+    case compliance
+    case ipReport
+
+    func title(language: String) -> String {
+        switch self {
+        case .privacy:
+            return language == "fr" ? "Politique de confidentialité" : "Privacy Policy"
+        case .terms:
+            return language == "fr" ? "Conditions d'utilisation" : "Terms of Use"
+        case .compliance:
+            return language == "fr" ? "Données et conformité" : "Data & Compliance"
+        case .ipReport:
+            return language == "fr" ? "Signaler une atteinte PI" : "Report IP Infringement"
+        }
+    }
+
+    func body(language: String) -> String {
+        switch self {
+        case .privacy:
+            return language == "fr"
+                ? "Consultez comment African Data Layer collecte, protège et traite les données personnelles et les preuves terrain."
+                : "Review how African Data Layer collects, protects, and processes personal data and field evidence."
+        case .terms:
+            return language == "fr"
+                ? "Consultez les règles d'utilisation du service, les responsabilités des contributeurs et les conditions des récompenses."
+                : "Review service rules, contributor responsibilities, and rewards terms."
+        case .compliance:
+            return language == "fr"
+                ? "Demandez accès, rectification, effacement ou opposition. Notre équipe répond sous 30 jours."
+                : "Request access, rectification, erasure, or objection. Our team responds within 30 days."
+        case .ipReport:
+            return language == "fr"
+                ? "Signalez une atteinte à la propriété intellectuelle avec une description claire et vos coordonnées."
+                : "Report intellectual-property infringement with a clear description and your contact details."
+        }
+    }
+}
+
+struct SettingsLegalView: View {
+    let kind: SettingsLegalKind
+    let language: String
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: kind.title(language: language), onBack: { dismiss() })
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ADLCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(kind.title(language: language))
+                                .font(ADLFont.inter(18, .bold))
+                                .foregroundColor(ADLColor.ink)
+                            Text(kind.body(language: language))
+                                .font(ADLFont.inter(14, .regular))
+                                .foregroundColor(Color(hex: 0x4b5563))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    Button {
+                        openURL(contactURL)
+                    } label: {
+                        Label(contactLabel, systemImage: contactIcon)
+                    }
+                    .buttonStyle(SecondaryButtonStyle())
+                }
+                .padding(16)
+            }
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .navigationBarBackButtonHidden(true)
+    }
+
+    private var contactURL: URL {
+        switch kind {
+        case .ipReport:
+            return URL(string: "mailto:legal@africandatalayer.com")!
+        default:
+            return URL(string: "mailto:privacy@africandatalayer.com")!
+        }
+    }
+
+    private var contactLabel: String {
+        switch kind {
+        case .ipReport:
+            return language == "fr" ? "Contacter l'équipe juridique" : "Contact legal team"
+        default:
+            return language == "fr" ? "Contacter confidentialité" : "Contact privacy team"
+        }
+    }
+
+    private var contactIcon: String {
+        kind == .ipReport ? "envelope.badge.shield.half.filled" : "envelope.fill"
+    }
+}
+
+private extension View {
+    func settingsCard() -> some View {
+        self
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous)
+                    .stroke(ADLColor.line, lineWidth: 1)
+            )
+    }
 }
 
 struct DailyProgressWidget: View {
