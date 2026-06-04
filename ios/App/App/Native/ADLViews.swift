@@ -491,7 +491,6 @@ struct AuthView: View {
 
     private enum Mode { case signin, signup }
     @State private var mode: Mode = .signin
-    @State private var selectedRole: UserRole = .agent
     @State private var identifier = ""
     @State private var password = ""
     @State private var showPassword = false
@@ -625,34 +624,6 @@ struct AuthView: View {
                     }
                     .padding(.top, 20)
 
-                    // Demo role access (gated) — preserves multi-role testing
-                    if AppReleaseMode.allowsDemoAccess {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("DEMO ACCESS")
-                                .font(ADLFont.inter(11, .bold))
-                                .tracking(1.6)
-                                .foregroundColor(ADLColor.inkMuted)
-                            Picker("Role", selection: $selectedRole) {
-                                ForEach(AppReleaseMode.demoRoles) { role in
-                                    Text(role.title).tag(role)
-                                }
-                            }
-                            .pickerStyle(.segmented)
-                            Button {
-                                appState.switchRole(selectedRole)
-                                appState.signInDemo()
-                            } label: {
-                                Text("Enter Demo").font(ADLFont.inter(15, .semibold))
-                            }
-                            .buttonStyle(SecondaryButtonStyle())
-                        }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous).stroke(ADLColor.line, lineWidth: 1))
-                        .padding(.top, 28)
-                    }
                 }
                 .frame(maxWidth: 440)
                 .frame(maxWidth: .infinity)
