@@ -2633,128 +2633,408 @@ private struct AnalyticsStatusNote: View {
 struct AdminReviewView: View {
     @EnvironmentObject private var appState: AppState
 
+    // Derive risk level from trustScore (higher trust = lower risk)
+    private func riskLevel(for point: DataPoint) -> RiskLevel {
+        if point.trustScore < 50 { return .high }
+        if point.trustScore < 75 { return .medium }
+        return .low
+    }
+
+    // Derive trust tier from trustScore
+    private func trustTier(for point: DataPoint) -> TrustTier {
+        if point.trustScore >= 85 { return .gold }
+        if point.trustScore >= 65 { return .silver }
+        return .bronze
+    }
+
     var body: some View {
-        List {
-            Section {
-                HStack(spacing: 12) {
-                    MetricTile(
-                        title: "Pending review",
-                        value: "\(appState.analyticsSummary?.reviewQueue.pendingReview ?? appState.points.filter(\.requiresRefresh).count)",
-                        systemImage: "checkmark.shield.fill",
-                        tint: ADLColor.terracotta
-                    )
-                    MetricTile(
-                        title: "High-risk events",
-                        value: "\(appState.analyticsSummary?.reviewQueue.highRiskEvents ?? 0)",
-                        systemImage: "exclamationmark.octagon.fill",
-                        tint: ADLColor.gold
-                    )
-                }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Review Queue", "File de révision"),
+                            subtitle: appState.t("Admin · Submission Queue", "Admin · File de soumissions")) {
+                ADLPill(text: "Admin", bg: ADLColor.navyWash, fg: ADLColor.navy)
+                    .padding(.trailing, 4)
             }
 
-            if let summary = appState.analyticsSummary {
-                Section {
-                    HStack(spacing: 12) {
-                        MetricTile(title: "Verified", value: KpiFormat.pct(summary.verification.verificationRatePct), systemImage: "checkmark.seal.fill", tint: ADLColor.forest)
-                        MetricTile(title: "Fraud rate", value: KpiFormat.pct(summary.fraud.fraudRatePct), systemImage: "shield.lefthalf.filled", tint: ADLColor.terracotta)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    // KPI grid (2×2)
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                        KpiTile(
+                            label: appState.t("Pending Review", "En attente"),
+                            value: "\(appState.analyticsSummary?.reviewQueue.pendingReview ?? appState.points.filter(\.requiresRefresh).count)",
+                            tone: .navy,
+                            systemIcon: "checkmark.square"
+                        )
+                        KpiTile(
+                            label: appState.t("High-Risk", "Risque élevé"),
+                            value: "\(appState.analyticsSummary?.reviewQueue.highRiskEvents ?? 0)",
+                            tone: .amber,
+                            systemIcon: "exclamationmark.octagon.fill"
+                        )
+                        KpiTile(
+                            label: appState.t("Verified", "Vérifiés"),
+                            value: KpiFormat.pct(appState.analyticsSummary?.verification.verificationRatePct ?? 0),
+                            tone: .forest,
+                            systemIcon: "checkmark.seal.fill"
+                        )
+                        KpiTile(
+                            label: appState.t("Fraud Rate", "Taux fraude"),
+                            value: KpiFormat.pct(appState.analyticsSummary?.fraud.fraudRatePct ?? 0),
+                            tone: .terra,
+                            systemIcon: "shield.lefthalf.filled"
+                        )
                     }
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                }
-            }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
 
-            if appState.analyticsSummary == nil {
-                Section {
+                    // Status note (loading/error)
                     AnalyticsStatusNote()
-                        .listRowBackground(Color.clear)
-                }
-            }
+                        .padding(.horizontal, 16)
 
-            Section("Review queue") {
-                ForEach(appState.points) { point in
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Label(point.name, systemImage: point.category.systemImage)
-                                .font(.headline)
-                            Spacer()
-                            StatusPill(title: "\(point.trustScore)%", tint: point.trustScore >= 85 ? ADLColor.forest : ADLColor.gold)
+                    // Section label
+                    SectionLabel(text: appState.t("Review Queue", "File de révision"), wide: true)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+
+                    // Submission cards
+                    if appState.points.isEmpty {
+                        ADLCard {
+                            Text(appState.t("No submissions in queue.", "Aucune soumission dans la file."))
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(Color(hex: 0x374151))
                         }
-                        Text(point.subtitle)
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        HStack {
-                            Button("Approve") {}
-                                .buttonStyle(.borderedProminent)
-                            Button("Hold") {}
-                                .buttonStyle(.bordered)
-                            Button("Reject") {}
-                                .buttonStyle(.bordered)
-                                .tint(ADLColor.terracotta)
+                        .padding(.horizontal, 16)
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(appState.points) { point in
+                                AdminSubmissionCard(
+                                    point: point,
+                                    riskLevel: riskLevel(for: point),
+                                    trustTier: trustTier(for: point)
+                                )
+                            }
                         }
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.vertical, 6)
                 }
+                .padding(.bottom, 24)
             }
         }
-        .navigationTitle("Review")
+        .background(ADLColor.paper.ignoresSafeArea())
         .task { await appState.loadAnalytics() }
         .refreshable { await appState.loadAnalytics(force: true) }
+    }
+}
+
+/// Single submission card in the admin review queue — mirrors web AdminQueue card layout.
+private struct AdminSubmissionCard: View {
+    @EnvironmentObject private var appState: AppState
+    let point: DataPoint
+    let riskLevel: RiskLevel
+    let trustTier: TrustTier
+
+    // Accent color on left border by risk
+    private var accentColor: Color {
+        switch riskLevel {
+        case .high: return ADLColor.terracotta
+        case .medium: return ADLColor.amber
+        case .low: return ADLColor.forest
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 0) {
+            // Left accent strip
+            Rectangle()
+                .fill(accentColor)
+                .frame(width: 4)
+                .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+
+            HStack(alignment: .top, spacing: 12) {
+                // Category icon tile (80×80 equivalent — 64pt on mobile)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(point.category.tint.opacity(0.13))
+                        .frame(width: 60, height: 60)
+                    Image(systemName: point.category.systemImage)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(point.category.tint)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    // Row 1: name + RiskBadge
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(point.name.isEmpty ? appState.t("Unnamed submission", "Soumission sans nom") : point.name)
+                            .font(ADLFont.inter(15, .bold))
+                            .foregroundColor(ADLColor.ink)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        RiskBadge(level: riskLevel)
+                    }
+
+                    // Row 2: category • subtitle
+                    Text("\(point.category.title) • \(point.subtitle)")
+                        .font(ADLFont.inter(13))
+                        .foregroundColor(ADLColor.inkMuted)
+                        .lineLimit(2)
+
+                    // Row 3: TrustBadge + evidence chip
+                    HStack(spacing: 6) {
+                        TrustBadge(tier: trustTier)
+                        ADLPill(
+                            text: "\(point.eventsCount) \(appState.t("evidence", "preuves"))",
+                            bg: ADLColor.line,
+                            fg: Color(hex: 0x4b5563)
+                        )
+                        ADLPill(
+                            text: "Score \(point.trustScore)",
+                            bg: ADLColor.navyWash,
+                            fg: ADLColor.navy
+                        )
+                    }
+
+                    // Row 4: Action buttons
+                    HStack(spacing: 8) {
+                        // Approve — navy/forest filled pill
+                        Button {
+                            // TODO: approve action
+                        } label: {
+                            Text(appState.t("Approve", "Approuver"))
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(ADLColor.forest)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+
+                        // Hold — ghost pill
+                        Button {
+                            // TODO: hold action
+                        } label: {
+                            Text(appState.t("Hold", "En attente"))
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(ADLColor.ink)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .overlay(Capsule().stroke(ADLColor.lineStrong, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.plain)
+
+                        // Reject — terra filled pill
+                        Button {
+                            // TODO: reject action
+                        } label: {
+                            Text(appState.t("Reject", "Rejeter"))
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(ADLColor.terracotta)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+            .padding(12)
+        }
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
     }
 }
 
 struct AgentPerformanceView: View {
     @EnvironmentObject private var appState: AppState
 
+    // Compute per-agent rows from leaderboard + analytics summary.
+    // In demo mode the leaderboard is populated from /api/leaderboard.
+    // activeAgents / totalSubs / avgQuality are derived the same way as AgentPerformance.tsx.
+    private var agentRows: [LeaderboardEntry] { appState.leaderboard }
+    private var activeAgents: Int { agentRows.filter { $0.xp > 0 }.count }
+    private var totalSubs: Int { agentRows.reduce(0) { $0 + $1.contributions } }
+    private var avgQuality: Int {
+        guard !agentRows.isEmpty else { return 0 }
+        let total = agentRows.reduce(0) { $0 + $1.averageQualityScore }
+        return total / agentRows.count
+    }
+
+    // Trust tier from avgQuality (mirrors web tier logic)
+    private func tier(for entry: LeaderboardEntry) -> TrustTier {
+        if entry.averageQualityScore >= 85 { return .gold }
+        if entry.averageQualityScore >= 70 { return .silver }
+        return .bronze
+    }
+
+    // Tier gradient colors
+    private func tierColors(for t: TrustTier) -> [Color] {
+        switch t {
+        case .gold: return [ADLColor.gold, Color(hex: 0xd97706)]
+        case .silver: return [Color(hex: 0x9ca3af), Color(hex: 0x6b7280)]
+        case .bronze: return [ADLColor.terracotta, Color(hex: 0x9b2c2c)]
+        }
+    }
+
+    // Quality bar tint
+    private func barTint(quality: Int) -> Color {
+        if quality >= 90 { return ADLColor.forestDark }
+        if quality >= 70 { return ADLColor.amber }
+        return Color(hex: 0x991b1b)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 14) {
-                AnalyticsStatusNote()
-                let summary = appState.analyticsSummary
-                HStack(spacing: 12) {
-                    MetricTile(
-                        title: "Verified points",
-                        value: "\(summary?.verification.verifiedPoints ?? 0)",
-                        systemImage: "checkmark.seal.fill",
-                        tint: ADLColor.forest
-                    )
-                    MetricTile(
-                        title: "Active contributors",
-                        value: "\(summary?.weeklyActiveContributors ?? 0)",
-                        systemImage: "person.2.fill",
-                        tint: ADLColor.navySoft
-                    )
-                }
-                HStack(spacing: 12) {
-                    MetricTile(
-                        title: "Pending review",
-                        value: "\(summary?.reviewQueue.pendingReview ?? 0)",
-                        systemImage: "tray.full.fill",
-                        tint: ADLColor.gold
-                    )
-                    MetricTile(
-                        title: "Enrichment rate",
-                        value: KpiFormat.pct(summary?.enrichmentRatePct ?? 0),
-                        systemImage: "arrow.triangle.2.circlepath",
-                        tint: ADLColor.terracotta
-                    )
-                }
-                ADLCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Agent coaching")
-                            .font(.headline)
-                        Text("Reviewer notes, fraud signals, and quality trend detail stay in one operational workflow.")
-                            .foregroundColor(.secondary)
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Agent Performance", "Performance agents"))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    // KPI grid — 3 columns (mirrors web grid-cols-3)
+                    HStack(spacing: 8) {
+                        KpiTile(
+                            label: appState.t("Active", "Actifs"),
+                            value: appState.isLoadingLeaderboard ? "--" : "\(activeAgents)",
+                            tone: .navy
+                        )
+                        KpiTile(
+                            label: appState.t("Total Subs", "Soumissions"),
+                            value: appState.isLoadingLeaderboard ? "--" : "\(totalSubs)",
+                            tone: .forest
+                        )
+                        KpiTile(
+                            label: appState.t("Avg Quality", "Qualité moy."),
+                            value: appState.isLoadingLeaderboard ? "--" : "\(avgQuality)%",
+                            tone: .amber
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+
+                    // Section label
+                    SectionLabel(text: appState.t("Agent Rankings", "Classement des agents"), wide: true)
+                        .padding(.horizontal, 16)
+
+                    // Agent rows
+                    if appState.isLoadingLeaderboard && agentRows.isEmpty {
+                        ADLCard {
+                            Text(appState.t("Loading agent metrics...", "Chargement des métriques agents..."))
+                                .font(ADLFont.inter(13))
+                                .foregroundColor(Color(hex: 0x6b7280))
+                        }
+                        .padding(.horizontal, 16)
+                    } else if agentRows.isEmpty {
+                        ADLCard {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(appState.t("No agent data yet.", "Aucune donnée agent pour l'instant."))
+                                    .font(ADLFont.inter(13, .semibold))
+                                    .foregroundColor(Color(hex: 0x374151))
+                                Text(appState.t(
+                                    "Rankings populate after submissions are approved in the review queue.",
+                                    "Les classements se remplissent après approbation des soumissions dans la file de revue."
+                                ))
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(Color(hex: 0x6b7280))
+                                .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(Array(agentRows.prefix(30).enumerated()), id: \.offset) { index, entry in
+                                agentRow(rank: index + 1, entry: entry)
+                            }
+                        }
+                        .padding(.horizontal, 16)
                     }
                 }
+                .padding(.bottom, 24)
             }
-            .padding(16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Agents")
-        .task { await appState.loadAnalytics() }
-        .refreshable { await appState.loadAnalytics(force: true) }
+        .task {
+            await appState.loadAnalytics()
+            await appState.loadLeaderboard()
+        }
+        .refreshable {
+            await appState.loadAnalytics(force: true)
+            await appState.loadLeaderboard(force: true)
+        }
+    }
+
+    @ViewBuilder
+    private func agentRow(rank: Int, entry: LeaderboardEntry) -> some View {
+        let t = tier(for: entry)
+        let gradColors = tierColors(for: t)
+        let initial = String((entry.name.first ?? "?").uppercased())
+
+        // card-soft: white bg, border gray-100 (ADLColor.line)
+        HStack(spacing: 12) {
+            // Rank number
+            Text("#\(rank)")
+                .font(ADLFont.inter(13, .bold))
+                .foregroundColor(Color(hex: 0xd1d5db))
+                .frame(width: 28, alignment: .center)
+
+            // Identity circle with tier gradient
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: gradColors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 40, height: 40)
+                Text(initial)
+                    .font(ADLFont.inter(15, .bold))
+                    .foregroundColor(.white)
+            }
+
+            // Name + badges + metrics
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(entry.name)
+                        .font(ADLFont.inter(13, .semibold))
+                        .foregroundColor(ADLColor.ink)
+                        .lineLimit(1)
+                    TrustBadge(tier: t)
+                }
+
+                HStack(spacing: 10) {
+                    Text("\(entry.contributions) \(appState.t("subs", "soum."))")
+                        .font(ADLFont.inter(11))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                    Text("\(entry.averageQualityScore)% \(appState.t("quality", "qualité"))")
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.forestDark)
+                    Text("\(entry.xp) XP")
+                        .font(ADLFont.inter(11, .semibold))
+                        .foregroundColor(ADLColor.navy)
+                }
+
+                // Quality bar
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(ADLColor.line).frame(height: 4)
+                        Capsule()
+                            .fill(barTint(quality: entry.averageQualityScore))
+                            .frame(width: max(0, min(1, Double(entry.averageQualityScore) / 100.0)) * geo.size.width, height: 4)
+                    }
+                }
+                .frame(height: 4)
+                .padding(.top, 4)
+            }
+        }
+        .padding(12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(ADLColor.line, lineWidth: 1)
+        )
     }
 }
 
