@@ -1045,14 +1045,10 @@ struct FieldMapKitView: UIViewRepresentable {
         mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
         mapView.addAnnotations(points.map(FieldPointAnnotation.init(point:)))
 
-        // Remove only polygon overlays so the CARTO tile overlay added in makeUIView persists
+        // Geofence polygon intentionally not drawn (removed yellow zone outline).
+        // Strip any stray polygon overlays while preserving the CARTO tile overlay.
         let polygonsToRemove = mapView.overlays.filter { $0 is MKPolygon }
         mapView.removeOverlays(polygonsToRemove)
-
-        if !collectionZone.isEmpty {
-            let polygon = MKPolygon(coordinates: collectionZone, count: collectionZone.count)
-            mapView.addOverlay(polygon, level: .aboveLabels)
-        }
     }
 
     func makeCoordinator() -> Coordinator {
@@ -3678,15 +3674,7 @@ struct ProfileView: View {
                             weekSummarySection
                             contributionHistorySection
                             uploadIssuesSection
-
-                            // MARK: Sign-out — danger text, SecondaryButtonStyle
-                            Button {
-                                appState.signOut()
-                            } label: {
-                                Text("Sign Out")
-                                    .foregroundColor(ADLColor.danger)
-                            }
-                            .buttonStyle(SecondaryButtonStyle())
+                            // Sign-out lives in Settings only (reached via the gear icon).
                         }
                         .padding(16)
                         .padding(.bottom, 24)
