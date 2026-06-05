@@ -3877,11 +3877,77 @@ struct AdminReviewView: View {
 }
 
 /// Single submission card in the admin review queue — mirrors web AdminQueue card layout.
+private enum AdminDecision {
+    case approved, held, rejected
+    var systemImage: String {
+        switch self {
+        case .approved: return "checkmark.seal.fill"
+        case .held: return "pause.circle.fill"
+        case .rejected: return "xmark.octagon.fill"
+        }
+    }
+    var tint: Color {
+        switch self {
+        case .approved: return ADLColor.forest
+        case .held: return ADLColor.amber
+        case .rejected: return ADLColor.terracotta
+        }
+    }
+    var labelEN: String {
+        switch self {
+        case .approved: return "Approved"
+        case .held: return "On hold"
+        case .rejected: return "Rejected"
+        }
+    }
+    var labelFR: String {
+        switch self {
+        case .approved: return "Approuvé"
+        case .held: return "En attente"
+        case .rejected: return "Rejeté"
+        }
+    }
+}
+
 private struct AdminSubmissionCard: View {
     @EnvironmentObject private var appState: AppState
     let point: DataPoint
     let riskLevel: RiskLevel
     let trustTier: TrustTier
+    @State private var decision: AdminDecision?
+
+    // Submission photo if present, else a category-tinted icon placeholder.
+    @ViewBuilder private var submissionThumbnail: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(point.category.tint.opacity(0.13))
+                .frame(width: 60, height: 60)
+            if let raw = point.photoUrl, let url = URL(string: raw) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    case .empty:
+                        ProgressView().tint(point.category.tint)
+                    case .failure:
+                        Image(systemName: point.category.systemImage)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(point.category.tint)
+                    @unknown default:
+                        Image(systemName: point.category.systemImage)
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(point.category.tint)
+                    }
+                }
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            } else {
+                Image(systemName: point.category.systemImage)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(point.category.tint)
+            }
+        }
+    }
 
     // Accent color on left border by risk
     private var accentColor: Color {
@@ -3901,15 +3967,8 @@ private struct AdminSubmissionCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
 
             HStack(alignment: .top, spacing: 12) {
-                // Category icon tile (80×80 equivalent — 64pt on mobile)
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(point.category.tint.opacity(0.13))
-                        .frame(width: 60, height: 60)
-                    Image(systemName: point.category.systemImage)
-                        .font(.system(size: 22, weight: .semibold))
-                        .foregroundColor(point.category.tint)
-                }
+                // Submission photo thumbnail, falling back to a category-tinted icon.
+                submissionThumbnail
 
                 VStack(alignment: .leading, spacing: 6) {
                     // Row 1: name + RiskBadge
@@ -3943,50 +4002,48 @@ private struct AdminSubmissionCard: View {
                         )
                     }
 
-                    // Row 4: Action buttons
-                    HStack(spacing: 8) {
-                        // Approve — navy/forest filled pill
-                        Button {
-                            // TODO: approve action
-                        } label: {
-                            Text(appState.t("Approve", "Approuver"))
+                    // Row 4: once decided, show the resolved status instead of actions.
+                    if let decision {
+                        HStack(spacing: 6) {
+                            Image(systemName: decision.systemImage)
+                                .font(.system(size: 12, weight: .bold))
+                            Text(appState.t(decision.labelEN, decision.labelFR))
                                 .font(ADLFont.inter(12, .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(ADLColor.forest)
-                                .clipShape(Capsule())
                         }
-                        .buttonStyle(.plain)
+                        .foregroundColor(decision.tint)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(decision.tint.opacity(0.12))
+                        .clipShape(Capsule())
+                        .padding(.top, 2)
+                    } else {
+                        HStack(spacing: 8) {
+                            Button { decision = .approved } label: {
+                                Text(appState.t("Approve", "Approuver"))
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(ADLColor.forest).clipShape(Capsule())
+                            }.buttonStyle(.plain)
 
-                        // Hold — ghost pill
-                        Button {
-                            // TODO: hold action
-                        } label: {
-                            Text(appState.t("Hold", "En attente"))
-                                .font(ADLFont.inter(12, .bold))
-                                .foregroundColor(ADLColor.ink)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .overlay(Capsule().stroke(ADLColor.lineStrong, lineWidth: 1.5))
-                        }
-                        .buttonStyle(.plain)
+                            Button { decision = .held } label: {
+                                Text(appState.t("Hold", "En attente"))
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(ADLColor.ink)
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                                    .overlay(Capsule().stroke(ADLColor.lineStrong, lineWidth: 1.5))
+                            }.buttonStyle(.plain)
 
-                        // Reject — terra filled pill
-                        Button {
-                            // TODO: reject action
-                        } label: {
-                            Text(appState.t("Reject", "Rejeter"))
-                                .font(ADLFont.inter(12, .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 7)
-                                .background(ADLColor.terracotta)
-                                .clipShape(Capsule())
+                            Button { decision = .rejected } label: {
+                                Text(appState.t("Reject", "Rejeter"))
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12).padding(.vertical, 7)
+                                    .background(ADLColor.terracotta).clipShape(Capsule())
+                            }.buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.top, 2)
                     }
-                    .padding(.top, 2)
                 }
             }
             .padding(12)

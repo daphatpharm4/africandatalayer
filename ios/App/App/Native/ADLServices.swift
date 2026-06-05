@@ -296,7 +296,8 @@ final class AppState: ObservableObject {
         queueStore.saveDrafts(drafts)
         refreshQueueSnapshot()
         lastSyncMessage = t("Contribution queued for sync", "Contribution en file d'attente")
-        selectedTab = .queue
+        // Queue isn't an agent tab; return to the map (reach the queue via Profile).
+        selectedTab = .home
     }
 
     func loadAnalytics(force: Bool = false) async {
