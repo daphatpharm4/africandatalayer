@@ -374,9 +374,12 @@ struct DataPoint: Codable, Hashable, Identifiable {
     var location: SubmissionLocation
     var trustScore: Int
     var eventsCount: Int
+    var createdAt: Date
     var updatedAt: Date
     var requiresRefresh: Bool
     var photoUrl: String?
+    var details: SubmissionDetails
+    var gaps: [String]
 
     init(
         id: String,
@@ -386,9 +389,12 @@ struct DataPoint: Codable, Hashable, Identifiable {
         location: SubmissionLocation,
         trustScore: Int,
         eventsCount: Int,
+        createdAt: Date? = nil,
         updatedAt: Date,
         requiresRefresh: Bool,
-        photoUrl: String? = nil
+        photoUrl: String? = nil,
+        details: SubmissionDetails = SubmissionDetails(),
+        gaps: [String] = []
     ) {
         self.id = id
         self.category = category
@@ -397,9 +403,12 @@ struct DataPoint: Codable, Hashable, Identifiable {
         self.location = location
         self.trustScore = trustScore
         self.eventsCount = eventsCount
+        self.createdAt = createdAt ?? updatedAt
         self.updatedAt = updatedAt
         self.requiresRefresh = requiresRefresh
         self.photoUrl = photoUrl
+        self.details = details
+        self.gaps = gaps
     }
 
     init(projected point: ProjectedPoint) {
@@ -407,7 +416,8 @@ struct DataPoint: Codable, Hashable, Identifiable {
             ?? point.details.siteName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             ?? point.details.roadName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
             ?? point.category.title
-        let date = Self.parseDate(point.updatedAt) ?? Self.parseDate(point.createdAt) ?? Date()
+        let createdDate = Self.parseDate(point.createdAt) ?? Date()
+        let date = Self.parseDate(point.updatedAt) ?? createdDate
         let score = point.details.confidenceScore.map { Int(max(0, min(100, $0)).rounded()) } ?? 85
         self.init(
             id: point.pointId,
@@ -417,9 +427,12 @@ struct DataPoint: Codable, Hashable, Identifiable {
             location: point.location,
             trustScore: score,
             eventsCount: point.eventsCount,
+            createdAt: createdDate,
             updatedAt: date,
             requiresRefresh: !point.gaps.isEmpty,
-            photoUrl: point.photoUrl?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            photoUrl: point.photoUrl?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+            details: point.details,
+            gaps: point.gaps
         )
     }
 
@@ -667,13 +680,16 @@ struct LeaderboardEntry: Codable, Hashable, Identifiable {
 struct UserProfile: Codable, Hashable {
     var id: String?
     var name: String?
+    var image: String?
+    var avatarPreset: String?
+    var occupation: String?
     var role: UserRole?
     var trustTier: String?
     var trustScore: Int?
     var xp: Int
 
     enum CodingKeys: String, CodingKey {
-        case id, name, role, trustTier, trustScore
+        case id, name, image, avatarPreset, occupation, role, trustTier, trustScore
         case xp = "XP"
     }
 }
@@ -890,4 +906,178 @@ struct DailyGoal: Hashable {
 /// Emitted when the agent crosses into a new tier, to trigger the celebration.
 struct LevelUpEvent: Equatable {
     var tier: AgentTier
+}
+
+// MARK: - Admin Review Queue (africandatalayer-ot4)
+
+/// Decision values accepted by PATCH /api/submissions/{id}?view=review
+enum ReviewDecision: String, Codable {
+    case approved
+    case rejected
+    case flagged
+}
+
+/// Stats counts from AdminReviewQueueResponse.stats
+struct AdminReviewStats: Codable, Hashable {
+    var all: Int
+    var flagged: Int
+    var pending: Int
+    var lowRisk: Int
+    var eligible: Int
+
+    enum CodingKeys: String, CodingKey {
+        case all, flagged, pending, eligible
+        case lowRisk
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        all      = try c.decodeIfPresent(Int.self, forKey: .all)      ?? 0
+        flagged  = try c.decodeIfPresent(Int.self, forKey: .flagged)  ?? 0
+        pending  = try c.decodeIfPresent(Int.self, forKey: .pending)  ?? 0
+        lowRisk  = try c.decodeIfPresent(Int.self, forKey: .lowRisk)  ?? 0
+        eligible = try c.decodeIfPresent(Int.self, forKey: .eligible) ?? 0
+    }
+}
+
+/// Flattened summary of one review group — from AdminSubmissionGroup.summary
+struct AdminReviewSummary: Codable, Hashable {
+    var riskScore: Double
+    var reviewStatus: String
+    var riskBucket: String       // "flagged" | "pending" | "low_risk"
+    var trustTier: String?
+    var trustScore: Double?
+    var evidenceCount: Int
+    var contributorCount: Int
+    var staleHours: Int
+    var submissionDistanceKm: Double?
+    var ipDistanceKm: Double?
+    var hasSubmissionMismatch: Bool
+    var hasIpMismatch: Bool
+    var isLowEndDevice: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case riskScore, reviewStatus, riskBucket, trustTier, trustScore, evidenceCount, contributorCount
+        case staleHours, submissionDistanceKm, ipDistanceKm, hasSubmissionMismatch, hasIpMismatch, isLowEndDevice
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        riskScore       = try c.decodeIfPresent(Double.self, forKey: .riskScore)        ?? 0
+        reviewStatus    = try c.decodeIfPresent(String.self, forKey: .reviewStatus)    ?? ""
+        riskBucket      = try c.decodeIfPresent(String.self, forKey: .riskBucket)      ?? "pending"
+        trustTier       = try c.decodeIfPresent(String.self, forKey: .trustTier)
+        trustScore      = try c.decodeIfPresent(Double.self, forKey: .trustScore)
+        evidenceCount   = try c.decodeIfPresent(Int.self,    forKey: .evidenceCount)   ?? 0
+        contributorCount = try c.decodeIfPresent(Int.self,   forKey: .contributorCount) ?? 0
+        staleHours      = try c.decodeIfPresent(Int.self, forKey: .staleHours)          ?? 0
+        submissionDistanceKm = try c.decodeIfPresent(Double.self, forKey: .submissionDistanceKm)
+        ipDistanceKm    = try c.decodeIfPresent(Double.self, forKey: .ipDistanceKm)
+        hasSubmissionMismatch = try c.decodeIfPresent(Bool.self, forKey: .hasSubmissionMismatch) ?? false
+        hasIpMismatch   = try c.decodeIfPresent(Bool.self, forKey: .hasIpMismatch)      ?? false
+        isLowEndDevice  = try c.decodeIfPresent(Bool.self, forKey: .isLowEndDevice)     ?? false
+    }
+}
+
+struct AdminReviewEvent: Decodable, Hashable {
+    var id: String
+    var eventType: String
+    var createdAt: String
+    var category: SubmissionCategory
+    var location: SubmissionLocation?
+    var details: SubmissionDetails
+    var photoUrl: String?
+}
+
+struct AdminReviewUser: Decodable, Hashable {
+    var id: String
+    var name: String
+    var email: String?
+    var trustScore: Int?
+    var trustTier: String?
+}
+
+/// One group in the review queue — a point with its latest event + summary
+struct AdminReviewGroup: Identifiable, Decodable, Hashable {
+    var id: String { pointId }
+    var pointId: String
+    var category: SubmissionCategory
+    var siteName: String?
+    var latestEventId: String
+    var photoURL: String?
+    var latestEvent: AdminReviewEvent?
+    var latestUser: AdminReviewUser?
+    var summary: AdminReviewSummary
+
+    // Wire nested latestEvent.event.id and latestEvent.event.photoUrl
+    // plus allPhotos[0].url as an alternative photo source.
+    private enum CodingKeys: String, CodingKey {
+        case pointId, category, siteName, allPhotos, summary, latestEvent
+    }
+
+    private struct LatestEventWrapper: Decodable {
+        var event: AdminReviewEvent
+        var user: AdminReviewUser?
+    }
+
+    private struct PhotoEntry: Decodable {
+        var url: String
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        pointId  = try c.decodeIfPresent(String.self, forKey: .pointId)  ?? ""
+        siteName = try c.decodeIfPresent(String.self, forKey: .siteName)
+        summary  = try c.decode(AdminReviewSummary.self, forKey: .summary)
+
+        // category: String rawValue → SubmissionCategory (defensive)
+        let catRaw = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
+        category = SubmissionCategory(rawValue: catRaw) ?? .censusProxy
+
+        // latestEvent.event.id and latestEvent.event.photoUrl
+        let wrapper = try c.decodeIfPresent(LatestEventWrapper.self, forKey: .latestEvent)
+        latestEvent = wrapper?.event
+        latestUser = wrapper?.user
+        latestEventId = wrapper?.event.id ?? ""
+        let latestPhoto = wrapper?.event.photoUrl?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // allPhotos[0].url as first-choice photo
+        let photos = try c.decodeIfPresent([PhotoEntry].self, forKey: .allPhotos) ?? []
+        let firstPhotoURL = photos.first?.url.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Prefer allPhotos[0], fall back to latestEvent.event.photoUrl
+        let resolved = firstPhotoURL?.isEmpty == false ? firstPhotoURL : (latestPhoto?.isEmpty == false ? latestPhoto : nil)
+        photoURL = resolved
+    }
+}
+
+/// Top-level response from GET /api/submissions?view=review_queue
+struct AdminReviewQueueResponse: Decodable {
+    var groups: [AdminReviewGroup]
+    var stats: AdminReviewStats
+    var page: Int
+    var totalPages: Int
+    var totalGroups: Int
+    var limit: Int
+
+    enum CodingKeys: String, CodingKey {
+        case groups, stats, page, totalPages, totalGroups, limit
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        groups      = try c.decodeIfPresent([AdminReviewGroup].self, forKey: .groups)      ?? []
+        stats       = try c.decodeIfPresent(AdminReviewStats.self,   forKey: .stats)       ?? AdminReviewStats()
+        page        = try c.decodeIfPresent(Int.self, forKey: .page)        ?? 0
+        totalPages  = try c.decodeIfPresent(Int.self, forKey: .totalPages)  ?? 1
+        totalGroups = try c.decodeIfPresent(Int.self, forKey: .totalGroups) ?? 0
+        limit       = try c.decodeIfPresent(Int.self, forKey: .limit)       ?? 20
+    }
+}
+
+// Allow AdminReviewStats zero-arg init for decodeIfPresent fallback
+extension AdminReviewStats {
+    init() {
+        all = 0; flagged = 0; pending = 0; lowRisk = 0; eligible = 0
+    }
 }

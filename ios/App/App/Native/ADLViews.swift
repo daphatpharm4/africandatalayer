@@ -498,6 +498,7 @@ private struct FlowPills: View {
 /// Auth screen mirroring web Auth.tsx — centered, light, OAuth + credentials.
 struct AuthView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.openURL) private var openURL
     var onBack: (() -> Void)? = nil
 
     private enum Mode { case signin, signup }
@@ -505,6 +506,9 @@ struct AuthView: View {
     @State private var identifier = ""
     @State private var password = ""
     @State private var showPassword = false
+    @State private var smsOptIn = false
+    @State private var emailNoticeAccepted = false
+    @State private var acceptedTerms = false
 
     private var title: String {
         mode == .signin
@@ -593,8 +597,41 @@ struct AuthView: View {
                                 .foregroundColor(ADLColor.terracotta)
                         }
 
+                        if mode == .signup {
+                            VStack(alignment: .leading, spacing: 12) {
+                                AuthConsentRow(
+                                    isOn: $smsOptIn,
+                                    text: appState.t(
+                                        "I agree to receive operational SMS for assignments, payouts, and system notices. Message frequency varies. Reply STOP anytime.",
+                                        "J'accepte de recevoir des SMS pour les missions, paiements et avis système. Fréquence variable. Répondez STOP à tout moment."
+                                    )
+                                )
+                                AuthConsentRow(
+                                    isOn: $emailNoticeAccepted,
+                                    text: appState.t(
+                                        "I agree to receive operational email for account, security, payout, and policy notices.",
+                                        "J'accepte de recevoir des emails opérationnels pour le compte, la sécurité, les paiements et les politiques."
+                                    )
+                                )
+                                termsConsentRow
+                            }
+                            .padding(.top, 2)
+                        }
+
                         Button {
-                            Task { await appState.signIn(identifier: identifier, password: password) }
+                            Task {
+                                if mode == .signin {
+                                    await appState.signIn(identifier: identifier, password: password)
+                                } else {
+                                    await appState.register(
+                                        identifier: identifier,
+                                        password: password,
+                                        acceptedTerms: acceptedTerms,
+                                        smsOptIn: smsOptIn,
+                                        emailNoticeAccepted: emailNoticeAccepted
+                                    )
+                                }
+                            }
                         } label: {
                             HStack(spacing: 8) {
                                 if appState.isSigningIn {
@@ -637,6 +674,9 @@ struct AuthView: View {
                         Button {
                             withAnimation { mode = mode == .signin ? .signup : .signin }
                             appState.authError = nil
+                            smsOptIn = false
+                            emailNoticeAccepted = false
+                            acceptedTerms = false
                         } label: {
                             Text(mode == .signin ? appState.t("Create an account", "Créer un compte") : appState.t("Sign in instead", "Se connecter plutôt"))
                                 .font(ADLFont.inter(12, .bold))
@@ -670,6 +710,63 @@ struct AuthView: View {
             .font(ADLFont.inter(13, .semibold))
             .foregroundColor(ADLColor.ink)
             .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var termsConsentRow: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button {
+                acceptedTerms.toggle()
+            } label: {
+                Image(systemName: acceptedTerms ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(acceptedTerms ? ADLColor.navy : Color(hex: 0x9ca3af))
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(appState.t(
+                    "I agree to the Terms of Use and Privacy Policy.",
+                    "J'accepte les Conditions d'utilisation et la Politique de confidentialité."
+                ))
+                .font(ADLFont.inter(12))
+                .foregroundColor(Color(hex: 0x4b5563))
+                .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 12) {
+                    Button(appState.t("Terms", "Conditions")) {
+                        openURL(URL(string: "https://www.app.africandatalayer.com/")!)
+                    }
+                    Button(appState.t("Privacy", "Confidentialité")) {
+                        openURL(URL(string: "https://www.app.africandatalayer.com/")!)
+                    }
+                }
+                .font(ADLFont.inter(12, .bold))
+                .foregroundColor(ADLColor.navy)
+            }
+        }
+    }
+}
+
+struct AuthConsentRow: View {
+    @Binding var isOn: Bool
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Button {
+                isOn.toggle()
+            } label: {
+                Image(systemName: isOn ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(isOn ? ADLColor.navy : Color(hex: 0x9ca3af))
+            }
+            .buttonStyle(.plain)
+
+            Text(text)
+                .font(ADLFont.inter(12))
+                .foregroundColor(Color(hex: 0x4b5563))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -808,35 +905,36 @@ struct ADLTabBar: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
-        HStack(alignment: .top, spacing: 4) {
+        let compact = routes.count >= 5
+        HStack(alignment: .top, spacing: compact ? 2 : 4) {
             ForEach(routes) { route in
                 let active = route == selection
                 let isContribute = route == .contribute
                 Button { onSelect(route) } label: {
-                    VStack(spacing: 4) {
+                    VStack(spacing: compact ? 3 : 4) {
                         Image(systemName: icon(for: route))
-                            .font(.system(size: 19, weight: .medium))
+                            .font(.system(size: compact ? 17 : 19, weight: .medium))
                         Text(title(for: route))
-                            .font(ADLFont.inter(11, .semibold))
+                            .font(ADLFont.inter(compact ? 10 : 11, .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
                     .foregroundColor(active ? ADLColor.navy : (isContribute ? ADLColor.terracotta : Color(hex: 0x6b7280)))
-                    .frame(maxWidth: .infinity, minHeight: 54)
+                    .frame(maxWidth: .infinity, minHeight: compact ? 50 : 54)
                     .background(
-                        RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        RoundedRectangle(cornerRadius: compact ? 18 : 21, style: .continuous)
                             .fill(active ? ADLColor.navyWash : Color.clear)
                     )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 21, style: .continuous)
+                        RoundedRectangle(cornerRadius: compact ? 18 : 21, style: .continuous)
                             .stroke(active ? ADLColor.navy.opacity(0.06) : Color.clear, lineWidth: 1)
                     )
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .padding(.horizontal, compact ? 8 : 12)
+        .padding(.top, compact ? 6 : 8)
         .background(
             Color.white
                 .overlay(Rectangle().fill(ADLColor.lineStrong).frame(height: 1), alignment: .top)
@@ -3291,16 +3389,16 @@ private struct ADLShortcutTile: View {
         } label: {
             HStack(spacing: 12) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 40, height: 40)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 36, height: 36)
                     .background(filled ? Color.white.opacity(0.12) : ADLColor.navyWash)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
-                        .font(ADLFont.inter(13, .bold))
+                        .font(ADLFont.inter(12, .bold))
                         .lineLimit(1)
                     Text(subtitle)
-                        .font(ADLFont.inter(11, .regular))
+                        .font(ADLFont.inter(10, .regular))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .foregroundColor(filled ? Color.white.opacity(0.72) : .secondary)
@@ -3310,7 +3408,7 @@ private struct ADLShortcutTile: View {
                     .font(.system(size: 15, weight: .bold))
             }
             .foregroundColor(filled ? .white : ADLColor.navy)
-            .padding(16)
+            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(filled ? ADLColor.navy : Color.white)
             .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
@@ -3782,18 +3880,22 @@ private struct AnalyticsStatusNote: View {
 struct AdminReviewView: View {
     @EnvironmentObject private var appState: AppState
 
-    // Derive risk level from trustScore (higher trust = lower risk)
-    private func riskLevel(for point: DataPoint) -> RiskLevel {
-        if point.trustScore < 50 { return .high }
-        if point.trustScore < 75 { return .medium }
-        return .low
+    // Map riskBucket String → RiskLevel
+    private func riskLevel(for group: AdminReviewGroup) -> RiskLevel {
+        switch group.summary.riskBucket {
+        case "flagged": return .high
+        case "pending": return .medium
+        default:        return .low
+        }
     }
 
-    // Derive trust tier from trustScore
-    private func trustTier(for point: DataPoint) -> TrustTier {
-        if point.trustScore >= 85 { return .gold }
-        if point.trustScore >= 65 { return .silver }
-        return .bronze
+    // Map trustTier String → TrustTier (UI enum)
+    private func trustTier(for group: AdminReviewGroup) -> TrustTier {
+        switch group.summary.trustTier?.lowercased() ?? "" {
+        case "gold", "elite":          return .gold
+        case "silver", "trusted":      return .silver
+        default:                       return .bronze
+        }
     }
 
     var body: some View {
@@ -3807,17 +3909,17 @@ struct AdminReviewView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
-                    // KPI grid (2×2)
+                    // KPI grid (2×2): prefer live reviewStats, fall back to analyticsSummary
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                         KpiTile(
                             label: appState.t("Pending Review", "En attente"),
-                            value: "\(appState.analyticsSummary?.reviewQueue.pendingReview ?? appState.points.filter(\.requiresRefresh).count)",
+                            value: "\(appState.reviewStats?.pending ?? appState.analyticsSummary?.reviewQueue.pendingReview ?? 0)",
                             tone: .navy,
                             systemIcon: "checkmark.square"
                         )
                         KpiTile(
                             label: appState.t("High-Risk", "Risque élevé"),
-                            value: "\(appState.analyticsSummary?.reviewQueue.highRiskEvents ?? 0)",
+                            value: "\(appState.reviewStats?.flagged ?? appState.analyticsSummary?.reviewQueue.highRiskEvents ?? 0)",
                             tone: .amber,
                             systemIcon: "exclamationmark.octagon.fill"
                         )
@@ -3837,7 +3939,32 @@ struct AdminReviewView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
 
-                    // Status note (loading/error)
+                    // Loading / error state for the review queue
+                    if appState.isLoadingReview {
+                        ADLCard {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text(appState.t("Loading queue…", "Chargement de la file…"))
+                                    .font(ADLFont.inter(13))
+                                    .foregroundColor(ADLColor.inkMuted)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    } else if let err = appState.reviewError, appState.reviewQueue.isEmpty {
+                        ADLCard {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(appState.t("Queue unavailable", "File indisponible"))
+                                    .font(ADLFont.inter(13, .semibold))
+                                    .foregroundColor(ADLColor.ink)
+                                Text(err)
+                                    .font(ADLFont.inter(12))
+                                    .foregroundColor(ADLColor.inkMuted)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+
+                    // Status note (loading/error for analytics)
                     AnalyticsStatusNote()
                         .padding(.horizontal, 16)
 
@@ -3847,7 +3974,7 @@ struct AdminReviewView: View {
                         .padding(.top, 4)
 
                     // Submission cards
-                    if appState.points.isEmpty {
+                    if !appState.isLoadingReview && appState.reviewQueue.isEmpty {
                         ADLCard {
                             Text(appState.t("No submissions in queue.", "Aucune soumission dans la file."))
                                 .font(ADLFont.inter(13, .semibold))
@@ -3856,11 +3983,11 @@ struct AdminReviewView: View {
                         .padding(.horizontal, 16)
                     } else {
                         VStack(spacing: 10) {
-                            ForEach(appState.points) { point in
+                            ForEach(appState.reviewQueue) { group in
                                 AdminSubmissionCard(
-                                    point: point,
-                                    riskLevel: riskLevel(for: point),
-                                    trustTier: trustTier(for: point)
+                                    group: group,
+                                    riskLevel: riskLevel(for: group),
+                                    trustTier: trustTier(for: group)
                                 )
                             }
                         }
@@ -3871,91 +3998,121 @@ struct AdminReviewView: View {
             }
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .task { await appState.loadAnalytics() }
-        .refreshable { await appState.loadAnalytics(force: true) }
+        .task {
+            await appState.loadReviewQueue()
+            await appState.loadAnalytics()
+        }
+        .refreshable {
+            await appState.loadReviewQueue(force: true)
+            await appState.loadAnalytics(force: true)
+        }
     }
 }
 
-/// Single submission card in the admin review queue — mirrors web AdminQueue card layout.
-private enum AdminDecision {
-    case approved, held, rejected
+// MARK: - AdminSubmissionCard helpers
+
+/// Resolved display state derived from group.summary.reviewStatus (server-canonical).
+private enum AdminResolvedStatus {
+    case approved, rejected, flagged
+
+    /// Returns nil when the status is still pending (actions should show).
+    static func from(_ reviewStatus: String) -> AdminResolvedStatus? {
+        let s = reviewStatus.lowercased()
+        if s == "approved" || s == "auto_approved" { return .approved }
+        if s == "rejected" || s.hasPrefix("rejected_") { return .rejected }
+        if s == "flagged" { return .flagged }
+        return nil
+    }
+
     var systemImage: String {
         switch self {
         case .approved: return "checkmark.seal.fill"
-        case .held: return "pause.circle.fill"
         case .rejected: return "xmark.octagon.fill"
+        case .flagged:  return "flag.fill"
         }
     }
     var tint: Color {
         switch self {
         case .approved: return ADLColor.forest
-        case .held: return ADLColor.amber
         case .rejected: return ADLColor.terracotta
+        case .flagged:  return ADLColor.amber
         }
     }
+    // Labels are computed in the View (MainActor) to avoid calling t() from enum context.
     var labelEN: String {
         switch self {
         case .approved: return "Approved"
-        case .held: return "On hold"
         case .rejected: return "Rejected"
+        case .flagged:  return "Flagged"
         }
     }
     var labelFR: String {
         switch self {
         case .approved: return "Approuvé"
-        case .held: return "En attente"
         case .rejected: return "Rejeté"
+        case .flagged:  return "Signalé"
         }
     }
 }
 
+/// Single submission card in the admin review queue — wired to AdminReviewGroup.
 private struct AdminSubmissionCard: View {
     @EnvironmentObject private var appState: AppState
-    let point: DataPoint
+    let group: AdminReviewGroup
     let riskLevel: RiskLevel
     let trustTier: TrustTier
-    @State private var decision: AdminDecision?
+    @State private var isSubmitting = false
 
-    // Submission photo if present, else a category-tinted icon placeholder.
+    // Resolved status from server — drives already-decided display.
+    private var resolvedStatus: AdminResolvedStatus? {
+        AdminResolvedStatus.from(group.summary.reviewStatus)
+    }
+
+    // Photo thumbnail
     @ViewBuilder private var submissionThumbnail: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(point.category.tint.opacity(0.13))
+                .fill(group.category.tint.opacity(0.13))
                 .frame(width: 60, height: 60)
-            if let raw = point.photoUrl, let url = URL(string: raw) {
+            if let raw = group.photoURL, let url = URL(string: raw) {
                 AsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
                     case .empty:
-                        ProgressView().tint(point.category.tint)
+                        ProgressView().tint(group.category.tint)
                     case .failure:
-                        Image(systemName: point.category.systemImage)
+                        Image(systemName: group.category.systemImage)
                             .font(.system(size: 22, weight: .semibold))
-                            .foregroundColor(point.category.tint)
+                            .foregroundColor(group.category.tint)
                     @unknown default:
-                        Image(systemName: point.category.systemImage)
+                        Image(systemName: group.category.systemImage)
                             .font(.system(size: 22, weight: .semibold))
-                            .foregroundColor(point.category.tint)
+                            .foregroundColor(group.category.tint)
                     }
                 }
                 .frame(width: 60, height: 60)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
-                Image(systemName: point.category.systemImage)
+                Image(systemName: group.category.systemImage)
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundColor(point.category.tint)
+                    .foregroundColor(group.category.tint)
             }
         }
     }
 
-    // Accent color on left border by risk
     private var accentColor: Color {
         switch riskLevel {
         case .high: return ADLColor.terracotta
         case .medium: return ADLColor.amber
         case .low: return ADLColor.forest
         }
+    }
+
+    private var displayName: String {
+        group.siteName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? group.siteName!
+            : group.category.title
     }
 
     var body: some View {
@@ -3967,13 +4124,12 @@ private struct AdminSubmissionCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
 
             HStack(alignment: .top, spacing: 12) {
-                // Submission photo thumbnail, falling back to a category-tinted icon.
                 submissionThumbnail
 
                 VStack(alignment: .leading, spacing: 6) {
                     // Row 1: name + RiskBadge
                     HStack(alignment: .top, spacing: 8) {
-                        Text(point.name.isEmpty ? appState.t("Unnamed submission", "Soumission sans nom") : point.name)
+                        Text(displayName)
                             .font(ADLFont.inter(15, .bold))
                             .foregroundColor(ADLColor.ink)
                             .lineLimit(1)
@@ -3981,66 +4137,100 @@ private struct AdminSubmissionCard: View {
                         RiskBadge(level: riskLevel)
                     }
 
-                    // Row 2: category • subtitle
-                    Text("\(point.category.title) • \(point.subtitle)")
+                    // Row 2: category • riskBucket
+                    Text("\(group.category.title) • \(group.summary.riskBucket.replacingOccurrences(of: "_", with: " "))")
                         .font(ADLFont.inter(13))
                         .foregroundColor(ADLColor.inkMuted)
                         .lineLimit(2)
 
-                    // Row 3: TrustBadge + evidence chip
+                    // Row 3: TrustBadge + evidence + contributor chips
                     HStack(spacing: 6) {
                         TrustBadge(tier: trustTier)
                         ADLPill(
-                            text: "\(point.eventsCount) \(appState.t("evidence", "preuves"))",
+                            text: "\(group.summary.evidenceCount) \(appState.t("evidence", "preuves"))",
                             bg: ADLColor.line,
                             fg: Color(hex: 0x4b5563)
                         )
-                        ADLPill(
-                            text: "Score \(point.trustScore)",
-                            bg: ADLColor.navyWash,
-                            fg: ADLColor.navy
-                        )
+                        if let score = group.summary.trustScore {
+                            ADLPill(
+                                text: "Score \(Int(score))",
+                                bg: ADLColor.navyWash,
+                                fg: ADLColor.navy
+                            )
+                        }
                     }
 
-                    // Row 4: once decided, show the resolved status instead of actions.
-                    if let decision {
+                    // Row 4: already-decided pill OR action buttons
+                    if let status = resolvedStatus {
                         HStack(spacing: 6) {
-                            Image(systemName: decision.systemImage)
+                            Image(systemName: status.systemImage)
                                 .font(.system(size: 12, weight: .bold))
-                            Text(appState.t(decision.labelEN, decision.labelFR))
+                            Text(appState.t(status.labelEN, status.labelFR))
                                 .font(ADLFont.inter(12, .bold))
                         }
-                        .foregroundColor(decision.tint)
+                        .foregroundColor(status.tint)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .background(decision.tint.opacity(0.12))
+                        .background(status.tint.opacity(0.12))
                         .clipShape(Capsule())
                         .padding(.top, 2)
                     } else {
                         HStack(spacing: 8) {
-                            Button { decision = .approved } label: {
+                            Button {
+                                guard !isSubmitting else { return }
+                                isSubmitting = true
+                                Task {
+                                    await appState.submitReviewDecision(
+                                        eventId: group.latestEventId,
+                                        decision: .approved
+                                    )
+                                    isSubmitting = false
+                                }
+                            } label: {
                                 Text(appState.t("Approve", "Approuver"))
                                     .font(ADLFont.inter(12, .bold))
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 12).padding(.vertical, 7)
-                                    .background(ADLColor.forest).clipShape(Capsule())
-                            }.buttonStyle(.plain)
+                                    .background(isSubmitting ? Color.gray : ADLColor.forest)
+                                    .clipShape(Capsule())
+                            }.buttonStyle(.plain).disabled(isSubmitting)
 
-                            Button { decision = .held } label: {
-                                Text(appState.t("Hold", "En attente"))
+                            Button {
+                                guard !isSubmitting else { return }
+                                isSubmitting = true
+                                Task {
+                                    await appState.submitReviewDecision(
+                                        eventId: group.latestEventId,
+                                        decision: .flagged
+                                    )
+                                    isSubmitting = false
+                                }
+                            } label: {
+                                Text(appState.t("Flag", "Signaler"))
                                     .font(ADLFont.inter(12, .bold))
                                     .foregroundColor(ADLColor.ink)
                                     .padding(.horizontal, 12).padding(.vertical, 7)
                                     .overlay(Capsule().stroke(ADLColor.lineStrong, lineWidth: 1.5))
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(.plain).disabled(isSubmitting)
 
-                            Button { decision = .rejected } label: {
+                            Button {
+                                guard !isSubmitting else { return }
+                                isSubmitting = true
+                                Task {
+                                    await appState.submitReviewDecision(
+                                        eventId: group.latestEventId,
+                                        decision: .rejected
+                                    )
+                                    isSubmitting = false
+                                }
+                            } label: {
                                 Text(appState.t("Reject", "Rejeter"))
                                     .font(ADLFont.inter(12, .bold))
                                     .foregroundColor(.white)
                                     .padding(.horizontal, 12).padding(.vertical, 7)
-                                    .background(ADLColor.terracotta).clipShape(Capsule())
-                            }.buttonStyle(.plain)
+                                    .background(isSubmitting ? Color.gray : ADLColor.terracotta)
+                                    .clipShape(Capsule())
+                            }.buttonStyle(.plain).disabled(isSubmitting)
                         }
                         .padding(.top, 2)
                     }
@@ -4976,44 +5166,29 @@ struct AnalyticsView: View {
     private var clientContent: some View {
         VStack(alignment: .leading, spacing: 24) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("CLIENT INSIGHTS")
+                Text(appState.t("CLIENT INSIGHTS", "ANALYSES CLIENT"))
                     .font(ADLFont.inter(11, .bold))
                     .foregroundColor(ADLColor.inkMuted)
-                Text("Your data, two ways - map-level context or executive summary")
+                Text(appState.t(
+                    "Your data, two ways - map-level context or executive summary",
+                    "Vos données en deux vues - contexte cartographique ou résumé exécutif"
+                ))
                     .font(ADLFont.inter(14, .semibold))
                     .foregroundColor(ADLColor.ink)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 2)
 
-            VStack(spacing: 12) {
-                ADLShortcutTile(
-                    title: "Delta Intelligence",
-                    subtitle: "Neighborhood shifts, top cells, and export-ready map context",
-                    systemImage: "map.fill",
-                    filled: true
-                ) {
-                    appState.selectedTab = .clientDashboard
-                }
-                ADLShortcutTile(
-                    title: "Investor Dashboard",
-                    subtitle: "Executive KPIs for trust, growth, and reporting confidence",
-                    systemImage: "chart.line.uptrend.xyaxis"
-                ) {
-                    appState.selectedTab = .investor
-                }
-            }
-
             clientKpiGrid
 
             ADLCard {
                 VStack(alignment: .leading, spacing: 14) {
                     HStack {
-                        Label("HOW CLIENTS USE THIS SURFACE", systemImage: "chart.bar.fill")
+                        Label(appState.t("HOW CLIENTS USE THIS SURFACE", "UTILISATION CLIENT"), systemImage: "chart.bar.fill")
                             .font(ADLFont.inter(11, .bold))
                             .foregroundColor(ADLColor.ink)
                         Spacer()
-                        Text("ROLE-SPECIFIC")
+                        Text(appState.t("ROLE-SPECIFIC", "PAR RÔLE"))
                             .font(ADLFont.inter(11, .semibold))
                             .foregroundColor(ADLColor.inkMuted)
                     }
@@ -5021,7 +5196,10 @@ struct AnalyticsView: View {
                         Text(clientTopCategoryText)
                             .font(ADLFont.inter(14, .semibold))
                             .foregroundColor(ADLColor.ink)
-                        Text("Start with Delta Intelligence when you need exact map location, cluster drivers, and exportable context. Move to Investor Dashboard when the conversation shifts to trust, growth, and executive KPIs.")
+                        Text(appState.t(
+                            "Use the Delta and Dashboard tabs for the full dedicated views. This Insights page summarizes the live signals those pages are built from.",
+                            "Utilisez les onglets Delta et Dashboard pour les vues complètes. Cette page Insights résume les signaux live qui alimentent ces pages."
+                        ))
                             .font(ADLFont.inter(12, .regular))
                             .foregroundColor(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -5060,24 +5238,6 @@ struct AnalyticsView: View {
                     .padding(.vertical, 7)
                     .background(ADLColor.ink)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            }
-
-            VStack(spacing: 12) {
-                ADLShortcutTile(
-                    title: "Delta Intelligence",
-                    subtitle: "Snapshots, trends & anomalies",
-                    systemImage: "chart.bar.fill",
-                    filled: true
-                ) {
-                    appState.selectedTab = .clientDashboard
-                }
-                ADLShortcutTile(
-                    title: "Agent Performance",
-                    subtitle: "Quality, fraud & assignment pace",
-                    systemImage: "person.2.fill"
-                ) {
-                    appState.selectedTab = .agentPerformance
-                }
             }
 
             adminKpiGrid
@@ -5719,8 +5879,102 @@ struct ProfileRow: View {
     }
 }
 
+struct ProfileAvatarMark: View {
+    let name: String
+    var image: String?
+    var preset: String?
+    var size: CGFloat = 64
+
+    private var normalizedPreset: String {
+        if let preset = preset?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(), !preset.isEmpty {
+            return preset
+        }
+        if let image = image?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+           image.hasPrefix("preset:") {
+            return String(image.dropFirst("preset:".count))
+        }
+        return "baobab"
+    }
+
+    private var imageURL: URL? {
+        guard let raw = image?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty,
+              !raw.lowercased().hasPrefix("preset:")
+        else { return nil }
+        return URL(string: raw)
+    }
+
+    var body: some View {
+        Group {
+            if let imageURL {
+                AsyncImage(url: imageURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image.resizable().scaledToFill()
+                    default:
+                        presetAvatar
+                    }
+                }
+            } else {
+                presetAvatar
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 2))
+        .accessibilityLabel("Profile picture for \(name)")
+    }
+
+    private var presetAvatar: some View {
+        ZStack {
+            Circle().fill(background)
+            Circle()
+                .fill(accent.opacity(0.24))
+                .frame(width: size * 0.42, height: size * 0.42)
+                .offset(x: -size * 0.22, y: -size * 0.22)
+            Circle()
+                .fill(accent.opacity(0.16))
+                .frame(width: size * 0.34, height: size * 0.34)
+                .offset(x: size * 0.24, y: size * 0.22)
+            Text(initial)
+                .font(.system(size: size * 0.42, weight: .bold))
+                .foregroundColor(textColor)
+        }
+    }
+
+    private var initial: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return String(trimmed.first.map(Character.init) ?? "A").uppercased()
+    }
+
+    private var background: Color {
+        switch normalizedPreset {
+        case "sunrise": return Color(hex: 0xfde6cb)
+        case "lagoon": return Color(hex: 0xddeff6)
+        default: return Color(hex: 0xe7f1e6)
+        }
+    }
+
+    private var accent: Color {
+        switch normalizedPreset {
+        case "sunrise": return ADLColor.terracotta
+        case "lagoon": return Color(hex: 0x0f6b8c)
+        default: return ADLColor.forest
+        }
+    }
+
+    private var textColor: Color {
+        switch normalizedPreset {
+        case "sunrise": return ADLColor.terraDark
+        case "lagoon": return ADLColor.navy
+        default: return ADLColor.forestDark
+        }
+    }
+}
+
 struct ProfileView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         VStack(spacing: 0) {
@@ -5875,8 +6129,12 @@ struct ProfileView: View {
     private var profileHero: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 14) {
-                // 96-pt identity circle (web: h-[60px] w-[60px] in hero → plan specifies size:96)
-                IdentityCircle(name: displayName, size: 96)
+                ProfileAvatarMark(
+                    name: displayName,
+                    image: appState.userProfile?.image,
+                    preset: appState.userProfile?.avatarPreset,
+                    size: 96
+                )
 
                 VStack(alignment: .leading, spacing: 6) {
                     // Name + tier pill (web: text-xl font-bold + micro-label bg-gold/20 text-gold)
@@ -6017,33 +6275,47 @@ struct ProfileView: View {
             }
             .buttonStyle(.plain)
 
-            // Help Center — gold-wash background
-            ADLCard {
-                HStack(spacing: 12) {
-                    Image(systemName: "book.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(ADLColor.navy)
-                        .frame(width: 40, height: 40)
-                        .background(Color.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(appState.t("Help Center", "Centre d'aide"))
-                            .font(ADLFont.inter(15, .semibold))
+            Button {
+                openURL(helpCenterURL)
+            } label: {
+                ADLCard {
+                    HStack(spacing: 12) {
+                        Image(systemName: "book.fill")
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(ADLColor.navy)
-                        Text(appState.t("Guides for your current role and workflow.", "Guides pour votre rôle et votre workflow."))
-                            .font(ADLFont.inter(12))
+                            .frame(width: 40, height: 40)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(appState.t("Help Center", "Centre d'aide"))
+                                .font(ADLFont.inter(15, .semibold))
+                                .foregroundColor(ADLColor.navy)
+                            Text(appState.t("Guides for your current role and workflow.", "Guides pour votre rôle et votre workflow."))
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(ADLColor.inkMuted)
                     }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(ADLColor.inkMuted)
                 }
             }
+            .buttonStyle(.plain)
             .background(ADLColor.goldWash)
             .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
         }
+    }
+
+    private var helpCenterURL: URL {
+        let path: String
+        switch appState.selectedRole {
+        case .client: path = "/docs/client"
+        case .admin: path = "/docs/admin"
+        case .agent: path = "/docs/agent"
+        }
+        return URL(string: "https://www.app.africandatalayer.com\(path)")!
     }
 
     // MARK: - Admin map access card
@@ -6298,6 +6570,10 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @AppStorage("adl_high_contrast") private var highContrast = false
     @AppStorage("adl_sms_notifications") private var smsNotifications = false
+    @State private var displayNameDraft = ""
+    @State private var selectedAvatarPreset = "baobab"
+    @State private var profileMessage: String?
+    @State private var isSavingProfile = false
 
     private var language: String { appState.language }
 
@@ -6311,6 +6587,7 @@ struct SettingsView: View {
                         clientIdentityCard
                     }
 
+                    profileSection
                     languageSection
                     displaySection
 
@@ -6328,6 +6605,7 @@ struct SettingsView: View {
         }
         .background((highContrast ? Color.white : ADLColor.paper).ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
+        .onAppear(perform: syncProfileDrafts)
     }
 
     private func text(_ en: String, _ fr: String) -> String {
@@ -6336,9 +6614,14 @@ struct SettingsView: View {
 
     private var clientIdentityCard: some View {
         HStack(spacing: 14) {
-            IdentityCircle(name: "Client", size: 52)
+            ProfileAvatarMark(
+                name: currentDisplayName,
+                image: appState.userProfile?.image,
+                preset: selectedAvatarPreset,
+                size: 52
+            )
             VStack(alignment: .leading, spacing: 4) {
-                Text(text("Your Organization", "Votre organisation"))
+                Text(currentDisplayName)
                     .font(ADLFont.inter(16, .bold))
                     .foregroundColor(.white)
                 Text(text("Data client - Bonamoussadi", "Client data - Bonamoussadi"))
@@ -6358,6 +6641,72 @@ struct SettingsView: View {
         .padding(20)
         .background(ADLColor.navy)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+    }
+
+    private var profileSection: some View {
+        SettingsSection(title: text("Profile", "Profil")) {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(appState.selectedRole == .client
+                         ? text("Organization name", "Nom de l'organisation")
+                         : text("Display name", "Nom affiché"))
+                        .font(ADLFont.inter(12, .bold))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                    TextField(
+                        appState.selectedRole == .client
+                            ? text("Your Organization", "Votre organisation")
+                            : text("Display name", "Nom affiché"),
+                        text: $displayNameDraft
+                    )
+                    .font(ADLFont.inter(15))
+                    .textInputAutocapitalization(.words)
+                    .padding(.horizontal, 12)
+                    .frame(height: 48)
+                    .background(ADLColor.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(text("Avatar", "Avatar"))
+                        .font(ADLFont.inter(12, .bold))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                    HStack(spacing: 12) {
+                        ForEach(["baobab", "sunrise", "lagoon"], id: \.self) { preset in
+                            Button {
+                                selectedAvatarPreset = preset
+                            } label: {
+                                ProfileAvatarMark(name: currentDisplayName, preset: preset, size: 54)
+                                    .overlay(
+                                        Circle().stroke(selectedAvatarPreset == preset ? ADLColor.navy : Color.clear, lineWidth: 3)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(preset.capitalized)
+                        }
+                    }
+                }
+
+                if let profileMessage {
+                    Text(profileMessage)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(profileMessage == text("Saved", "Enregistré") ? ADLColor.forest : ADLColor.terracotta)
+                }
+
+                Button {
+                    saveProfile()
+                } label: {
+                    if isSavingProfile {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(text("Save profile", "Enregistrer le profil"))
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(isSavingProfile)
+            }
+            .padding(16)
+            .settingsCard()
+        }
     }
 
     private var languageSection: some View {
@@ -6467,6 +6816,47 @@ struct SettingsView: View {
             return "v\(cleanVersion) (\(build))"
         }
         return "v\(cleanVersion)"
+    }
+
+    private var currentDisplayName: String {
+        let candidate = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !candidate.isEmpty { return candidate }
+        if let name = appState.userProfile?.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name
+        }
+        return appState.selectedRole == .client
+            ? text("Your Organization", "Votre organisation")
+            : appState.profile.name
+    }
+
+    private func syncProfileDrafts() {
+        displayNameDraft = appState.userProfile?.name ?? appState.profile.name
+        selectedAvatarPreset = normalizedPreset(appState.userProfile?.avatarPreset ?? appState.userProfile?.image)
+    }
+
+    private func normalizedPreset(_ raw: String?) -> String {
+        let value = raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let preset = value.hasPrefix("preset:") ? String(value.dropFirst("preset:".count)) : value
+        return ["baobab", "sunrise", "lagoon"].contains(preset) ? preset : "baobab"
+    }
+
+    private func saveProfile() {
+        let name = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else {
+            profileMessage = text("Name cannot be empty.", "Le nom ne peut pas être vide.")
+            return
+        }
+        isSavingProfile = true
+        profileMessage = nil
+        Task {
+            do {
+                try await appState.updateProfile(name: name, avatarPreset: selectedAvatarPreset)
+                profileMessage = text("Saved", "Enregistré")
+            } catch {
+                profileMessage = (error as? APIError)?.message ?? text("Unable to save profile.", "Impossible d'enregistrer le profil.")
+            }
+            isSavingProfile = false
+        }
     }
 }
 
@@ -6609,6 +6999,19 @@ enum SettingsLegalKind {
                 : "Report intellectual-property infringement with a clear description and your contact details."
         }
     }
+
+    var fullPageURL: URL {
+        switch self {
+        case .privacy:
+            return URL(string: "https://www.app.africandatalayer.com/")!
+        case .terms:
+            return URL(string: "https://www.app.africandatalayer.com/")!
+        case .compliance:
+            return URL(string: "https://www.app.africandatalayer.com/")!
+        case .ipReport:
+            return URL(string: "https://www.app.africandatalayer.com/")!
+        }
+    }
 }
 
 struct SettingsLegalView: View {
@@ -6633,6 +7036,13 @@ struct SettingsLegalView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
+
+                    Button {
+                        openURL(kind.fullPageURL)
+                    } label: {
+                        Label(openFullPageLabel, systemImage: "safari.fill")
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
 
                     Button {
                         openURL(contactURL)
@@ -6668,6 +7078,15 @@ struct SettingsLegalView: View {
 
     private var contactIcon: String {
         kind == .ipReport ? "envelope.badge.shield.half.filled" : "envelope.fill"
+    }
+
+    private var openFullPageLabel: String {
+        switch kind {
+        case .ipReport:
+            return language == "fr" ? "Ouvrir le formulaire complet" : "Open full form"
+        default:
+            return language == "fr" ? "Ouvrir la page complète" : "Open full page"
+        }
     }
 }
 

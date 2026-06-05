@@ -44,6 +44,12 @@ final class AppState: ObservableObject {
         didSet { UserDefaults.standard.set(language, forKey: "adl_language") }
     }
 
+    // MARK: - Admin Review Queue (africandatalayer-ot4)
+    @Published var reviewQueue: [AdminReviewGroup] = []
+    @Published var reviewStats: AdminReviewStats?
+    @Published var isLoadingReview = false
+    @Published var reviewError: String?
+
     func t(_ en: String, _ fr: String) -> String { language == "fr" ? fr : en }
 
     private let queueStore = OfflineQueueStore()
@@ -183,7 +189,7 @@ final class AppState: ObservableObject {
     func signIn(identifier: String, password: String) async {
         let normalizedIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedIdentifier.isEmpty, !password.isEmpty else {
-            authError = "Enter phone/email and password."
+            authError = t("Enter phone/email and password.", "Saisissez téléphone/email et mot de passe.")
             return
         }
 
@@ -199,7 +205,51 @@ final class AppState: ObservableObject {
             }
             applyAuthenticatedUser(user)
         } catch {
-            authError = (error as? APIError)?.message ?? "Unable to sign in."
+            authError = (error as? APIError)?.message ?? t("Unable to sign in.", "Connexion impossible.")
+        }
+    }
+
+    func register(
+        identifier: String,
+        password: String,
+        acceptedTerms: Bool,
+        smsOptIn: Bool,
+        emailNoticeAccepted: Bool
+    ) async {
+        let normalizedIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedIdentifier.isEmpty, !password.isEmpty else {
+            authError = t("Enter phone/email and password.", "Saisissez téléphone/email et mot de passe.")
+            return
+        }
+        guard acceptedTerms else {
+            authError = t(
+                "You must accept the Terms of Use and Privacy Policy.",
+                "Vous devez accepter les Conditions d'utilisation et la Politique de confidentialité."
+            )
+            return
+        }
+        guard emailNoticeAccepted else {
+            authError = t(
+                "You must acknowledge operational email notices.",
+                "Vous devez accepter les avis opérationnels par email."
+            )
+            return
+        }
+
+        isSigningIn = true
+        authError = nil
+        defer { isSigningIn = false }
+
+        do {
+            try await apiClient.register(identifier: normalizedIdentifier, password: password, smsOptIn: smsOptIn)
+            let session = try await apiClient.signIn(identifier: normalizedIdentifier, password: password)
+            guard let user = session.user else {
+                authError = t("Unable to load session.", "Session impossible à charger.")
+                return
+            }
+            applyAuthenticatedUser(user)
+        } catch {
+            authError = (error as? APIError)?.message ?? t("Unable to create account.", "Création du compte impossible.")
         }
     }
 
@@ -239,6 +289,15 @@ final class AppState: ObservableObject {
                 self.continueAsGuest()
             }
         }
+    }
+
+    func updateProfile(name: String? = nil, avatarPreset: String? = nil) async throws {
+        let updated = try await apiClient.updateUserProfile(name: name, avatarPreset: avatarPreset)
+        userProfile = updated
+        if let nextName = updated.name?.trimmingCharacters(in: .whitespacesAndNewlines), !nextName.isEmpty {
+            profile.name = nextName
+        }
+        refreshGamification()
     }
 
     func switchRole(_ role: UserRole) {
@@ -348,6 +407,45 @@ final class AppState: ObservableObject {
         } catch {
             points = []
             pointsError = (error as? APIError)?.message ?? "Unable to load backend points."
+        }
+    }
+
+    // MARK: - Admin Review Queue service methods (africandatalayer-ot4)
+
+    func loadReviewQueue(force: Bool = false) async {
+        guard !isLoadingReview else { return }
+        if !reviewQueue.isEmpty, !force { return }
+        isLoadingReview = true
+        reviewError = nil
+        defer { isLoadingReview = false }
+        do {
+            let result = try await apiClient.fetchReviewQueue()
+            reviewQueue = result.groups
+            reviewStats = result.stats
+        } catch {
+            reviewError = (error as? APIError)?.message ?? "Unable to load review queue."
+        }
+    }
+
+    func submitReviewDecision(eventId: String, decision: ReviewDecision) async {
+        struct DecisionBody: Encodable { let decision: String }
+        do {
+            try await apiClient.patchJSON(
+                path: "/api/submissions/\(eventId)?view=review",
+                body: DecisionBody(decision: decision.rawValue)
+            )
+            // Optimistically update matching group's reviewStatus locally
+            reviewQueue = reviewQueue.map { group in
+                guard group.latestEventId == eventId else { return group }
+                var updated = group
+                updated.summary.reviewStatus = decision.rawValue
+                return updated
+            }
+            // Background refresh to pull canonical server state
+            Task { await loadReviewQueue(force: true) }
+        } catch {
+            // Errors are transient — the queue reload will correct state
+            reviewError = (error as? APIError)?.message ?? "Unable to submit decision."
         }
     }
 
@@ -565,6 +663,21 @@ final class ADLAPIClient {
         return session
     }
 
+    func register(identifier: String, password: String, smsOptIn: Bool) async throws {
+        var request = URLRequest(url: url(path: "/api/auth/register"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(RegisterPayload(
+            identifier: identifier,
+            email: identifier,
+            password: password,
+            acceptedPolicies: ["privacy", "terms"],
+            smsOptIn: smsOptIn ? true : nil
+        ))
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
     func signOut() async throws {
         let csrf = try await csrfToken()
         var request = URLRequest(url: url(path: "/api/auth/signout"))
@@ -599,11 +712,38 @@ final class ADLAPIClient {
         try await fetchJSON(UserProfile.self, path: "/api/user")
     }
 
+    func updateUserProfile(name: String?, avatarPreset: String?) async throws -> UserProfile {
+        var request = URLRequest(url: url(path: "/api/user"))
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(UUID().uuidString, forHTTPHeaderField: "Idempotency-Key")
+        request.httpBody = try JSONEncoder().encode(UserProfileUpdatePayload(name: name, avatarPreset: avatarPreset))
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+        return try decoder.decode(UserProfile.self, from: data)
+    }
+
     func submit(_ payload: SubmissionPayload) async throws {
         var request = URLRequest(url: url(path: "/api/submissions"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(payload)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    /// Fetch the admin review queue — page 0 defaults, optional risk filter.
+    func fetchReviewQueue(page: Int = 0, limit: Int = 20) async throws -> AdminReviewQueueResponse {
+        let path = "/api/submissions?view=review_queue&scope=global&page=\(page)&limit=\(limit)"
+        return try await fetchJSON(AdminReviewQueueResponse.self, path: path)
+    }
+
+    /// PATCH /api/submissions/{eventId}?view=review with a ReviewDecision body.
+    func patchJSON<T: Encodable>(path: String, body: T) async throws {
+        var request = URLRequest(url: url(path: path))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await urlSession.data(for: request)
         try validate(response: response, data: data)
     }
@@ -669,6 +809,19 @@ struct AuthRedirectPayload: Codable {
 struct APIErrorPayload: Codable {
     var error: String?
     var message: String?
+}
+
+struct RegisterPayload: Encodable {
+    var identifier: String
+    var email: String
+    var password: String
+    var acceptedPolicies: [String]
+    var smsOptIn: Bool?
+}
+
+struct UserProfileUpdatePayload: Encodable {
+    var name: String?
+    var avatarPreset: String?
 }
 
 enum APIError: Error {
