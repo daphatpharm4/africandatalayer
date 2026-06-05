@@ -4517,7 +4517,6 @@ struct AdminReviewView: View {
     }
 }
 
-@MainActor
 private enum AdminNativeMode: String, CaseIterable, Hashable {
     case review
     case assignments
