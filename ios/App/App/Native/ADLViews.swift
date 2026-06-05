@@ -1833,6 +1833,10 @@ struct ContributionView: View {
     @State private var showingCamera = false
     @State private var validationMessage: String?
     @State private var mapPointId: String?
+    // Step machine: 0=category, 1=photo, 2=location, 3=fields, 4=review
+    @State private var currentStep: Int = 0
+
+    private let totalSteps = 5
 
     var body: some View {
         Group {
@@ -1845,104 +1849,65 @@ struct ContributionView: View {
         }
     }
 
-    private var contributionForm: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ADLCard {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text("Capture point")
-                            .font(.title2.weight(.bold))
-                            .foregroundColor(ADLColor.ink)
-
-                        Picker("Vertical", selection: $category) {
-                            ForEach(SubmissionCategory.allCases) { item in
-                                Label(item.title, systemImage: item.systemImage).tag(item)
-                            }
-                        }
-
-                        RequiredFieldsView(category: category)
-                        detailsFields
-
-                        TextEditor(text: $notes)
-                            .frame(minHeight: 110)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(ADLColor.line, lineWidth: 1)
-                            )
-                            .accessibilityLabel("Notes")
-
-                        Picker("Consent", selection: $consentStatus) {
-                            ForEach(ConsentStatus.allCases) { status in
-                                Text(status.title).tag(status)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        HStack(spacing: 10) {
-                            Button {
-                                locationProvider.requestCurrentLocation()
-                            } label: {
-                                Label("GPS", systemImage: "location.fill")
-                            }
-                            .buttonStyle(SecondaryButtonStyle())
-
-                            Button {
-                                showingCamera = true
-                            } label: {
-                                Label("Photo", systemImage: "camera.fill")
-                            }
-                            .buttonStyle(SecondaryButtonStyle())
-                        }
-
-                        HStack {
-                            StatusPill(title: locationProvider.statusText, tint: ADLColor.forest)
-                            if capturedImage != nil {
-                                StatusPill(title: "Photo ready", tint: ADLColor.gold)
-                            }
-                        }
-
-                        if let validationMessage {
-                            Text(validationMessage)
-                                .font(.footnote.weight(.semibold))
-                                .foregroundColor(ADLColor.terracotta)
-                        }
-
-                        if let capturedImage {
-                            Image(uiImage: capturedImage)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 180)
-                                .clipped()
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                        }
-
-                        Button {
-                            guard let payload = buildPayload() else { return }
-                            appState.enqueueContribution(
-                                title: displayTitle,
-                                notes: notes,
-                                category: category,
-                                location: locationProvider.lastLocation,
-                                image: capturedImage,
-                                payload: payload
-                            )
-                            siteName = ""
-                            roadName = ""
-                            notes = ""
-                            capturedImage = nil
-                            validationMessage = nil
-                            mapPointId = nil
-                        } label: {
-                            Label("Queue Contribution", systemImage: "tray.and.arrow.down.fill")
-                        }
-                        .buttonStyle(PrimaryButtonStyle())
-                    }
+    // MARK: - Step progress indicator (dots)
+    private var stepProgressBar: some View {
+        HStack(spacing: 6) {
+            ForEach(0..<totalSteps, id: \.self) { idx in
+                if idx < currentStep {
+                    // Completed step: filled terra pill
+                    Capsule()
+                        .fill(ADLColor.terracotta)
+                        .frame(width: 20, height: 4)
+                } else if idx == currentStep {
+                    // Active step: wide navy pill
+                    Capsule()
+                        .fill(ADLColor.navy)
+                        .frame(width: 28, height: 4)
+                } else {
+                    // Future step: gray dot
+                    Capsule()
+                        .fill(ADLColor.lineStrong)
+                        .frame(width: 12, height: 4)
                 }
             }
-            .padding(16)
+            Spacer()
+            Text(appState.t("Step \(currentStep + 1) of \(totalSteps)", "Étape \(currentStep + 1) sur \(totalSteps)"))
+                .font(ADLFont.inter(11, .semibold))
+                .foregroundColor(ADLColor.inkMuted)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .animation(.easeInOut(duration: 0.2), value: currentStep)
+    }
+
+    // MARK: - Main form shell
+    private var contributionForm: some View {
+        VStack(spacing: 0) {
+            ADLScreenHeader(
+                title: appState.t("Capture", "Capture"),
+                subtitle: stepSubtitle,
+                onBack: currentStep > 0 ? { currentStep -= 1 } : nil
+            )
+            stepProgressBar
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Group {
+                        switch currentStep {
+                        case 0: step0CategoryPicker
+                        case 1: step1Photo
+                        case 2: step2Location
+                        case 3: step3Fields
+                        default: step4Review
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+                }
+                .padding(.top, 8)
+                .padding(.bottom, 32)
+            }
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Capture")
         .sheet(isPresented: $showingCamera) {
             CameraPicker(image: $capturedImage)
         }
@@ -1951,76 +1916,688 @@ struct ContributionView: View {
         }
     }
 
-    @ViewBuilder
-    private var detailsFields: some View {
+    private var stepSubtitle: String {
+        switch currentStep {
+        case 0: return appState.t("Choose category", "Choisir la catégorie")
+        case 1: return appState.t("Capture photo", "Capturer la photo")
+        case 2: return appState.t("Confirm location", "Confirmer la position")
+        case 3: return appState.t("Required fields", "Champs requis")
+        default: return appState.t("Review & submit", "Vérifier et envoyer")
+        }
+    }
+
+    // MARK: - Step 0: Category / Vertical Picker
+    private var step0CategoryPicker: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionLabel(text: appState.t("Category", "Catégorie"), wide: true)
+            VerticalPickerBar(
+                categories: SubmissionCategory.allCases,
+                selected: $category
+            )
+            // Selected category description card
+            ADLCard {
+                HStack(spacing: 14) {
+                    Image(systemName: category.systemImage)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 48, height: 48)
+                        .background(category.tint)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(category.title)
+                            .font(ADLFont.inter(16, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        let fields = VerticalConfig.all[category]?.requiredFields ?? []
+                        Text(appState.t("Required: \(fields.joined(separator: ", "))",
+                                        "Requis : \(fields.joined(separator: ", "))"))
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                }
+            }
+            // Notes field
+            VStack(alignment: .leading, spacing: 6) {
+                SectionLabel(text: appState.t("Notes (optional)", "Notes (optionnel)"))
+                ZStack(alignment: .topLeading) {
+                    if notes.isEmpty {
+                        Text(appState.t("Add any observations...", "Ajoutez vos observations..."))
+                            .font(ADLFont.inter(15))
+                            .foregroundColor(ADLColor.inkMuted.opacity(0.5))
+                            .padding(.top, 12)
+                            .padding(.leading, 4)
+                    }
+                    TextEditor(text: $notes)
+                        .font(ADLFont.inter(15))
+                        .frame(minHeight: 88)
+                        .scrollContentBackground(.hidden)
+                }
+                .padding(12)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(ADLColor.lineStrong, lineWidth: 1)
+                )
+            }
+            Button {
+                currentStep = 1
+            } label: {
+                HStack {
+                    Text(appState.t("Continue", "Continuer"))
+                    Image(systemName: "arrow.right")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    // MARK: - Step 1: Photo Capture
+    private var step1Photo: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionLabel(text: appState.t("Step 1 — Capture photo", "Étape 1 — Capturer la photo"), wide: true)
+            // Capture surface
+            Button {
+                showingCamera = true
+            } label: {
+                ZStack {
+                    if let img = capturedImage {
+                        Image(uiImage: img)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(maxWidth: .infinity, minHeight: 220)
+                            .clipped()
+                            .overlay(
+                                LinearGradient(
+                                    colors: [Color.black.opacity(0), Color.black.opacity(0.38)],
+                                    startPoint: .top, endPoint: .bottom
+                                )
+                            )
+                        // Captured checkmark overlay
+                        VStack(spacing: 6) {
+                            Spacer()
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundColor(ADLColor.terracotta)
+                                Text(appState.t("Photo captured — tap to retake", "Photo capturée — appuyez pour reprendre"))
+                                    .font(ADLFont.inter(12, .semibold))
+                                    .foregroundColor(.white)
+                            }
+                            .padding(.bottom, 12)
+                        }
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 36, weight: .medium))
+                                .foregroundColor(Color(hex: 0x6b7280))
+                            Text(appState.t("Tap to capture", "Appuyez pour capturer"))
+                                .font(ADLFont.inter(14, .semibold))
+                                .foregroundColor(Color(hex: 0x4b5563))
+                            Text(appState.t("Photo required for verification", "Photo requise pour vérification"))
+                                .font(ADLFont.inter(11))
+                                .foregroundColor(Color(hex: 0x9ca3af))
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 220)
+                        .background(ADLColor.line)
+                    }
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(capturedImage != nil ? ADLColor.terracotta : ADLColor.lineStrong,
+                            style: StrokeStyle(lineWidth: 2, dash: capturedImage != nil ? [] : [6, 4]))
+            )
+            .buttonStyle(.plain)
+            // Camera-only note
+            Text(capturedImage != nil
+                ? appState.t("Tap to retake if the frame changed.", "Appuyez pour reprendre si le cadrage a changé.")
+                : appState.t("Camera capture only. Gallery uploads are blocked.", "Capture caméra uniquement. Import galerie bloqué."))
+                .font(ADLFont.inter(11, .medium))
+                .foregroundColor(Color(hex: 0x6b7280))
+            // GPS status mini-card
+            ADLCard {
+                HStack(spacing: 12) {
+                    Image(systemName: locationProvider.lastLocation != nil ? "checkmark.circle.fill" : "mappin.circle")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(locationProvider.lastLocation != nil ? ADLColor.forest : Color(hex: 0x6b7280))
+                        .frame(width: 32, height: 32)
+                        .background(locationProvider.lastLocation != nil ? ADLColor.forestWash : ADLColor.line)
+                        .clipShape(Circle())
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(locationProvider.lastLocation != nil
+                             ? appState.t("GPS locked", "GPS verrouillé")
+                             : appState.t("Waiting for GPS lock", "En attente du GPS"))
+                            .font(ADLFont.inter(13, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        if let loc = locationProvider.lastLocation {
+                            Text(String(format: "%.4f°, %.4f°%@", loc.latitude, loc.longitude,
+                                        loc.accuracyMeters.map { " · ±\(Int($0))m" } ?? ""))
+                                .font(ADLFont.inter(11))
+                                .foregroundColor(ADLColor.inkMuted)
+                        } else {
+                            Text(appState.t("Tap GPS on next step to capture location", "GPS capturé à l'étape suivante"))
+                                .font(ADLFont.inter(11))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                    Spacer()
+                }
+            }
+            if let validationMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(ADLColor.terracotta)
+                    Text(validationMessage)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                }
+                .padding(12)
+                .background(ADLColor.terraWash)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            Button {
+                if capturedImage == nil {
+                    validationMessage = appState.t("Please capture a photo before continuing.", "Veuillez capturer une photo avant de continuer.")
+                } else {
+                    validationMessage = nil
+                    currentStep = 2
+                }
+            } label: {
+                HStack {
+                    Text(appState.t("Continue", "Continuer"))
+                    Image(systemName: "arrow.right")
+                }
+            }
+            .buttonStyle(CTAButtonStyle())
+        }
+    }
+
+    // MARK: - Step 2: GPS / Location
+    private var step2Location: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionLabel(text: appState.t("Step 3 — Confirm location", "Étape 3 — Confirmer la position"), wide: true)
+            // Location card
+            ADLCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "location.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(locationProvider.lastLocation != nil ? ADLColor.forest : ADLColor.inkMuted)
+                            .frame(width: 36, height: 36)
+                            .background(locationProvider.lastLocation != nil ? ADLColor.forestWash : ADLColor.line)
+                            .clipShape(Circle())
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(locationProvider.lastLocation != nil
+                                 ? appState.t("GPS locked", "GPS verrouillé")
+                                 : appState.t("GPS pending", "GPS en attente"))
+                                .font(ADLFont.inter(14, .bold))
+                                .foregroundColor(ADLColor.ink)
+                            Text(locationProvider.statusText)
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                        Spacer()
+                    }
+                    if let loc = locationProvider.lastLocation {
+                        // Coordinate display strip
+                        HStack(spacing: 0) {
+                            coordChip(label: "LAT", value: String(format: "%.5f°", loc.latitude))
+                            Divider().frame(height: 28).padding(.horizontal, 8)
+                            coordChip(label: "LNG", value: String(format: "%.5f°", loc.longitude))
+                            if let acc = loc.accuracyMeters {
+                                Divider().frame(height: 28).padding(.horizontal, 8)
+                                coordChip(label: appState.t("ACC", "PRÉC"), value: "±\(Int(acc))m")
+                            }
+                        }
+                        .padding(10)
+                        .background(ADLColor.navyWash)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    }
+                }
+            }
+            // Capture GPS button
+            Button {
+                locationProvider.requestCurrentLocation()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "location.fill")
+                    Text(locationProvider.lastLocation != nil
+                         ? appState.t("Refresh GPS", "Actualiser le GPS")
+                         : appState.t("Capture GPS", "Capturer le GPS"))
+                }
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            if let validationMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(ADLColor.terracotta)
+                    Text(validationMessage)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                }
+                .padding(12)
+                .background(ADLColor.terraWash)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            Button {
+                if locationProvider.lastLocation == nil {
+                    validationMessage = appState.t("Capture GPS before continuing.", "Capturez le GPS avant de continuer.")
+                } else {
+                    validationMessage = nil
+                    currentStep = 3
+                }
+            } label: {
+                HStack {
+                    Text(appState.t("Continue", "Continuer"))
+                    Image(systemName: "arrow.right")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    private func coordChip(label: String, value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(label)
+                .font(ADLFont.inter(9, .bold))
+                .tracking(1.4)
+                .foregroundColor(ADLColor.navy)
+            Text(value)
+                .font(ADLFont.inter(12, .bold))
+                .foregroundColor(ADLColor.ink)
+        }
+    }
+
+    // MARK: - Step 3: Required Fields
+    private var step3Fields: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionLabel(text: appState.t("Step 2 — \(category.title) details", "Étape 2 — Détails \(category.title)"), wide: true)
+            RequiredFieldsView(category: category)
+            detailsFieldsStyled
+            // Consent picker
+            VStack(alignment: .leading, spacing: 8) {
+                SectionLabel(text: appState.t("Consent & Privacy", "Consentement et confidentialité"))
+                ForEach(ConsentStatus.allCases) { status in
+                    let isActive = consentStatus == status
+                    Button {
+                        consentStatus = status
+                    } label: {
+                        HStack {
+                            Text(status.title)
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(isActive ? ADLColor.navy : ADLColor.inkMuted)
+                            Spacer()
+                            if isActive {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(ADLColor.navy)
+                            }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(isActive ? ADLColor.navyWash : Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(isActive ? ADLColor.navyBorder : ADLColor.lineStrong, lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            if let validationMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(ADLColor.terracotta)
+                    Text(validationMessage)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                }
+                .padding(12)
+                .background(ADLColor.terraWash)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            Button {
+                // Validate required field presence before moving to review
+                if let msg = validateRequiredFields() {
+                    validationMessage = msg
+                } else {
+                    validationMessage = nil
+                    currentStep = 4
+                }
+            } label: {
+                HStack {
+                    Text(appState.t("Review", "Vérifier"))
+                    Image(systemName: "arrow.right")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    // Validate required fields for current category; returns error string or nil
+    private func validateRequiredFields() -> String? {
         switch category {
         case .pharmacy:
-            TextField("Pharmacy name", text: $siteName)
-                .textFieldStyle(.roundedBorder)
-            Toggle("Open now", isOn: $isOpenNow)
-            Toggle("On duty", isOn: $isOnDuty)
-            TextField("Opening hours", text: $openingHours)
-                .textFieldStyle(.roundedBorder)
+            if trimmed(siteName).isEmpty {
+                return appState.t("Pharmacy name is required.", "Le nom de la pharmacie est requis.")
+            }
         case .mobileMoney:
-            TextField("Providers", text: $providerText)
-                .textFieldStyle(.roundedBorder)
-            TextField("Merchant ID", text: $merchantId)
-                .textFieldStyle(.roundedBorder)
-            TextField("Payment methods", text: $paymentMethodsText)
-                .textFieldStyle(.roundedBorder)
-            TextField("Opening hours", text: $openingHours)
-                .textFieldStyle(.roundedBorder)
+            if csv(providerText).isEmpty {
+                return appState.t("Select at least one provider.", "Sélectionnez au moins un opérateur.")
+            }
         case .fuelStation:
-            TextField("Station name", text: $siteName)
-                .textFieldStyle(.roundedBorder)
-            Toggle("Fuel available", isOn: $hasFuelAvailable)
-            TextField("Fuel types", text: $fuelTypesText)
-                .textFieldStyle(.roundedBorder)
-            TextField("Super price", text: $fuelPriceText)
-                .keyboardType(.decimalPad)
-                .textFieldStyle(.roundedBorder)
-            TextField("Quality", text: $quality)
-                .textFieldStyle(.roundedBorder)
+            if trimmed(siteName).isEmpty {
+                return appState.t("Fuel station name is required.", "Le nom de la station-service est requis.")
+            }
         case .alcoholOutlet:
-            TextField("Outlet name", text: $siteName)
-                .textFieldStyle(.roundedBorder)
-            TextField("Outlet type", text: $outletType)
-                .textFieldStyle(.roundedBorder)
-            Toggle("Formal outlet", isOn: $isFormal)
-            TextField("Payment methods", text: $paymentMethodsText)
-                .textFieldStyle(.roundedBorder)
+            if trimmed(siteName).isEmpty {
+                return appState.t("Alcohol outlet name is required.", "Le nom du point de vente est requis.")
+            }
         case .billboard:
-            TextField("Billboard name", text: $siteName)
-                .textFieldStyle(.roundedBorder)
-            TextField("Billboard type", text: $billboardType)
-                .textFieldStyle(.roundedBorder)
-            Toggle("Occupied", isOn: $isOccupied)
-            TextField("Advertiser brand", text: $advertiserBrand)
-                .textFieldStyle(.roundedBorder)
+            if trimmed(siteName).isEmpty {
+                return appState.t("Billboard name is required.", "Le nom du panneau est requis.")
+            }
         case .transportRoad:
-            TextField("Road name", text: $roadName)
-                .textFieldStyle(.roundedBorder)
-            TextField("Condition", text: $roadCondition)
-                .textFieldStyle(.roundedBorder)
-            TextField("Surface", text: $roadSurface)
-                .textFieldStyle(.roundedBorder)
-            Toggle("Blocked", isOn: $roadBlocked)
-            if roadBlocked {
-                TextField("Blockage type", text: $blockageType)
-                    .textFieldStyle(.roundedBorder)
+            if trimmed(roadName).isEmpty {
+                return appState.t("Road segment name is required.", "Le nom du segment routier est requis.")
             }
         case .censusProxy:
-            TextField("Building type", text: $buildingType)
-                .textFieldStyle(.roundedBorder)
-            TextField("Occupancy status", text: $occupancyStatus)
-                .textFieldStyle(.roundedBorder)
-            TextField("Storey count", text: $storeyCount)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
-            TextField("Estimated units", text: $estimatedUnits)
-                .keyboardType(.numberPad)
-                .textFieldStyle(.roundedBorder)
+            if trimmed(buildingType).isEmpty {
+                return appState.t("Building type is required.", "Le type de bâtiment est requis.")
+            }
         }
+        return nil
+    }
+
+    // MARK: - Styled fields (replaces old detailsFields)
+    @ViewBuilder
+    private var detailsFieldsStyled: some View {
+        switch category {
+        case .pharmacy:
+            styledField(label: appState.t("Pharmacy name", "Nom de la pharmacie"),
+                        placeholder: appState.t("Enter pharmacy name", "Nom de la pharmacie"),
+                        text: $siteName)
+            yesNoToggle(label: appState.t("Open now", "Ouvert maintenant"), value: $isOpenNow)
+            yesNoToggle(label: appState.t("On duty", "De garde"), value: $isOnDuty)
+            styledField(label: appState.t("Opening hours", "Heures d'ouverture"),
+                        placeholder: appState.t("e.g. 08:00–20:00", "ex. 08:00–20:00"),
+                        text: $openingHours)
+        case .mobileMoney:
+            styledField(label: appState.t("Providers", "Opérateurs"),
+                        placeholder: "Orange Money, MTN MoMo",
+                        text: $providerText)
+            styledField(label: appState.t("Merchant ID", "ID marchand"),
+                        placeholder: "MID-XXXX",
+                        text: $merchantId)
+            styledField(label: appState.t("Payment methods", "Méthodes de paiement"),
+                        placeholder: appState.t("Cash, Mobile Money", "Espèces, Mobile Money"),
+                        text: $paymentMethodsText)
+            styledField(label: appState.t("Opening hours", "Heures d'ouverture"),
+                        placeholder: appState.t("e.g. 08:00–20:00", "ex. 08:00–20:00"),
+                        text: $openingHours)
+        case .fuelStation:
+            styledField(label: appState.t("Station name", "Nom de la station"),
+                        placeholder: appState.t("Enter station name", "Nom de la station"),
+                        text: $siteName)
+            yesNoToggle(label: appState.t("Fuel available", "Carburant disponible"), value: $hasFuelAvailable)
+            styledField(label: appState.t("Fuel types", "Types de carburant"),
+                        placeholder: "Super, Gasoil",
+                        text: $fuelTypesText)
+            styledField(label: appState.t("Super price (FCFA)", "Prix Super (FCFA)"),
+                        placeholder: "e.g. 730",
+                        text: $fuelPriceText,
+                        keyboardType: .decimalPad)
+            styledField(label: appState.t("Quality", "Qualité"),
+                        placeholder: "Standard",
+                        text: $quality)
+        case .alcoholOutlet:
+            styledField(label: appState.t("Outlet name", "Nom du point de vente"),
+                        placeholder: appState.t("Enter outlet name", "Nom du point de vente"),
+                        text: $siteName)
+            styledField(label: appState.t("Outlet type", "Type de point de vente"),
+                        placeholder: "Bar, Restaurant…",
+                        text: $outletType)
+            yesNoToggle(label: appState.t("Formal outlet", "Point de vente formel"), value: $isFormal)
+            styledField(label: appState.t("Payment methods", "Méthodes de paiement"),
+                        placeholder: appState.t("Cash, Mobile Money", "Espèces, Mobile Money"),
+                        text: $paymentMethodsText)
+        case .billboard:
+            styledField(label: appState.t("Billboard name", "Nom du panneau"),
+                        placeholder: appState.t("Enter billboard name", "Nom du panneau"),
+                        text: $siteName)
+            styledField(label: appState.t("Billboard type", "Type de panneau"),
+                        placeholder: "Standard, Digital…",
+                        text: $billboardType)
+            yesNoToggle(label: appState.t("Occupied", "Occupé"), value: $isOccupied)
+            styledField(label: appState.t("Advertiser brand", "Marque annonceur"),
+                        placeholder: appState.t("Brand name (optional)", "Nom de la marque (optionnel)"),
+                        text: $advertiserBrand)
+        case .transportRoad:
+            styledField(label: appState.t("Road name", "Nom de la route"),
+                        placeholder: appState.t("Enter road name", "Nom de la route"),
+                        text: $roadName)
+            styledField(label: appState.t("Condition", "État"),
+                        placeholder: "Good, Fair, Poor…",
+                        text: $roadCondition)
+            styledField(label: appState.t("Surface type", "Type de surface"),
+                        placeholder: "Asphalt, Gravel…",
+                        text: $roadSurface)
+            yesNoToggle(label: appState.t("Road blocked", "Route bloquée"), value: $roadBlocked)
+            if roadBlocked {
+                styledField(label: appState.t("Blockage type", "Type de blocage"),
+                            placeholder: "Flooding, Construction…",
+                            text: $blockageType)
+            }
+        case .censusProxy:
+            styledField(label: appState.t("Building type", "Type de bâtiment"),
+                        placeholder: "Residential, Commercial…",
+                        text: $buildingType)
+            styledField(label: appState.t("Occupancy status", "Statut d'occupation"),
+                        placeholder: "Occupied, Vacant…",
+                        text: $occupancyStatus)
+            styledField(label: appState.t("Storey count", "Nombre d'étages"),
+                        placeholder: "e.g. 3",
+                        text: $storeyCount,
+                        keyboardType: .numberPad)
+            styledField(label: appState.t("Estimated units", "Unités estimées"),
+                        placeholder: "e.g. 12",
+                        text: $estimatedUnits,
+                        keyboardType: .numberPad)
+        }
+    }
+
+    // Reusable styled text field (web: h-12 rounded-xl border-gray-200)
+    private func styledField(label: String, placeholder: String, text: Binding<String>,
+                             keyboardType: UIKeyboardType = .default) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(ADLFont.inter(12, .semibold))
+                .foregroundColor(Color(hex: 0x374151))
+            TextField(placeholder, text: text)
+                .font(ADLFont.inter(15))
+                .keyboardType(keyboardType)
+                .autocorrectionDisabled()
+                .frame(height: 48)
+                .padding(.horizontal, 14)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(ADLColor.lineStrong, lineWidth: 1)
+                )
+        }
+    }
+
+    // Yes/No toggle buttons (web: min-h-[44px] navy active / gray-200 inactive)
+    private func yesNoToggle(label: String, value: Binding<Bool>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(ADLFont.inter(12, .semibold))
+                .foregroundColor(Color(hex: 0x374151))
+            HStack(spacing: 8) {
+                Button {
+                    value.wrappedValue = true
+                } label: {
+                    Text(appState.t("Yes", "Oui"))
+                        .font(ADLFont.inter(13, .semibold))
+                        .foregroundColor(value.wrappedValue ? .white : ADLColor.inkMuted)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(value.wrappedValue ? ADLColor.navy : Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(value.wrappedValue ? ADLColor.navy : ADLColor.lineStrong, lineWidth: 1.5)
+                        )
+                }
+                .buttonStyle(.plain)
+                Button {
+                    value.wrappedValue = false
+                } label: {
+                    Text(appState.t("No", "Non"))
+                        .font(ADLFont.inter(13, .semibold))
+                        .foregroundColor(!value.wrappedValue ? .white : ADLColor.inkMuted)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(!value.wrappedValue ? ADLColor.navy : Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(!value.wrappedValue ? ADLColor.navy : ADLColor.lineStrong, lineWidth: 1.5)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Step 4: Review & Submit
+    private var step4Review: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionLabel(text: appState.t("Review & Submit", "Vérifier et envoyer"), wide: true)
+            // Summary card
+            ADLCard {
+                VStack(alignment: .leading, spacing: 14) {
+                    // Category + title row
+                    HStack(spacing: 12) {
+                        Image(systemName: category.systemImage)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 40, height: 40)
+                            .background(category.tint)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(displayTitle)
+                                .font(ADLFont.inter(15, .bold))
+                                .foregroundColor(ADLColor.ink)
+                            Text(category.title)
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                        Spacer()
+                    }
+                    Divider()
+                    // Evidence checklist
+                    reviewRow(icon: "camera.fill",
+                              label: appState.t("Photo", "Photo"),
+                              value: capturedImage != nil ? appState.t("Captured", "Capturée") : appState.t("Missing", "Manquante"),
+                              pass: capturedImage != nil)
+                    reviewRow(icon: "location.fill",
+                              label: appState.t("GPS", "GPS"),
+                              value: locationProvider.lastLocation.map {
+                                  String(format: "%.4f°, %.4f°", $0.latitude, $0.longitude)
+                              } ?? appState.t("Not captured", "Non capturé"),
+                              pass: locationProvider.lastLocation != nil)
+                    reviewRow(icon: "doc.text.fill",
+                              label: appState.t("Consent", "Consentement"),
+                              value: consentStatus.title,
+                              pass: true)
+                    if !notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        reviewRow(icon: "note.text",
+                                  label: appState.t("Notes", "Notes"),
+                                  value: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+                                  pass: true)
+                    }
+                }
+            }
+            // XP teaser
+            HStack(spacing: 10) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(ADLColor.gold)
+                Text(appState.t("Earn XP for this capture", "Gagnez des XP pour cette capture"))
+                    .font(ADLFont.inter(13, .semibold))
+                    .foregroundColor(ADLColor.ink)
+                Spacer()
+                Text("+XP")
+                    .font(ADLFont.inter(14, .bold))
+                    .foregroundColor(ADLColor.forest)
+            }
+            .padding(12)
+            .background(ADLColor.forestWash)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            if let validationMessage {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .foregroundColor(ADLColor.terracotta)
+                    Text(validationMessage)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                }
+                .padding(12)
+                .background(ADLColor.terraWash)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            // Submit CTA
+            Button {
+                guard let payload = buildPayload() else { return }
+                appState.enqueueContribution(
+                    title: displayTitle,
+                    notes: notes,
+                    category: category,
+                    location: locationProvider.lastLocation,
+                    image: capturedImage,
+                    payload: payload
+                )
+                resetFormAfterSubmit()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "tray.and.arrow.down.fill")
+                    Text(appState.t("Queue Contribution", "Mettre en file d'attente"))
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+        }
+    }
+
+    private func reviewRow(icon: String, label: String, value: String, pass: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(pass ? ADLColor.forest : ADLColor.terracotta)
+                .frame(width: 28, height: 28)
+                .background(pass ? ADLColor.forestWash : ADLColor.terraWash)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Text(label)
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.ink)
+            Spacer()
+            Text(value)
+                .font(ADLFont.inter(12))
+                .foregroundColor(ADLColor.inkMuted)
+                .lineLimit(1)
+        }
+    }
+
+    private func resetFormAfterSubmit() {
+        currentStep = 0
+        siteName = ""
+        roadName = ""
+        notes = ""
+        capturedImage = nil
+        validationMessage = nil
+        mapPointId = nil
     }
 
     private var displayTitle: String {
@@ -2225,17 +2802,32 @@ struct RequiredFieldsView: View {
 
     var body: some View {
         let fields = VerticalConfig.all[category]?.requiredFields ?? []
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: 10) {
             Image(systemName: "checklist")
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(category.tint)
-            Text(fields.isEmpty ? "No required fields" : "Required: \(fields.joined(separator: ", "))")
-                .font(.footnote.weight(.medium))
-                .foregroundColor(.secondary)
+                .frame(width: 28, height: 28)
+                .background(category.tint.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("REQUIRED FIELDS")
+                    .font(ADLFont.inter(10, .bold))
+                    .tracking(1.4)
+                    .foregroundColor(category.tint)
+                Text(fields.isEmpty ? "No required fields" : fields.joined(separator: " · "))
+                    .font(ADLFont.inter(12, .medium))
+                    .foregroundColor(ADLColor.inkMuted)
+                    .lineLimit(2)
+            }
             Spacer()
         }
-        .padding(10)
-        .background(category.tint.opacity(0.08))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(12)
+        .background(category.tint.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(category.tint.opacity(0.15), lineWidth: 1)
+        )
     }
 }
 
