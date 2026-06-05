@@ -93,6 +93,19 @@ test("userUpdateSchema accepts only built-in avatar presets", () => {
   assert.throws(() => userUpdateSchema.parse({ avatarPreset: "remote-url" }), /Invalid option/);
 });
 
+test("userUpdateSchema accepts native lowercase profile image payloads", () => {
+  assert.deepEqual(
+    userUpdateSchema.parse({
+      imagebase64: "data:image/jpeg;base64,abc123",
+      name: "Field Agent",
+    }),
+    {
+      imagebase64: "data:image/jpeg;base64,abc123",
+      name: "Field Agent",
+    },
+  );
+});
+
 test("adminUserAccessPatchSchema allows explicit role changes only", () => {
   assert.deepEqual(
     adminUserAccessPatchSchema.parse({

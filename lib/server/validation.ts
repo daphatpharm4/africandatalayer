@@ -51,6 +51,7 @@ export const submissionInputSchema = z
       .optional(),
     details: z.record(z.string(), z.unknown()).optional(),
     imageBase64: z.string().min(1).max(12_000_000).optional(),
+    imagebase64: z.string().min(1).max(12_000_000).optional(),
     secondImageBase64: z.string().min(1).max(12_000_000).optional(),
     clientExif: z
       .object({
@@ -171,9 +172,12 @@ export const adminAccountCreateSchema = z
 
 export const userUpdateSchema = z
   .object({
+    name: z.string().trim().max(160).optional(),
     occupation: z.string().trim().max(120).optional(),
     mapScope: z.enum(["bonamoussadi", "cameroon", "global"]).optional(),
     avatarPreset: z.enum(AVATAR_PRESETS).optional(),
+    imageBase64: z.string().min(1).max(10_000_000).optional(),
+    imagebase64: z.string().min(1).max(10_000_000).optional(),
   })
   .strict();
 
@@ -247,7 +251,7 @@ export const adminUserAccessPatchSchema = z
 export const privacyRequestSchema = z
   .object({
     requestType: z.enum(["access", "rectification", "erasure"]),
-    subjectReference: z.string().trim().min(1).max(160),
+    subjectReference: z.string().trim().max(160).optional(),
     notes: z.string().trim().max(1000).optional(),
   })
   .strict();
