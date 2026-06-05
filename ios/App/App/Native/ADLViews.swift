@@ -1012,18 +1012,7 @@ struct AgentHomeView: View {
             .padding(.bottom, 16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle(appState.t("Field Map", "Carte terrain"))
         .task { await appState.loadPoints() }
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    appState.startMapCapture(at: region.center)
-                } label: {
-                    Image(systemName: "plus.circle.fill")
-                }
-                .accessibilityLabel("Start capture")
-            }
-        }
         .sheet(item: $selectedPoint) { point in
             PointDetailSheet(
                 point: point,
@@ -1255,10 +1244,10 @@ struct FieldMapHeader: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(appState.t("Bonamoussadi field map", "Carte terrain Bonamoussadi"))
-                        .font(.headline.weight(.bold))
+                        .font(ADLFont.inter(17, .bold))
                         .foregroundColor(ADLColor.ink)
                     Text(appState.t("Collection zone, trusted points, and next captures.", "Zone de collecte, points vérifiés et prochaines captures."))
-                        .font(.footnote.weight(.medium))
+                        .font(ADLFont.inter(13, .medium))
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -1324,10 +1313,10 @@ struct FieldMapActionBar: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(selectedPoint.name)
-                            .font(.subheadline.weight(.bold))
+                            .font(ADLFont.inter(15, .semibold))
                             .foregroundColor(ADLColor.ink)
                         Text(selectedPoint.requiresRefresh ? appState.t("Ready for refresh capture", "Prêt pour une nouvelle capture") : appState.t("Verified point", "Point vérifié"))
-                            .font(.caption)
+                            .font(ADLFont.inter(12, .medium))
                             .foregroundColor(.secondary)
                     }
                     Spacer()
@@ -1696,7 +1685,6 @@ struct PointDetailSheet: View {
                 .background(.ultraThinMaterial)
             }
             .background(ADLColor.paper.ignoresSafeArea())
-            .navigationTitle(point.category.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -1791,11 +1779,11 @@ struct DetailRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.footnote.weight(.medium))
+                .font(ADLFont.inter(13, .medium))
                 .foregroundColor(.secondary)
             Spacer()
             Text(value)
-                .font(.footnote.weight(.semibold))
+                .font(ADLFont.inter(13, .semibold))
                 .foregroundColor(ADLColor.ink)
         }
     }
@@ -3774,8 +3762,8 @@ private struct AnalyticsStatusNote: View {
             if appState.isLoadingAnalytics {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Loading live metrics…")
-                        .font(.footnote)
+                    Text(appState.t("Loading live metrics…", "Chargement des métriques…"))
+                        .font(ADLFont.inter(13))
                         .foregroundColor(.secondary)
                 }
             } else if let error = appState.analyticsError {
@@ -3783,7 +3771,7 @@ private struct AnalyticsStatusNote: View {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundColor(ADLColor.terracotta)
                     Text(error)
-                        .font(.footnote)
+                        .font(ADLFont.inter(13))
                         .foregroundColor(.secondary)
                 }
             }
@@ -5568,7 +5556,7 @@ struct VoucherRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(voucher.rewardName)
-                        .font(.footnote.weight(.bold))
+                        .font(ADLFont.inter(13, .bold))
                         .foregroundColor(ADLColor.ink)
                     Text(voucher.code)
                         .font(.system(.caption, design: .monospaced))
@@ -5576,7 +5564,7 @@ struct VoucherRow: View {
                 }
                 Spacer()
                 Text("\(voucher.costXP) XP")
-                    .font(.caption2.weight(.bold))
+                    .font(ADLFont.inter(11, .semibold))
                     .foregroundColor(.secondary)
             }
         }
@@ -5585,48 +5573,58 @@ struct VoucherRow: View {
 
 struct BadgesView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
     private let columns = [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                let earned = appState.badges.filter(\.unlocked).count
-                Text("\(earned) of \(appState.badges.count) earned")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundColor(.secondary)
-                LazyVGrid(columns: columns, spacing: 12) {
-                    ForEach(appState.badges) { badge in
-                        BadgeTile(badge: badge)
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Badges", "Badges"), onBack: { dismiss() }) {
+                EmptyView()
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    let earned = appState.badges.filter(\.unlocked).count
+                    Text(appState.t("\(earned) of \(appState.badges.count) earned", "\(earned) sur \(appState.badges.count) obtenus"))
+                        .font(ADLFont.inter(13, .semibold))
+                        .foregroundColor(.secondary)
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(appState.badges) { badge in
+                            BadgeTile(badge: badge)
+                        }
                     }
                 }
+                .padding(16)
             }
-            .padding(16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Badges")
         .task { await appState.loadProfile() }
     }
 }
 
 struct MissionsView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                ADLSectionHeader(title: "Daily")
-                ForEach(appState.missions.filter { $0.period == .daily }) { mission in
-                    MissionRow(mission: mission)
-                }
-                ADLSectionHeader(title: "Weekly")
-                ForEach(appState.missions.filter { $0.period == .weekly }) { mission in
-                    MissionRow(mission: mission)
-                }
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Missions", "Missions"), onBack: { dismiss() }) {
+                EmptyView()
             }
-            .padding(16)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    ADLSectionHeader(title: appState.t("Daily", "Quotidien"))
+                    ForEach(appState.missions.filter { $0.period == .daily }) { mission in
+                        MissionRow(mission: mission)
+                    }
+                    ADLSectionHeader(title: appState.t("Weekly", "Hebdomadaire"))
+                    ForEach(appState.missions.filter { $0.period == .weekly }) { mission in
+                        MissionRow(mission: mission)
+                    }
+                }
+                .padding(16)
+            }
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .navigationTitle("Missions")
         .task { await appState.loadProfile() }
     }
 }
@@ -5642,16 +5640,16 @@ struct ProfileRow: View {
                 .foregroundColor(ADLColor.navy)
                 .frame(width: 26)
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(ADLFont.inter(15, .semibold))
                 .foregroundColor(ADLColor.ink)
             Spacer()
             if let trailing {
                 Text(trailing)
-                    .font(.caption.weight(.semibold))
+                    .font(ADLFont.inter(12, .semibold))
                     .foregroundColor(.secondary)
             }
             Image(systemName: "chevron.right")
-                .font(.caption.weight(.bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.secondary)
         }
         .padding(14)
@@ -6113,9 +6111,9 @@ struct ProfileView: View {
     private var badgesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SectionLabel(text: "Badges", wide: true)
+                SectionLabel(text: appState.t("Badges", "Badges"), wide: true)
                 Spacer()
-                Text("\(appState.badges.filter(\.unlocked).count)/\(appState.badges.count) earned")
+                Text(appState.t("\(appState.badges.filter(\.unlocked).count)/\(appState.badges.count) earned", "\(appState.badges.filter(\.unlocked).count)/\(appState.badges.count) obtenus"))
                     .font(ADLFont.inter(11, .semibold))
                     .foregroundColor(ADLColor.inkMuted)
             }
@@ -6146,13 +6144,13 @@ struct ProfileView: View {
     private var contributionHistorySection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionLabel(text: "Contribution History")
+                SectionLabel(text: appState.t("Contribution History", "Historique de contributions"))
                 Spacer()
             }
 
             if appState.drafts.isEmpty {
                 ADLCard {
-                    Text("No contributions yet. Add your first report to build your history.")
+                    Text(appState.t("No contributions yet. Add your first report to build your history.", "Aucune contribution pour le moment. Ajoutez votre premier rapport pour commencer votre historique."))
                         .font(ADLFont.inter(12))
                         .foregroundColor(ADLColor.inkMuted)
                 }
@@ -6196,10 +6194,10 @@ struct ProfileView: View {
     private var uploadIssuesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionLabel(text: "Upload Issues")
+                SectionLabel(text: appState.t("Upload Issues", "Problèmes d'envoi"))
                 Spacer()
                 if !failedDrafts.isEmpty {
-                    Label("Clear", systemImage: "trash")
+                    Label(appState.t("Clear", "Effacer"), systemImage: "trash")
                         .font(ADLFont.inter(11, .bold))
                         .foregroundColor(ADLColor.terracotta)
                 }
@@ -6207,7 +6205,7 @@ struct ProfileView: View {
 
             if failedDrafts.isEmpty {
                 ADLCard {
-                    Text("All clear! No upload issues.")
+                    Text(appState.t("All clear! No upload issues.", "Tout est bon ! Aucun problème d'envoi."))
                         .font(ADLFont.inter(12))
                         .foregroundColor(ADLColor.inkMuted)
                 }
@@ -6642,19 +6640,19 @@ struct DailyProgressWidget: View {
                         .stroke(ADLColor.forest, style: StrokeStyle(lineWidth: 7, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     Text("\(goal.completed)/\(goal.target)")
-                        .font(.caption.weight(.bold))
+                        .font(ADLFont.inter(12, .bold))
                         .foregroundColor(ADLColor.ink)
                 }
                 .frame(width: 52, height: 52)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(appState.t("Today's goal", "Objectif du jour"))
-                        .font(.subheadline.weight(.bold))
+                        .font(ADLFont.inter(15, .semibold))
                         .foregroundColor(ADLColor.ink)
                     Text(goal.completed >= goal.target
                          ? appState.t("Goal complete — nice work.", "Objectif atteint — bien joué !")
                          : appState.t("\(goal.target - goal.completed) more captures to go.", "\(goal.target - goal.completed) captures restantes."))
-                        .font(.footnote)
+                        .font(ADLFont.inter(13))
                         .foregroundColor(.secondary)
                 }
                 Spacer()
@@ -6685,10 +6683,10 @@ struct LevelUpCelebration: View {
                     .font(.system(size: 52))
                     .foregroundColor(ADLColor.gold)
                 Text("Level up!")
-                    .font(.title2.weight(.bold))
+                    .font(ADLFont.inter(20, .bold))
                     .foregroundColor(ADLColor.ink)
                 Text("You reached \(tier.title)")
-                    .font(.subheadline)
+                    .font(ADLFont.inter(15))
                     .foregroundColor(.secondary)
                 Button("Keep going") { onDismiss() }
                     .buttonStyle(PrimaryButtonStyle())

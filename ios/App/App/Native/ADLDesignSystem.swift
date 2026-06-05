@@ -137,7 +137,7 @@ struct MetricTile: View {
         ADLCard {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: systemImage)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(tint)
                     .frame(width: 36, height: 36)
                     .background(tint.opacity(0.12))
@@ -145,10 +145,10 @@ struct MetricTile: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(value)
-                        .font(.title2.weight(.bold))
+                        .font(ADLFont.inter(20, .bold))
                         .foregroundColor(ADLColor.ink)
                     Text(title)
-                        .font(.footnote.weight(.medium))
+                        .font(ADLFont.inter(13, .medium))
                         .foregroundColor(.secondary)
                 }
             }
@@ -162,7 +162,7 @@ struct StatusPill: View {
 
     var body: some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .font(ADLFont.inter(12, .semibold))
             .foregroundColor(tint)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -224,13 +224,13 @@ struct ADLSectionHeader: View {
     var body: some View {
         HStack {
             Text(title.uppercased())
-                .font(.caption.weight(.bold))
+                .font(ADLFont.inter(12, .bold))
                 .tracking(1.1)
                 .foregroundColor(.secondary)
             Spacer()
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .font(.caption.weight(.semibold))
+                    .font(ADLFont.inter(12, .semibold))
                     .foregroundColor(ADLColor.terracotta)
             }
         }
@@ -273,10 +273,10 @@ struct StatTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
-                .font(.title3.weight(.bold))
+                .font(ADLFont.inter(18, .bold))
                 .foregroundColor(tint)
             Text(label.uppercased())
-                .font(.caption2.weight(.bold))
+                .font(ADLFont.inter(11, .bold))
                 .tracking(0.8)
                 .foregroundColor(.secondary)
         }
@@ -305,7 +305,7 @@ struct RewardCard: View {
         ADLCard {
             HStack(spacing: 14) {
                 Image(systemName: reward.category.systemImage)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(ADLColor.navy)
                     .frame(width: 44, height: 44)
                     .background(ADLColor.navy.opacity(0.10))
@@ -313,14 +313,14 @@ struct RewardCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(reward.name)
-                        .font(.subheadline.weight(.bold))
+                        .font(ADLFont.inter(15, .semibold))
                         .foregroundColor(ADLColor.ink)
                     Text(reward.category.title)
-                        .font(.caption2.weight(.semibold))
+                        .font(ADLFont.inter(11, .semibold))
                         .tracking(0.6)
                         .foregroundColor(.secondary)
                     Text(reward.stock.title)
-                        .font(.caption2.weight(.bold))
+                        .font(ADLFont.inter(11, .bold))
                         .foregroundColor(stockTint)
                 }
 
@@ -328,7 +328,7 @@ struct RewardCard: View {
 
                 Button(action: action) {
                     Text("\(reward.costXP) XP")
-                        .font(.caption.weight(.bold))
+                        .font(ADLFont.inter(12, .bold))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                 }
@@ -356,21 +356,21 @@ struct BadgeTile: View {
     var body: some View {
         VStack(spacing: 10) {
             Image(systemName: badge.unlocked ? badge.systemImage : "lock.fill")
-                .font(.title2.weight(.semibold))
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundColor(badge.unlocked ? badge.tint : .secondary)
                 .frame(width: 52, height: 52)
                 .background((badge.unlocked ? badge.tint : ADLColor.line).opacity(0.14))
                 .clipShape(Circle())
 
             Text(badge.title)
-                .font(.caption.weight(.bold))
+                .font(ADLFont.inter(12, .bold))
                 .foregroundColor(ADLColor.ink)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
 
             if badge.unlocked {
                 Text("Earned")
-                    .font(.caption2.weight(.bold))
+                    .font(ADLFont.inter(11, .bold))
                     .foregroundColor(ADLColor.forest)
             } else {
                 ADLProgressBar(value: badge.progress, tint: ADLColor.gold, height: 5)
@@ -399,17 +399,17 @@ struct MissionRow: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(mission.title)
-                        .font(.subheadline.weight(.bold))
+                        .font(ADLFont.inter(15, .semibold))
                         .foregroundColor(ADLColor.ink)
                     Spacer()
                     StatusPill(title: "+\(mission.rewardXP) XP", tint: mission.isComplete ? ADLColor.forest : ADLColor.gold)
                 }
                 Text(mission.detail)
-                    .font(.footnote)
+                    .font(ADLFont.inter(13))
                     .foregroundColor(.secondary)
                 ADLProgressBar(value: mission.fraction, tint: mission.isComplete ? ADLColor.forest : ADLColor.navy)
                 Text("\(mission.current)/\(mission.goal)")
-                    .font(.caption2.weight(.bold))
+                    .font(ADLFont.inter(11, .bold))
                     .foregroundColor(.secondary)
             }
         }
