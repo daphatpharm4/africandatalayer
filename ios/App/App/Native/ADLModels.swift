@@ -1130,3 +1130,200 @@ extension AdminReviewStats {
         all = 0; flagged = 0; pending = 0; lowRisk = 0; eligible = 0
     }
 }
+
+// MARK: - Assignments (africandatalayer-955)
+
+enum CollectionAssignmentStatus: String, Codable, Hashable {
+    case pending
+    case inProgress = "in_progress"
+    case completed
+    case cancelled
+
+    var title: String {
+        switch self {
+        case .pending:    return ADLModelText.t("Pending", "En attente")
+        case .inProgress: return ADLModelText.t("In Progress", "En cours")
+        case .completed:  return ADLModelText.t("Completed", "Terminé")
+        case .cancelled:  return ADLModelText.t("Cancelled", "Annulé")
+        }
+    }
+
+    var tint: String {
+        switch self {
+        case .pending:    return "amber"
+        case .inProgress: return "navy"
+        case .completed:  return "forest"
+        case .cancelled:  return "terra"
+        }
+    }
+}
+
+struct CollectionAssignment: Decodable, Hashable, Identifiable {
+    var id: String
+    var agentUserId: String
+    var zoneId: String
+    var zoneLabel: String
+    var assignedVerticals: [SubmissionCategory]
+    var assignedDate: String
+    var dueDate: String
+    var status: CollectionAssignmentStatus
+    var pointsExpected: Int
+    var pointsSubmitted: Int
+    var completionRate: Double
+    var notes: String?
+    var createdAt: String
+    var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, agentUserId, zoneId, zoneLabel, assignedVerticals, assignedDate, dueDate
+        case status, pointsExpected, pointsSubmitted, completionRate, notes, createdAt, updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id              = try c.decodeIfPresent(String.self, forKey: .id)              ?? ""
+        agentUserId     = try c.decodeIfPresent(String.self, forKey: .agentUserId)     ?? ""
+        zoneId          = try c.decodeIfPresent(String.self, forKey: .zoneId)          ?? ""
+        zoneLabel       = try c.decodeIfPresent(String.self, forKey: .zoneLabel)       ?? ""
+        assignedDate    = try c.decodeIfPresent(String.self, forKey: .assignedDate)    ?? ""
+        dueDate         = try c.decodeIfPresent(String.self, forKey: .dueDate)         ?? ""
+        pointsExpected  = try c.decodeIfPresent(Int.self,    forKey: .pointsExpected)  ?? 0
+        pointsSubmitted = try c.decodeIfPresent(Int.self,    forKey: .pointsSubmitted) ?? 0
+        completionRate  = try c.decodeIfPresent(Double.self, forKey: .completionRate)  ?? 0
+        notes           = try c.decodeIfPresent(String.self, forKey: .notes)
+        createdAt       = try c.decodeIfPresent(String.self, forKey: .createdAt)       ?? ""
+        updatedAt       = try c.decodeIfPresent(String.self, forKey: .updatedAt)       ?? ""
+
+        let rawStatus = try c.decodeIfPresent(String.self, forKey: .status) ?? "pending"
+        status = CollectionAssignmentStatus(rawValue: rawStatus) ?? .pending
+
+        let rawVerticals = try c.decodeIfPresent([String].self, forKey: .assignedVerticals) ?? []
+        assignedVerticals = rawVerticals.compactMap { SubmissionCategory(rawValue: $0) }
+    }
+}
+
+struct AssignmentZone: Decodable, Hashable, Identifiable {
+    var id: String
+    var label: String
+}
+
+struct AssignmentAgent: Decodable, Hashable, Identifiable {
+    var id: String
+    var name: String
+    var email: String?
+}
+
+struct AssignmentPlannerContext: Decodable, Hashable {
+    var zones: [AssignmentZone]
+    var agents: [AssignmentAgent]
+
+    init(zones: [AssignmentZone] = [], agents: [AssignmentAgent] = []) {
+        self.zones = zones
+        self.agents = agents
+    }
+
+    enum CodingKeys: String, CodingKey { case zones, agents }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        zones  = try c.decodeIfPresent([AssignmentZone].self,  forKey: .zones)  ?? []
+        agents = try c.decodeIfPresent([AssignmentAgent].self, forKey: .agents) ?? []
+    }
+}
+
+struct AssignmentsResponse: Decodable {
+    var context: AssignmentPlannerContext
+    var assignments: [CollectionAssignment]
+
+    enum CodingKeys: String, CodingKey { case context, assignments }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        context     = try c.decode(AssignmentPlannerContext.self,   forKey: .context)
+        assignments = try c.decodeIfPresent([CollectionAssignment].self, forKey: .assignments) ?? []
+    }
+}
+
+// MARK: - Automation Leads (africandatalayer-955)
+
+enum AutomationLeadStatus: String, Codable, Hashable {
+    case rejectedOutOfZone    = "rejected_out_of_zone"
+    case rejectedManual       = "rejected_manual"
+    case matchedExisting      = "matched_existing"
+    case needsFieldVerify     = "needs_field_verify"
+    case readyForAssignment   = "ready_for_assignment"
+    case assignmentCreated    = "assignment_created"
+    case verified
+    case importCandidate      = "import_candidate"
+
+    var title: String {
+        switch self {
+        case .rejectedOutOfZone:  return ADLModelText.t("Rejected (zone)", "Rejeté (zone)")
+        case .rejectedManual:     return ADLModelText.t("Rejected", "Rejeté")
+        case .matchedExisting:    return ADLModelText.t("Matched", "Associé")
+        case .needsFieldVerify:   return ADLModelText.t("Needs Verify", "Vérif. terrain")
+        case .readyForAssignment: return ADLModelText.t("Ready", "Prêt")
+        case .assignmentCreated:  return ADLModelText.t("Assigned", "Affecté")
+        case .verified:           return ADLModelText.t("Verified", "Vérifié")
+        case .importCandidate:    return ADLModelText.t("Import", "Importable")
+        }
+    }
+}
+
+enum AutomationLeadPriority: String, Codable, Hashable {
+    case high
+    case medium
+    case low
+
+    var title: String {
+        switch self {
+        case .high:   return ADLModelText.t("High", "Haute")
+        case .medium: return ADLModelText.t("Medium", "Moyenne")
+        case .low:    return ADLModelText.t("Low", "Faible")
+        }
+    }
+}
+
+struct LeadCandidate: Decodable, Hashable, Identifiable {
+    var id: String
+    var sourceSystem: String
+    var sourceRecordId: String
+    var sourceUrl: String?
+    var category: SubmissionCategory
+    var zoneId: String?
+    var location: SubmissionLocation
+    var matchPointId: String?
+    var matchConfidence: Double?
+    var status: AutomationLeadStatus
+    var priority: AutomationLeadPriority
+    var createdAt: String
+    var updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, sourceSystem, sourceRecordId, sourceUrl, category, zoneId, location
+        case matchPointId, matchConfidence, status, priority, createdAt, updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id             = try c.decodeIfPresent(String.self, forKey: .id)             ?? ""
+        sourceSystem   = try c.decodeIfPresent(String.self, forKey: .sourceSystem)   ?? ""
+        sourceRecordId = try c.decodeIfPresent(String.self, forKey: .sourceRecordId) ?? ""
+        sourceUrl      = try c.decodeIfPresent(String.self, forKey: .sourceUrl)
+        zoneId         = try c.decodeIfPresent(String.self, forKey: .zoneId)
+        matchPointId   = try c.decodeIfPresent(String.self, forKey: .matchPointId)
+        matchConfidence = try c.decodeIfPresent(Double.self, forKey: .matchConfidence)
+        createdAt      = try c.decodeIfPresent(String.self, forKey: .createdAt)      ?? ""
+        updatedAt      = try c.decodeIfPresent(String.self, forKey: .updatedAt)      ?? ""
+        location       = try c.decodeIfPresent(SubmissionLocation.self, forKey: .location) ?? SubmissionLocation(latitude: 0, longitude: 0, accuracyMeters: nil)
+
+        let rawCat = try c.decodeIfPresent(String.self, forKey: .category) ?? ""
+        category = SubmissionCategory(rawValue: rawCat) ?? .censusProxy
+
+        let rawStatus = try c.decodeIfPresent(String.self, forKey: .status) ?? "needs_field_verify"
+        status = AutomationLeadStatus(rawValue: rawStatus) ?? .needsFieldVerify
+
+        let rawPriority = try c.decodeIfPresent(String.self, forKey: .priority) ?? "medium"
+        priority = AutomationLeadPriority(rawValue: rawPriority) ?? .medium
+    }
+}

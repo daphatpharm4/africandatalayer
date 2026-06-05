@@ -50,6 +50,17 @@ final class AppState: ObservableObject {
     @Published var isLoadingReview = false
     @Published var reviewError: String?
 
+    // MARK: - Assignments (africandatalayer-955)
+    @Published var assignments: [CollectionAssignment] = []
+    @Published var assignmentsContext: AssignmentPlannerContext = AssignmentPlannerContext(zones: [], agents: [])
+    @Published var isLoadingAssignments = false
+    @Published var assignmentsError: String?
+
+    // MARK: - Automation Leads (africandatalayer-955)
+    @Published var leads: [LeadCandidate] = []
+    @Published var isLoadingLeads = false
+    @Published var leadsError: String?
+
     func t(_ en: String, _ fr: String) -> String { language == "fr" ? fr : en }
 
     private let queueStore = OfflineQueueStore()
@@ -418,6 +429,51 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Assignments service methods (africandatalayer-955)
+
+    func loadAssignments(force: Bool = false) async {
+        guard !isLoadingAssignments else { return }
+        if !assignments.isEmpty, !force { return }
+        isLoadingAssignments = true
+        assignmentsError = nil
+        defer { isLoadingAssignments = false }
+        do {
+            let result = try await apiClient.fetchAssignments()
+            assignmentsContext = result.context
+            assignments = result.assignments
+        } catch {
+            assignmentsError = (error as? APIError)?.message ?? t("Unable to load assignments.", "Impossible de charger les affectations.")
+        }
+    }
+
+    // MARK: - Leads service methods (africandatalayer-955)
+
+    func loadLeads(force: Bool = false) async {
+        guard !isLoadingLeads else { return }
+        if !leads.isEmpty, !force { return }
+        isLoadingLeads = true
+        leadsError = nil
+        defer { isLoadingLeads = false }
+        do {
+            leads = try await apiClient.fetchLeads()
+        } catch {
+            leadsError = (error as? APIError)?.message ?? t("Unable to load leads.", "Impossible de charger les leads.")
+        }
+    }
+
+    func applyLeadAction(id: String, action: String) async {
+        struct LeadActionBody: Encodable { let action: String }
+        do {
+            try await apiClient.patchJSON(
+                path: "/api/intake/leads/\(id)",
+                body: LeadActionBody(action: action)
+            )
+            Task { await loadLeads(force: true) }
+        } catch {
+            leadsError = (error as? APIError)?.message ?? t("Action failed.", "Action échouée.")
+        }
+    }
+
     // MARK: - Admin Review Queue service methods (africandatalayer-ot4)
 
     func loadReviewQueue(force: Bool = false) async {
@@ -756,6 +812,18 @@ final class ADLAPIClient {
         request.httpBody = try JSONEncoder().encode(payload)
         let (data, response) = try await urlSession.data(for: request)
         try validate(response: response, data: data)
+    }
+
+    // MARK: - Assignments API (africandatalayer-955)
+
+    func fetchAssignments() async throws -> AssignmentsResponse {
+        try await fetchJSON(AssignmentsResponse.self, path: "/api/user?view=assignments")
+    }
+
+    // MARK: - Automation Leads API (africandatalayer-955)
+
+    func fetchLeads() async throws -> [LeadCandidate] {
+        try await fetchJSON([LeadCandidate].self, path: "/api/intake/leads")
     }
 
     /// Fetch the admin review queue — page 0 defaults, optional risk filter.

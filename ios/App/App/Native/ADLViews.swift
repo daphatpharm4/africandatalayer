@@ -3914,9 +3914,16 @@ struct AdminReviewView: View {
 
             adminModeTabs
 
-            if activeMode == .review {
+            switch activeMode {
+            case .review:
                 reviewCockpitContent
-            } else {
+            case .assignments:
+                assignmentsCockpitContent
+            case .automation:
+                automationCockpitContent
+            case .ipReports:
+                ipReportsCockpitContent
+            case .communications:
                 adminModePlaceholder
             }
         }
@@ -4053,6 +4060,123 @@ struct AdminReviewView: View {
                 }
                 .padding(.bottom, 24)
             }
+    }
+
+    // MARK: - Assignments cockpit (africandatalayer-955)
+
+    private var assignmentsCockpitContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SectionLabel(text: appState.t("Collection Assignments", "Affectations terrain"), wide: true)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+
+                if appState.isLoadingAssignments {
+                    ADLCard {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text(appState.t("Loading assignments…", "Chargement des affectations…"))
+                                .font(ADLFont.inter(13))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                } else if let err = appState.assignmentsError, appState.assignments.isEmpty {
+                    ADLCard {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(appState.t("Assignments unavailable", "Affectations indisponibles"))
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(ADLColor.ink)
+                            Text(err)
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                } else if appState.assignments.isEmpty {
+                    ADLCard {
+                        Text(appState.t("No assignments found.", "Aucune affectation trouvée."))
+                            .font(ADLFont.inter(13, .semibold))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                    .padding(.horizontal, 16)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(appState.assignments) { assignment in
+                            AssignmentCard(
+                                assignment: assignment,
+                                context: appState.assignmentsContext
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .task { await appState.loadAssignments() }
+        .refreshable { await appState.loadAssignments(force: true) }
+    }
+
+    // MARK: - Automation cockpit (africandatalayer-955)
+
+    private var automationCockpitContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                SectionLabel(text: appState.t("Automation Leads", "Leads automatisés"), wide: true)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+
+                if appState.isLoadingLeads {
+                    ADLCard {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text(appState.t("Loading leads…", "Chargement des leads…"))
+                                .font(ADLFont.inter(13))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                } else if let err = appState.leadsError, appState.leads.isEmpty {
+                    ADLCard {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(appState.t("Leads unavailable", "Leads indisponibles"))
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(ADLColor.ink)
+                            Text(err)
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                } else if appState.leads.isEmpty {
+                    ADLCard {
+                        Text(appState.t("No leads to review.", "Aucun lead à réviser."))
+                            .font(ADLFont.inter(13, .semibold))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                    .padding(.horizontal, 16)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(appState.leads) { lead in
+                            LeadCard(lead: lead) { action in
+                                Task { await appState.applyLeadAction(id: lead.id, action: action) }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+            }
+            .padding(.bottom, 24)
+        }
+        .task { await appState.loadLeads() }
+        .refreshable { await appState.loadLeads(force: true) }
+    }
+
+    // MARK: - IP Reports cockpit (africandatalayer-955)
+
+    private var ipReportsCockpitContent: some View {
+        IpReportsFormView()
     }
 
     private var adminModePlaceholder: some View {
@@ -4677,6 +4801,423 @@ private struct AdminSubmissionCard: View {
     private func add(_ en: String, _ fr: String, _ value: [String]?, to rows: inout [(String, String)]) {
         guard let values = value?.filter({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }), !values.isEmpty else { return }
         rows.append((appState.t(en, fr), values.joined(separator: ", ")))
+    }
+}
+
+// MARK: - AssignmentCard (africandatalayer-955)
+
+private struct AssignmentCard: View {
+    @EnvironmentObject private var appState: AppState
+    let assignment: CollectionAssignment
+    let context: AssignmentPlannerContext
+
+    private var agentName: String {
+        context.agents.first(where: { $0.id == assignment.agentUserId })?.name
+            ?? assignment.agentUserId
+    }
+
+    private var statusPill: some View {
+        let (bg, fg): (Color, Color) = {
+            switch assignment.status {
+            case .pending:    return (ADLColor.amberWash, ADLColor.amber)
+            case .inProgress: return (ADLColor.navyWash,  ADLColor.navy)
+            case .completed:  return (ADLColor.forestWash, ADLColor.forestDark)
+            case .cancelled:  return (ADLColor.terraWash, ADLColor.terracotta)
+            }
+        }()
+        return ADLPill(text: assignment.status.title, bg: bg, fg: fg)
+    }
+
+    private var progress: Double {
+        guard assignment.pointsExpected > 0 else { return 0 }
+        return min(1, Double(assignment.pointsSubmitted) / Double(assignment.pointsExpected))
+    }
+
+    var body: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 10) {
+                // Header row
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(assignment.zoneLabel)
+                            .font(ADLFont.inter(15, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        Text(agentName)
+                            .font(ADLFont.inter(13))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                    Spacer()
+                    statusPill
+                }
+
+                // Vertical chips
+                if !assignment.assignedVerticals.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(assignment.assignedVerticals, id: \.self) { cat in
+                                HStack(spacing: 4) {
+                                    Image(systemName: cat.systemImage)
+                                        .font(.system(size: 11, weight: .semibold))
+                                    Text(cat.title)
+                                        .font(ADLFont.inter(11, .semibold))
+                                }
+                                .foregroundColor(cat.tint)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(cat.tint.opacity(0.10))
+                                .clipShape(Capsule())
+                            }
+                        }
+                    }
+                }
+
+                // Progress bar + counts
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(appState.t("Progress", "Avancement"))
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(ADLColor.inkMuted)
+                        Spacer()
+                        Text("\(assignment.pointsSubmitted)/\(assignment.pointsExpected) pts")
+                            .font(ADLFont.inter(11, .semibold))
+                            .foregroundColor(ADLColor.ink)
+                    }
+                    ADLProgressBar(value: progress, tint: ADLColor.forest)
+                }
+
+                // Due date row
+                HStack {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 12))
+                        .foregroundColor(ADLColor.inkMuted)
+                    Text("\(appState.t("Due", "Échéance")): \(assignment.dueDate.prefix(10))")
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+
+                if let notes = assignment.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - LeadCard (africandatalayer-955)
+
+private struct LeadCard: View {
+    @EnvironmentObject private var appState: AppState
+    let lead: LeadCandidate
+    let onAction: (String) -> Void
+    @State private var isActing = false
+
+    private var priorityPill: some View {
+        let (bg, fg): (Color, Color) = {
+            switch lead.priority {
+            case .high:   return (Color(hex: 0xfee2e2), Color(hex: 0x991b1b))
+            case .medium: return (ADLColor.amberWash, ADLColor.amber)
+            case .low:    return (ADLColor.forestWash, ADLColor.forestDark)
+            }
+        }()
+        return ADLPill(text: lead.priority.title, bg: bg, fg: fg)
+    }
+
+    private var statusPill: some View {
+        let isActive = lead.status == .readyForAssignment || lead.status == .needsFieldVerify
+        return ADLPill(
+            text: lead.status.title,
+            bg: isActive ? ADLColor.navyWash : ADLColor.line,
+            fg: isActive ? ADLColor.navy : ADLColor.inkMuted
+        )
+    }
+
+    var body: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 10) {
+                // Header
+                HStack(alignment: .top) {
+                    HStack(spacing: 8) {
+                        Image(systemName: lead.category.systemImage)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(lead.category.tint)
+                            .frame(width: 32, height: 32)
+                            .background(lead.category.tint.opacity(0.12))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(lead.category.title)
+                                .font(ADLFont.inter(14, .bold))
+                                .foregroundColor(ADLColor.ink)
+                            Text(lead.sourceSystem)
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                    Spacer()
+                    priorityPill
+                }
+
+                statusPill
+
+                // Match confidence if present
+                if let confidence = lead.matchConfidence {
+                    HStack(spacing: 6) {
+                        Text(appState.t("Match confidence", "Confiance correspondance"))
+                            .font(ADLFont.inter(11))
+                            .foregroundColor(ADLColor.inkMuted)
+                        Text(String(format: "%.0f%%", confidence * 100))
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(ADLColor.navy)
+                    }
+                }
+
+                // Location
+                HStack(spacing: 4) {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(ADLColor.inkMuted)
+                    Text(String(format: "%.5f, %.5f", lead.location.latitude, lead.location.longitude))
+                        .font(ADLFont.inter(11))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+
+                // Action buttons — only for actionable statuses
+                if lead.status == .readyForAssignment || lead.status == .needsFieldVerify || lead.status == .importCandidate {
+                    HStack(spacing: 8) {
+                        Button {
+                            guard !isActing else { return }
+                            isActing = true
+                            onAction("reject")
+                        } label: {
+                            Text(appState.t("Reject", "Rejeter"))
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(isActing ? Color.gray : ADLColor.terracotta)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isActing)
+
+                        Button {
+                            guard !isActing else { return }
+                            isActing = true
+                            onAction("mark_assigned")
+                        } label: {
+                            Text(appState.t("Assign", "Affecter"))
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(isActing ? Color.gray : ADLColor.forest)
+                                .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isActing)
+
+                        Button {
+                            guard !isActing else { return }
+                            isActing = true
+                            onAction("promote_to_import_candidate")
+                        } label: {
+                            Text(appState.t("Promote", "Promouvoir"))
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(ADLColor.navy)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .overlay(Capsule().stroke(ADLColor.navyBorder, lineWidth: 1.5))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isActing)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - IpReportsFormView (africandatalayer-955)
+
+private struct IpReportsFormView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var reporterName = ""
+    @State private var reporterEmail = ""
+    @State private var targetRef = ""
+    @State private var description = ""
+    @State private var rightsBasis = ""
+    @State private var sworn = false
+    @State private var isSubmitting = false
+    @State private var submitError: String?
+    @State private var didSubmit = false
+
+    var body: some View {
+        ScrollView {
+            if didSubmit {
+                successView
+            } else {
+                formView
+            }
+        }
+    }
+
+    private var successView: some View {
+        VStack(spacing: 20) {
+            Spacer().frame(height: 32)
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 56))
+                .foregroundColor(ADLColor.forest)
+            Text(appState.t("Report Submitted", "Signalement soumis"))
+                .font(ADLFont.inter(20, .bold))
+                .foregroundColor(ADLColor.ink)
+            Text(appState.t(
+                "Your IP report has been received and will be reviewed by our team.",
+                "Votre signalement de propriété intellectuelle a été reçu et sera examiné par notre équipe."
+            ))
+            .font(ADLFont.inter(14))
+            .foregroundColor(ADLColor.inkMuted)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 24)
+
+            Button(appState.t("Submit another", "Nouveau signalement")) {
+                resetForm()
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .padding(.horizontal, 24)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 40)
+    }
+
+    private var formView: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SectionLabel(text: appState.t("IP Report", "Signalement PI"), wide: true)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+            ADLCard {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appState.t(
+                        "Report content that you believe infringes your intellectual property rights.",
+                        "Signalez un contenu qui porte atteinte à vos droits de propriété intellectuelle."
+                    ))
+                    .font(ADLFont.inter(13))
+                    .foregroundColor(ADLColor.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 16)
+
+            VStack(spacing: 10) {
+                ADLInputField(
+                    icon: "person.fill",
+                    placeholder: appState.t("Your full name", "Votre nom complet"),
+                    text: $reporterName
+                )
+                ADLInputField(
+                    icon: "envelope.fill",
+                    placeholder: appState.t("Your email address", "Votre adresse e-mail"),
+                    text: $reporterEmail,
+                    keyboard: .emailAddress
+                )
+                ADLInputField(
+                    icon: "link",
+                    placeholder: appState.t("Infringing content URL or reference", "URL ou référence du contenu contrefaisant"),
+                    text: $targetRef
+                )
+                ADLInputField(
+                    icon: "text.alignleft",
+                    placeholder: appState.t("Describe the infringement", "Décrivez la violation"),
+                    text: $description
+                )
+                ADLInputField(
+                    icon: "checkmark.shield.fill",
+                    placeholder: appState.t("Rights basis (copyright, trademark…)", "Fondement des droits (droits d'auteur, marque…)"),
+                    text: $rightsBasis
+                )
+            }
+            .padding(.horizontal, 16)
+
+            // Sworn declaration toggle
+            ADLCard {
+                Toggle(isOn: $sworn) {
+                    Text(appState.t(
+                        "I swear the information above is accurate to the best of my knowledge.",
+                        "Je certifie que les informations ci-dessus sont exactes à ma connaissance."
+                    ))
+                    .font(ADLFont.inter(13))
+                    .foregroundColor(ADLColor.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                .tint(ADLColor.navy)
+            }
+            .padding(.horizontal, 16)
+
+            if let err = submitError {
+                ADLCard {
+                    Text(err)
+                        .font(ADLFont.inter(13))
+                        .foregroundColor(ADLColor.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 16)
+            }
+
+            Button {
+                Task { await submitReport() }
+            } label: {
+                if isSubmitting {
+                    HStack(spacing: 8) {
+                        ProgressView().tint(.white)
+                        Text(appState.t("Submitting…", "Envoi…"))
+                    }
+                } else {
+                    Text(appState.t("Submit Report", "Soumettre le signalement"))
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(!canSubmit || isSubmitting)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 32)
+        }
+    }
+
+    private var canSubmit: Bool {
+        !reporterName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !reporterEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        sworn
+    }
+
+    private func submitReport() async {
+        guard canSubmit, !isSubmitting else { return }
+        isSubmitting = true
+        submitError = nil
+        let payload = IpReportPayload(
+            reporterName: reporterName.trimmingCharacters(in: .whitespacesAndNewlines),
+            reporterEmail: reporterEmail.trimmingCharacters(in: .whitespacesAndNewlines),
+            targetKind: "url",
+            targetRef: targetRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : targetRef.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines),
+            sworn: sworn
+        )
+        do {
+            try await appState.submitIpReport(payload)
+            didSubmit = true
+        } catch {
+            submitError = (error as? APIError)?.message ?? appState.t("Submission failed. Please try again.", "Échec de soumission. Veuillez réessayer.")
+        }
+        isSubmitting = false
+    }
+
+    private func resetForm() {
+        reporterName = ""
+        reporterEmail = ""
+        targetRef = ""
+        description = ""
+        rightsBasis = ""
+        sworn = false
+        submitError = nil
+        didSubmit = false
     }
 }
 
