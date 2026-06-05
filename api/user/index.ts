@@ -349,6 +349,10 @@ export async function PUT(request: Request): Promise<Response> {
     const profile = await getUserProfile(auth.id);
     if (!profile) return errorResponse("Profile not found", 404);
 
+    if (body?.name !== undefined) {
+      profile.name = body.name.trim();
+    }
+
     if (body?.occupation !== undefined) {
       if (typeof body.occupation !== "string") return errorResponse("Invalid occupation", 400);
       const normalized = body.occupation.trim();

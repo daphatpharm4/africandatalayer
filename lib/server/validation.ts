@@ -171,6 +171,7 @@ export const adminAccountCreateSchema = z
 
 export const userUpdateSchema = z
   .object({
+    name: z.string().trim().max(160).optional(),
     occupation: z.string().trim().max(120).optional(),
     mapScope: z.enum(["bonamoussadi", "cameroon", "global"]).optional(),
     avatarPreset: z.enum(AVATAR_PRESETS).optional(),
