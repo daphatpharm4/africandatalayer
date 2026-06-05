@@ -3934,11 +3934,11 @@ struct AdminReviewView: View {
     private var adminModeTabs: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(AdminNativeMode.allCases) { mode in
+                ForEach(AdminNativeMode.allCases, id: \.self) { mode in
                     Button {
                         activeMode = mode
                     } label: {
-                        Text(mode.title(appState))
+                        Text(mode.title(appState.language))
                             .font(ADLFont.inter(12, .bold))
                             .tracking(1.6)
                             .textCase(.uppercase)
@@ -4068,10 +4068,10 @@ struct AdminReviewView: View {
                                 .background(activeMode.tint.opacity(0.12))
                                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(activeMode.title(appState))
+                                Text(activeMode.title(appState.language))
                                     .font(ADLFont.inter(18, .bold))
                                     .foregroundColor(ADLColor.ink)
-                                Text(activeMode.subtitle(appState))
+                                Text(activeMode.subtitle(appState.language))
                                     .font(ADLFont.inter(13))
                                     .foregroundColor(ADLColor.inkMuted)
                             }
@@ -4080,7 +4080,7 @@ struct AdminReviewView: View {
 
                         Divider().background(ADLColor.line)
 
-                        ForEach(activeMode.bullets(appState), id: \.self) { bullet in
+                        ForEach(activeMode.bullets(appState.language), id: \.self) { bullet in
                             HStack(alignment: .top, spacing: 8) {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 13, weight: .semibold))
@@ -4096,8 +4096,8 @@ struct AdminReviewView: View {
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                    KpiTile(label: activeMode.primaryMetricLabel(appState), value: activeMode.primaryMetricValue(appState), tone: .navy)
-                    KpiTile(label: activeMode.secondaryMetricLabel(appState), value: activeMode.secondaryMetricValue(appState), tone: .forest)
+                    KpiTile(label: activeMode.primaryMetricLabel(appState.language), value: activeMode.primaryMetricValue(stats: appState.reviewStats), tone: .navy)
+                    KpiTile(label: activeMode.secondaryMetricLabel(appState.language), value: activeMode.secondaryMetricValue(language: appState.language, stats: appState.reviewStats), tone: .forest)
                 }
             }
             .padding(16)
@@ -4107,37 +4107,40 @@ struct AdminReviewView: View {
 }
 
 @MainActor
-private enum AdminNativeMode: String, CaseIterable, Identifiable {
+private enum AdminNativeMode: String, CaseIterable, Hashable {
     case review
     case assignments
     case automation
     case ipReports
     case communications
 
-    var id: String { rawValue }
+    /// Bilingual helper (enum avoids a MainActor-crossing Identifiable conformance).
+    private static func adlTr(_ language: String, _ en: String, _ fr: String) -> String {
+        language == "fr" ? fr : en
+    }
 
-    func title(_ appState: AppState) -> String {
+    func title(_ language: String) -> String {
         switch self {
-        case .review: return appState.t("Review Cockpit", "Cockpit de révision")
-        case .assignments: return appState.t("Assignments", "Affectations")
-        case .automation: return appState.t("Automation", "Automatisation")
-        case .ipReports: return appState.t("IP Reports", "Signalements PI")
-        case .communications: return appState.t("Communications", "Communications")
+        case .review: return Self.adlTr(language, "Review Cockpit", "Cockpit de révision")
+        case .assignments: return Self.adlTr(language, "Assignments", "Affectations")
+        case .automation: return Self.adlTr(language, "Automation", "Automatisation")
+        case .ipReports: return Self.adlTr(language, "IP Reports", "Signalements PI")
+        case .communications: return Self.adlTr(language, "Communications", "Communications")
         }
     }
 
-    func subtitle(_ appState: AppState) -> String {
+    func subtitle(_ language: String) -> String {
         switch self {
         case .review:
-            return appState.t("Server-filtered risk queue and submission triage.", "File de risque serveur et triage des soumissions.")
+            return Self.adlTr(language, "Server-filtered risk queue and submission triage.", "File de risque serveur et triage des soumissions.")
         case .assignments:
-            return appState.t("Plan collection zones and monitor agent work.", "Planifier les zones de collecte et suivre les agents.")
+            return Self.adlTr(language, "Plan collection zones and monitor agent work.", "Planifier les zones de collecte et suivre les agents.")
         case .automation:
-            return appState.t("Review machine-originated leads before assignment.", "Réviser les leads automatisés avant affectation.")
+            return Self.adlTr(language, "Review machine-originated leads before assignment.", "Réviser les leads automatisés avant affectation.")
         case .ipReports:
-            return appState.t("Track intellectual-property reports from users.", "Suivre les signalements de propriété intellectuelle.")
+            return Self.adlTr(language, "Track intellectual-property reports from users.", "Suivre les signalements de propriété intellectuelle.")
         case .communications:
-            return appState.t("Coordinate email, SMS, and in-app notices.", "Coordonner email, SMS et avis in-app.")
+            return Self.adlTr(language, "Coordinate email, SMS, and in-app notices.", "Coordonner email, SMS et avis in-app.")
         }
     }
 
@@ -4161,49 +4164,49 @@ private enum AdminNativeMode: String, CaseIterable, Identifiable {
         }
     }
 
-    func bullets(_ appState: AppState) -> [String] {
+    func bullets(_ language: String) -> [String] {
         switch self {
         case .review:
             return [
-                appState.t("Open grouped submissions and expand each record for evidence.", "Ouvrir les soumissions groupées et développer chaque dossier."),
-                appState.t("Approve, reject, or flag from the server-backed queue.", "Approuver, rejeter ou signaler depuis la file serveur.")
+                Self.adlTr(language, "Open grouped submissions and expand each record for evidence.", "Ouvrir les soumissions groupées et développer chaque dossier."),
+                Self.adlTr(language, "Approve, reject, or flag from the server-backed queue.", "Approuver, rejeter ou signaler depuis la file serveur.")
             ]
         case .assignments:
             return [
-                appState.t("Create and monitor collection assignments by zone.", "Créer et suivre les affectations par zone."),
-                appState.t("Track expected points, submitted points, and due dates.", "Suivre les points attendus, soumis et les échéances.")
+                Self.adlTr(language, "Create and monitor collection assignments by zone.", "Créer et suivre les affectations par zone."),
+                Self.adlTr(language, "Track expected points, submitted points, and due dates.", "Suivre les points attendus, soumis et les échéances.")
             ]
         case .automation:
             return [
-                appState.t("Filter imported candidates by source, risk, and category.", "Filtrer les candidats importés par source, risque et catégorie."),
-                appState.t("Promote useful leads into assignments for field verification.", "Transformer les bons leads en affectations terrain.")
+                Self.adlTr(language, "Filter imported candidates by source, risk, and category.", "Filtrer les candidats importés par source, risque et catégorie."),
+                Self.adlTr(language, "Promote useful leads into assignments for field verification.", "Transformer les bons leads en affectations terrain.")
             ]
         case .ipReports:
             return [
-                appState.t("Review open IP reports and resolution status.", "Réviser les signalements PI ouverts et leur statut."),
-                appState.t("Keep legal follow-up separate from submission review.", "Séparer le suivi juridique de la revue des soumissions.")
+                Self.adlTr(language, "Review open IP reports and resolution status.", "Réviser les signalements PI ouverts et leur statut."),
+                Self.adlTr(language, "Keep legal follow-up separate from submission review.", "Séparer le suivi juridique de la revue des soumissions.")
             ]
         case .communications:
             return [
-                appState.t("Prepare operational notices for agents and clients.", "Préparer des avis opérationnels pour agents et clients."),
-                appState.t("Respect SMS and email consent before campaign sends.", "Respecter les consentements SMS et email avant envoi.")
+                Self.adlTr(language, "Prepare operational notices for agents and clients.", "Préparer des avis opérationnels pour agents et clients."),
+                Self.adlTr(language, "Respect SMS and email consent before campaign sends.", "Respecter les consentements SMS et email avant envoi.")
             ]
         }
     }
 
-    func primaryMetricLabel(_ appState: AppState) -> String {
+    func primaryMetricLabel(_ language: String) -> String {
         switch self {
-        case .review: return appState.t("Pending", "En attente")
-        case .assignments: return appState.t("Active", "Actives")
-        case .automation: return appState.t("Ready", "Prêts")
-        case .ipReports: return appState.t("Open", "Ouverts")
-        case .communications: return appState.t("Channels", "Canaux")
+        case .review: return Self.adlTr(language, "Pending", "En attente")
+        case .assignments: return Self.adlTr(language, "Active", "Actives")
+        case .automation: return Self.adlTr(language, "Ready", "Prêts")
+        case .ipReports: return Self.adlTr(language, "Open", "Ouverts")
+        case .communications: return Self.adlTr(language, "Channels", "Canaux")
         }
     }
 
-    func primaryMetricValue(_ appState: AppState) -> String {
+    func primaryMetricValue(stats: AdminReviewStats?) -> String {
         switch self {
-        case .review: return "\(appState.reviewStats?.pending ?? 0)"
+        case .review: return "\(stats?.pending ?? 0)"
         case .assignments: return "0"
         case .automation: return "0"
         case .ipReports: return "0"
@@ -4211,23 +4214,23 @@ private enum AdminNativeMode: String, CaseIterable, Identifiable {
         }
     }
 
-    func secondaryMetricLabel(_ appState: AppState) -> String {
+    func secondaryMetricLabel(_ language: String) -> String {
         switch self {
-        case .review: return appState.t("Flagged", "Signalés")
-        case .assignments: return appState.t("Due Soon", "Échéance")
-        case .automation: return appState.t("Sources", "Sources")
-        case .ipReports: return appState.t("Resolved", "Résolus")
-        case .communications: return appState.t("Consent", "Consentement")
+        case .review: return Self.adlTr(language, "Flagged", "Signalés")
+        case .assignments: return Self.adlTr(language, "Due Soon", "Échéance")
+        case .automation: return Self.adlTr(language, "Sources", "Sources")
+        case .ipReports: return Self.adlTr(language, "Resolved", "Résolus")
+        case .communications: return Self.adlTr(language, "Consent", "Consentement")
         }
     }
 
-    func secondaryMetricValue(_ appState: AppState) -> String {
+    func secondaryMetricValue(language: String, stats: AdminReviewStats?) -> String {
         switch self {
-        case .review: return "\(appState.reviewStats?.flagged ?? 0)"
+        case .review: return "\(stats?.flagged ?? 0)"
         case .assignments: return "0"
         case .automation: return "0"
         case .ipReports: return "0"
-        case .communications: return appState.t("Required", "Requis")
+        case .communications: return Self.adlTr(language, "Required", "Requis")
         }
     }
 }
