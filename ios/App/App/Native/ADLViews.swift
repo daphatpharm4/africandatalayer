@@ -34,6 +34,7 @@ struct RootView: View {
 
 /// Brief navy loading splash shown only during bootstrap.
 struct BootSplashView: View {
+    @EnvironmentObject private var appState: AppState
     var body: some View {
         ZStack {
             LinearGradient(
@@ -45,7 +46,7 @@ struct BootSplashView: View {
                 Text("African Data Layer")
                     .font(ADLFont.inter(17, .bold))
                     .foregroundColor(.white)
-                Text("DOUALA · CAMEROON")
+                Text(appState.t("DOUALA · CAMEROON", "DOUALA · CAMEROUN"))
                     .font(ADLFont.inter(11, .bold))
                     .tracking(2)
                     .foregroundColor(.white.opacity(0.55))
@@ -437,6 +438,7 @@ private struct HeroRewards: View {
 }
 
 private struct HeroReady: View {
+    @EnvironmentObject private var appState: AppState
     private let pills: [SubmissionCategory] = [.pharmacy, .fuelStation, .mobileMoney, .transportRoad, .censusProxy]
 
     var body: some View {
@@ -452,7 +454,7 @@ private struct HeroReady: View {
                     .font(ADLFont.inter(16, .heavy))
                     .foregroundColor(.white)
                     .padding(.top, 12)
-                Text("DOUALA · CAMEROON")
+                Text(appState.t("DOUALA · CAMEROON", "DOUALA · CAMEROUN"))
                     .font(ADLFont.inter(11, .bold))
                     .tracking(2.2)
                     .foregroundColor(.white.opacity(0.55))
@@ -989,7 +991,7 @@ struct AgentHomeView: View {
         center: CLLocationCoordinate2D(latitude: 4.0887, longitude: 9.7403),
         span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
     )
-    @State private var trackingMode: MapUserTrackingMode = .none
+    @State private var trackingMode: MKUserTrackingMode = .none
     @State private var selectedPoint: DataPoint?
     @State private var activeCategory: SubmissionCategory?
 
@@ -1140,7 +1142,7 @@ struct FieldMapKitView: UIViewRepresentable {
     let points: [DataPoint]
     let collectionZone: [CLLocationCoordinate2D]
     @Binding var region: MKCoordinateRegion
-    @Binding var trackingMode: MapUserTrackingMode
+    @Binding var trackingMode: MKUserTrackingMode
     @Binding var selectedPoint: DataPoint?
 
     func makeUIView(context: Context) -> MKMapView {
@@ -1185,18 +1187,8 @@ struct FieldMapKitView: UIViewRepresentable {
     }
 
     private func updateTrackingMode(on mapView: MKMapView) {
-        let nextMode: MKUserTrackingMode
-        switch trackingMode {
-        case .follow:
-            nextMode = .follow
-        case .followWithHeading:
-            nextMode = .followWithHeading
-        default:
-            nextMode = .none
-        }
-
-        if mapView.userTrackingMode != nextMode {
-            mapView.setUserTrackingMode(nextMode, animated: true)
+        if mapView.userTrackingMode != trackingMode {
+            mapView.setUserTrackingMode(trackingMode, animated: true)
         }
     }
 
@@ -4062,6 +4054,7 @@ private struct AdminSubmissionCard: View {
     let riskLevel: RiskLevel
     let trustTier: TrustTier
     @State private var isSubmitting = false
+    @State private var isExpanded = false
 
     // Resolved status from server — drives already-decided display.
     private var resolvedStatus: AdminResolvedStatus? {
@@ -4160,6 +4153,29 @@ private struct AdminSubmissionCard: View {
                         }
                     }
 
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            isExpanded.toggle()
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(isExpanded
+                                 ? appState.t("Hide review details", "Masquer les détails")
+                                 : appState.t("Show review details", "Afficher les détails"))
+                                .font(ADLFont.inter(12, .bold))
+                            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundColor(ADLColor.navy)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.top, 2)
+
+                    if isExpanded {
+                        expandedReviewDetails
+                            .padding(.top, 8)
+                    }
+
                     // Row 4: already-decided pill OR action buttons
                     if let status = resolvedStatus {
                         HStack(spacing: 6) {
@@ -4245,6 +4261,188 @@ private struct AdminSubmissionCard: View {
                 .stroke(ADLColor.line, lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.04), radius: 2, x: 0, y: 1)
+    }
+
+    private var expandedReviewDetails: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let raw = group.photoURL, let url = URL(string: raw) {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .empty:
+                        ZStack {
+                            reviewPhotoPlaceholder
+                            ProgressView()
+                        }
+                    default:
+                        reviewPhotoPlaceholder
+                    }
+                }
+                .frame(height: 170)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                ForEach(reviewRows, id: \.0) { label, value in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(label.uppercased())
+                            .font(ADLFont.inter(9, .bold))
+                            .tracking(1.2)
+                            .foregroundColor(Color(hex: 0x9ca3af))
+                        Text(value)
+                            .font(ADLFont.inter(12, .semibold))
+                            .foregroundColor(ADLColor.ink)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(ADLColor.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+            }
+
+            if !detailRows.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    SectionLabel(text: appState.t("Submission Details", "Détails de soumission"))
+                    ForEach(detailRows, id: \.0) { label, value in
+                        HStack(alignment: .top, spacing: 10) {
+                            Text(label)
+                                .font(ADLFont.inter(12, .bold))
+                                .foregroundColor(ADLColor.inkMuted)
+                                .frame(width: 116, alignment: .leading)
+                            Text(value)
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.vertical, 7)
+                        .overlay(Rectangle().fill(ADLColor.line).frame(height: 1), alignment: .bottom)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(ADLColor.lineStrong, lineWidth: 1)
+        )
+    }
+
+    private var reviewPhotoPlaceholder: some View {
+        ZStack {
+            ADLColor.paper
+            Image(systemName: group.category.systemImage)
+                .font(.system(size: 30, weight: .semibold))
+                .foregroundColor(group.category.tint)
+        }
+    }
+
+    private var reviewRows: [(String, String)] {
+        var rows: [(String, String)] = [
+            (appState.t("Point ID", "ID point"), group.pointId),
+            (appState.t("Event ID", "ID événement"), group.latestEventId.isEmpty ? appState.t("Unavailable", "Indisponible") : group.latestEventId),
+            (appState.t("Category", "Catégorie"), group.category.title),
+            (appState.t("Risk score", "Score risque"), String(format: "%.0f", group.summary.riskScore)),
+            (appState.t("Evidence", "Preuves"), "\(group.summary.evidenceCount)"),
+            (appState.t("Contributors", "Contributeurs"), "\(group.summary.contributorCount)"),
+            (appState.t("Age", "Âge"), "\(group.summary.staleHours)h"),
+            (appState.t("Status", "Statut"), group.summary.reviewStatus.replacingOccurrences(of: "_", with: " "))
+        ]
+        if let user = group.latestUser {
+            rows.append((appState.t("Submitted by", "Soumis par"), user.name.isEmpty ? user.id : user.name))
+        }
+        if let createdAt = group.latestEvent?.createdAt {
+            rows.append((appState.t("Time", "Heure"), formattedDate(createdAt)))
+        }
+        if let location = group.latestEvent?.location {
+            rows.append((appState.t("GPS", "GPS"), String(format: "%.5f, %.5f", location.latitude, location.longitude)))
+            rows.append((appState.t("Accuracy", "Précision"), location.accuracyMeters.map { String(format: "%.0fm", $0) } ?? appState.t("Unavailable", "Indisponible")))
+        }
+        rows.append((appState.t("GPS drift", "Dérive GPS"), group.summary.submissionDistanceKm.map { String(format: "%.2f km", $0) } ?? appState.t("Unavailable", "Indisponible")))
+        rows.append((appState.t("IP drift", "Dérive IP"), group.summary.ipDistanceKm.map { String(format: "%.2f km", $0) } ?? appState.t("Unavailable", "Indisponible")))
+        if group.summary.hasSubmissionMismatch {
+            rows.append((appState.t("GPS match", "Correspondance GPS"), appState.t("Mismatch", "Écart")))
+        }
+        if group.summary.hasIpMismatch {
+            rows.append((appState.t("IP match", "Correspondance IP"), appState.t("Mismatch", "Écart")))
+        }
+        if group.summary.isLowEndDevice {
+            rows.append((appState.t("Device", "Appareil"), appState.t("Low-end device", "Appareil bas de gamme")))
+        }
+        return rows
+    }
+
+    private var detailRows: [(String, String)] {
+        guard let details = group.latestEvent?.details else { return [] }
+        var rows: [(String, String)] = []
+        add("Name", "Nom", details.name, to: &rows)
+        add("Site name", "Nom du site", details.siteName, to: &rows)
+        if let score = details.confidenceScore {
+            rows.append((appState.t("Confidence", "Confiance"), String(format: "%.0f%%", score)))
+        }
+        add("Opening hours", "Horaires", details.openingHours, to: &rows)
+        add("Open now", "Ouvert maintenant", details.isOpenNow, to: &rows)
+        add("On duty", "De garde", details.isOnDuty, to: &rows)
+        add("Providers", "Fournisseurs", details.providers, to: &rows)
+        add("Payments", "Paiements", details.paymentMethods, to: &rows)
+        add("Fuel available", "Carburant disponible", details.hasFuelAvailable, to: &rows)
+        add("Fuel types", "Types carburant", details.fuelTypes, to: &rows)
+        if let prices = details.pricesByFuel, !prices.isEmpty {
+            rows.append((appState.t("Fuel prices", "Prix carburant"), prices.map { "\($0.key): \(Int($0.value))" }.joined(separator: ", ")))
+        }
+        add("Quality", "Qualité", details.quality, to: &rows)
+        add("Outlet type", "Type de point", details.outletType, to: &rows)
+        add("Formal", "Formel", details.isFormal, to: &rows)
+        add("Billboard type", "Type panneau", details.billboardType, to: &rows)
+        add("Occupied", "Occupé", details.isOccupied, to: &rows)
+        add("Advertiser", "Annonceur", details.advertiserBrand, to: &rows)
+        add("Road name", "Nom route", details.roadName, to: &rows)
+        add("Condition", "État", details.condition, to: &rows)
+        add("Surface", "Surface", details.surfaceType, to: &rows)
+        add("Blocked", "Bloqué", details.isBlocked, to: &rows)
+        add("Blockage", "Blocage", details.blockageType, to: &rows)
+        add("Building type", "Type bâtiment", details.buildingType, to: &rows)
+        add("Occupancy", "Occupation", details.occupancyStatus, to: &rows)
+        if let storeyCount = details.storeyCount {
+            rows.append((appState.t("Storeys", "Étages"), "\(storeyCount)"))
+        }
+        if let estimatedUnits = details.estimatedUnits {
+            rows.append((appState.t("Estimated units", "Unités estimées"), "\(estimatedUnits)"))
+        }
+        if let consent = details.consentStatus {
+            rows.append((appState.t("Consent", "Consentement"), consent.title))
+        }
+        add("Consent date", "Date consentement", details.consentRecordedAt, to: &rows)
+        return rows
+    }
+
+    private func formattedDate(_ iso: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = formatter.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        return date?.formatted(date: .abbreviated, time: .shortened) ?? iso
+    }
+
+    private func add(_ en: String, _ fr: String, _ value: String?, to rows: inout [(String, String)]) {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else { return }
+        rows.append((appState.t(en, fr), trimmed))
+    }
+
+    private func add(_ en: String, _ fr: String, _ value: Bool?, to rows: inout [(String, String)]) {
+        guard let value else { return }
+        rows.append((appState.t(en, fr), value ? appState.t("Yes", "Oui") : appState.t("No", "Non")))
+    }
+
+    private func add(_ en: String, _ fr: String, _ value: [String]?, to rows: inout [(String, String)]) {
+        guard let values = value?.filter({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }), !values.isEmpty else { return }
+        rows.append((appState.t(en, fr), values.joined(separator: ", ")))
     }
 }
 
@@ -7140,6 +7338,7 @@ struct DailyProgressWidget: View {
 struct LevelUpCelebration: View {
     let tier: AgentTier
     let onDismiss: () -> Void
+    @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shown = false
 
@@ -7158,13 +7357,13 @@ struct LevelUpCelebration: View {
                 Image(systemName: "trophy.fill")
                     .font(.system(size: 52))
                     .foregroundColor(ADLColor.gold)
-                Text("Level up!")
+                Text(appState.t("Level up!", "Niveau supérieur !"))
                     .font(ADLFont.inter(20, .bold))
                     .foregroundColor(ADLColor.ink)
-                Text("You reached \(tier.title)")
+                Text(appState.t("You reached \(tier.title)", "Vous avez atteint \(tier.title)"))
                     .font(ADLFont.inter(15))
                     .foregroundColor(.secondary)
-                Button("Keep going") { onDismiss() }
+                Button(appState.t("Keep going", "Continuer")) { onDismiss() }
                     .buttonStyle(PrimaryButtonStyle())
             }
             .padding(28)
