@@ -768,6 +768,7 @@ struct AppShellView: View {
         case .adminReview: AdminReviewView()
         case .agentPerformance: AgentPerformanceView()
         case .clientDashboard: ClientDashboardView()
+        case .investor: InvestorDashboardView()
         case .analytics: AnalyticsView()
         }
     }
@@ -856,6 +857,7 @@ struct ADLTabBar: View {
         case .adminReview: return appState.t("Queue", "File")
         case .agentPerformance: return appState.t("Agents", "Agents")
         case .clientDashboard: return "Delta"
+        case .investor: return appState.t("Dashboard", "Tableau")
         case .analytics:
             if isAdmin { return appState.t("Impact", "Impact") }
             if appState.selectedRole == .client { return appState.t("Insights", "Analyses") }
@@ -873,6 +875,7 @@ struct ADLTabBar: View {
         case .adminReview: return "checkmark.square"
         case .agentPerformance: return "person.2"
         case .clientDashboard: return "chart.bar"
+        case .investor: return "square.grid.2x2"
         case .analytics:
             if isAdmin { return "chart.bar" }
             if appState.selectedRole == .client { return "chart.line.uptrend.xyaxis" }
@@ -4396,6 +4399,407 @@ struct ClientDashboardView: View {
     }
 }
 
+// MARK: - Investor Dashboard
+
+struct InvestorDashboardView: View {
+    @EnvironmentObject private var appState: AppState
+
+    // MARK: - Derived data
+
+    private var summary: AnalyticsSummary? { appState.analyticsSummary }
+
+    private var totalPoints: Int { summary?.verification.totalPoints ?? 0 }
+    private var verifiedPoints: Int { summary?.verification.verifiedPoints ?? 0 }
+    private var verificationRate: Double { summary?.verification.verificationRatePct ?? 0 }
+    private var fraudRate: Double { summary?.fraud.fraudRatePct ?? 0 }
+    private var enrichmentRate: Double { summary?.enrichmentRatePct ?? 0 }
+    private var activeContributors: Int { summary?.weeklyActiveContributors ?? 0 }
+
+    private var wowDelta: Int? {
+        guard appState.weeklyTrend.count >= 2 else { return nil }
+        let prev = appState.weeklyTrend[appState.weeklyTrend.count - 2].totalEvents
+        let curr = appState.weeklyTrend[appState.weeklyTrend.count - 1].totalEvents
+        guard prev > 0 else { return nil }
+        return Int(Double(curr - prev) / Double(prev) * 100)
+    }
+
+    private var weeklyBars: [WeeklyTrendBar] {
+        let raw = appState.weeklyTrend.suffix(7)
+        if raw.count < 7 {
+            let padding = (0..<(7 - raw.count)).map {
+                WeeklyTrendBar(weekStart: "pad-\($0)", totalEvents: 0)
+            }
+            return padding + Array(raw)
+        }
+        return Array(raw)
+    }
+
+    // Quality distribution derived from leaderboard
+    private struct DistBucket: Identifiable {
+        let id: String
+        let label: String
+        let value: Int
+        let color: Color
+    }
+
+    private var qualityBuckets: [DistBucket] {
+        var excellent = 0, high = 0, medium = 0, low = 0
+        for entry in appState.leaderboard {
+            let q = entry.averageQualityScore
+            if q >= 80 { excellent += 1 }
+            else if q >= 60 { high += 1 }
+            else if q >= 40 { medium += 1 }
+            else { low += 1 }
+        }
+        return [
+            DistBucket(id: "excellent", label: appState.t("Excellent", "Excellent"), value: excellent, color: Color(hex: 0x4c7c59)),
+            DistBucket(id: "high",      label: appState.t("High", "Haut"),            value: high,      color: Color(hex: 0x0f2b46)),
+            DistBucket(id: "medium",    label: appState.t("Medium", "Moyen"),          value: medium,    color: Color(hex: 0xc86b4a)),
+            DistBucket(id: "low",       label: appState.t("Low", "Bas"),              value: low,       color: Color(hex: 0xd69e2e)),
+        ].filter { $0.value > 0 }
+    }
+
+    private var trustTierBuckets: [DistBucket] {
+        var elite = 0, trusted = 0, standard = 0, newTier = 0
+        for entry in appState.leaderboard {
+            let q = entry.averageQualityScore
+            if q >= 75 { elite += 1 }
+            else if q >= 50 { trusted += 1 }
+            else if q >= 30 { standard += 1 }
+            else { newTier += 1 }
+        }
+        return [
+            DistBucket(id: "elite",    label: appState.t("Elite", "Élite"),          value: elite,    color: Color(hex: 0x4c7c59)),
+            DistBucket(id: "trusted",  label: appState.t("Trusted", "Confiance"),    value: trusted,  color: Color(hex: 0x0f2b46)),
+            DistBucket(id: "standard", label: appState.t("Standard", "Standard"),   value: standard, color: Color(hex: 0xc86b4a)),
+            DistBucket(id: "new",      label: appState.t("New", "Nouveau"),          value: newTier,  color: Color(hex: 0xd5e1eb)),
+        ].filter { $0.value > 0 }
+    }
+
+    private var verificationDonut: [DistBucket] {
+        let unverified = max(0, totalPoints - verifiedPoints)
+        return [
+            DistBucket(id: "verified",   label: appState.t("Verified", "Vérifié"),       value: verifiedPoints, color: Color(hex: 0x4c7c59)),
+            DistBucket(id: "unverified", label: appState.t("Unverified", "Non vérifié"), value: unverified,     color: Color(hex: 0xd5e1eb)),
+        ].filter { $0.value > 0 }
+    }
+
+    // MARK: - Body
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ADLScreenHeader(title: appState.t("Investor Dashboard", "Tableau investisseur")) {
+                Color.clear.frame(width: 44, height: 44)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+
+                    // MARK: Network-status hero (navy)
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("AFRICAN DATA LAYER")
+                                    .font(ADLFont.inter(13, .bold))
+                                    .foregroundColor(.white)
+                                Text(appState.t("Client Dashboard", "Tableau client"))
+                                    .font(ADLFont.inter(11))
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                            Spacer()
+                            Text(appState.t("Client", "Client").uppercased())
+                                .font(ADLFont.inter(10, .bold))
+                                .tracking(1.2)
+                                .foregroundColor(.white.opacity(0.7))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.white.opacity(0.12))
+                                .clipShape(Capsule())
+                        }
+
+                        // Network status sub-card
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(appState.t("Network status", "Statut réseau").uppercased())
+                                .font(ADLFont.inter(9, .bold))
+                                .tracking(1.8)
+                                .foregroundColor(.white.opacity(0.5))
+
+                            if totalPoints > 0 {
+                                Text("\(appState.t("Active network", "Réseau actif")) · \(totalPoints.formatted()) \(appState.t("points mapped", "points cartographiés"))")
+                                    .font(ADLFont.inter(17, .bold))
+                                    .foregroundColor(.white)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if let delta = wowDelta {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: delta >= 0 ? "arrow.up.right" : "arrow.down.right")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text("\(delta >= 0 ? "+" : "")\(delta)% \(appState.t("this week", "cette semaine"))")
+                                            .font(ADLFont.inter(11, .semibold))
+                                    }
+                                    .foregroundColor(delta >= 0 ? Color(hex: 0x4ade80) : Color(hex: 0xf87171))
+                                }
+                            } else {
+                                Text(appState.t("Awaiting first capture", "En attente de la première capture"))
+                                    .font(ADLFont.inter(17, .bold))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text(appState.t("Field agents are being onboarded.", "Les agents terrain sont en cours d'intégration."))
+                                    .font(ADLFont.inter(11))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(Color.white.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                        // Stats pair
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(appState.t("Verified", "Vérifiés").uppercased())
+                                    .font(ADLFont.inter(9, .bold))
+                                    .tracking(1.6)
+                                    .foregroundColor(.white.opacity(0.5))
+                                Text("\(verifiedPoints.formatted())")
+                                    .font(ADLFont.inter(22, .heavy))
+                                    .foregroundColor(.white)
+                                Text("/ \(totalPoints.formatted()) \(appState.t("total", "total"))")
+                                    .font(ADLFont.inter(11))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(Color.white.opacity(0.08))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.1), lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(appState.t("Coverage", "Couverture").uppercased())
+                                    .font(ADLFont.inter(9, .bold))
+                                    .tracking(1.6)
+                                    .foregroundColor(.white.opacity(0.5))
+                                Text(String(format: "%.0f%%", verificationRate))
+                                    .font(ADLFont.inter(22, .heavy))
+                                    .foregroundColor(verificationRate > 0 ? Color(hex: 0xf4c317) : .white.opacity(0.4))
+                                Text(appState.t("Bonamoussadi", "Bonamoussadi"))
+                                    .font(ADLFont.inter(11))
+                                    .foregroundColor(.white.opacity(0.4))
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .background(verificationRate > 0 ? Color(hex: 0xf4c317).opacity(0.15) : Color.white.opacity(0.08))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(verificationRate > 0 ? Color(hex: 0xf4c317).opacity(0.2) : Color.white.opacity(0.1), lineWidth: 1))
+                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(16)
+                    .background(ADLColor.navy)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    // MARK: KPI tile grid
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                        KpiTile(
+                            label: appState.t("Total Points", "Points totaux"),
+                            value: "\(totalPoints.formatted())",
+                            tone: .navy,
+                            systemIcon: "mappin.and.ellipse"
+                        )
+                        KpiTile(
+                            label: appState.t("Active Agents", "Agents actifs"),
+                            value: "\(activeContributors)",
+                            tone: .forest,
+                            systemIcon: "person.2.fill"
+                        )
+                        KpiTile(
+                            label: appState.t("Verification", "Vérification"),
+                            value: String(format: "%.0f%%", verificationRate),
+                            tone: .navy,
+                            systemIcon: "checkmark.seal.fill"
+                        )
+                        KpiTile(
+                            label: appState.t("Fraud Rate", "Taux fraude"),
+                            value: String(format: "%.1f%%", fraudRate),
+                            tone: .amber,
+                            systemIcon: "exclamationmark.shield.fill"
+                        )
+                    }
+
+                    // MARK: Weekly submission bars
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionLabel(text: appState.t("Weekly submissions", "Soumissions hebdo."))
+                        let bars = weeklyBars
+                        let maxVal = max(bars.map(\.totalEvents).max() ?? 1, 1)
+                        let dayLabels = ["S", "M", "T", "W", "T", "F", "S"]
+                        ADLCard {
+                            HStack(alignment: .bottom, spacing: 6) {
+                                ForEach(Array(bars.enumerated()), id: \.offset) { index, bar in
+                                    let isHighlight = index == 6
+                                    let heightFraction = max(CGFloat(bar.totalEvents) / CGFloat(maxVal), 0.03)
+                                    VStack(spacing: 4) {
+                                        if bar.totalEvents > 0 {
+                                            Text("\(bar.totalEvents)")
+                                                .font(ADLFont.inter(9, .bold))
+                                                .foregroundColor(Color(hex: 0x9ca3af))
+                                        } else {
+                                            Spacer().frame(height: 12)
+                                        }
+                                        GeometryReader { geo in
+                                            VStack(spacing: 0) {
+                                                Spacer()
+                                                RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                                    .fill(isHighlight ? ADLColor.terracotta : ADLColor.navyLight)
+                                                    .frame(height: geo.size.height * heightFraction)
+                                            }
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                        Text(dayLabels[index])
+                                            .font(ADLFont.inter(9))
+                                            .foregroundColor(Color(hex: 0x9ca3af))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                }
+                            }
+                            .frame(height: 90)
+                        }
+                    }
+
+                    // MARK: Quality distribution bar chart
+                    if !qualityBuckets.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            SectionLabel(text: appState.t("Quality distribution", "Distribution qualité"))
+                            ADLCard {
+                                let maxQ = max(qualityBuckets.map(\.value).max() ?? 1, 1)
+                                VStack(spacing: 10) {
+                                    ForEach(qualityBuckets) { bucket in
+                                        HStack(spacing: 10) {
+                                            Text(bucket.label)
+                                                .font(ADLFont.inter(11, .semibold))
+                                                .foregroundColor(.secondary)
+                                                .frame(width: 68, alignment: .leading)
+                                                .lineLimit(1)
+                                            GeometryReader { proxy in
+                                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                                    .fill(bucket.color)
+                                                    .frame(width: max(8, CGFloat(bucket.value) / CGFloat(maxQ) * proxy.size.width))
+                                            }
+                                            .frame(height: 18)
+                                            Text("\(bucket.value)")
+                                                .font(ADLFont.inter(11, .bold))
+                                                .foregroundColor(ADLColor.inkMuted)
+                                                .frame(width: 28, alignment: .trailing)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // MARK: Trust tier distribution (SectorMark donut) + Verification donut side by side
+                    if !trustTierBuckets.isEmpty || !verificationDonut.isEmpty {
+                        HStack(alignment: .top, spacing: 10) {
+                            // Trust tiers
+                            if !trustTierBuckets.isEmpty {
+                                investorDonutCard(
+                                    title: appState.t("Trust Tiers", "Niveaux confiance"),
+                                    buckets: trustTierBuckets
+                                )
+                            }
+                            // Verification split
+                            if !verificationDonut.isEmpty {
+                                investorDonutCard(
+                                    title: appState.t("Verification", "Vérification"),
+                                    buckets: verificationDonut
+                                )
+                            }
+                        }
+                    }
+
+                    // MARK: Enrichment + pending row
+                    ADLCard {
+                        HStack(spacing: 16) {
+                            VStack(alignment: .leading, spacing: 4) {
+                                SectionLabel(text: appState.t("Enrichment", "Enrichissement"), wide: true)
+                                Text(String(format: "%.0f%%", enrichmentRate))
+                                    .font(ADLFont.inter(22, .heavy))
+                                    .foregroundColor(ADLColor.terracotta)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Rectangle()
+                                .fill(ADLColor.line)
+                                .frame(width: 1, height: 40)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                SectionLabel(text: appState.t("Pending review", "En attente"), wide: true)
+                                Text("\(summary?.reviewQueue.pendingReview ?? 0)")
+                                    .font(ADLFont.inter(22, .heavy))
+                                    .foregroundColor(ADLColor.navy)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 24)
+            }
+            .refreshable { await appState.loadAnalytics(force: true) }
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .task {
+            await appState.loadAnalytics()
+            await appState.loadLeaderboard()
+        }
+    }
+
+    @ViewBuilder
+    private func investorDonutCard(title: String, buckets: [DistBucket]) -> some View {
+        let total = max(buckets.map(\.value).reduce(0, +), 1)
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                SectionLabel(text: title)
+                Chart {
+                    ForEach(buckets) { bucket in
+                        SectorMark(
+                            angle: .value(bucket.label, bucket.value),
+                            innerRadius: .ratio(0.52),
+                            angularInset: 1.5
+                        )
+                        .foregroundStyle(bucket.color)
+                        .cornerRadius(3)
+                    }
+                }
+                .frame(height: 90)
+                .chartLegend(.hidden)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(buckets) { bucket in
+                        HStack(spacing: 6) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(bucket.color)
+                                .frame(width: 8, height: 8)
+                            Text(bucket.label)
+                                .font(ADLFont.inter(10, .semibold))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(Int(Double(bucket.value) / Double(total) * 100))%")
+                                .font(ADLFont.inter(10, .bold))
+                                .foregroundColor(ADLColor.ink)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
 struct AnalyticsView: View {
     @EnvironmentObject private var appState: AppState
 
@@ -4550,7 +4954,9 @@ struct AnalyticsView: View {
                     title: "Investor Dashboard",
                     subtitle: "Executive KPIs for trust, growth, and reporting confidence",
                     systemImage: "chart.line.uptrend.xyaxis"
-                )
+                ) {
+                    appState.selectedTab = .investor
+                }
             }
 
             clientKpiGrid

@@ -160,6 +160,7 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
     case adminReview
     case agentPerformance
     case clientDashboard
+    case investor
     case analytics
 
     var id: String { rawValue }
@@ -208,7 +209,7 @@ enum AppReleaseMode {
         case .admin:
             return [.adminReview, .home, .analytics, .agentPerformance, .profile]
         case .client:
-            return [.clientDashboard, .home, .analytics, .profile]
+            return [.clientDashboard, .investor, .home, .analytics, .profile]
         }
     }
 
