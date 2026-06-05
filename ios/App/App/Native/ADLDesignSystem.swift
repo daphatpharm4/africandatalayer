@@ -420,7 +420,7 @@ struct MissionRow: View {
 struct PrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .semibold))
+            .font(ADLFont.inter(15, .semibold))
             .tracking(0.15)
             .foregroundColor(.white)
             .frame(maxWidth: .infinity, minHeight: 56)
@@ -436,7 +436,7 @@ struct PrimaryButtonStyle: ButtonStyle {
 struct CTAButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .semibold))
+            .font(ADLFont.inter(15, .semibold))
             .tracking(0.15)
             .foregroundColor(.white)
             .frame(maxWidth: .infinity, minHeight: 56)
@@ -452,7 +452,7 @@ struct CTAButtonStyle: ButtonStyle {
 struct SecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .semibold))
+            .font(ADLFont.inter(15, .semibold))
             .tracking(0.15)
             .foregroundColor(ADLColor.navy)
             .frame(maxWidth: .infinity, minHeight: 56)

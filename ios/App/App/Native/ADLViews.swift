@@ -745,8 +745,8 @@ struct AppShellView: View {
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .onAppear { appState.enforceVisibleNavigation() }
-        .onChange(of: appState.selectedRole) { _ in appState.enforceVisibleNavigation() }
-        .onChange(of: appState.selectedTab) { _ in appState.enforceVisibleNavigation() }
+        .onChange(of: appState.selectedRole) { appState.enforceVisibleNavigation() }
+        .onChange(of: appState.selectedTab) { appState.enforceVisibleNavigation() }
         .overlay {
             if let event = appState.levelUpEvent {
                 LevelUpCelebration(tier: event.tier) {
