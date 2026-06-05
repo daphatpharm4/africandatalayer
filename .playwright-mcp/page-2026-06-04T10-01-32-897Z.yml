@@ -1,0 +1,24 @@
+- main [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e6]:
+      - img [ref=e8]:
+        - generic [ref=e44]: BONAMOUSSADI · DOUALA
+      - generic [ref=e45]:
+        - generic [ref=e46]:
+          - img [ref=e47]
+          - generic [ref=e51]: ADL
+        - button "Passer" [ref=e52] [cursor=pointer]
+    - generic [ref=e54]:
+      - generic [ref=e55]: Bienvenue
+      - heading "La ville cartographiée depuis le terrain." [level=1] [ref=e56]
+      - paragraph [ref=e57]: African Data Layer transforme les déplacements quotidiens à Bonamoussadi en données d'infrastructure vérifiées.
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - button "Slide 1" [ref=e60] [cursor=pointer]
+          - button "Slide 2" [ref=e62] [cursor=pointer]
+          - button "Slide 3" [ref=e64] [cursor=pointer]
+          - button "Slide 4" [ref=e66] [cursor=pointer]
+          - button "Slide 5" [ref=e68] [cursor=pointer]
+        - button "Suivant" [ref=e70] [cursor=pointer]:
+          - generic [ref=e71]: Suivant
+          - img [ref=e72]

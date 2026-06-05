@@ -1,0 +1,21 @@
+[    1137ms] [ERROR] Loading the stylesheet 'https://fonts.googleapis.com/css2?family=Sora:wght@600;700&display=swap' violates the following Content Security Policy directive: "style-src 'self' 'unsafe-inline'". Note that 'style-src-elem' was not explicitly set, so 'style-src' is used as a fallback. The action has been blocked. @ https://www.app.africandatalayer.com/:8
+[    1541ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    1542ms] [LOG] [API] GET /api/auth/session @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    1585ms] [ERROR] [API] GET /api/leaderboard → NETWORK ERROR AbortError: signal is aborted without reason
+    at https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:305:8217
+    at Ja (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:92968)
+    at Rf (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110871)
+    at ui (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110103)
+    at zf (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110447)
+    at ui (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110165)
+    at zf (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110467)
+    at ui (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110165)
+    at zf (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110467)
+    at ui (https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49:110165) @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    1630ms] [ERROR] CoreLocationProvider: CoreLocation framework reported a kCLErrorLocationUnknown failure. @ https://www.app.africandatalayer.com/:0
+[    1957ms] [LOG] [API] GET /api/auth/session → 200 @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    1965ms] [LOG] [AUTH] getSession: response no user @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    1965ms] [LOG] [AUTH] getSession: fetching /api/auth/session @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    1965ms] [LOG] [API] GET /api/auth/session @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    2239ms] [LOG] [API] GET /api/auth/session → 200 @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49
+[    2240ms] [LOG] [AUTH] getSession: response no user @ https://www.app.africandatalayer.com/assets/index-C8Y1KIhI.js:49

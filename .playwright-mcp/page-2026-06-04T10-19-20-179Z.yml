@@ -1,0 +1,50 @@
+- main [ref=e16]:
+  - generic [ref=e145]:
+    - button "Retour" [ref=e146] [cursor=pointer]:
+      - img [ref=e147]
+    - generic [ref=e149]:
+      - img [ref=e151]
+      - generic [ref=e155]:
+        - heading "Rejoignez le réseau" [level=1] [ref=e156]
+        - paragraph [ref=e157]: Créez un compte terrain pour capturer les lieux, services et changements d'infrastructure sur le terrain.
+      - generic [ref=e158]:
+        - button "Se connecter avec Apple" [ref=e159] [cursor=pointer]:
+          - img [ref=e160]
+          - generic [ref=e162]: Se connecter avec Apple
+        - button "Continuer avec Google" [ref=e163] [cursor=pointer]
+        - generic [ref=e164]:
+          - text: Numéro de téléphone ou email
+          - generic [ref=e165]:
+            - img
+            - textbox "Numéro de téléphone ou email" [ref=e166]:
+              - /placeholder: +2376XXXXXXXX ou nom@email.com
+        - generic [ref=e167]:
+          - text: Mot de passe
+          - generic [ref=e168]:
+            - img
+            - textbox "Mot de passe" [ref=e169]:
+              - /placeholder: Min. 10 car., A-Z, a-z, 0-9
+            - button "Afficher le mot de passe" [ref=e170] [cursor=pointer]:
+              - img [ref=e171]
+          - paragraph [ref=e174]: Utilisez au moins 10 caractères avec une majuscule, une minuscule et un chiffre.
+        - generic [ref=e175]:
+          - checkbox "Recevoir des SMS" [ref=e176]
+          - generic [ref=e177]: J'accepte de recevoir des SMS (alertes de mission, paiements, avis système) au numéro indiqué. Fréquence variable. Répondez STOP pour vous désabonner.
+        - generic [ref=e178]:
+          - checkbox "Accepter les Conditions d'utilisation et la Politique de confidentialité" [ref=e179]
+          - generic [ref=e180]:
+            - text: J'accepte les
+            - button "Conditions d'utilisation" [ref=e181] [cursor=pointer]
+            - text: et la
+            - button "Politique de confidentialité" [ref=e182] [cursor=pointer]
+            - text: .
+        - button "Créer un compte" [ref=e183] [cursor=pointer]:
+          - generic [ref=e184]: Créer un compte
+          - img [ref=e185]
+      - generic [ref=e187]:
+        - generic [ref=e188]:
+          - img [ref=e189]
+          - generic [ref=e192]: La connexion chiffrée protège votre compte terrain.
+        - paragraph [ref=e193]:
+          - text: Vous avez déjà un compte ?
+          - button "Se connecter plutôt" [ref=e194] [cursor=pointer]
