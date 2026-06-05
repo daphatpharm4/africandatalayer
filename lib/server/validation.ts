@@ -175,6 +175,7 @@ export const userUpdateSchema = z
     occupation: z.string().trim().max(120).optional(),
     mapScope: z.enum(["bonamoussadi", "cameroon", "global"]).optional(),
     avatarPreset: z.enum(AVATAR_PRESETS).optional(),
+    imageBase64: z.string().min(1).max(10_000_000).optional(),
   })
   .strict();
 
@@ -248,7 +249,7 @@ export const adminUserAccessPatchSchema = z
 export const privacyRequestSchema = z
   .object({
     requestType: z.enum(["access", "rectification", "erasure"]),
-    subjectReference: z.string().trim().min(1).max(160),
+    subjectReference: z.string().trim().max(160).optional(),
     notes: z.string().trim().max(1000).optional(),
   })
   .strict();

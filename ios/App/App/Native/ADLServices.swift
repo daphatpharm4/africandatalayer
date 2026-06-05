@@ -291,13 +291,21 @@ final class AppState: ObservableObject {
         }
     }
 
-    func updateProfile(name: String? = nil, avatarPreset: String? = nil) async throws {
-        let updated = try await apiClient.updateUserProfile(name: name, avatarPreset: avatarPreset)
+    func updateProfile(name: String? = nil, avatarPreset: String? = nil, imageBase64: String? = nil) async throws {
+        let updated = try await apiClient.updateUserProfile(name: name, avatarPreset: avatarPreset, imageBase64: imageBase64)
         userProfile = updated
         if let nextName = updated.name?.trimmingCharacters(in: .whitespacesAndNewlines), !nextName.isEmpty {
             profile.name = nextName
         }
         refreshGamification()
+    }
+
+    func submitIpReport(_ payload: IpReportPayload) async throws {
+        try await apiClient.submitIpReport(payload)
+    }
+
+    func submitPrivacyRequest(_ payload: PrivacyRequestPayload) async throws {
+        try await apiClient.submitPrivacyRequest(payload)
     }
 
     func switchRole(_ role: UserRole) {
@@ -712,15 +720,33 @@ final class ADLAPIClient {
         try await fetchJSON(UserProfile.self, path: "/api/user")
     }
 
-    func updateUserProfile(name: String?, avatarPreset: String?) async throws -> UserProfile {
+    func updateUserProfile(name: String?, avatarPreset: String?, imageBase64: String?) async throws -> UserProfile {
         var request = URLRequest(url: url(path: "/api/user"))
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(UUID().uuidString, forHTTPHeaderField: "Idempotency-Key")
-        request.httpBody = try JSONEncoder().encode(UserProfileUpdatePayload(name: name, avatarPreset: avatarPreset))
+        request.httpBody = try JSONEncoder().encode(UserProfileUpdatePayload(name: name, avatarPreset: avatarPreset, imageBase64: imageBase64))
         let (data, response) = try await urlSession.data(for: request)
         try validate(response: response, data: data)
         return try decoder.decode(UserProfile.self, from: data)
+    }
+
+    func submitIpReport(_ payload: IpReportPayload) async throws {
+        var request = URLRequest(url: url(path: "/api/privacy?view=ip-report"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    func submitPrivacyRequest(_ payload: PrivacyRequestPayload) async throws {
+        var request = URLRequest(url: url(path: "/api/privacy?view=requests"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(payload)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
     }
 
     func submit(_ payload: SubmissionPayload) async throws {
@@ -822,6 +848,22 @@ struct RegisterPayload: Encodable {
 struct UserProfileUpdatePayload: Encodable {
     var name: String?
     var avatarPreset: String?
+    var imageBase64: String?
+}
+
+struct IpReportPayload: Encodable {
+    var reporterName: String
+    var reporterEmail: String
+    var targetKind: String
+    var targetRef: String?
+    var description: String
+    var sworn: Bool
+}
+
+struct PrivacyRequestPayload: Encodable {
+    var requestType: String
+    var subjectReference: String?
+    var notes: String?
 }
 
 enum APIError: Error {

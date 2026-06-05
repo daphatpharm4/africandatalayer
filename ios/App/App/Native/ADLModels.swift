@@ -3,6 +3,16 @@ import Foundation
 import SwiftUI
 import UIKit
 
+enum ADLModelText {
+    static var language: String {
+        UserDefaults.standard.string(forKey: "adl_language") ?? "fr"
+    }
+
+    static func t(_ en: String, _ fr: String) -> String {
+        language == "fr" ? fr : en
+    }
+}
+
 enum UserRole: String, CaseIterable, Codable, Identifiable {
     case agent
     case admin
@@ -13,9 +23,9 @@ enum UserRole: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .agent:
-            return "Field Agent"
+            return ADLModelText.t("Field Agent", "Agent terrain")
         case .admin:
-            return "Admin Reviewer"
+            return ADLModelText.t("Admin Reviewer", "Réviseur admin")
         case .client:
             return "Client"
         }
@@ -38,13 +48,13 @@ enum ConsentStatus: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .obtained:
-            return "Consent obtained"
+            return ADLModelText.t("Consent obtained", "Consentement obtenu")
         case .refusedPiiOnly:
-            return "No PII"
+            return ADLModelText.t("No PII", "Sans PII")
         case .notRequired:
-            return "Not required"
+            return ADLModelText.t("Not required", "Non requis")
         case .withdrawn:
-            return "Withdrawn"
+            return ADLModelText.t("Withdrawn", "Retiré")
         }
     }
 }
@@ -63,19 +73,19 @@ enum SubmissionCategory: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .pharmacy:
-            return "Pharmacy"
+            return ADLModelText.t("Pharmacy", "Pharmacie")
         case .fuelStation:
-            return "Fuel Station"
+            return ADLModelText.t("Fuel Station", "Station-service")
         case .mobileMoney:
             return "Mobile Money"
         case .alcoholOutlet:
-            return "Alcohol Outlet"
+            return ADLModelText.t("Alcohol Outlet", "Point alcool")
         case .billboard:
-            return "Billboard"
+            return ADLModelText.t("Billboard", "Panneau publicitaire")
         case .transportRoad:
-            return "Transport Road"
+            return ADLModelText.t("Transport Road", "Route transport")
         case .censusProxy:
-            return "Census Proxy"
+            return ADLModelText.t("Census Proxy", "Proxy recensement")
         }
     }
 
@@ -233,13 +243,13 @@ enum SyncState: String, Codable {
     var title: String {
         switch self {
         case .queued:
-            return "Queued"
+            return ADLModelText.t("Queued", "En file")
         case .syncing:
-            return "Syncing"
+            return ADLModelText.t("Syncing", "Synchronisation")
         case .synced:
-            return "Synced"
+            return ADLModelText.t("Synced", "Synchronisé")
         case .failed:
-            return "Failed"
+            return ADLModelText.t("Failed", "Échec")
         }
     }
 }
@@ -706,10 +716,10 @@ enum RewardCategory: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .mobileCredit: return "Mobile credit"
-        case .fuelDiscount: return "Fuel discount"
-        case .giftCard: return "Gift card"
-        case .recognition: return "Recognition"
+        case .mobileCredit: return ADLModelText.t("Mobile credit", "Crédit mobile")
+        case .fuelDiscount: return ADLModelText.t("Fuel discount", "Réduction carburant")
+        case .giftCard: return ADLModelText.t("Gift card", "Carte cadeau")
+        case .recognition: return ADLModelText.t("Recognition", "Reconnaissance")
         }
     }
 
@@ -730,9 +740,9 @@ enum RewardStock: String, Codable {
 
     var title: String {
         switch self {
-        case .inStock: return "In stock"
-        case .lowStock: return "Low stock"
-        case .outOfStock: return "Out of stock"
+        case .inStock: return ADLModelText.t("In stock", "Disponible")
+        case .lowStock: return ADLModelText.t("Low stock", "Stock faible")
+        case .outOfStock: return ADLModelText.t("Out of stock", "Rupture")
         }
     }
 
@@ -777,8 +787,8 @@ enum RedeemError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .insufficientBalance: return "Not enough XP for this reward yet."
-        case .outOfStock: return "This reward is out of stock."
+        case .insufficientBalance: return ADLModelText.t("Not enough XP for this reward yet.", "Pas encore assez de XP pour cette récompense.")
+        case .outOfStock: return ADLModelText.t("This reward is out of stock.", "Cette récompense est en rupture.")
         }
     }
 }
@@ -798,12 +808,12 @@ enum AgentTier: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .starter: return "Starter"
-        case .contributor: return "Contributor"
-        case .trusted: return "Trusted"
+        case .starter: return ADLModelText.t("Starter", "Débutant")
+        case .contributor: return ADLModelText.t("Contributor", "Contributeur")
+        case .trusted: return ADLModelText.t("Trusted", "Fiable")
         case .expert: return "Expert"
-        case .elite: return "Elite"
-        case .legend: return "Legend"
+        case .elite: return ADLModelText.t("Elite", "Élite")
+        case .legend: return ADLModelText.t("Legend", "Légende")
         }
     }
 
@@ -870,8 +880,8 @@ enum MissionPeriod: String, Hashable {
 
     var title: String {
         switch self {
-        case .daily: return "Daily"
-        case .weekly: return "Weekly"
+        case .daily: return ADLModelText.t("Daily", "Quotidien")
+        case .weekly: return ADLModelText.t("Weekly", "Hebdomadaire")
         }
     }
 }

@@ -416,6 +416,8 @@ private struct HeroVerticals: View {
 }
 
 private struct HeroRewards: View {
+    @EnvironmentObject private var appState: AppState
+
     var body: some View {
         ZStack {
             Ellipse()
@@ -429,7 +431,7 @@ private struct HeroRewards: View {
                     .background(Color.white.opacity(0.1))
                     .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
                     .shadow(color: ADLColor.gold.opacity(0.4), radius: 20, x: 0, y: 18)
-                Text("Be the first verified.")
+                Text(appState.t("Be the first verified.", "Soyez le premier vérifié."))
                     .font(ADLFont.inter(14, .semibold))
                     .foregroundColor(.white.opacity(0.85))
             }
@@ -1012,7 +1014,7 @@ struct AgentHomeView: View {
                 selectedPoint: $selectedPoint
             )
             .ignoresSafeArea(edges: .bottom)
-            .accessibilityLabel("Apple Maps field map")
+            .accessibilityLabel(appState.t("Apple Maps field map", "Carte terrain Apple Maps"))
 
             VStack(spacing: 12) {
                 FieldMapHeader(
@@ -1072,7 +1074,7 @@ struct AgentHomeView: View {
                     .foregroundColor(ADLColor.navy)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
-                    .accessibilityLabel("Center on user location")
+                    .accessibilityLabel(appState.t("Center on user location", "Centrer sur votre position"))
 
                     Button {
                         region = MKCoordinateRegion(
@@ -1088,7 +1090,7 @@ struct AgentHomeView: View {
                     .foregroundColor(ADLColor.navy)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
-                    .accessibilityLabel("Recenter Bonamoussadi zone")
+                    .accessibilityLabel(appState.t("Recenter Bonamoussadi zone", "Recentrer la zone Bonamoussadi"))
 
                     Spacer()
                 }
@@ -2879,6 +2881,7 @@ struct ContributionView: View {
 }
 
 struct RequiredFieldsView: View {
+    @EnvironmentObject private var appState: AppState
     let category: SubmissionCategory
 
     var body: some View {
@@ -2891,11 +2894,11 @@ struct RequiredFieldsView: View {
                 .background(category.tint.opacity(0.10))
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
-                Text("REQUIRED FIELDS")
+                Text(appState.t("Required Fields", "Champs requis").uppercased())
                     .font(ADLFont.inter(10, .bold))
                     .tracking(1.4)
                     .foregroundColor(category.tint)
-                Text(fields.isEmpty ? "No required fields" : fields.joined(separator: " · "))
+                Text(fields.isEmpty ? appState.t("No required fields", "Aucun champ requis") : fields.joined(separator: " · "))
                     .font(ADLFont.inter(12, .medium))
                     .foregroundColor(ADLColor.inkMuted)
                     .lineLimit(2)
@@ -3444,6 +3447,7 @@ private struct ADLMiniStat: View {
 }
 
 private struct ProfileHeroCard: View {
+    @EnvironmentObject private var appState: AppState
     let name: String
     let subtitle: String
     let tier: String
@@ -3488,7 +3492,7 @@ private struct ProfileHeroCard: View {
                             .clipShape(Capsule())
                     }
                     HStack(spacing: 6) {
-                        Text("Level \(level)")
+                        Text(appState.t("Level \(level)", "Niveau \(level)"))
                             .font(ADLFont.inter(11, .bold))
                             .foregroundColor(.white.opacity(0.72))
                             .padding(.horizontal, 8)
@@ -3514,7 +3518,7 @@ private struct ProfileHeroCard: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("LEVEL")
+                    Text(appState.t("Level", "Niveau").uppercased())
                     Spacer()
                     Text("\(xp.formatted()) / \(xpTarget.formatted()) XP")
                 }
@@ -3542,12 +3546,13 @@ private struct ProfileHeroCard: View {
 }
 
 private struct ProfileBalanceCard: View {
+    @EnvironmentObject private var appState: AppState
     let xp: Int
 
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 6) {
-                Text("XP BALANCE")
+                Text(appState.t("XP Balance", "Solde XP").uppercased())
                     .font(ADLFont.inter(11, .bold))
                     .tracking(0.9)
                     .foregroundColor(.white.opacity(0.78))
@@ -3609,13 +3614,14 @@ private struct ProfileBadgeChip: View {
 }
 
 private struct ProfileStreakTracker: View {
+    @EnvironmentObject private var appState: AppState
     let streakDays: Int
 
     var body: some View {
         ADLCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("STREAK")
+                    Text(appState.t("Streak", "Série").uppercased())
                         .font(ADLFont.inter(11, .bold))
                         .tracking(0.9)
                         .foregroundColor(ADLColor.inkMuted)
@@ -3668,6 +3674,7 @@ private struct ProfileWeekSummaryCard: View {
 }
 
 private struct ADLLeaderboardRow: View {
+    @EnvironmentObject private var appState: AppState
     let entry: LeaderboardEntry
     var compact = false
 
@@ -3688,7 +3695,10 @@ private struct ADLLeaderboardRow: View {
                     .foregroundColor(ADLColor.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                Text("\(entry.contributions.formatted()) submissions - \(RelativeDate.short(entry.lastContributionAt))")
+                Text(appState.t(
+                    "\(entry.contributions.formatted()) submissions - \(RelativeDate.short(entry.lastContributionAt))",
+                    "\(entry.contributions.formatted()) soumissions - \(RelativeDate.short(entry.lastContributionAt))"
+                ))
                     .font(ADLFont.inter(11, .semibold))
                     .foregroundColor(ADLColor.inkMuted)
                     .lineLimit(1)
@@ -3698,7 +3708,10 @@ private struct ADLLeaderboardRow: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 if !compact {
-                    Text("Verified value score: \(entry.rankingScore.formatted())")
+                    Text(appState.t(
+                        "Verified value score: \(entry.rankingScore.formatted())",
+                        "Score valeur vérifiée : \(entry.rankingScore.formatted())"
+                    ))
                         .font(ADLFont.inter(12, .regular))
                         .foregroundColor(.secondary)
                 }
@@ -3707,7 +3720,7 @@ private struct ADLLeaderboardRow: View {
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 5) {
-                Text("Score: \(entry.rankingScore.formatted())")
+                Text(appState.t("Score: \(entry.rankingScore.formatted())", "Score : \(entry.rankingScore.formatted())"))
                     .font(ADLFont.inter(12, .bold))
                     .foregroundColor(ADLColor.navy)
                     .lineLimit(1)
@@ -3715,7 +3728,7 @@ private struct ADLLeaderboardRow: View {
                     .font(ADLFont.inter(12, .bold))
                     .foregroundColor(ADLColor.forest)
                     .lineLimit(1)
-                Text("\(entry.averageQualityScore)% quality")
+                Text(appState.t("\(entry.averageQualityScore)% quality", "\(entry.averageQualityScore)% qualité"))
                     .font(ADLFont.inter(11, .semibold))
                     .foregroundColor(ADLColor.inkMuted)
                     .lineLimit(1)
@@ -5424,12 +5437,12 @@ struct AnalyticsView: View {
                     Text(appState.profile.name)
                         .font(ADLFont.inter(14, .bold))
                         .foregroundColor(ADLColor.ink)
-                    Label("Senior Contributor", systemImage: "checkmark.shield.fill")
+                    Label(appState.t("Senior Contributor", "Contributeur senior"), systemImage: "checkmark.shield.fill")
                         .font(ADLFont.inter(11, .semibold))
                         .foregroundColor(ADLColor.inkMuted)
                 }
                 Spacer()
-                Text("ADMIN")
+                Text(appState.t("Admin", "Admin").uppercased())
                     .font(ADLFont.inter(11, .bold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
@@ -5442,13 +5455,21 @@ struct AnalyticsView: View {
             categoryBarsCard
             xpDistributionCard
             freshnessHeatmapCard
-            leaderboardPanel(title: "Top Contributor Leaderboard", scope: "Monthly", entries: appState.leaderboard, compact: true)
+            leaderboardPanel(
+                title: appState.t("Top Contributor Leaderboard", "Classement des meilleurs contributeurs"),
+                scope: appState.t("Monthly", "Mensuel"),
+                entries: appState.leaderboard,
+                compact: true
+            )
 
             VStack(spacing: 10) {
-                Text("ENTERPRISE API ACCESS")
+                Text(appState.t("Enterprise API Access", "Accès API entreprise").uppercased())
                     .font(ADLFont.inter(11, .bold))
                     .foregroundColor(ADLColor.navy)
-                Text("Structured data access for municipalities, NGOs, and logistics teams - with guaranteed uptime.")
+                Text(appState.t(
+                    "Structured data access for municipalities, NGOs, and logistics teams - with guaranteed uptime.",
+                    "Accès structuré aux données pour municipalités, ONG et équipes logistiques - avec disponibilité garantie."
+                ))
                     .font(ADLFont.inter(12, .regular))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -5470,20 +5491,20 @@ struct AnalyticsView: View {
         let summary = appState.analyticsSummary
         let tracked = summary?.verification.totalPoints ?? appState.points.count
         return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            ADLMiniStat(label: "Tracked points", value: tracked.formatted(), suffix: "latest", suffixTint: ADLColor.navy)
-            ADLMiniStat(label: "Completion rate", value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0), suffix: appState.isLoadingAnalytics ? "..." : "live")
-            ADLMiniStat(label: "Anomaly flags", value: "\(summary?.reviewQueue.highRiskEvents ?? 0)", suffix: "watchlist", suffixTint: ADLColor.terracotta)
-            ADLMiniStat(label: "Avg WoW growth", value: weeklyGrowth, suffix: "tracked", suffixTint: ADLColor.forest)
+            ADLMiniStat(label: appState.t("Tracked points", "Points suivis"), value: tracked.formatted(), suffix: appState.t("latest", "récent"), suffixTint: ADLColor.navy)
+            ADLMiniStat(label: appState.t("Completion rate", "Taux d'achèvement"), value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0), suffix: appState.isLoadingAnalytics ? "..." : appState.t("live", "direct"))
+            ADLMiniStat(label: appState.t("Anomaly flags", "Alertes anomalie"), value: "\(summary?.reviewQueue.highRiskEvents ?? 0)", suffix: appState.t("watchlist", "surveillance"), suffixTint: ADLColor.terracotta)
+            ADLMiniStat(label: appState.t("Avg WoW growth", "Croissance hebdo. moy."), value: weeklyGrowth, suffix: appState.t("tracked", "suivi"), suffixTint: ADLColor.forest)
         }
     }
 
     private var adminKpiGrid: some View {
         let summary = appState.analyticsSummary
         return LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            ADLMiniStat(label: "Data complete", value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0), suffix: appState.isLoadingAnalytics ? "..." : "live")
-            ADLMiniStat(label: "Active contributors", value: "\(summary?.weeklyActiveContributors ?? 0)", suffix: "30d", suffixTint: ADLColor.navy)
-            ADLMiniStat(label: "Pending review", value: "\(summary?.reviewQueue.pendingReview ?? 0)", suffix: "queue", suffixTint: ADLColor.gold)
-            ADLMiniStat(label: "Fraud rate", value: KpiFormat.pct(summary?.fraud.fraudRatePct ?? 0), suffix: "risk", suffixTint: ADLColor.terracotta)
+            ADLMiniStat(label: appState.t("Data complete", "Données complètes"), value: KpiFormat.pct(summary?.verification.verificationRatePct ?? 0), suffix: appState.isLoadingAnalytics ? "..." : appState.t("live", "direct"))
+            ADLMiniStat(label: appState.t("Active contributors", "Contributeurs actifs"), value: "\(summary?.weeklyActiveContributors ?? 0)", suffix: "30j", suffixTint: ADLColor.navy)
+            ADLMiniStat(label: appState.t("Pending review", "En attente"), value: "\(summary?.reviewQueue.pendingReview ?? 0)", suffix: appState.t("queue", "file"), suffixTint: ADLColor.gold)
+            ADLMiniStat(label: appState.t("Fraud rate", "Taux fraude"), value: KpiFormat.pct(summary?.fraud.fraudRatePct ?? 0), suffix: appState.t("risk", "risque"), suffixTint: ADLColor.terracotta)
         }
     }
 
@@ -5491,11 +5512,11 @@ struct AnalyticsView: View {
         ADLCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Label("CONTRIBUTIONS BY CATEGORY", systemImage: "chart.bar.fill")
+                    Label(appState.t("Contributions by Category", "Contributions par catégorie").uppercased(), systemImage: "chart.bar.fill")
                         .font(ADLFont.inter(11, .bold))
                         .foregroundColor(ADLColor.ink)
                     Spacer()
-                    Text("LIVE")
+                    Text(appState.t("Live", "Direct").uppercased())
                         .font(ADLFont.inter(11, .semibold))
                         .foregroundColor(ADLColor.inkMuted)
                 }
@@ -5530,11 +5551,11 @@ struct AnalyticsView: View {
         ADLCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Label("XP DISTRIBUTION", systemImage: "medal.fill")
+                    Label(appState.t("XP Distribution", "Distribution XP").uppercased(), systemImage: "medal.fill")
                         .font(ADLFont.inter(11, .bold))
                         .foregroundColor(ADLColor.ink)
                     Spacer()
-                    Text("ALL USERS")
+                    Text(appState.t("All Users", "Tous utilisateurs").uppercased())
                         .font(ADLFont.inter(11, .semibold))
                         .foregroundColor(ADLColor.inkMuted)
                 }
@@ -5564,11 +5585,11 @@ struct AnalyticsView: View {
         ADLCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Label("DATA FRESHNESS HEATMAP", systemImage: "thermometer.sun.fill")
+                    Label(appState.t("Data Freshness Heatmap", "Carte de fraîcheur").uppercased(), systemImage: "thermometer.sun.fill")
                         .font(ADLFont.inter(11, .bold))
                         .foregroundColor(ADLColor.ink)
                     Spacer()
-                    Text("LAST 24H")
+                    Text(appState.t("Last 24h", "24 h").uppercased())
                         .font(ADLFont.inter(11, .semibold))
                         .foregroundColor(ADLColor.inkMuted)
                 }
@@ -5587,11 +5608,11 @@ struct AnalyticsView: View {
         ADLCard {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
-                    Label("FIELD NETWORK PULSE", systemImage: "person.2.fill")
+                    Label(appState.t("Field Network Pulse", "Pulse du réseau terrain").uppercased(), systemImage: "person.2.fill")
                         .font(ADLFont.inter(11, .bold))
                         .foregroundColor(ADLColor.ink)
                     Spacer()
-                    Text("TOP 3 CONTRIBUTORS")
+                    Text(appState.t("Top 3 Contributors", "Top 3 contributeurs").uppercased())
                         .font(ADLFont.inter(11, .semibold))
                         .foregroundColor(ADLColor.inkMuted)
                 }
@@ -5612,20 +5633,25 @@ struct AnalyticsView: View {
                         .foregroundColor(ADLColor.inkMuted)
                 }
                 Spacer()
-                Text("LIVE")
+                Text(appState.t("Live", "Direct").uppercased())
                     .font(ADLFont.inter(11, .semibold))
                     .foregroundColor(ADLColor.inkMuted)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("HOW RANKINGS WORK")
+                Text(appState.t("How Rankings Work", "Fonctionnement du classement").uppercased())
                     .font(ADLFont.inter(11, .semibold))
                     .foregroundColor(ADLColor.inkMuted)
-                Text(compact ? "Ranking score = submissions x average quality" : "Score = verified submissions x average quality")
+                Text(compact
+                     ? appState.t("Ranking score = submissions x average quality", "Score classement = soumissions x qualité moyenne")
+                     : appState.t("Score = verified submissions x average quality", "Score = soumissions vérifiées x qualité moyenne"))
                     .font(ADLFont.inter(14, .semibold))
                     .foregroundColor(ADLColor.ink)
                 if let topVerticalChampion {
-                    Text("Busiest category: \(categoryTitle(topVerticalChampion.0)) (\(topVerticalChampion.1))")
+                    Text(appState.t(
+                        "Busiest category: \(categoryTitle(topVerticalChampion.0)) (\(topVerticalChampion.1))",
+                        "Catégorie la plus active : \(categoryTitle(topVerticalChampion.0)) (\(topVerticalChampion.1))"
+                    ))
                         .font(ADLFont.inter(12, .regular))
                         .foregroundColor(.secondary)
                 }
@@ -5653,7 +5679,7 @@ struct AnalyticsView: View {
     @ViewBuilder
     private func leaderboardRows(entries: [LeaderboardEntry], compact: Bool) -> some View {
         if appState.isLoadingLeaderboard && entries.isEmpty {
-            Text("Loading contributors...")
+            Text(appState.t("Loading contributors...", "Chargement des contributeurs..."))
                 .font(ADLFont.inter(11, .semibold))
                 .foregroundColor(ADLColor.inkMuted)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -5663,10 +5689,13 @@ struct AnalyticsView: View {
                 .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(ADLColor.line, lineWidth: 1))
         } else if entries.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
-                Text("No contributors yet.")
+                Text(appState.t("No contributors yet.", "Aucun contributeur pour le moment."))
                     .font(ADLFont.inter(13, .semibold))
                     .foregroundColor(Color(hex: 0x374151))
-                Text("Score = verified submissions x average quality. Submit your first capture to appear here.")
+                Text(appState.t(
+                    "Score = verified submissions x average quality. Submit your first capture to appear here.",
+                    "Score = soumissions vérifiées x qualité moyenne. Envoyez votre première capture pour apparaître ici."
+                ))
                     .font(ADLFont.inter(12, .regular))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -6078,6 +6107,7 @@ struct ProfileRow: View {
 }
 
 struct ProfileAvatarMark: View {
+    @EnvironmentObject private var appState: AppState
     let name: String
     var image: String?
     var preset: String?
@@ -6120,7 +6150,7 @@ struct ProfileAvatarMark: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay(Circle().stroke(Color.white.opacity(0.2), lineWidth: 2))
-        .accessibilityLabel("Profile picture for \(name)")
+        .accessibilityLabel(appState.t("Profile picture for \(name)", "Photo de profil de \(name)"))
     }
 
     private var presetAvatar: some View {
@@ -6187,7 +6217,7 @@ struct ProfileView: View {
                         .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Settings")
+                .accessibilityLabel(appState.t("Settings", "Paramètres"))
             }
 
             if appState.isGuest {
@@ -6359,7 +6389,7 @@ struct ProfileView: View {
                         .lineLimit(1)
 
                     // Level pill (web: micro-label bg-white/10 text-white/70)
-                    Text("Level \(level)")
+                    Text(appState.t("Level \(level)", "Niveau \(level)"))
                         .font(ADLFont.inter(11, .bold))
                         .foregroundColor(.white.opacity(0.7))
                         .padding(.horizontal, 8)
@@ -6376,7 +6406,7 @@ struct ProfileView: View {
             // XP progress bar (web: mt-5, LEVEL label xs tracking-wide, h-2 bar)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("LEVEL")
+                    Text(appState.t("Level", "Niveau").uppercased())
                         .font(ADLFont.inter(11, .medium))
                         .tracking(0.9)
                         .foregroundColor(.white.opacity(0.7))
@@ -6617,7 +6647,7 @@ struct ProfileView: View {
         return ADLCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    SectionLabel(text: "Weekly Target")
+                    SectionLabel(text: appState.t("Weekly Target", "Objectif hebdo."))
                     Spacer()
                     Text("\(pointsThisWeek)/\(weeklyTarget)")
                         .font(ADLFont.inter(12, .bold))
@@ -6625,8 +6655,8 @@ struct ProfileView: View {
                 }
                 ADLProgressBar(value: progress, tint: ADLColor.navy, height: 12)
                 Text(pointsThisWeek >= weeklyTarget
-                     ? "Target reached! +20 XP bonus earned."
-                     : "Complete 50 this week for a 20 XP bonus!")
+                     ? appState.t("Target reached! +20 XP bonus earned.", "Objectif atteint ! Bonus +20 XP gagné.")
+                     : appState.t("Complete 50 this week for a 20 XP bonus!", "Complétez 50 cette semaine pour un bonus de 20 XP !"))
                     .font(ADLFont.inter(11))
                     .foregroundColor(ADLColor.inkMuted)
             }
@@ -6772,6 +6802,10 @@ struct SettingsView: View {
     @State private var selectedAvatarPreset = "baobab"
     @State private var profileMessage: String?
     @State private var isSavingProfile = false
+    @State private var profilePhotoDraft: UIImage?
+    @State private var showProfilePhotoSource = false
+    @State private var showProfileImagePicker = false
+    @State private var profileImageSource: UIImagePickerController.SourceType = .photoLibrary
 
     private var language: String { appState.language }
 
@@ -6804,6 +6838,25 @@ struct SettingsView: View {
         .background((highContrast ? Color.white : ADLColor.paper).ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
         .onAppear(perform: syncProfileDrafts)
+        .confirmationDialog(text("Profile photo", "Photo de profil"), isPresented: $showProfilePhotoSource, titleVisibility: .visible) {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button(text("Take Photo", "Prendre une photo")) {
+                    profileImageSource = .camera
+                    showProfileImagePicker = true
+                }
+            }
+            Button(text("Choose Photo", "Choisir une photo")) {
+                profileImageSource = .photoLibrary
+                showProfileImagePicker = true
+            }
+            Button(text("Use preset avatar", "Utiliser un avatar")) {
+                profilePhotoDraft = nil
+            }
+            Button(text("Cancel", "Annuler"), role: .cancel) {}
+        }
+        .sheet(isPresented: $showProfileImagePicker) {
+            ProfileImagePicker(image: $profilePhotoDraft, sourceType: profileImageSource)
+        }
     }
 
     private func text(_ en: String, _ fr: String) -> String {
@@ -6865,17 +6918,53 @@ struct SettingsView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(text("Avatar", "Avatar"))
+                    Text(text("Profile picture", "Photo de profil"))
                         .font(ADLFont.inter(12, .bold))
                         .foregroundColor(Color(hex: 0x6b7280))
+                    HStack(spacing: 12) {
+                        Button {
+                            showProfilePhotoSource = true
+                        } label: {
+                            profilePhotoPreview
+                                .overlay(
+                                    Circle()
+                                        .fill(ADLColor.navy)
+                                        .frame(width: 26, height: 26)
+                                        .overlay(
+                                            Image(systemName: "camera.fill")
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundColor(.white)
+                                        ),
+                                    alignment: .bottomTrailing
+                                )
+                        }
+                        .buttonStyle(.plain)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(text("Use a real account photo or a preset avatar.", "Utilisez une vraie photo de compte ou un avatar."))
+                                .font(ADLFont.inter(12, .medium))
+                                .foregroundColor(ADLColor.inkMuted)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button(text("Change photo", "Changer la photo")) {
+                                showProfilePhotoSource = true
+                            }
+                            .font(ADLFont.inter(12, .bold))
+                            .foregroundColor(ADLColor.navy)
+                        }
+                    }
+
+                    Text(text("Preset avatars", "Avatars prédéfinis"))
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(Color(hex: 0x9ca3af))
                     HStack(spacing: 12) {
                         ForEach(["baobab", "sunrise", "lagoon"], id: \.self) { preset in
                             Button {
                                 selectedAvatarPreset = preset
+                                profilePhotoDraft = nil
                             } label: {
                                 ProfileAvatarMark(name: currentDisplayName, preset: preset, size: 54)
                                     .overlay(
-                                        Circle().stroke(selectedAvatarPreset == preset ? ADLColor.navy : Color.clear, lineWidth: 3)
+                                        Circle().stroke(profilePhotoDraft == nil && selectedAvatarPreset == preset ? ADLColor.navy : Color.clear, lineWidth: 3)
                                     )
                             }
                             .buttonStyle(.plain)
@@ -7027,9 +7116,28 @@ struct SettingsView: View {
             : appState.profile.name
     }
 
+    @ViewBuilder
+    private var profilePhotoPreview: some View {
+        if let profilePhotoDraft {
+            Image(uiImage: profilePhotoDraft)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 72, height: 72)
+                .clipShape(Circle())
+        } else {
+            ProfileAvatarMark(
+                name: currentDisplayName,
+                image: appState.userProfile?.image,
+                preset: selectedAvatarPreset,
+                size: 72
+            )
+        }
+    }
+
     private func syncProfileDrafts() {
         displayNameDraft = appState.userProfile?.name ?? appState.profile.name
         selectedAvatarPreset = normalizedPreset(appState.userProfile?.avatarPreset ?? appState.userProfile?.image)
+        profilePhotoDraft = nil
     }
 
     private func normalizedPreset(_ raw: String?) -> String {
@@ -7048,8 +7156,17 @@ struct SettingsView: View {
         profileMessage = nil
         Task {
             do {
-                try await appState.updateProfile(name: name, avatarPreset: selectedAvatarPreset)
+                let imageBase64 = profilePhotoDraft?.adlProfileImageDataURL()
+                if profilePhotoDraft != nil && imageBase64 == nil {
+                    throw APIError.requestFailed(text("Unable to prepare profile photo.", "Impossible de préparer la photo de profil."))
+                }
+                try await appState.updateProfile(
+                    name: name,
+                    avatarPreset: imageBase64 == nil ? selectedAvatarPreset : nil,
+                    imageBase64: imageBase64
+                )
                 profileMessage = text("Saved", "Enregistré")
+                profilePhotoDraft = nil
             } catch {
                 profileMessage = (error as? APIError)?.message ?? text("Unable to save profile.", "Impossible d'enregistrer le profil.")
             }
@@ -7158,7 +7275,7 @@ struct SettingsNavigationRow<Destination: View>: View {
     }
 }
 
-enum SettingsLegalKind {
+enum SettingsLegalKind: Equatable {
     case privacy
     case terms
     case compliance
@@ -7198,16 +7315,71 @@ enum SettingsLegalKind {
         }
     }
 
-    var fullPageURL: URL {
+    func sections(language: String) -> [(String, String)] {
         switch self {
         case .privacy:
-            return URL(string: "https://www.app.africandatalayer.com/")!
+            return [
+                (
+                    language == "fr" ? "Ce que nous collectons" : "What we collect",
+                    language == "fr"
+                        ? "Identifiant de compte, nom affiché, rôle, paramètres, photos terrain, GPS, EXIF et journaux d'audit nécessaires à la vérification."
+                        : "Account identifier, display name, role, settings, field photos, GPS, EXIF, and audit logs needed for verification."
+                ),
+                (
+                    language == "fr" ? "Utilisation" : "Use",
+                    language == "fr"
+                        ? "Nous utilisons ces données pour vérifier les soumissions, prévenir la fraude, synchroniser les récompenses et fournir des rapports agrégés."
+                        : "We use this data to verify submissions, prevent fraud, sync rewards, and provide aggregated reporting."
+                ),
+                (
+                    language == "fr" ? "Vos droits" : "Your rights",
+                    language == "fr"
+                        ? "Vous pouvez demander accès, rectification, effacement ou opposition depuis Données et conformité."
+                        : "You may request access, rectification, erasure, or objection from Data & Compliance."
+                )
+            ]
         case .terms:
-            return URL(string: "https://www.app.africandatalayer.com/")!
+            return [
+                (
+                    language == "fr" ? "Compte" : "Account",
+                    language == "fr"
+                        ? "Vous êtes responsable de la sécurité de vos identifiants et de l'exactitude des informations soumises."
+                        : "You are responsible for keeping your credentials secure and submitting accurate information."
+                ),
+                (
+                    language == "fr" ? "Soumissions terrain" : "Field submissions",
+                    language == "fr"
+                        ? "Les photos, positions GPS et détails doivent représenter l'état réel du terrain au moment de la capture."
+                        : "Photos, GPS locations, and details must represent real field conditions at capture time."
+                ),
+                (
+                    language == "fr" ? "Récompenses" : "Rewards",
+                    language == "fr"
+                        ? "XP, badges et récompenses dépendent de la qualité vérifiée et peuvent être annulés en cas de fraude."
+                        : "XP, badges, and rewards depend on verified quality and may be revoked for fraud."
+                )
+            ]
         case .compliance:
-            return URL(string: "https://www.app.africandatalayer.com/")!
+            return [
+                (
+                    language == "fr" ? "Ce que nous stockons" : "What we store",
+                    language == "fr"
+                        ? "Identifiant, nom affiché, mot de passe haché, avatar, périmètre carte, XP, score de confiance, audit et soumissions."
+                        : "Identifier, display name, hashed password, avatar, map scope, XP, trust score, audit trail, and submissions."
+                ),
+                (
+                    language == "fr" ? "États de consentement" : "Consent states",
+                    language == "fr"
+                        ? "Obtenu, refusé PII uniquement, non requis ou retiré selon le contexte de collecte."
+                        : "Obtained, refused PII only, not required, or withdrawn depending on the collection context."
+                ),
+                (
+                    language == "fr" ? "Sous-traitants" : "Processors",
+                    "Supabase · Vercel · Sentry · Google Identity · Resend."
+                )
+            ]
         case .ipReport:
-            return URL(string: "https://www.app.africandatalayer.com/")!
+            return []
         }
     }
 }
@@ -7215,45 +7387,243 @@ enum SettingsLegalKind {
 struct SettingsLegalView: View {
     let kind: SettingsLegalKind
     let language: String
+    @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @State private var reporterName = ""
+    @State private var reporterEmail = ""
+    @State private var targetKind = "submission"
+    @State private var targetRef = ""
+    @State private var ipDescription = ""
+    @State private var sworn = false
+    @State private var signature = ""
+    @State private var legalMessage: String?
+    @State private var isSubmitting = false
+    @State private var didSubmitIpReport = false
 
     var body: some View {
         VStack(spacing: 0) {
             ADLScreenHeader(title: kind.title(language: language), onBack: { dismiss() })
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    ADLCard {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(kind.title(language: language))
-                                .font(ADLFont.inter(18, .bold))
-                                .foregroundColor(ADLColor.ink)
-                            Text(kind.body(language: language))
-                                .font(ADLFont.inter(14, .regular))
-                                .foregroundColor(Color(hex: 0x4b5563))
+                    if didSubmitIpReport {
+                        successCard
+                    } else {
+                        introCard
+                        ForEach(Array(kind.sections(language: language).enumerated()), id: \.offset) { _, section in
+                            ADLCard {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(section.0)
+                                        .font(ADLFont.inter(15, .bold))
+                                        .foregroundColor(ADLColor.ink)
+                                    Text(section.1)
+                                        .font(ADLFont.inter(13))
+                                        .foregroundColor(ADLColor.inkMuted)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                            }
+                        }
+
+                        if kind == .compliance {
+                            complianceActions
+                        }
+
+                        if kind == .ipReport {
+                            ipReportForm
+                        } else {
+                            contactButtons
+                        }
+
+                        if let legalMessage {
+                            Text(legalMessage)
+                                .font(ADLFont.inter(12, .semibold))
+                                .foregroundColor(legalMessageColor)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
-
-                    Button {
-                        openURL(kind.fullPageURL)
-                    } label: {
-                        Label(openFullPageLabel, systemImage: "safari.fill")
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-
-                    Button {
-                        openURL(contactURL)
-                    } label: {
-                        Label(contactLabel, systemImage: contactIcon)
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
                 }
                 .padding(16)
             }
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .navigationBarBackButtonHidden(true)
+        .onAppear(perform: seedReporterFields)
+    }
+
+    private var introCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(kind.title(language: language))
+                    .font(ADLFont.inter(18, .bold))
+                    .foregroundColor(ADLColor.ink)
+                Text(kind.body(language: language))
+                    .font(ADLFont.inter(14))
+                    .foregroundColor(Color(hex: 0x4b5563))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var successCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 30, weight: .bold))
+                    .foregroundColor(ADLColor.forest)
+                Text(language == "fr" ? "Signalement reçu" : "Report received")
+                    .font(ADLFont.inter(18, .bold))
+                    .foregroundColor(ADLColor.ink)
+                Text(language == "fr"
+                     ? "Merci. Notre équipe juridique examinera votre signalement et répondra sous 10 jours ouvrés."
+                     : "Thank you. Our legal team will review your report and respond within 10 business days.")
+                    .font(ADLFont.inter(13))
+                    .foregroundColor(ADLColor.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(language == "fr" ? "Retour aux paramètres" : "Back to Settings") {
+                    dismiss()
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+    }
+
+    private var complianceActions: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(language == "fr" ? "Vos droits" : "Your rights")
+                    .font(ADLFont.inter(15, .bold))
+                    .foregroundColor(ADLColor.ink)
+                complianceButton(
+                    type: "access",
+                    title: language == "fr" ? "Demander l'accès aux données" : "Request data access",
+                    body: language == "fr" ? "Recevoir une copie de toutes les données personnelles détenues." : "Get a copy of all personal data we hold."
+                )
+                complianceButton(
+                    type: "rectification",
+                    title: language == "fr" ? "Demander une rectification" : "Request rectification",
+                    body: language == "fr" ? "Corriger des données inexactes ou incomplètes." : "Correct inaccurate or incomplete data."
+                )
+                complianceButton(
+                    type: "erasure",
+                    title: language == "fr" ? "Demander l'effacement" : "Request erasure",
+                    body: language == "fr" ? "Supprimer votre compte et vos soumissions personnelles." : "Delete your account and personal submissions."
+                )
+            }
+        }
+    }
+
+    private func complianceButton(type: String, title: String, body: String) -> some View {
+        Button {
+            submitPrivacyRequest(type)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "doc.badge.gearshape")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(ADLColor.navy)
+                    .frame(width: 24)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(ADLFont.inter(13, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(body)
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(ADLColor.paper)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isSubmitting)
+    }
+
+    private var ipReportForm: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 14) {
+                legalField(language == "fr" ? "Votre nom complet" : "Your full name", text: $reporterName)
+                legalField(language == "fr" ? "Votre email" : "Your email", text: $reporterEmail, keyboard: .emailAddress)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(language == "fr" ? "Type de cible" : "Target kind")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                    Picker("", selection: $targetKind) {
+                        Text(language == "fr" ? "Soumission" : "Submission").tag("submission")
+                        Text("Point").tag("point")
+                        Text(language == "fr" ? "Autre" : "Other").tag("other")
+                    }
+                    .pickerStyle(.segmented)
+                }
+
+                legalField(language == "fr" ? "Référence cible (facultatif)" : "Target reference (optional)", text: $targetRef)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(language == "fr" ? "Description de l'atteinte (min 20 car.)" : "Description of the infringement (min 20 chars)")
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(Color(hex: 0x6b7280))
+                    TextEditor(text: $ipDescription)
+                        .font(ADLFont.inter(13))
+                        .frame(minHeight: 112)
+                        .padding(8)
+                        .background(ADLColor.paper)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                Toggle(isOn: $sworn) {
+                    Text(language == "fr"
+                         ? "Je déclare sous serment que ces informations sont exactes et que je suis autorisé à agir."
+                         : "I swear that this notice is accurate and that I am authorized to act.")
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                .tint(ADLColor.navy)
+
+                legalField(language == "fr" ? "Signature (nom complet)" : "Signature (full name)", text: $signature)
+
+                Button {
+                    submitIpReport()
+                } label: {
+                    if isSubmitting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(language == "fr" ? "Envoyer le signalement" : "Submit report")
+                    }
+                }
+                .buttonStyle(PrimaryButtonStyle())
+                .disabled(isSubmitting)
+            }
+        }
+    }
+
+    private func legalField(_ title: String, text: Binding<String>, keyboard: UIKeyboardType = .default) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(ADLFont.inter(11, .bold))
+                .foregroundColor(Color(hex: 0x6b7280))
+            TextField(title, text: text)
+                .font(ADLFont.inter(13))
+                .keyboardType(keyboard)
+                .textInputAutocapitalization(keyboard == .emailAddress ? .never : .words)
+                .autocorrectionDisabled(keyboard == .emailAddress)
+                .padding(.horizontal, 12)
+                .frame(height: 46)
+                .background(ADLColor.paper)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    private var contactButtons: some View {
+        VStack(spacing: 10) {
+            Button {
+                openURL(contactURL)
+            } label: {
+                Label(contactLabel, systemImage: contactIcon)
+            }
+            .buttonStyle(SecondaryButtonStyle())
+        }
     }
 
     private var contactURL: URL {
@@ -7278,12 +7648,91 @@ struct SettingsLegalView: View {
         kind == .ipReport ? "envelope.badge.shield.half.filled" : "envelope.fill"
     }
 
-    private var openFullPageLabel: String {
-        switch kind {
-        case .ipReport:
-            return language == "fr" ? "Ouvrir le formulaire complet" : "Open full form"
-        default:
-            return language == "fr" ? "Ouvrir la page complète" : "Open full page"
+    private var legalMessageColor: Color {
+        guard let legalMessage else { return ADLColor.inkMuted }
+        if legalMessage == successMessage { return ADLColor.forest }
+        return ADLColor.terracotta
+    }
+
+    private var successMessage: String {
+        language == "fr" ? "Demande envoyée. Notre équipe répondra sous 30 jours." : "Request submitted. Our team will respond within 30 days."
+    }
+
+    private func seedReporterFields() {
+        if reporterName.isEmpty {
+            reporterName = appState.userProfile?.name ?? appState.profile.name
+        }
+        if reporterEmail.isEmpty,
+           let id = appState.userProfile?.id,
+           id.contains("@") {
+            reporterEmail = id
+        }
+    }
+
+    private func submitPrivacyRequest(_ type: String) {
+        isSubmitting = true
+        legalMessage = nil
+        Task {
+            do {
+                try await appState.submitPrivacyRequest(PrivacyRequestPayload(
+                    requestType: type,
+                    subjectReference: appState.userProfile?.id,
+                    notes: language == "fr"
+                        ? "Demande \(type) initiée depuis l'application native."
+                        : "Self-service \(type) request from native app."
+                ))
+                legalMessage = successMessage
+            } catch {
+                legalMessage = (error as? APIError)?.message ?? (language == "fr" ? "La demande a échoué." : "Request failed.")
+            }
+            isSubmitting = false
+        }
+    }
+
+    private func submitIpReport() {
+        let name = reporterName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let email = reporterEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        let description = ipDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let signed = signature.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard name.count >= 2 else {
+            legalMessage = language == "fr" ? "Entrez votre nom complet." : "Enter your full name."
+            return
+        }
+        guard email.contains("@") && email.contains(".") else {
+            legalMessage = language == "fr" ? "Entrez un email valide." : "Enter a valid email."
+            return
+        }
+        guard description.count >= 20 else {
+            legalMessage = language == "fr" ? "La description doit contenir au moins 20 caractères." : "Description must be at least 20 characters."
+            return
+        }
+        guard sworn else {
+            legalMessage = language == "fr" ? "Confirmez la déclaration sous serment." : "Confirm the sworn statement."
+            return
+        }
+        guard !signed.isEmpty else {
+            legalMessage = language == "fr" ? "Signez avec votre nom complet." : "Sign with your full name."
+            return
+        }
+
+        isSubmitting = true
+        legalMessage = nil
+        Task {
+            do {
+                try await appState.submitIpReport(IpReportPayload(
+                    reporterName: name,
+                    reporterEmail: email,
+                    targetKind: targetKind,
+                    targetRef: targetRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : targetRef.trimmingCharacters(in: .whitespacesAndNewlines),
+                    description: description,
+                    sworn: true
+                ))
+                didSubmitIpReport = true
+            } catch {
+                legalMessage = (error as? APIError)?.message ?? (language == "fr" ? "La soumission a échoué." : "Submission failed.")
+            }
+            isSubmitting = false
         }
     }
 }
@@ -7440,6 +7889,67 @@ struct CameraPicker: UIViewControllerRepresentable {
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
+        }
+    }
+}
+
+struct ProfileImagePicker: UIViewControllerRepresentable {
+    @Binding var image: UIImage?
+    let sourceType: UIImagePickerController.SourceType
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(sourceType) ? sourceType : .photoLibrary
+        picker.allowsEditing = true
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        private let parent: ProfileImagePicker
+
+        init(_ parent: ProfileImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            parent.image = (info[.editedImage] as? UIImage) ?? (info[.originalImage] as? UIImage)
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+
+private extension UIImage {
+    func adlProfileImageDataURL(maxDimension: CGFloat = 1024, compressionQuality: CGFloat = 0.76) -> String? {
+        let source = adlScaledProfileImage(maxDimension: maxDimension)
+        guard let data = source.jpegData(compressionQuality: compressionQuality) else { return nil }
+        return "data:image/jpeg;base64,\(data.base64EncodedString())"
+    }
+
+    func adlScaledProfileImage(maxDimension: CGFloat) -> UIImage {
+        let largest = max(size.width, size.height)
+        guard largest > maxDimension, largest > 0 else { return self }
+
+        let scale = maxDimension / largest
+        let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            draw(in: CGRect(origin: .zero, size: targetSize))
         }
     }
 }

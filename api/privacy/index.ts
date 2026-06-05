@@ -483,25 +483,22 @@ export async function POST(request: Request): Promise<Response> {
       return jsonResponse({ ok: true, recorded: body.accept }, { status: 201 });
     }
 
-    // Admin-only views below.
-    const auth = await requireUser(request);
-    if (!auth) return errorResponse("Unauthorized", 401);
-    const viewer = toSubmissionAuthContext(auth);
-    if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
-
     if (view === "requests") {
+      const auth = await requireUser(request);
+      if (!auth) return errorResponse("Unauthorized", 401);
       const validation = privacyRequestSchema.safeParse(rawBody);
       if (!validation.success) {
         return errorResponse(validation.error.issues[0]?.message ?? "Invalid privacy request", 400);
       }
       const body = validation.data;
+      const subjectReference = body.subjectReference?.trim() || auth.id;
       const result = await query<PrivacyRequest>(
         `INSERT INTO privacy_requests (request_type, subject_reference, created_by, notes)
          VALUES ($1, $2, $3, $4)
          RETURNING id::text, request_type AS "requestType", status, subject_reference AS "subjectReference",
                    created_by AS "createdBy", assigned_to AS "assignedTo", notes,
                    resolution_notes AS "resolutionNotes", created_at AS "createdAt", updated_at AS "updatedAt"`,
-        [body.requestType, body.subjectReference, auth.id, body.notes ?? null],
+        [body.requestType, subjectReference, auth.id, body.notes ?? null],
       );
       await logSecurityEvent({
         eventType: "privacy_request",
@@ -509,11 +506,17 @@ export async function POST(request: Request): Promise<Response> {
         request,
         details: {
           requestType: body.requestType,
-          subjectReference: body.subjectReference,
+          subjectReference,
         },
       });
       return jsonResponse(result.rows[0], { status: 201 });
     }
+
+    // Admin-only views below.
+    const auth = await requireUser(request);
+    if (!auth) return errorResponse("Unauthorized", 401);
+    const viewer = toSubmissionAuthContext(auth);
+    if (!viewer?.isAdmin) return errorResponse("Forbidden", 403);
 
     if (view === "export") {
       const validation = privacyActionSchema.safeParse(rawBody);

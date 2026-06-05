@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { put } from "@vercel/blob";
 import { requireUser } from "../../lib/auth.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
@@ -41,6 +42,9 @@ const ASSIGNMENT_STATUSES: ReadonlySet<CollectionAssignmentStatus> = new Set([
   "completed",
   "expired",
 ]);
+const INLINE_PROFILE_IMAGE_REGEX = /^data:(image\/[a-z0-9.+-]+);base64,/i;
+const ALLOWED_PROFILE_IMAGE_MIME = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+const MAX_PROFILE_IMAGE_BYTES = 4_000_000;
 
 function normalizeMapScope(input: unknown): MapScope | null {
   if (typeof input !== "string") return null;
@@ -70,6 +74,45 @@ function isAdminToken(token: unknown): boolean {
 function resolveUserRole(role: unknown, isAdmin: boolean): UserRole {
   if (role === "admin" || role === "agent" || role === "client") return role;
   return isAdmin ? "admin" : "agent";
+}
+
+function mimeToExtension(mime: string): string {
+  switch (mime) {
+    case "image/png":
+      return "png";
+    case "image/webp":
+      return "webp";
+    default:
+      return "jpg";
+  }
+}
+
+function parseProfileImagePayload(imageBase64: string): { imageBuffer: Buffer; mime: string; ext: string } | null {
+  const match = imageBase64.match(INLINE_PROFILE_IMAGE_REGEX);
+  if (!match) return null;
+
+  const mime = match[1]?.toLowerCase() ?? "";
+  if (!ALLOWED_PROFILE_IMAGE_MIME.has(mime)) return null;
+
+  const commaIndex = imageBase64.indexOf(",");
+  const base64 = commaIndex === -1 ? imageBase64 : imageBase64.slice(commaIndex + 1);
+  const imageBuffer = Buffer.from(base64, "base64");
+  if (!imageBuffer.length || imageBuffer.byteLength > MAX_PROFILE_IMAGE_BYTES) return null;
+
+  return { imageBuffer, mime, ext: mimeToExtension(mime) };
+}
+
+async function uploadProfilePhoto(userId: string, imageBuffer: Buffer, mime: string, ext: string): Promise<string> {
+  const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 96) || "user";
+  const pathname = `profiles/${safeUserId}-${Date.now()}.${ext}`;
+  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const uploaded = await put(pathname, imageBuffer, {
+    access: "public",
+    contentType: mime,
+    addRandomSuffix: false,
+    token: token || undefined,
+  });
+  return uploaded.url;
 }
 
 function sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit<T, "passwordHash"> {
@@ -374,6 +417,13 @@ export async function PUT(request: Request): Promise<Response> {
       profile.image = encodeAvatarPresetImage(body.avatarPreset);
     }
 
+    if (body?.imageBase64 !== undefined) {
+      const parsedImage = parseProfileImagePayload(body.imageBase64);
+      if (!parsedImage) return errorResponse("Invalid profile image", 400);
+      profile.image = await uploadProfilePhoto(auth.id, parsedImage.imageBuffer, parsedImage.mime, parsedImage.ext);
+      profile.avatarPreset = undefined;
+    }
+
     await upsertUserProfile(auth.id, profile);
     const sanitized = sanitizeProfile(profile);
 
@@ -383,6 +433,10 @@ export async function PUT(request: Request): Promise<Response> {
     return jsonResponse(sanitized, { status: 200 });
   } catch (error) {
     if (isStorageUnavailableError(error)) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    if (message.includes("blob") && message.includes("token")) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
     throw error;
