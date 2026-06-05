@@ -61,6 +61,16 @@ final class AppState: ObservableObject {
     @Published var isLoadingLeads = false
     @Published var leadsError: String?
 
+    // MARK: - Communications (africandatalayer-955)
+    @Published var emailCampaigns: [CampaignRow] = []
+    @Published var smsCampaigns: [CampaignRow] = []
+    @Published var audiencePreview: AudiencePreview?
+    @Published var commsMaxRecipients = 0
+    @Published var isLoadingComms = false
+    @Published var commsError: String?
+    @Published var isSendingCampaign = false
+    @Published var commsActionMessage: String?
+
     func t(_ en: String, _ fr: String) -> String { language == "fr" ? fr : en }
 
     private let queueStore = OfflineQueueStore()
@@ -474,6 +484,85 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Communications service methods (africandatalayer-955)
+
+    /// Load both campaign lists (email + SMS) in parallel.
+    func loadCommunications(force: Bool = false) async {
+        guard !isLoadingComms else { return }
+        if !emailCampaigns.isEmpty, !smsCampaigns.isEmpty, !force { return }
+        isLoadingComms = true
+        commsError = nil
+        defer { isLoadingComms = false }
+        do {
+            async let emailResult = apiClient.fetchEmailCampaigns()
+            async let smsResult = apiClient.fetchSmsCampaigns()
+            let (email, sms) = try await (emailResult, smsResult)
+            emailCampaigns = email.campaigns
+            smsCampaigns = sms.campaigns
+            commsMaxRecipients = max(email.maxRecipients, sms.maxRecipients)
+        } catch {
+            commsError = (error as? APIError)?.message ?? t("Unable to load communications.", "Impossible de charger les communications.")
+        }
+    }
+
+    /// Refresh the live audience preview counts for the given filter.
+    func previewAudience(_ audience: CommsAudienceFilter = .default) async {
+        do {
+            audiencePreview = try await apiClient.fetchAudiencePreview(audience: audience)
+        } catch {
+            // Preview is best-effort — fall back to campaign-derived counts silently.
+            audiencePreview = nil
+        }
+    }
+
+    /// Create an email or SMS campaign. Returns true on success.
+    @discardableResult
+    func createCampaign(
+        channel: CommsChannel,
+        subject: String,
+        body: String,
+        audience: CommsAudienceFilter = .default,
+        dryRun: Bool = false
+    ) async -> Bool {
+        guard !isSendingCampaign else { return false }
+        isSendingCampaign = true
+        commsError = nil
+        commsActionMessage = nil
+        defer { isSendingCampaign = false }
+        do {
+            let result: CreateCampaignResponse
+            switch channel {
+            case .email:
+                result = try await apiClient.createEmailCampaign(CreateEmailCampaignBody(
+                    subject: subject,
+                    htmlBody: body,
+                    textBody: body,
+                    language: language,
+                    audience: audience,
+                    dryRun: dryRun,
+                    scheduledAt: nil
+                ))
+            case .sms:
+                result = try await apiClient.createSmsCampaign(CreateSmsCampaignBody(
+                    message: body,
+                    language: language,
+                    audience: audience,
+                    dryRun: dryRun,
+                    acknowledgeCost: true,
+                    scheduledAt: nil
+                ))
+            }
+            commsActionMessage = dryRun
+                ? t("Dry-run created (\(result.recipientCount) recipients)", "Test créé (\(result.recipientCount) destinataires)")
+                : t("Campaign sent to \(result.recipientCount) recipients.", "Campagne envoyée à \(result.recipientCount) destinataires.")
+            await loadCommunications(force: true)
+            return true
+        } catch {
+            commsError = (error as? APIError)?.message ?? t("Unable to send campaign.", "Impossible d'envoyer la campagne.")
+            return false
+        }
+    }
+
     // MARK: - Admin Review Queue service methods (africandatalayer-ot4)
 
     func loadReviewQueue(force: Bool = false) async {
@@ -840,6 +929,46 @@ final class ADLAPIClient {
         request.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await urlSession.data(for: request)
         try validate(response: response, data: data)
+    }
+
+    /// POST an Encodable body to `path`, decoding the JSON response as `R`.
+    func postJSON<T: Encodable, R: Decodable>(path: String, body: T) async throws -> R {
+        var request = URLRequest(url: url(path: path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+        return try decoder.decode(R.self, from: data)
+    }
+
+    // MARK: - Communications API (africandatalayer-955)
+
+    func fetchEmailCampaigns() async throws -> CampaignsListResponse {
+        try await fetchJSON(CampaignsListResponse.self, path: "/api/privacy?view=campaigns")
+    }
+
+    func fetchSmsCampaigns() async throws -> CampaignsListResponse {
+        try await fetchJSON(CampaignsListResponse.self, path: "/api/privacy?view=sms-campaigns")
+    }
+
+    func fetchAudiencePreview(audience: CommsAudienceFilter) async throws -> AudiencePreview {
+        let audienceJSON = String(data: try JSONEncoder().encode(audience), encoding: .utf8) ?? "{}"
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "view", value: "audience-preview"),
+            URLQueryItem(name: "audience", value: audienceJSON)
+        ]
+        let query = components.percentEncodedQuery ?? "view=audience-preview"
+        return try await fetchJSON(AudiencePreview.self, path: "/api/privacy?\(query)")
+    }
+
+    func createEmailCampaign(_ body: CreateEmailCampaignBody) async throws -> CreateCampaignResponse {
+        try await postJSON(path: "/api/privacy?view=campaigns", body: body)
+    }
+
+    func createSmsCampaign(_ body: CreateSmsCampaignBody) async throws -> CreateCampaignResponse {
+        try await postJSON(path: "/api/privacy?view=sms-campaigns", body: body)
     }
 
     private func csrfToken() async throws -> String {

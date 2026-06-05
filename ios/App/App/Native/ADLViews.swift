@@ -3924,7 +3924,7 @@ struct AdminReviewView: View {
             case .ipReports:
                 ipReportsCockpitContent
             case .communications:
-                adminModePlaceholder
+                CommunicationsCockpitView()
             }
         }
         .background(ADLColor.paper.ignoresSafeArea())
@@ -5218,6 +5218,359 @@ private struct IpReportsFormView: View {
         sworn = false
         submitError = nil
         didSubmit = false
+    }
+}
+
+// MARK: - Communications cockpit (africandatalayer-955)
+
+/// Admin Communications cockpit — channel toggle (Email/SMS), audience summary,
+/// campaign history list, and a composer sheet. Mirrors CommunicationsPanel.tsx.
+private struct CommunicationsCockpitView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var channel: CommsChannel = .email
+    @State private var showComposer = false
+
+    private var campaigns: [CampaignRow] {
+        channel == .email ? appState.emailCampaigns : appState.smsCampaigns
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                channelToggle
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+
+                audienceCard
+                    .padding(.horizontal, 16)
+
+                if let msg = appState.commsActionMessage {
+                    ADLCard {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(ADLColor.forest)
+                            Text(msg)
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(ADLColor.ink)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                }
+
+                newCampaignButton
+                    .padding(.horizontal, 16)
+
+                SectionLabel(text: appState.t("Campaigns", "Campagnes"), wide: true)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+
+                campaignList
+            }
+            .padding(.bottom, 24)
+        }
+        .task {
+            await appState.loadCommunications()
+            await appState.previewAudience()
+        }
+        .refreshable {
+            await appState.loadCommunications(force: true)
+            await appState.previewAudience()
+        }
+        .sheet(isPresented: $showComposer) {
+            CampaignComposerSheet(channel: channel)
+                .environmentObject(appState)
+        }
+    }
+
+    private var channelToggle: some View {
+        HStack(spacing: 8) {
+            ForEach(CommsChannel.allCases, id: \.self) { ch in
+                let active = ch == channel
+                Button {
+                    channel = ch
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: ch.systemImage)
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(ch.title(appState.language))
+                            .font(ADLFont.inter(13, .bold))
+                    }
+                    .foregroundColor(active ? .white : ADLColor.inkMuted)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(active ? ADLColor.navy : Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(active ? ADLColor.navy : ADLColor.lineStrong, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var audienceCard: some View {
+        let preview = appState.audiencePreview
+        let recipients = preview?.recipientCount ?? campaigns.first?.recipientCount ?? 0
+        let suppressed = preview?.suppressedCount ?? campaigns.first?.suppressedCount ?? 0
+        let maxRecipients = preview?.maxRecipients ?? appState.commsMaxRecipients
+        return ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "person.2.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(ADLColor.navy)
+                    Text(appState.t("Audience", "Audience"))
+                        .font(ADLFont.inter(13, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Spacer()
+                    ADLPill(text: appState.t("Opt-in", "Consentement"), bg: ADLColor.forestWash, fg: ADLColor.forestDark)
+                }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    KpiTile(label: appState.t("Recipients", "Destinataires"), value: "\(recipients)", tone: .navy)
+                    KpiTile(label: appState.t("Suppressed", "Supprimés"), value: "\(suppressed)", tone: .amber)
+                    KpiTile(label: appState.t("Max", "Max"), value: "\(maxRecipients)", tone: .forest)
+                }
+            }
+        }
+    }
+
+    private var newCampaignButton: some View {
+        Button {
+            appState.commsActionMessage = nil
+            showComposer = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "plus.circle.fill")
+                Text(appState.t("New campaign", "Nouvelle campagne"))
+            }
+        }
+        .buttonStyle(PrimaryButtonStyle())
+    }
+
+    @ViewBuilder
+    private var campaignList: some View {
+        if appState.isLoadingComms && campaigns.isEmpty {
+            ADLCard {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text(appState.t("Loading campaigns…", "Chargement des campagnes…"))
+                        .font(ADLFont.inter(13))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+            }
+            .padding(.horizontal, 16)
+        } else if let err = appState.commsError, campaigns.isEmpty {
+            ADLCard {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(appState.t("Communications unavailable", "Communications indisponibles"))
+                        .font(ADLFont.inter(13, .semibold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(err)
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+            }
+            .padding(.horizontal, 16)
+        } else if campaigns.isEmpty {
+            ADLCard {
+                Text(appState.t("No campaigns yet.", "Aucune campagne pour l'instant."))
+                    .font(ADLFont.inter(13, .semibold))
+                    .foregroundColor(ADLColor.inkMuted)
+            }
+            .padding(.horizontal, 16)
+        } else {
+            VStack(spacing: 10) {
+                ForEach(campaigns) { row in
+                    CampaignCard(row: row, channel: channel)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+}
+
+/// A single campaign row card: headline, status pill, and counts.
+private struct CampaignCard: View {
+    @EnvironmentObject private var appState: AppState
+    let row: CampaignRow
+    let channel: CommsChannel
+
+    private var statusPill: (bg: Color, fg: Color) {
+        switch row.status {
+        case "completed", "sent":
+            return (ADLColor.forestWash, ADLColor.forestDark)
+        case "failed", "cancelled":
+            return (Color(hex: 0xfee2e2), Color(hex: 0x991b1b))
+        case "sending", "queued":
+            return (ADLColor.amberWash, ADLColor.amber)
+        default:
+            return (ADLColor.navyWash, ADLColor.navy)
+        }
+    }
+
+    var body: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: channel.systemImage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(ADLColor.navy)
+                        .frame(width: 28, height: 28)
+                        .background(ADLColor.navyWash)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    Text(row.headline.isEmpty ? appState.t("(no subject)", "(sans objet)") : row.headline)
+                        .font(ADLFont.inter(14, .semibold))
+                        .foregroundColor(ADLColor.ink)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 6)
+                    ADLPill(text: row.status, bg: statusPill.bg, fg: statusPill.fg)
+                }
+
+                HStack(spacing: 14) {
+                    countLabel(icon: "person.2.fill", value: row.recipientCount, label: appState.t("recipients", "destinataires"))
+                    countLabel(icon: "paperplane.fill", value: row.sentCount, label: appState.t("sent", "envoyés"))
+                    countLabel(icon: "exclamationmark.triangle.fill", value: row.failedCount, label: appState.t("failed", "échecs"))
+                }
+
+                if !row.createdAt.isEmpty {
+                    Text(row.createdAt)
+                        .font(ADLFont.inter(11))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+            }
+        }
+    }
+
+    private func countLabel(icon: String, value: Int, label: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(ADLColor.inkMuted)
+            Text("\(value)")
+                .font(ADLFont.inter(12, .bold))
+                .foregroundColor(ADLColor.ink)
+            Text(label)
+                .font(ADLFont.inter(11))
+                .foregroundColor(ADLColor.inkMuted)
+        }
+    }
+}
+
+/// Composer sheet — subject+body for email, message for SMS.
+private struct CampaignComposerSheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    let channel: CommsChannel
+
+    @State private var subject = ""
+    @State private var messageBody = ""
+
+    private var canSend: Bool {
+        let trimmedBody = messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedBody.isEmpty, !appState.isSendingCampaign else { return false }
+        if channel == .email {
+            return !subject.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return true
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    SectionLabel(
+                        text: channel == .email
+                            ? appState.t("New email campaign", "Nouvelle campagne e-mail")
+                            : appState.t("New SMS campaign", "Nouvelle campagne SMS"),
+                        wide: true
+                    )
+
+                    if channel == .email {
+                        ADLInputField(
+                            icon: "textformat",
+                            placeholder: appState.t("Subject", "Objet"),
+                            text: $subject
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        SectionLabel(text: channel == .email
+                            ? appState.t("Body", "Corps")
+                            : appState.t("Message", "Message"))
+                        TextField(
+                            channel == .email
+                                ? appState.t("Write your email…", "Rédigez votre e-mail…")
+                                : appState.t("Write your SMS…", "Rédigez votre SMS…"),
+                            text: $messageBody,
+                            axis: .vertical
+                        )
+                        .font(ADLFont.inter(15))
+                        .lineLimit(6...12)
+                        .padding(12)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous).stroke(ADLColor.line, lineWidth: 1))
+                    }
+
+                    if channel == .sms {
+                        Text(appState.t(
+                            "SMS sends incur per-segment cost across the selected audience.",
+                            "Les SMS génèrent un coût par segment pour l'audience sélectionnée."
+                        ))
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    if let err = appState.commsError {
+                        ADLCard {
+                            Text(err)
+                                .font(ADLFont.inter(13))
+                                .foregroundColor(ADLColor.danger)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
+                    Button {
+                        Task {
+                            let ok = await appState.createCampaign(
+                                channel: channel,
+                                subject: subject.trimmingCharacters(in: .whitespacesAndNewlines),
+                                body: messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
+                            )
+                            if ok { dismiss() }
+                        }
+                    } label: {
+                        if appState.isSendingCampaign {
+                            HStack(spacing: 8) {
+                                ProgressView().tint(.white)
+                                Text(appState.t("Sending…", "Envoi…"))
+                            }
+                        } else {
+                            HStack(spacing: 8) {
+                                Image(systemName: "paperplane.fill")
+                                Text(appState.t("Send campaign", "Envoyer la campagne"))
+                            }
+                        }
+                    }
+                    .buttonStyle(PrimaryButtonStyle())
+                    .disabled(!canSend)
+                }
+                .padding(16)
+            }
+            .background(ADLColor.paper.ignoresSafeArea())
+            .navigationTitle(channel.title(appState.language))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(appState.t("Cancel", "Annuler")) { dismiss() }
+                }
+            }
+        }
     }
 }
 

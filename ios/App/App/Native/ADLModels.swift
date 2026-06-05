@@ -1327,3 +1327,162 @@ struct LeadCandidate: Decodable, Hashable, Identifiable {
         priority = AutomationLeadPriority(rawValue: rawPriority) ?? .medium
     }
 }
+
+// MARK: - Communications (africandatalayer-955)
+
+/// Channel toggle for the admin Communications cockpit.
+enum CommsChannel: String, CaseIterable, Hashable {
+    case email
+    case sms
+
+    func title(_ language: String) -> String {
+        switch self {
+        case .email: return language == "fr" ? "E-mail" : "Email"
+        case .sms:   return "SMS"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .email: return "envelope.fill"
+        case .sms:   return "message.fill"
+        }
+    }
+}
+
+/// One email OR SMS campaign row. The list endpoints return `subject` for
+/// email and `message` for SMS — both are optional so a single model serves
+/// both `view=campaigns` and `view=sms-campaigns`.
+struct CampaignRow: Decodable, Hashable, Identifiable {
+    var id: String
+    var subject: String?
+    var message: String?
+    var status: String
+    var recipientCount: Int
+    var sentCount: Int
+    var failedCount: Int
+    var suppressedCount: Int
+    var createdAt: String
+    var startedAt: String?
+    var completedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, subject, message, status
+        case recipientCount, sentCount, failedCount, suppressedCount
+        case createdAt, startedAt, completedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id              = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        subject         = try c.decodeIfPresent(String.self, forKey: .subject)
+        message         = try c.decodeIfPresent(String.self, forKey: .message)
+        status          = try c.decodeIfPresent(String.self, forKey: .status) ?? "draft"
+        recipientCount  = try c.decodeIfPresent(Int.self, forKey: .recipientCount) ?? 0
+        sentCount       = try c.decodeIfPresent(Int.self, forKey: .sentCount) ?? 0
+        failedCount     = try c.decodeIfPresent(Int.self, forKey: .failedCount) ?? 0
+        suppressedCount = try c.decodeIfPresent(Int.self, forKey: .suppressedCount) ?? 0
+        createdAt       = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        startedAt       = try c.decodeIfPresent(String.self, forKey: .startedAt)
+        completedAt     = try c.decodeIfPresent(String.self, forKey: .completedAt)
+    }
+
+    /// Display headline: subject for email, message for SMS.
+    var headline: String {
+        let s = (subject?.isEmpty == false) ? subject : nil
+        let m = (message?.isEmpty == false) ? message : nil
+        return s ?? m ?? ""
+    }
+}
+
+struct CampaignsListResponse: Decodable {
+    var campaigns: [CampaignRow]
+    var maxRecipients: Int
+
+    enum CodingKeys: String, CodingKey { case campaigns, maxRecipients }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        campaigns     = try c.decodeIfPresent([CampaignRow].self, forKey: .campaigns) ?? []
+        maxRecipients = try c.decodeIfPresent(Int.self, forKey: .maxRecipients) ?? 0
+    }
+}
+
+/// Audience preview counts (`GET /api/privacy?view=audience-preview&...`).
+struct AudiencePreview: Decodable, Hashable {
+    var recipientCount: Int
+    var totalCount: Int
+    var suppressedCount: Int
+    var maxRecipients: Int
+
+    enum CodingKeys: String, CodingKey {
+        case recipientCount, totalCount, suppressedCount, maxRecipients
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        recipientCount  = try c.decodeIfPresent(Int.self, forKey: .recipientCount) ?? 0
+        totalCount      = try c.decodeIfPresent(Int.self, forKey: .totalCount) ?? 0
+        suppressedCount = try c.decodeIfPresent(Int.self, forKey: .suppressedCount) ?? 0
+        maxRecipients   = try c.decodeIfPresent(Int.self, forKey: .maxRecipients) ?? 0
+    }
+}
+
+/// Response from creating an email or SMS campaign.
+struct CreateCampaignResponse: Decodable {
+    var id: String
+    var status: String
+    var recipientCount: Int
+    var suppressedCount: Int?
+    var capped: Bool
+    var segmentsPerRecipient: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, status, recipientCount, suppressedCount, capped, segmentsPerRecipient
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id                   = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        status               = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        recipientCount       = try c.decodeIfPresent(Int.self, forKey: .recipientCount) ?? 0
+        suppressedCount      = try c.decodeIfPresent(Int.self, forKey: .suppressedCount)
+        capped               = try c.decodeIfPresent(Bool.self, forKey: .capped) ?? false
+        segmentsPerRecipient = try c.decodeIfPresent(Int.self, forKey: .segmentsPerRecipient)
+    }
+}
+
+/// Audience filter — mirrors the web `AudienceFilter`. Encoded into the
+/// JSON `audience` field of create-campaign request bodies and serialized
+/// for the `audience=` preview query param.
+struct CommsAudienceFilter: Encodable, Hashable {
+    var roles: [String]?
+    var trustTiers: [String]?
+    var mapScopes: [String]?
+    var requireEmailOptIn: Bool?
+    var lastActiveDays: Int?
+
+    /// Default audience matches the web panel: opt-in required.
+    static let `default` = CommsAudienceFilter(requireEmailOptIn: true)
+}
+
+/// POST body for `view=campaigns` (email).
+struct CreateEmailCampaignBody: Encodable {
+    var subject: String
+    var htmlBody: String
+    var textBody: String
+    var language: String
+    var audience: CommsAudienceFilter
+    var dryRun: Bool
+    var scheduledAt: String?
+}
+
+/// POST body for `view=sms-campaigns` (SMS).
+struct CreateSmsCampaignBody: Encodable {
+    var message: String
+    var language: String
+    var audience: CommsAudienceFilter
+    var dryRun: Bool
+    var acknowledgeCost: Bool
+    var scheduledAt: String?
+}
