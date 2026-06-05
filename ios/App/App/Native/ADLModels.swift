@@ -291,6 +291,35 @@ struct GpsIntegrityReport: Codable, Hashable {
     var deviceTimestamp: Int
     var timeDeltaMs: Int?
 
+    enum CodingKeys: String, CodingKey {
+        case mockLocationDetected
+        case mockLocationMethod
+        case hasAccelerometerData
+        case hasGyroscopeData
+        case accelerometerSampleCount
+        case motionDetectedDuringCapture
+        case gpsAccuracyMeters
+        case networkType
+        case gpsTimestamp
+        case deviceTimestamp
+        case timeDeltaMs
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(mockLocationDetected, forKey: .mockLocationDetected)
+        try container.encodeNilOrValue(mockLocationMethod, forKey: .mockLocationMethod)
+        try container.encode(hasAccelerometerData, forKey: .hasAccelerometerData)
+        try container.encode(hasGyroscopeData, forKey: .hasGyroscopeData)
+        try container.encode(accelerometerSampleCount, forKey: .accelerometerSampleCount)
+        try container.encode(motionDetectedDuringCapture, forKey: .motionDetectedDuringCapture)
+        try container.encodeNilOrValue(gpsAccuracyMeters, forKey: .gpsAccuracyMeters)
+        try container.encodeNilOrValue(networkType, forKey: .networkType)
+        try container.encodeNilOrValue(gpsTimestamp, forKey: .gpsTimestamp)
+        try container.encode(deviceTimestamp, forKey: .deviceTimestamp)
+        try container.encodeNilOrValue(timeDeltaMs, forKey: .timeDeltaMs)
+    }
+
     static func from(location: SubmissionLocation?) -> GpsIntegrityReport {
         let nowMs = Int(Date().timeIntervalSince1970 * 1000)
         return GpsIntegrityReport(
@@ -306,6 +335,16 @@ struct GpsIntegrityReport: Codable, Hashable {
             deviceTimestamp: nowMs,
             timeDeltaMs: nil
         )
+    }
+}
+
+private extension KeyedEncodingContainer {
+    mutating func encodeNilOrValue<T: Encodable>(_ value: T?, forKey key: Key) throws {
+        if let value {
+            try encode(value, forKey: key)
+        } else {
+            try encodeNil(forKey: key)
+        }
     }
 }
 

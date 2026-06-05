@@ -3884,6 +3884,7 @@ private struct AnalyticsStatusNote: View {
 
 struct AdminReviewView: View {
     @EnvironmentObject private var appState: AppState
+    @State private var activeMode: AdminNativeMode = .review
 
     // Map riskBucket String → RiskLevel
     private func riskLevel(for group: AdminReviewGroup) -> RiskLevel {
@@ -3905,13 +3906,64 @@ struct AdminReviewView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ADLScreenHeader(title: appState.t("Review Queue", "File de révision"),
+            ADLScreenHeader(title: "African Data Layer",
                             subtitle: appState.t("Admin · Submission Queue", "Admin · File de soumissions")) {
                 ADLPill(text: "Admin", bg: ADLColor.navyWash, fg: ADLColor.navy)
                     .padding(.trailing, 4)
             }
 
-            ScrollView {
+            adminModeTabs
+
+            if activeMode == .review {
+                reviewCockpitContent
+            } else {
+                adminModePlaceholder
+            }
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .task {
+            await appState.loadReviewQueue()
+            await appState.loadAnalytics()
+        }
+        .refreshable {
+            await appState.loadReviewQueue(force: true)
+            await appState.loadAnalytics(force: true)
+        }
+    }
+
+    private var adminModeTabs: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(AdminNativeMode.allCases) { mode in
+                    Button {
+                        activeMode = mode
+                    } label: {
+                        Text(mode.title(appState))
+                            .font(ADLFont.inter(12, .bold))
+                            .tracking(1.6)
+                            .textCase(.uppercase)
+                            .foregroundColor(activeMode == mode ? .white : ADLColor.inkMuted)
+                            .frame(minWidth: mode == .communications ? 152 : 118)
+                            .frame(height: 48)
+                            .background(activeMode == mode ? ADLColor.navy : Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .stroke(activeMode == mode ? ADLColor.navy : ADLColor.lineStrong, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .background(Color.white)
+        .overlay(Rectangle().fill(ADLColor.line).frame(height: 1), alignment: .bottom)
+    }
+
+    private var reviewCockpitContent: some View {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
 
                     // KPI grid (2×2): prefer live reviewStats, fall back to analyticsSummary
@@ -4001,15 +4053,181 @@ struct AdminReviewView: View {
                 }
                 .padding(.bottom, 24)
             }
+    }
+
+    private var adminModePlaceholder: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ADLCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(spacing: 10) {
+                            Image(systemName: activeMode.systemImage)
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(activeMode.tint)
+                                .frame(width: 42, height: 42)
+                                .background(activeMode.tint.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(activeMode.title(appState))
+                                    .font(ADLFont.inter(18, .bold))
+                                    .foregroundColor(ADLColor.ink)
+                                Text(activeMode.subtitle(appState))
+                                    .font(ADLFont.inter(13))
+                                    .foregroundColor(ADLColor.inkMuted)
+                            }
+                            Spacer()
+                        }
+
+                        Divider().background(ADLColor.line)
+
+                        ForEach(activeMode.bullets(appState), id: \.self) { bullet in
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(ADLColor.forest)
+                                    .padding(.top, 1)
+                                Text(bullet)
+                                    .font(ADLFont.inter(13))
+                                    .foregroundColor(ADLColor.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+                }
+
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    KpiTile(label: activeMode.primaryMetricLabel(appState), value: activeMode.primaryMetricValue(appState), tone: .navy)
+                    KpiTile(label: activeMode.secondaryMetricLabel(appState), value: activeMode.secondaryMetricValue(appState), tone: .forest)
+                }
+            }
+            .padding(16)
+            .padding(.bottom, 24)
         }
-        .background(ADLColor.paper.ignoresSafeArea())
-        .task {
-            await appState.loadReviewQueue()
-            await appState.loadAnalytics()
+    }
+}
+
+@MainActor
+private enum AdminNativeMode: String, CaseIterable, Identifiable {
+    case review
+    case assignments
+    case automation
+    case ipReports
+    case communications
+
+    var id: String { rawValue }
+
+    func title(_ appState: AppState) -> String {
+        switch self {
+        case .review: return appState.t("Review Cockpit", "Cockpit de révision")
+        case .assignments: return appState.t("Assignments", "Affectations")
+        case .automation: return appState.t("Automation", "Automatisation")
+        case .ipReports: return appState.t("IP Reports", "Signalements PI")
+        case .communications: return appState.t("Communications", "Communications")
         }
-        .refreshable {
-            await appState.loadReviewQueue(force: true)
-            await appState.loadAnalytics(force: true)
+    }
+
+    func subtitle(_ appState: AppState) -> String {
+        switch self {
+        case .review:
+            return appState.t("Server-filtered risk queue and submission triage.", "File de risque serveur et triage des soumissions.")
+        case .assignments:
+            return appState.t("Plan collection zones and monitor agent work.", "Planifier les zones de collecte et suivre les agents.")
+        case .automation:
+            return appState.t("Review machine-originated leads before assignment.", "Réviser les leads automatisés avant affectation.")
+        case .ipReports:
+            return appState.t("Track intellectual-property reports from users.", "Suivre les signalements de propriété intellectuelle.")
+        case .communications:
+            return appState.t("Coordinate email, SMS, and in-app notices.", "Coordonner email, SMS et avis in-app.")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .review: return "checkmark.square"
+        case .assignments: return "map"
+        case .automation: return "sparkles"
+        case .ipReports: return "shield.lefthalf.filled"
+        case .communications: return "message.badge.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .review: return ADLColor.navy
+        case .assignments: return ADLColor.forest
+        case .automation: return ADLColor.gold
+        case .ipReports: return ADLColor.terracotta
+        case .communications: return ADLColor.navyMid
+        }
+    }
+
+    func bullets(_ appState: AppState) -> [String] {
+        switch self {
+        case .review:
+            return [
+                appState.t("Open grouped submissions and expand each record for evidence.", "Ouvrir les soumissions groupées et développer chaque dossier."),
+                appState.t("Approve, reject, or flag from the server-backed queue.", "Approuver, rejeter ou signaler depuis la file serveur.")
+            ]
+        case .assignments:
+            return [
+                appState.t("Create and monitor collection assignments by zone.", "Créer et suivre les affectations par zone."),
+                appState.t("Track expected points, submitted points, and due dates.", "Suivre les points attendus, soumis et les échéances.")
+            ]
+        case .automation:
+            return [
+                appState.t("Filter imported candidates by source, risk, and category.", "Filtrer les candidats importés par source, risque et catégorie."),
+                appState.t("Promote useful leads into assignments for field verification.", "Transformer les bons leads en affectations terrain.")
+            ]
+        case .ipReports:
+            return [
+                appState.t("Review open IP reports and resolution status.", "Réviser les signalements PI ouverts et leur statut."),
+                appState.t("Keep legal follow-up separate from submission review.", "Séparer le suivi juridique de la revue des soumissions.")
+            ]
+        case .communications:
+            return [
+                appState.t("Prepare operational notices for agents and clients.", "Préparer des avis opérationnels pour agents et clients."),
+                appState.t("Respect SMS and email consent before campaign sends.", "Respecter les consentements SMS et email avant envoi.")
+            ]
+        }
+    }
+
+    func primaryMetricLabel(_ appState: AppState) -> String {
+        switch self {
+        case .review: return appState.t("Pending", "En attente")
+        case .assignments: return appState.t("Active", "Actives")
+        case .automation: return appState.t("Ready", "Prêts")
+        case .ipReports: return appState.t("Open", "Ouverts")
+        case .communications: return appState.t("Channels", "Canaux")
+        }
+    }
+
+    func primaryMetricValue(_ appState: AppState) -> String {
+        switch self {
+        case .review: return "\(appState.reviewStats?.pending ?? 0)"
+        case .assignments: return "0"
+        case .automation: return "0"
+        case .ipReports: return "0"
+        case .communications: return "3"
+        }
+    }
+
+    func secondaryMetricLabel(_ appState: AppState) -> String {
+        switch self {
+        case .review: return appState.t("Flagged", "Signalés")
+        case .assignments: return appState.t("Due Soon", "Échéance")
+        case .automation: return appState.t("Sources", "Sources")
+        case .ipReports: return appState.t("Resolved", "Résolus")
+        case .communications: return appState.t("Consent", "Consentement")
+        }
+    }
+
+    func secondaryMetricValue(_ appState: AppState) -> String {
+        switch self {
+        case .review: return "\(appState.reviewStats?.flagged ?? 0)"
+        case .assignments: return "0"
+        case .automation: return "0"
+        case .ipReports: return "0"
+        case .communications: return appState.t("Required", "Requis")
         }
     }
 }

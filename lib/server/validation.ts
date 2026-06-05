@@ -176,6 +176,7 @@ export const userUpdateSchema = z
     mapScope: z.enum(["bonamoussadi", "cameroon", "global"]).optional(),
     avatarPreset: z.enum(AVATAR_PRESETS).optional(),
     imageBase64: z.string().min(1).max(10_000_000).optional(),
+    imagebase64: z.string().min(1).max(10_000_000).optional(),
   })
   .strict();
 

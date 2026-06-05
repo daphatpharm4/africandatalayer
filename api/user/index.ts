@@ -417,8 +417,9 @@ export async function PUT(request: Request): Promise<Response> {
       profile.image = encodeAvatarPresetImage(body.avatarPreset);
     }
 
-    if (body?.imageBase64 !== undefined) {
-      const parsedImage = parseProfileImagePayload(body.imageBase64);
+    const profileImageBase64 = body?.imageBase64 ?? body?.imagebase64;
+    if (profileImageBase64 !== undefined) {
+      const parsedImage = parseProfileImagePayload(profileImageBase64);
       if (!parsedImage) return errorResponse("Invalid profile image", 400);
       profile.image = await uploadProfilePhoto(auth.id, parsedImage.imageBuffer, parsedImage.mime, parsedImage.ext);
       profile.avatarPreset = undefined;
