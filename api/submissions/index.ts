@@ -918,7 +918,13 @@ export async function POST(request: Request): Promise<Response> {
     details.consentRecordedAt = consentRecordedAt;
   }
 
-  const imageBase64 = body?.imageBase64 as string | undefined;
+  const lowercaseImageBase64 = (body as unknown as { imagebase64?: unknown })?.imagebase64;
+  const imageBase64 =
+    typeof body?.imageBase64 === "string"
+      ? body.imageBase64
+      : typeof lowercaseImageBase64 === "string"
+        ? lowercaseImageBase64
+        : undefined;
   if (!imageBase64) return errorResponse("Photo is required", 400);
   const parsedPhoto = parseImagePayload(imageBase64);
   if (!parsedPhoto) return errorResponse("Invalid photo format", 400);

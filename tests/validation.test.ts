@@ -56,6 +56,16 @@ test("submissionInputSchema rejects unexpected fields and malformed hashes", () 
   );
 });
 
+test("submissionInputSchema accepts lowercase native image payloads", () => {
+  const parsed = submissionInputSchema.parse({
+    category: "mobile_money",
+    details: { providers: ["MTN"] },
+    imagebase64: "data:image/jpeg;base64,abc123",
+  });
+
+  assert.equal(parsed.imagebase64, "data:image/jpeg;base64,abc123");
+});
+
 test("reviewBodySchema and userStatusPatchSchema enforce pilot review controls", () => {
   assert.deepEqual(reviewBodySchema.parse({ decision: "flagged", notes: "Needs field audit" }), {
     decision: "flagged",

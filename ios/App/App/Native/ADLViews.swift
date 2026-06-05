@@ -3078,7 +3078,7 @@ struct ContributionView: View {
         let eventType: SubmissionEventType = mapPointId == nil ? .create : .enrich
         return SubmissionPayload(
             eventType: eventType,
-            pointId: mapPointId ?? "ios-\(UUID().uuidString)",
+            pointId: mapPointId,
             category: category,
             location: location,
             details: details,

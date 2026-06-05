@@ -1,5 +1,4 @@
 import bcrypt from "bcryptjs";
-import { put } from "@vercel/blob";
 import { requireUser } from "../../lib/auth.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
@@ -67,13 +66,31 @@ function normalizeLookupIdentifier(input: unknown): string | null {
   return normalizeIdentifier(raw)?.value ?? raw.toLowerCase();
 }
 
-function isAdminToken(token: unknown): boolean {
-  return (token as { isAdmin?: unknown } | undefined)?.isAdmin === true;
+function isAdminToken(token: unknown, role?: UserRole): boolean {
+  const claims = token as { isAdmin?: unknown; role?: unknown } | undefined;
+  return claims?.isAdmin === true || claims?.role === "admin" || role === "admin";
 }
 
 function resolveUserRole(role: unknown, isAdmin: boolean): UserRole {
   if (role === "admin" || role === "agent" || role === "client") return role;
   return isAdmin ? "admin" : "agent";
+}
+
+function applyAdminProfileAccess(profile: UserProfile): boolean {
+  let changed = false;
+  if (profile.role !== "admin") {
+    profile.role = "admin";
+    changed = true;
+  }
+  if (profile.isAdmin !== true) {
+    profile.isAdmin = true;
+    changed = true;
+  }
+  if (profile.mapScope !== "global") {
+    profile.mapScope = "global";
+    changed = true;
+  }
+  return changed;
 }
 
 function mimeToExtension(mime: string): string {
@@ -103,6 +120,7 @@ function parseProfileImagePayload(imageBase64: string): { imageBuffer: Buffer; m
 }
 
 async function uploadProfilePhoto(userId: string, imageBuffer: Buffer, mime: string, ext: string): Promise<string> {
+  const { put } = await import("@vercel/blob");
   const safeUserId = userId.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 96) || "user";
   const pathname = `profiles/${safeUserId}-${Date.now()}.${ext}`;
   const token = process.env.BLOB_READ_WRITE_TOKEN;
@@ -130,6 +148,12 @@ type AdminAccountCreateDeps = {
   getUserProfileFn?: GetUserProfileFn;
   upsertUserProfileFn?: UpsertUserProfileFn;
   hashPasswordFn?: HashPasswordFn;
+  logSecurityEventFn?: LogSecurityEventFn;
+};
+
+type AdminAccountAccessDeps = {
+  getUserProfileFn?: GetUserProfileFn;
+  upsertUserProfileFn?: UpsertUserProfileFn;
   logSecurityEventFn?: LogSecurityEventFn;
 };
 
@@ -217,10 +241,87 @@ export function createAdminAccountCreateHandler(deps: AdminAccountCreateDeps = {
 
 const handleAdminAccountCreate = createAdminAccountCreateHandler();
 
+export function createAdminAccountAccessHandler(deps: AdminAccountAccessDeps = {}) {
+  const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
+  const upsertUserProfileFn = deps.upsertUserProfileFn ?? upsertUserProfile;
+  const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
+
+  return async function handleAdminAccountAccess(request: Request, actorUserId: string): Promise<Response> {
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+    const validation = adminUserAccessPatchSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 400);
+    }
+
+    const body = validation.data;
+    const targetUserId = normalizeLookupIdentifier(body.userId);
+    if (!targetUserId) return errorResponse("User id is required", 400);
+    if (targetUserId === normalizeLookupIdentifier(actorUserId)) {
+      return errorResponse("Admins cannot change their own role from this panel", 400);
+    }
+
+    try {
+      const profile = await getUserProfileFn(targetUserId);
+      if (!profile) return errorResponse("Profile not found", 404);
+
+      const previousRole = resolveUserRole(profile.role, profile.isAdmin === true);
+      const previousIsAdmin = profile.isAdmin === true;
+      const previousMapScope = normalizeMapScope(profile.mapScope);
+
+      const nextRole = body.role;
+      const nextIsAdmin = nextRole === "admin";
+      const nextMapScope: MapScope = nextIsAdmin ? "global" : "bonamoussadi";
+
+      profile.role = nextRole;
+      profile.isAdmin = nextIsAdmin;
+      profile.mapScope = nextMapScope;
+
+      const changed =
+        previousRole !== nextRole || previousIsAdmin !== nextIsAdmin || previousMapScope !== nextMapScope;
+
+      if (changed) {
+        await upsertUserProfileFn(targetUserId, profile);
+        try {
+          await logSecurityEventFn({
+            eventType: "role_changed",
+            userId: targetUserId,
+            request,
+            details: {
+              actorUserId,
+              previousRole,
+              nextRole,
+              previousIsAdmin,
+              nextIsAdmin,
+              previousMapScope,
+              nextMapScope,
+            },
+          });
+        } catch (auditError) {
+          console.warn("Unable to write role_changed audit event", auditError);
+        }
+      }
+
+      return jsonResponse(sanitizeProfile(profile), { status: 200 });
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
+  };
+}
+
+const handleAdminAccountAccess = createAdminAccountAccessHandler();
+
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
-  const authIsAdmin = isAdminToken(auth.token);
+  const authIsAdmin = isAdminToken(auth.token, auth.role);
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
 
@@ -308,6 +409,9 @@ export async function GET(request: Request): Promise<Response> {
     try {
       const profile = await getUserProfile(identifier);
       if (!profile) return errorResponse("Profile not found", 404);
+      if (identifier === normalizeLookupIdentifier(auth.id) && applyAdminProfileAccess(profile)) {
+        await upsertUserProfile(auth.id, profile);
+      }
       return jsonResponse(sanitizeProfile(profile), { status: 200 });
     } catch (error) {
       if (isStorageUnavailableError(error)) {
@@ -322,9 +426,7 @@ export async function GET(request: Request): Promise<Response> {
     if (!profile) return errorResponse("Profile not found", 404);
 
     let shouldPersist = false;
-    if (authIsAdmin && (!profile.isAdmin || profile.mapScope !== "global")) {
-      profile.isAdmin = true;
-      profile.mapScope = "global";
+    if (authIsAdmin && applyAdminProfileAccess(profile)) {
       shouldPersist = true;
     }
 
@@ -447,7 +549,7 @@ export async function PUT(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
-  const authIsAdmin = isAdminToken(auth.token);
+  const authIsAdmin = isAdminToken(auth.token, auth.role);
   if (!authIsAdmin) return errorResponse("Forbidden", 403);
 
   const url = new URL(request.url);
@@ -483,7 +585,7 @@ interface AssignmentPatchBody extends CollectionAssignmentUpdateInput {
 export async function PATCH(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
-  const authIsAdmin = isAdminToken(auth.token);
+  const authIsAdmin = isAdminToken(auth.token, auth.role);
 
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
@@ -538,68 +640,7 @@ export async function PATCH(request: Request): Promise<Response> {
 
   if (view === "account_access") {
     if (!authIsAdmin) return errorResponse("Forbidden", 403);
-    let rawBody: unknown;
-    try {
-      rawBody = await request.json();
-    } catch {
-      return errorResponse("Invalid JSON body", 400);
-    }
-    const validation = adminUserAccessPatchSchema.safeParse(rawBody);
-    if (!validation.success) {
-      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 400);
-    }
-
-    const body = validation.data;
-    const targetUserId = normalizeLookupIdentifier(body.userId);
-    if (!targetUserId) return errorResponse("User id is required", 400);
-    if (targetUserId === auth.id.toLowerCase().trim()) {
-      return errorResponse("Admins cannot change their own role from this panel", 400);
-    }
-
-    try {
-      const profile = await getUserProfile(targetUserId);
-      if (!profile) return errorResponse("Profile not found", 404);
-
-      const previousRole = resolveUserRole(profile.role, profile.isAdmin === true);
-      const previousIsAdmin = profile.isAdmin === true;
-      const previousMapScope = normalizeMapScope(profile.mapScope);
-
-      const nextRole = body.role;
-      const nextIsAdmin = nextRole === "admin";
-      const nextMapScope: MapScope = nextIsAdmin ? "global" : "bonamoussadi";
-
-      profile.role = nextRole;
-      profile.isAdmin = nextIsAdmin;
-      profile.mapScope = nextMapScope;
-
-      const changed =
-        previousRole !== nextRole || previousIsAdmin !== nextIsAdmin || previousMapScope !== nextMapScope;
-
-      if (changed) {
-        await upsertUserProfile(targetUserId, profile);
-        await logSecurityEvent({
-          eventType: "role_changed",
-          userId: targetUserId,
-          request,
-          details: {
-            actorUserId: auth.id,
-            previousRole,
-            nextRole,
-            previousIsAdmin,
-            nextIsAdmin,
-            previousMapScope,
-            nextMapScope,
-          },
-        });
-      }
-
-      return jsonResponse(sanitizeProfile(profile), { status: 200 });
-    } catch (error) {
-      if (isStorageUnavailableError(error)) {
-        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
-      }
-      throw error;
-    }
+    return await handleAdminAccountAccess(request, auth.id);
   }
 
   if (view === "sms-consent") {

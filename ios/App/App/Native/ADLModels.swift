@@ -194,11 +194,7 @@ enum AppReleaseMode {
     }
 
     static func normalizedRole(_ role: UserRole) -> UserRole {
-#if DEBUG
         return role
-#else
-        return .agent
-#endif
     }
 
     static func defaultTab(for role: UserRole) -> AppRoute {

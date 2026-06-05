@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createAdminAccountCreateHandler } from "../api/user/index.js";
+import { createAdminAccountAccessHandler, createAdminAccountCreateHandler } from "../api/user/index.js";
 import type { UserProfile } from "../shared/types.js";
 
 function makeCreateRequest(body: unknown): Request {
   return new Request("http://localhost/api/user?view=account_create", {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-forwarded-for": "203.0.113.44",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function makeAccessRequest(body: unknown): Request {
+  return new Request("http://localhost/api/user?view=account_access", {
+    method: "PATCH",
     headers: {
       "Content-Type": "application/json",
       "x-forwarded-for": "203.0.113.44",
@@ -145,4 +156,74 @@ test("admin account create handler rejects invalid identifiers", async () => {
 
   assert.equal(response.status, 400);
   assert.equal(profileLookups, 0);
+});
+
+test("admin account access handler updates roles even if audit logging is unavailable", async () => {
+  let saved: UserProfile | null = null;
+  const handler = createAdminAccountAccessHandler({
+    getUserProfileFn: async () => ({
+      id: "field.agent@example.com",
+      name: "Field Agent",
+      email: "field.agent@example.com",
+      XP: 10,
+      role: "agent",
+      isAdmin: false,
+      mapScope: "bonamoussadi",
+    }),
+    upsertUserProfileFn: async (_id, profile) => {
+      saved = profile;
+    },
+    logSecurityEventFn: async () => {
+      throw new Error("security_audit_log unavailable");
+    },
+  });
+
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  let response: Response | null = null;
+  try {
+    response = await handler(
+      makeAccessRequest({
+        userId: "field.agent@example.com",
+        role: "admin",
+      }),
+      "ops-admin@example.com",
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(response?.status, 200);
+  assert.equal(saved?.role, "admin");
+  assert.equal(saved?.isAdmin, true);
+  assert.equal(saved?.mapScope, "global");
+
+  const body = (await response?.json()) as UserProfile;
+  assert.equal(body.role, "admin");
+  assert.equal(body.isAdmin, true);
+  assert.equal(body.mapScope, "global");
+});
+
+test("admin account access handler returns a controlled self-edit error", async () => {
+  let upsertCalls = 0;
+  const handler = createAdminAccountAccessHandler({
+    getUserProfileFn: async () => null,
+    upsertUserProfileFn: async () => {
+      upsertCalls += 1;
+    },
+    logSecurityEventFn: async () => {},
+  });
+
+  const response = await handler(
+    makeAccessRequest({
+      userId: "Ops-Admin@Example.com",
+      role: "agent",
+    }),
+    "ops-admin@example.com",
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(upsertCalls, 0);
+  const body = (await response.json()) as { error?: string };
+  assert.match(body.error ?? "", /cannot change their own role/i);
 });

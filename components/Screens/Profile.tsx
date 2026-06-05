@@ -77,8 +77,9 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     return 'bonamoussadi';
   };
   const resolveRole = (user: Pick<UserProfile, 'role' | 'isAdmin'> | null): UserRole => {
+    if (user?.isAdmin) return 'admin';
     if (user?.role === 'admin' || user?.role === 'agent' || user?.role === 'client') return user.role;
-    return user?.isAdmin ? 'admin' : 'agent';
+    return 'agent';
   };
   const roleLabel = (role: UserRole) => {
     if (role === 'admin') return t('Admin', 'Admin');

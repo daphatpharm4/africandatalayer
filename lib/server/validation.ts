@@ -51,6 +51,7 @@ export const submissionInputSchema = z
       .optional(),
     details: z.record(z.string(), z.unknown()).optional(),
     imageBase64: z.string().min(1).max(12_000_000).optional(),
+    imagebase64: z.string().min(1).max(12_000_000).optional(),
     secondImageBase64: z.string().min(1).max(12_000_000).optional(),
     clientExif: z
       .object({
