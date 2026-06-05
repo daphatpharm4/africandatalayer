@@ -513,6 +513,7 @@ struct AuthView: View {
     @State private var smsOptIn = false
     @State private var emailNoticeAccepted = false
     @State private var acceptedTerms = false
+    @State private var showForgotPassword = false
 
     private var title: String {
         mode == .signin
@@ -653,12 +654,16 @@ struct AuthView: View {
                     .padding(.top, 24)
 
                     if mode == .signin {
-                        Button { } label: {
+                        Button { showForgotPassword = true } label: {
                             Text(appState.t("Forgot your password?", "Mot de passe oublié ?"))
                                 .font(ADLFont.inter(13, .semibold))
                                 .foregroundColor(ADLColor.navy)
                         }
                         .padding(.top, 12)
+                        .sheet(isPresented: $showForgotPassword) {
+                            ForgotPasswordView()
+                                .environmentObject(appState)
+                        }
                     }
 
                     // Shield reassurance
@@ -747,6 +752,288 @@ struct AuthView: View {
                 .font(ADLFont.inter(12, .bold))
                 .foregroundColor(ADLColor.navy)
             }
+        }
+    }
+}
+
+// MARK: - Forgot Password flow
+
+struct ForgotPasswordView: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    private enum Step { case request, confirm, done }
+    @State private var step: Step = .request
+    @State private var identifier = ""
+    @State private var token = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var showNewPassword = false
+    @State private var showConfirmPassword = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack(alignment: .topLeading) {
+                ADLColor.paper.ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Header
+                        HStack {
+                            Button { dismiss() } label: {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(ADLColor.ink)
+                                    .frame(width: 44, height: 44)
+                            }
+                            Spacer()
+                            BrandDiamond(size: 24)
+                                .frame(width: 44, height: 44)
+                                .background(Color.white)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .shadow(color: ADLColor.navy.opacity(0.08), radius: 6, x: 0, y: 3)
+                            Spacer()
+                            Color.clear.frame(width: 44, height: 44)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.top, 12)
+
+                        // Title
+                        VStack(spacing: 6) {
+                            Text(appState.t("Reset password", "Réinitialiser le mot de passe"))
+                                .font(ADLFont.inter(24, .heavy))
+                                .tracking(-0.3)
+                                .foregroundColor(ADLColor.ink)
+                            Text(stepSubtitle)
+                                .font(ADLFont.inter(13))
+                                .foregroundColor(ADLColor.inkMuted)
+                                .multilineTextAlignment(.center)
+                                .lineSpacing(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 16)
+                        }
+                        .padding(.top, 20)
+
+                        // Form card
+                        VStack(alignment: .leading, spacing: 16) {
+                            if step == .request {
+                                requestForm
+                            } else if step == .confirm {
+                                confirmForm
+                            } else {
+                                doneView
+                            }
+
+                            // Error / info banners
+                            if let err = appState.resetError {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "exclamationmark.circle.fill")
+                                        .font(.system(size: 14))
+                                    Text(err)
+                                        .font(ADLFont.inter(13))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .foregroundColor(ADLColor.terracotta)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(ADLColor.terraWash)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            if let info = appState.resetInfo {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 14))
+                                    Text(info)
+                                        .font(ADLFont.inter(13))
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                .foregroundColor(ADLColor.forest)
+                                .padding(12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(ADLColor.forestWash)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                        }
+                        .padding(20)
+                        .background(Color.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: ADLColor.navy.opacity(0.06), radius: 12, x: 0, y: 4)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 24)
+
+                        // Back to sign in
+                        Button { dismiss() } label: {
+                            Text(appState.t("Back to sign in", "Retour à la connexion"))
+                                .font(ADLFont.inter(13, .semibold))
+                                .foregroundColor(ADLColor.navy)
+                                .underline()
+                        }
+                        .padding(.top, 20)
+                        .padding(.bottom, 40)
+                    }
+                    .frame(maxWidth: 440)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 4)
+                }
+            }
+            .toolbar(.hidden, for: .navigationBar)
+        }
+        .onDisappear {
+            appState.resetError = nil
+            appState.resetInfo = nil
+        }
+    }
+
+    private var stepSubtitle: String {
+        switch step {
+        case .request:
+            return appState.t(
+                "Enter the phone or email tied to your account. We'll send a reset code.",
+                "Entrez le téléphone ou e-mail lié à votre compte. Nous enverrons un code."
+            )
+        case .confirm:
+            return appState.t(
+                "Enter the code from your email or SMS, then choose a new password.",
+                "Entrez le code reçu par email ou SMS, puis choisissez un nouveau mot de passe."
+            )
+        case .done:
+            return appState.t(
+                "Your password has been updated.",
+                "Votre mot de passe a été mis à jour."
+            )
+        }
+    }
+
+    // MARK: Step 1 – request
+
+    private var requestForm: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(appState.t("Phone or email", "Téléphone ou e-mail"))
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.ink)
+            ADLInputField(
+                icon: "envelope",
+                placeholder: appState.t("+237699000000 or you@example.com", "+237699000000 ou vous@exemple.com"),
+                text: $identifier,
+                isSecure: false,
+                keyboard: .emailAddress
+            )
+
+            Button {
+                Task { await submitRequest() }
+            } label: {
+                HStack(spacing: 8) {
+                    if appState.isResetting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(appState.t("Send reset code", "Envoyer le code"))
+                            .font(ADLFont.inter(15, .semibold))
+                        Image(systemName: "arrow.right").font(.system(size: 16, weight: .bold))
+                    }
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(appState.isResetting)
+        }
+    }
+
+    // MARK: Step 2 – confirm
+
+    private var confirmForm: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(appState.t("Reset code", "Code de réinitialisation"))
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.ink)
+            ADLInputField(
+                icon: "number",
+                placeholder: appState.t("Code from email / SMS", "Code reçu par email / SMS"),
+                text: $token,
+                isSecure: false,
+                keyboard: .default
+            )
+
+            Text(appState.t("New password", "Nouveau mot de passe"))
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.ink)
+            ADLInputField(
+                icon: "lock",
+                placeholder: appState.t("At least 8 characters", "Au moins 8 caractères"),
+                text: $newPassword,
+                isSecure: !showNewPassword,
+                keyboard: .default,
+                trailingToggle: { showNewPassword.toggle() },
+                trailingIcon: showNewPassword ? "eye.slash" : "eye"
+            )
+
+            Text(appState.t("Confirm password", "Confirmer le mot de passe"))
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.ink)
+            ADLInputField(
+                icon: "lock",
+                placeholder: appState.t("Re-enter new password", "Saisissez à nouveau"),
+                text: $confirmPassword,
+                isSecure: !showConfirmPassword,
+                keyboard: .default,
+                trailingToggle: { showConfirmPassword.toggle() },
+                trailingIcon: showConfirmPassword ? "eye.slash" : "eye"
+            )
+
+            Button {
+                Task { await submitConfirm() }
+            } label: {
+                HStack(spacing: 8) {
+                    if appState.isResetting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text(appState.t("Update password", "Mettre à jour le mot de passe"))
+                            .font(ADLFont.inter(15, .semibold))
+                        Image(systemName: "checkmark").font(.system(size: 16, weight: .bold))
+                    }
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .disabled(appState.isResetting)
+        }
+    }
+
+    // MARK: Step 3 – done
+
+    private var doneView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "checkmark.seal.fill")
+                .font(.system(size: 40))
+                .foregroundColor(ADLColor.forest)
+            Text(appState.t(
+                "Password updated. You can now sign in with your new password.",
+                "Mot de passe mis à jour. Vous pouvez vous connecter avec votre nouveau mot de passe."
+            ))
+            .font(ADLFont.inter(14))
+            .foregroundColor(ADLColor.ink)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+
+            Button { dismiss() } label: {
+                Text(appState.t("Back to sign in", "Retour à la connexion"))
+                    .font(ADLFont.inter(15, .semibold))
+            }
+            .buttonStyle(PrimaryButtonStyle())
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: Actions
+
+    private func submitRequest() async {
+        await appState.requestPasswordReset(identifier: identifier)
+        if appState.resetInfo != nil {
+            withAnimation { step = .confirm }
+        }
+    }
+
+    private func submitConfirm() async {
+        await appState.confirmPasswordReset(token: token, password: newPassword, confirmPassword: confirmPassword)
+        if appState.resetInfo != nil {
+            withAnimation { step = .done }
         }
     }
 }

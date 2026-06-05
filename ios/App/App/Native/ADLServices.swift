@@ -50,6 +50,61 @@ final class AppState: ObservableObject {
     @Published var isLoadingReview = false
     @Published var reviewError: String?
 
+    // MARK: - Forgot Password (africandatalayer-955)
+    @Published var resetError: String?
+    @Published var resetInfo: String?
+    @Published var isResetting = false
+
+    func requestPasswordReset(identifier: String) async {
+        let normalized = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.count >= 3 else {
+            resetError = t("Enter a valid phone or email.", "Entrez un téléphone ou e-mail valide.")
+            return
+        }
+        isResetting = true
+        resetError = nil
+        resetInfo = nil
+        defer { isResetting = false }
+        do {
+            try await apiClient.requestPasswordReset(identifier: normalized)
+            resetInfo = t(
+                "If an account exists for this contact, a reset code has been sent. Check your email or SMS.",
+                "Si un compte existe pour ce contact, un code de réinitialisation a été envoyé. Vérifiez votre email ou SMS."
+            )
+        } catch {
+            resetError = (error as? APIError)?.message ?? t("Something went wrong. Try again.", "Une erreur est survenue. Réessayez.")
+        }
+    }
+
+    func confirmPasswordReset(token: String, password: String, confirmPassword: String) async {
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedToken.isEmpty else {
+            resetError = t("Enter the code from your email or SMS.", "Entrez le code reçu par email ou SMS.")
+            return
+        }
+        guard password.count >= 8 else {
+            resetError = t("Password must be at least 8 characters.", "Le mot de passe doit contenir au moins 8 caractères.")
+            return
+        }
+        guard password == confirmPassword else {
+            resetError = t("Passwords do not match.", "Les mots de passe ne correspondent pas.")
+            return
+        }
+        isResetting = true
+        resetError = nil
+        resetInfo = nil
+        defer { isResetting = false }
+        do {
+            try await apiClient.confirmPasswordReset(token: trimmedToken, password: password)
+            resetInfo = t(
+                "Password updated. You can now sign in with your new password.",
+                "Mot de passe mis à jour. Vous pouvez vous connecter avec votre nouveau mot de passe."
+            )
+        } catch {
+            resetError = (error as? APIError)?.message ?? t("Reset code is invalid or expired.", "Le code de réinitialisation est invalide ou expiré.")
+        }
+    }
+
     // MARK: - Assignments (africandatalayer-955)
     @Published var assignments: [CollectionAssignment] = []
     @Published var assignmentsContext: AssignmentPlannerContext = AssignmentPlannerContext(zones: [], agents: [])
@@ -827,6 +882,33 @@ final class ADLAPIClient {
             acceptedPolicies: ["privacy", "terms"],
             smsOptIn: smsOptIn ? true : nil
         ))
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    func requestPasswordReset(identifier: String) async throws {
+        struct ResetRequestBody: Encodable {
+            let action: String
+            let identifier: String
+        }
+        var request = URLRequest(url: url(path: "/api/auth/register"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(ResetRequestBody(action: "password-reset-request", identifier: identifier))
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
+    func confirmPasswordReset(token: String, password: String) async throws {
+        struct ResetConfirmBody: Encodable {
+            let action: String
+            let token: String
+            let password: String
+        }
+        var request = URLRequest(url: url(path: "/api/auth/register"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(ResetConfirmBody(action: "password-reset-confirm", token: token, password: password))
         let (data, response) = try await urlSession.data(for: request)
         try validate(response: response, data: data)
     }
