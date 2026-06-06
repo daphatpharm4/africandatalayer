@@ -1273,8 +1273,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 role="tab"
                 aria-selected={activeMode === mode}
                 onClick={() => openMode(mode)}
-                className={`h-12 rounded-2xl px-2 sm:px-3 text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-colors ${focusRingClass} ${
-                  activeMode === mode ? 'bg-navy text-white shadow-sm' : 'bg-page text-gray-600 border border-gray-100'
+                className={`h-12 rounded-2xl border px-2 sm:px-3 text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-colors ${focusRingClass} ${
+                  activeMode === mode ? 'border-navy bg-navy text-white shadow-sm' : 'border-gray-100 bg-page text-gray-600'
                 }`}
               >
                 {label}
