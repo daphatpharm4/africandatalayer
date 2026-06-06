@@ -522,6 +522,10 @@ export async function PUT(request: Request): Promise<Response> {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
+    const message = error instanceof Error ? error.message.toLowerCase() : "";
+    if (message.includes("blob") && message.includes("token")) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
     throw error;
   }
 }
