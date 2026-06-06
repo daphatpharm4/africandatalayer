@@ -74,6 +74,29 @@ export interface AdminReviewSortFields {
   riskScore: number;
 }
 
+export interface AdminReviewQueueRequestOptions {
+  page: number;
+  limit: number;
+  riskFilter: AdminRiskFilter;
+  userFilter?: string;
+  scope?: "global" | "cameroon" | "bonamoussadi";
+}
+
+export interface AdminBulkApprovePlan {
+  targetGroups: AdminSubmissionGroup[];
+  eventIds: string[];
+  consideredCount: number;
+  skippedFinalizedCount: number;
+  skippedIneligibleCount: number;
+  skippedCount: number;
+  hasExplicitSelection: boolean;
+}
+
+export interface AdminBulkApproveRequestBody {
+  eventIds: string[];
+  decision: "approved";
+}
+
 const DEFAULT_REVIEW_STATS: AdminReviewQueueStats = {
   all: 0,
   flagged: 0,
@@ -165,6 +188,91 @@ export function getAdminRiskBucketFromDetails(details: SubmissionDetails | Recor
   const riskScore = getAdminRiskScoreFromDetails(details);
   const reviewStatus = getAdminReviewStatusFromDetails(details);
   return getAdminRiskBucket(riskScore, reviewStatus);
+}
+
+export function buildAdminReviewQueueRequestPath(options: AdminReviewQueueRequestOptions): string {
+  const page = Number.isFinite(options.page) && options.page > 0 ? Math.floor(options.page) : 1;
+  const limit = Number.isFinite(options.limit) && options.limit > 0 ? Math.floor(options.limit) : 24;
+  const params = new URLSearchParams({
+    view: "review_queue",
+    scope: options.scope ?? "global",
+    page: String(page),
+    limit: String(limit),
+  });
+  if (options.riskFilter !== "all") params.set("risk", options.riskFilter);
+  const userFilter = options.userFilter?.trim() ?? "";
+  if (userFilter) params.set("userId", userFilter);
+  return `/api/submissions?${params.toString()}`;
+}
+
+export function isAdminBulkApproveCandidate(input: {
+  riskBucket: AdminRiskBucket;
+  details: SubmissionDetails | Record<string, unknown> | null | undefined;
+}): boolean {
+  const finality = getReviewFinality(input.details);
+  if (finality.state !== "pending") return false;
+  if (getAdminReviewStatusFromDetails(input.details) !== "pending_review") return false;
+  return input.riskBucket !== "flagged";
+}
+
+export function isAdminSubmissionGroupBulkApprovable(group: AdminSubmissionGroup): boolean {
+  return isAdminBulkApproveCandidate({
+    riskBucket: group.summary.riskBucket,
+    details: group.latestEvent.event.details,
+  });
+}
+
+export function buildAdminBulkApprovePlan(
+  groups: AdminSubmissionGroup[],
+  selectedPointIds: ReadonlySet<string>,
+): AdminBulkApprovePlan {
+  const hasExplicitSelection = selectedPointIds.size > 0;
+  const consideredGroups = hasExplicitSelection ? groups.filter((group) => selectedPointIds.has(group.pointId)) : [];
+  const targetGroups: AdminSubmissionGroup[] = [];
+  let skippedFinalizedCount = 0;
+  let skippedIneligibleCount = 0;
+
+  for (const group of consideredGroups) {
+    const finality = getReviewFinality(group.latestEvent.event.details);
+    if (finality.isFinalized) {
+      skippedFinalizedCount += 1;
+      continue;
+    }
+    if (!isAdminSubmissionGroupBulkApprovable(group)) {
+      skippedIneligibleCount += 1;
+      continue;
+    }
+    targetGroups.push(group);
+  }
+
+  return {
+    targetGroups,
+    eventIds: targetGroups.map((group) => group.latestEvent.event.id),
+    consideredCount: consideredGroups.length,
+    skippedFinalizedCount,
+    skippedIneligibleCount,
+    skippedCount: skippedFinalizedCount + skippedIneligibleCount,
+    hasExplicitSelection,
+  };
+}
+
+export function buildAdminBulkApproveRequestBody(
+  plan: Pick<AdminBulkApprovePlan, "eventIds">,
+): AdminBulkApproveRequestBody {
+  return {
+    eventIds: plan.eventIds,
+    decision: "approved",
+  };
+}
+
+export function pruneAdminBulkSelection(
+  groups: AdminSubmissionGroup[],
+  selectedPointIds: ReadonlySet<string>,
+): Set<string> {
+  const eligibleIds = new Set(
+    groups.filter(isAdminSubmissionGroupBulkApprovable).map((group) => group.pointId),
+  );
+  return new Set([...selectedPointIds].filter((id) => eligibleIds.has(id)));
 }
 
 export function compareAdminReviewSort(a: AdminReviewSortFields, b: AdminReviewSortFields): number {
@@ -309,7 +417,7 @@ export function buildAdminSubmissionGroups(items: AdminSubmissionEvent[]): Admin
 }
 
 export function buildAdminReviewStatsFromPoints(
-  points: Array<{ riskScore: number; reviewStatus: string }>,
+  points: Array<{ riskScore: number; reviewStatus: string; details?: SubmissionDetails | Record<string, unknown> | null }>,
 ): AdminReviewQueueStats {
   const stats = createEmptyAdminReviewStats();
   stats.all = points.length;
@@ -319,7 +427,12 @@ export function buildAdminReviewStatsFromPoints(
     if (bucket === "flagged") stats.flagged += 1;
     if (bucket === "pending") stats.pending += 1;
     if (bucket === "low_risk") stats.lowRisk += 1;
-    if ((bucket === "pending" || bucket === "low_risk") && point.reviewStatus === "pending_review") {
+    if (
+      isAdminBulkApproveCandidate({
+        riskBucket: bucket,
+        details: point.details ?? { reviewStatus: point.reviewStatus },
+      })
+    ) {
       stats.eligible += 1;
     }
   }

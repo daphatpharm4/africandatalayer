@@ -1,6 +1,11 @@
 import { requireUser } from "../../lib/auth.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
-import { applyReviewDecision, type ReviewDecision } from "../../lib/server/reviewDecision.js";
+import {
+  applyReviewDecision,
+  ReviewDecisionSkippedError,
+  type BatchApproveSkipReason,
+  type ReviewDecision,
+} from "../../lib/server/reviewDecision.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { captureServerException } from "../../lib/server/sentry.js";
 import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
@@ -10,8 +15,9 @@ import { batchReviewBodySchema } from "../../lib/server/validation.js";
 interface BatchReviewResultItem {
   eventId: string;
   decision: ReviewDecision;
-  status: "ok" | "error";
+  status: "ok" | "error" | "skipped";
   error?: string;
+  skippedReason?: BatchApproveSkipReason;
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -46,6 +52,7 @@ export async function POST(request: Request): Promise<Response> {
         reviewerId: auth.id,
         decision,
         notes,
+        enforceBulkApprovalEligibility: decision === "approved",
       });
 
       await logSecurityEvent({
@@ -73,11 +80,23 @@ export async function POST(request: Request): Promise<Response> {
 
       results.push({ eventId, decision, status: "ok" });
     } catch (error) {
+      if (error instanceof ReviewDecisionSkippedError) {
+        results.push({
+          eventId,
+          decision,
+          status: "skipped",
+          error: error.message,
+          skippedReason: error.reason,
+        });
+        continue;
+      }
+
       const message = error instanceof Error ? error.message : "Unknown error";
       captureServerException(error, { route: "batch_review_post", eventId });
       results.push({ eventId, decision, status: "error", error: message });
     }
   }
 
-  return jsonResponse({ results }, { status: 200 });
+  const skippedCount = results.filter((result) => result.status === "skipped").length;
+  return jsonResponse({ results, skippedCount }, { status: 200 });
 }

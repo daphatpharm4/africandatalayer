@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getBatchApproveSkipReason, ReviewDecisionSkippedError } from "../lib/server/reviewDecision.js";
 
 test("applyReviewDecision module exports the function", async () => {
   const mod = await import("../lib/server/reviewDecision.js");
@@ -56,4 +57,26 @@ test("batchReviewBodySchema accepts optional notes", async () => {
 test("batch-review module exports POST handler", async () => {
   const mod = await import("../api/submissions/batch-review.js");
   assert.equal(typeof mod.POST, "function");
+});
+
+test("batch approve server guard derives skip reasons from stored details", () => {
+  assert.equal(getBatchApproveSkipReason({ reviewStatus: "pending_review", riskScore: 20 }), null);
+  assert.equal(
+    getBatchApproveSkipReason({
+      reviewStatus: "pending_review",
+      riskScore: 20,
+      reviewDecision: "approved",
+      reviewedAt: "2026-06-06T00:00:00.000Z",
+    }),
+    "already_finalized",
+  );
+  assert.equal(getBatchApproveSkipReason({ reviewStatus: "pending_review", riskScore: 80 }), "high_risk");
+  assert.equal(getBatchApproveSkipReason({ reviewStatus: "flagged", riskScore: 20 }), "ineligible");
+});
+
+test("ReviewDecisionSkippedError carries a skipped reason for batch response mapping", () => {
+  const error = new ReviewDecisionSkippedError("event-1", "high_risk");
+  assert.equal(error.eventId, "event-1");
+  assert.equal(error.reason, "high_risk");
+  assert.match(error.message, /high risk/);
 });

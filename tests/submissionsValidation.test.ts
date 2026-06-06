@@ -8,6 +8,7 @@ import {
   listCreateMissingFields,
   listMissingFields,
 } from '../lib/server/pointProjection.js';
+import { stripServerOwnedSubmissionDetails } from '../lib/server/submissionDetails.js';
 import { isValidCategory, getVertical, categoryLabel, VERTICAL_IDS } from '../shared/verticals.js';
 
 test('strict Bonamoussadi geofence rejects out-of-bounds points', () => {
@@ -43,6 +44,40 @@ test('filterEnrichDetails keeps updates to already filled enrichable fields', ()
       isOpenNow: false,
     },
   );
+});
+
+test('stripServerOwnedSubmissionDetails removes review and risk metadata from contributor details', () => {
+  const stripped = stripServerOwnedSubmissionDetails({
+    name: 'Pharmacie Makepe',
+    reviewStatus: 'auto_approved',
+    reviewDecision: 'approved',
+    reviewedAt: '2026-06-06T00:00:00.000Z',
+    reviewedBy: 'admin-1',
+    riskScore: 0,
+    reviewFlags: [],
+    riskComponents: { locationRisk: 0 },
+    imageSha256: 'spoof',
+    contentHash: 'spoof',
+    xpAwarded: 100,
+    confidenceScore: 100,
+    fraudCheck: {
+      submissionLocation: null,
+      effectiveLocation: { latitude: 4.086, longitude: 9.74 },
+      ipLocation: null,
+      primaryPhoto: null,
+      secondaryPhoto: null,
+      submissionMatchThresholdKm: 1,
+      ipMatchThresholdKm: 50,
+    },
+    clientDevice: { deviceId: 'device-1' },
+    consentStatus: 'obtained',
+  });
+
+  assert.deepEqual(stripped, {
+    name: 'Pharmacie Makepe',
+    clientDevice: { deviceId: 'device-1' },
+    consentStatus: 'obtained',
+  });
 });
 
 test('gap computation for pharmacy marks missing opening hours by default', () => {

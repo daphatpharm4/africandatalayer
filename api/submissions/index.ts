@@ -65,6 +65,7 @@ import {
 } from "../../lib/server/submissionFraud.js";
 import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
 import { getTrustTier } from "../../lib/server/userTrust.js";
+import { stripServerOwnedSubmissionDetails } from "../../lib/server/submissionDetails.js";
 import { submissionInputSchema } from "../../lib/server/validation.js";
 import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon, mapScopeBbox } from "../../shared/geofence.js";
 import type {
@@ -707,6 +708,7 @@ export async function GET(request: Request): Promise<Response> {
         pointSummaries.map((summary) => ({
           riskScore: summary.riskScore,
           reviewStatus: summary.reviewStatus,
+          details: summary.latestEvent.details,
         })),
       );
 
@@ -890,10 +892,10 @@ export async function POST(request: Request): Promise<Response> {
   const location = parseLocation(body?.location);
   const consentStatus = normalizeConsentStatus(body.consentStatus) ?? "not_required";
   const consentRecordedAt = body.consentRecordedAt ?? new Date().toISOString();
-  let details = normalizeEnrichPayload(
+  let details = stripServerOwnedSubmissionDetails(normalizeEnrichPayload(
     category,
     body?.details && typeof body.details === "object" ? ({ ...(body.details as SubmissionDetails) } as SubmissionDetails) : {},
-  );
+  ));
   if (consentStatus === "refused_pii_only") {
     details = {
       ...stripPiiDetails(details),
@@ -1119,6 +1121,8 @@ export async function POST(request: Request): Promise<Response> {
         details.clientDevice = clientDevice;
       }
     }
+
+    details = stripServerOwnedSubmissionDetails(details);
 
     let riskEvaluation;
     try {

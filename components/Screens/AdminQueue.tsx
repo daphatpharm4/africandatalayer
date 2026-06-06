@@ -16,15 +16,23 @@ import TrustBadge, { type TrustTier as TrustBadgeTier } from '../shared/TrustBad
 import VerticalIcon from '../shared/VerticalIcon';
 import FilterChipRow from '../shared/FilterChipRow';
 import CommunicationsPanel from './CommunicationsPanel';
+import {
+  ADMIN_REVIEW_PAGE_LIMIT,
+  buildAdminQueueBatchApproveRequest,
+  buildAdminQueueReviewRequestPath,
+} from '../../lib/client/adminQueueApi';
 import { apiJson } from '../../lib/client/api';
 import { getAiReviewSummary } from '../../lib/client/ai';
 import { fetchIpReports, updateIpReport } from '../../lib/client/legal';
 import type { IpReport } from '../../shared/types';
 import { clearSyncErrorRecords, listSyncErrorRecords, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import {
+  buildAdminBulkApprovePlan,
   buildAdminSubmissionGroups,
   createEmptyAdminReviewStats,
   getReviewFinality,
+  isAdminSubmissionGroupBulkApprovable,
+  pruneAdminBulkSelection,
   type AdminReviewQueueResponse,
   type AdminRiskFilter,
   type AdminSubmissionGroup,
@@ -60,10 +68,6 @@ type AiReviewSummaryDisplay = Pick<
   'summary' | 'recommendedChecks' | 'riskDrivers' | 'supportingEvidence' | 'caveats' | 'agentFeedbackDraft' | 'confidence'
 >;
 
-type ViewTransitionDocument = Document & {
-  startViewTransition?: (callback: () => void) => void;
-};
-
 const DEFAULT_ASSIGNMENT_STATUS: CollectionAssignment['status'] = 'pending';
 const ASSIGNMENT_STATUSES: CollectionAssignment['status'][] = ['pending', 'in_progress', 'completed', 'expired'];
 const ASSIGNABLE_VERTICALS = VERTICAL_IDS as SubmissionCategory[];
@@ -78,7 +82,7 @@ const AUTOMATION_LEAD_STATUSES: AutomationLeadStatus[] = [
   'rejected_out_of_zone',
 ];
 const AUTOMATION_PRIORITIES: AutomationLeadPriority[] = ['high', 'medium', 'low'];
-const REVIEW_PAGE_LIMIT = 24;
+const REVIEW_PAGE_LIMIT = ADMIN_REVIEW_PAGE_LIMIT;
 const AUTOMATION_LEADS_PAGE_SIZE = 50;
 const focusRingClass =
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy focus-visible:ring-offset-2 focus-visible:ring-offset-page';
@@ -254,24 +258,6 @@ function automationStatusClass(status: AutomationLeadStatus): string {
 }
 
 function runViewTransition(callback: () => void) {
-  if (typeof document === 'undefined') {
-    startTransition(callback);
-    return;
-  }
-
-  if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    startTransition(callback);
-    return;
-  }
-
-  const doc = document as ViewTransitionDocument;
-  if (typeof doc.startViewTransition === 'function') {
-    doc.startViewTransition(() => {
-      startTransition(callback);
-    });
-    return;
-  }
-
   startTransition(callback);
 }
 
@@ -469,15 +455,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     setAiReviewError('');
     setAiReviewLoading(false);
   }, [selectedGroup?.latestEvent.event.id]);
-  const eligibleGroups = useMemo(
-    () =>
-      reviewData.groups.filter(
-        (group) =>
-          (group.summary.riskBucket === 'pending' || group.summary.riskBucket === 'low_risk')
-          && group.summary.reviewStatus === 'pending_review',
-      ),
-    [reviewData.groups],
-  );
+  const eligibleGroups = useMemo(() => reviewData.groups.filter(isAdminSubmissionGroupBulkApprovable), [reviewData.groups]);
   const selectedPageLabel = useMemo(() => {
     if (reviewData.totalGroups === 0) return t('No groups', 'Aucun groupe');
     const start = (reviewData.page - 1) * reviewData.limit + 1;
@@ -531,16 +509,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
       setReviewError('');
     }
 
-    const params = new URLSearchParams({
-      view: 'review_queue',
-      scope: 'global',
-      page: String(page),
-      limit: String(REVIEW_PAGE_LIMIT),
-    });
-    if (riskFilter !== 'all') params.set('risk', riskFilter);
-    if (userFilter) params.set('userId', userFilter);
-
-    const data = await apiJson<AdminReviewQueueResponse>(`/api/submissions?${params.toString()}`);
+    const data = await apiJson<AdminReviewQueueResponse>(buildAdminQueueReviewRequestPath(page, riskFilter, userFilter));
     reviewCacheRef.current.set(key, data);
 
     if (!options.background) {
@@ -700,7 +669,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   }, [activeMode, automationStatusFilter, automationPriorityFilter, automationCategoryFilter, automationSourceFilter, automationLeadsOffset]);
 
   useEffect(() => {
-    setSelectedForBulk((prev) => new Set([...prev].filter((id) => reviewData.groups.some((group) => group.pointId === id))));
+    setSelectedForBulk((prev) => pruneAdminBulkSelection(reviewData.groups, prev));
   }, [reviewData.groups]);
 
   useEffect(() => {
@@ -882,11 +851,15 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     }
   };
 
-  const toggleBulkItem = (pointId: string) => {
+  const toggleBulkItem = (group: AdminSubmissionGroup) => {
     setSelectedForBulk((prev) => {
       const next = new Set(prev);
-      if (next.has(pointId)) next.delete(pointId);
-      else next.add(pointId);
+      if (!isAdminSubmissionGroupBulkApprovable(group)) {
+        next.delete(group.pointId);
+        return next;
+      }
+      if (next.has(group.pointId)) next.delete(group.pointId);
+      else next.add(group.pointId);
       return next;
     });
   };
@@ -903,20 +876,36 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
   const handleBulkApprove = async () => {
     if (isApplyingDecision) return;
 
-    const targetGroups =
-      selectedForBulk.size > 0
-        ? reviewData.groups.filter(
-            (group) => selectedForBulk.has(group.pointId) && group.summary.reviewStatus === 'pending_review',
-          )
-        : eligibleGroups;
+    const plan = buildAdminBulkApprovePlan(reviewData.groups, selectedForBulk);
+    const targetGroups = plan.targetGroups;
 
     if (targetGroups.length === 0) {
-      setActionMessage(t('No pending groups to approve.', 'Aucun groupe en attente à approuver.'));
+      setActionMessage(
+        plan.skippedCount > 0
+          ? t(
+              `No eligible selected groups to approve. ${plan.skippedCount} skipped.`,
+              `Aucun groupe sélectionné éligible à approuver. ${plan.skippedCount} ignorés.`,
+            )
+          : t(
+              'Select at least one eligible submission to approve.',
+              'Sélectionnez au moins une soumission éligible à approuver.',
+            ),
+      );
       return;
     }
 
+    const skippedConfirmText =
+      plan.skippedCount > 0
+        ? t(
+            ` ${plan.skippedCount} selected item(s) will be skipped.`,
+            ` ${plan.skippedCount} élément(s) sélectionné(s) seront ignorés.`,
+          )
+        : '';
     const confirmed = window.confirm(
-      t(`Approve ${targetGroups.length} visible submissions?`, `Approuver ${targetGroups.length} soumissions visibles ?`),
+      t(
+        `Approve ${targetGroups.length} low-risk submission(s)?${skippedConfirmText}`,
+        `Approuver ${targetGroups.length} soumission(s) à faible risque ?${skippedConfirmText}`,
+      ),
     );
     if (!confirmed) return;
 
@@ -924,19 +913,17 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
     setDeleteError('');
     try {
       setIsApplyingDecision(true);
-      const eventIds = targetGroups.map((group) => group.latestEvent.event.id);
+      const batchRequest = buildAdminQueueBatchApproveRequest(plan);
       const response = await apiJson<{
-        results: Array<{ eventId: string; decision: ReviewDecision; status: 'ok' | 'error'; error?: string }>;
-      }>('/api/submissions/batch-review', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ eventIds, decision: 'approved' }),
-      });
+        results: Array<{ eventId: string; decision: ReviewDecision; status: 'ok' | 'error' | 'skipped'; error?: string }>;
+        skippedCount?: number;
+      }>(batchRequest.path, batchRequest.init);
 
       const groupNameByEventId = new Map(
         targetGroups.map((group) => [group.latestEvent.event.id, group.siteName ?? unnamedLabel] as const),
       );
       let okCount = 0;
+      let serverSkippedCount = 0;
       const failedNames: string[] = [];
 
       for (const result of response.results ?? []) {
@@ -945,21 +932,33 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
           okCount += 1;
           continue;
         }
+        if (result.status === 'skipped') {
+          serverSkippedCount += 1;
+          continue;
+        }
         const siteName = groupNameByEventId.get(result.eventId);
         if (siteName) failedNames.push(siteName);
       }
+      const skippedCount = plan.skippedCount + Math.max(serverSkippedCount, response.skippedCount ?? 0);
 
       reviewCacheRef.current.clear();
       void fetchReviewQueue(reviewPage, { force: true, background: true });
       setSelectedForBulk(new Set());
 
       if (failedNames.length === 0) {
-        setActionMessage(t(`${okCount} group(s) approved.`, `${okCount} groupe(s) approuvés.`));
+        setActionMessage(
+          skippedCount > 0
+            ? t(
+                `${okCount} approved, ${skippedCount} skipped.`,
+                `${okCount} approuvés, ${skippedCount} ignorés.`,
+              )
+            : t(`${okCount} group(s) approved.`, `${okCount} groupe(s) approuvés.`),
+        );
       } else {
         setActionMessage(
           t(
-            `${okCount} approved, ${failedNames.length} failed. Failed: ${failedNames.join(', ')}`,
-            `${okCount} approuvés, ${failedNames.length} échecs. Échecs : ${failedNames.join(', ')}`,
+            `${okCount} approved, ${failedNames.length} failed, ${skippedCount} skipped. Failed: ${failedNames.join(', ')}`,
+            `${okCount} approuvés, ${failedNames.length} échecs, ${skippedCount} ignorés. Échecs : ${failedNames.join(', ')}`,
           ),
         );
       }
@@ -1271,7 +1270,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 role="tab"
                 aria-selected={activeMode === mode}
                 onClick={() => openMode(mode)}
-                className={`h-11 rounded-2xl px-2 sm:px-3 text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-all ${focusRingClass} ${
+                className={`h-12 rounded-2xl px-2 sm:px-3 text-[10px] sm:text-xs font-bold uppercase tracking-wider sm:tracking-widest transition-colors ${focusRingClass} ${
                   activeMode === mode ? 'bg-navy text-white shadow-sm' : 'bg-page text-gray-600 border border-gray-100'
                 }`}
               >
@@ -1299,14 +1298,14 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     type="button"
                     onClick={() => goToPage(reviewData.page - 1)}
                     disabled={reviewData.page <= 1}
-                    className={`h-10 w-10 rounded-2xl border ${focusRingClass} ${
+                    className={`h-12 w-12 rounded-2xl border ${focusRingClass} ${
                       reviewData.page <= 1 ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
                     }`}
                     aria-label={t('Previous review page', 'Page précédente')}
                   >
                     <ChevronLeft size={16} className="mx-auto" />
                   </button>
-                  <div className="rounded-2xl bg-white/85 border border-white px-2 sm:px-3 py-2 text-center min-w-[80px] sm:min-w-[110px]">
+                  <div className="flex min-h-12 min-w-[80px] flex-col justify-center rounded-2xl border border-white bg-white/85 px-2 py-2 text-center sm:min-w-[110px] sm:px-3">
                     <div className="micro-label text-gray-400">{t('Page window', 'Fenêtre page')}</div>
                     <div className="text-sm font-bold text-gray-900">{selectedPageLabel}</div>
                   </div>
@@ -1314,7 +1313,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     type="button"
                     onClick={() => goToPage(reviewData.page + 1)}
                     disabled={reviewData.page >= reviewData.totalPages}
-                    className={`h-10 w-10 rounded-2xl border ${focusRingClass} ${
+                    className={`h-12 w-12 rounded-2xl border ${focusRingClass} ${
                       reviewData.page >= reviewData.totalPages ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
                     }`}
                     aria-label={t('Next review page', 'Page suivante')}
@@ -1353,7 +1352,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     <button
                       type="button"
                       onClick={selectAllEligible}
-                      className={`h-10 rounded-2xl px-3 micro-label bg-gray-50 text-gray-600 border border-gray-100 ${focusRingClass}`}
+                      className={`h-12 rounded-2xl px-3 micro-label bg-gray-50 text-gray-600 border border-gray-100 ${focusRingClass}`}
                     >
                       {t('Select eligible', 'Sélectionner éligibles')}
                     </button>
@@ -1361,15 +1360,13 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       type="button"
                       onClick={handleBulkApprove}
                       disabled={isApplyingDecision}
-                      className={`h-10 rounded-2xl px-4 micro-label ${focusRingClass} ${
+                      className={`h-12 rounded-2xl px-4 micro-label ${focusRingClass} ${
                         isApplyingDecision ? 'bg-gray-100 text-gray-400' : 'bg-navy text-white'
                       }`}
                     >
                       {isApplyingDecision
                         ? t('Approving...', 'Approbation...')
-                        : selectedForBulk.size > 0
-                          ? `${t('Approve selected', 'Approuver sélection')} (${selectedForBulk.size})`
-                          : `${t('Approve eligible', 'Approuver éligibles')} (${eligibleGroups.length})`}
+                        : `${t('Approve selected', 'Approuver sélection')} (${selectedForBulk.size})`}
                     </button>
                   </div>
                   <div className="text-[11px] text-gray-500">
@@ -1387,6 +1384,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     ]}
                     active={riskFilter}
                     onChange={changeRiskFilter}
+                    className="[&_.chip]:min-h-12"
                   />
                 </div>
 
@@ -1398,8 +1396,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   <select
                     value={userFilter}
                     onChange={(event) => changeUserFilter(event.target.value)}
-                    className={`h-10 rounded-xl border micro-label bg-page text-gray-600 border-gray-100 px-3 ${focusRingClass}`}
-                    aria-label={t('Filter by reviewer', 'Filtrer par relecteur')}
+                    className={`h-12 w-full min-w-0 rounded-xl border micro-label bg-page text-gray-600 border-gray-100 px-3 ${focusRingClass}`}
+                    aria-label={t('Filter by agent', 'Filtrer par agent')}
                   >
                     <option value="">{t('All agents', 'Tous les agents')}</option>
                     {reviewData.reviewers.map((user) => (
@@ -1535,6 +1533,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                     const contributors = [...new Set(group.events.map((event) => event.user.name))];
                     const gpsChipTone = group.summary.hasSubmissionMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200';
                     const ipChipTone = group.summary.hasIpMismatch ? 'bg-terra-wash text-terra border-terra-wash' : 'bg-gray-100 text-gray-600 border-gray-200';
+                    const isBulkEligible = isAdminSubmissionGroupBulkApprovable(group);
 
                     // Map riskBucket → RiskBadge level
                     const riskLevel: RiskLevel =
@@ -1562,14 +1561,40 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         className={`card border-l-4 ${queueAccentClass(group)} ${isSelected ? 'ring-2 ring-navy ring-offset-2 ring-offset-page' : ''}`}
                       >
                         <div className="flex gap-3 p-3">
-                          <div className="flex items-start pt-1">
+                          <div className="flex items-start">
+                            <label
+                              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${focusRingClass} ${
+                                isBulkEligible
+                                  ? selectedForBulk.has(group.pointId)
+                                    ? 'border-navy bg-navy-wash'
+                                    : 'border-gray-100 bg-gray-50'
+                                  : 'cursor-not-allowed border-gray-100 bg-gray-100 opacity-60'
+                              }`}
+                            >
+                              <span className="sr-only">
+                                {isBulkEligible
+                                  ? t('Select group for bulk approval', 'Sélectionner le groupe pour approbation en lot')
+                                  : t(
+                                      'Bulk approval unavailable for finalized or high-risk group',
+                                      'Approbation en lot indisponible pour un groupe finalisé ou à risque élevé',
+                                    )}
+                              </span>
                             <input
                               type="checkbox"
                               checked={selectedForBulk.has(group.pointId)}
-                              onChange={() => toggleBulkItem(group.pointId)}
-                              className={`h-4 w-4 rounded border-gray-300 text-navy ${focusRingClass}`}
-                              aria-label={t('Select group for bulk approval', 'Sélectionner le groupe pour approbation en lot')}
+                              disabled={!isBulkEligible}
+                              onChange={() => toggleBulkItem(group)}
+                              className="h-5 w-5 rounded border-gray-300 text-navy"
+                              aria-label={
+                                isBulkEligible
+                                  ? t('Select group for bulk approval', 'Sélectionner le groupe pour approbation en lot')
+                                  : t(
+                                      'Bulk approval unavailable for finalized or high-risk group',
+                                      'Approbation en lot indisponible pour un groupe finalisé ou à risque élevé',
+                                    )
+                              }
                             />
+                            </label>
                           </div>
                           <button
                             type="button"
@@ -1654,7 +1679,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       type="button"
                       onClick={() => goToPage(reviewData.page - 1)}
                       disabled={reviewData.page <= 1}
-                      className={`h-10 rounded-2xl px-3 micro-label border ${focusRingClass} ${
+                    className={`h-12 rounded-2xl px-3 micro-label border ${focusRingClass} ${
                         reviewData.page <= 1 ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
                       }`}
                     >
@@ -1667,7 +1692,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                       type="button"
                       onClick={() => goToPage(reviewData.page + 1)}
                       disabled={reviewData.page >= reviewData.totalPages}
-                      className={`h-10 rounded-2xl px-3 micro-label border ${focusRingClass} ${
+                      className={`h-12 rounded-2xl px-3 micro-label border ${focusRingClass} ${
                         reviewData.page >= reviewData.totalPages ? 'bg-gray-100 text-gray-300 border-gray-100' : 'bg-white text-navy border-gray-100'
                       }`}
                     >

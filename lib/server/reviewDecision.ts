@@ -2,6 +2,12 @@ import { query } from "./db.js";
 import { getUserProfile } from "./storage/index.js";
 import { reconcileUserProfileXp } from "./xp.js";
 import { adjustTrustOnReview, updateUserTrust } from "./userTrust.js";
+import {
+  getAdminRiskBucketFromDetails,
+  getAdminReviewStatusFromDetails,
+  getReviewFinality,
+  isAdminBulkApproveCandidate,
+} from "../shared/adminReviewQueue.js";
 
 export type ReviewDecision = "approved" | "rejected" | "flagged";
 
@@ -11,6 +17,20 @@ export interface ReviewResult {
   reviewStatus: string;
   xpAwarded: number;
   userId: string;
+}
+
+export type BatchApproveSkipReason = "already_finalized" | "high_risk" | "ineligible";
+
+export class ReviewDecisionSkippedError extends Error {
+  eventId: string;
+  reason: BatchApproveSkipReason;
+
+  constructor(eventId: string, reason: BatchApproveSkipReason) {
+    super(`Submission ${eventId} skipped: ${reason.replace(/_/g, " ")}`);
+    this.name = "ReviewDecisionSkippedError";
+    this.eventId = eventId;
+    this.reason = reason;
+  }
 }
 
 function isMissingDbObjectError(error: unknown): boolean {
@@ -26,6 +46,7 @@ export async function applyReviewDecision(params: {
   reviewerId: string;
   decision: ReviewDecision;
   notes: string | null;
+  enforceBulkApprovalEligibility?: boolean;
 }): Promise<ReviewResult> {
   const result = await query<{ user_id: string; details: Record<string, unknown> }>(
     `SELECT user_id, details
@@ -40,6 +61,12 @@ export async function applyReviewDecision(params: {
   }
 
   const details = row.details && typeof row.details === "object" ? ({ ...row.details } as Record<string, unknown>) : {};
+  if (params.enforceBulkApprovalEligibility && params.decision === "approved") {
+    const skipReason = getBatchApproveSkipReason(details);
+    if (skipReason) {
+      throw new ReviewDecisionSkippedError(params.eventId, skipReason);
+    }
+  }
   const plannedXpAwarded =
     typeof details.plannedXpAwarded === "number" && Number.isFinite(details.plannedXpAwarded)
       ? Math.max(0, Math.round(details.plannedXpAwarded))
@@ -106,4 +133,26 @@ export async function applyReviewDecision(params: {
     xpAwarded: nextXpAwarded,
     userId: row.user_id,
   };
+}
+
+export function getBatchApproveSkipReason(
+  details: Record<string, unknown> | null | undefined,
+): BatchApproveSkipReason | null {
+  const finality = getReviewFinality(details);
+  if (finality.isFinalized) return "already_finalized";
+
+  const riskBucket = getAdminRiskBucketFromDetails(details);
+  if (riskBucket === "flagged") return "high_risk";
+
+  if (
+    !isAdminBulkApproveCandidate({
+      riskBucket,
+      details,
+    })
+  ) {
+    return "ineligible";
+  }
+
+  if (getAdminReviewStatusFromDetails(details) !== "pending_review") return "ineligible";
+  return null;
 }

@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildAdminQueueBatchApproveRequest,
+  buildAdminQueueReviewRequestPath,
+} from "../lib/client/adminQueueApi.js";
+import {
+  buildAdminBulkApprovePlan,
+  buildAdminBulkApproveRequestBody,
   buildAdminReviewStatsFromPoints,
+  buildAdminReviewQueueRequestPath,
   buildAdminSubmissionGroups,
   compareAdminReviewSort,
   getAdminRiskBucket,
   getReviewFinality,
+  isAdminSubmissionGroupBulkApprovable,
   parseAdminReviewLimit,
   parseAdminReviewPage,
+  pruneAdminBulkSelection,
 } from "../lib/shared/adminReviewQueue.js";
 import type { AdminSubmissionEvent } from "../shared/types.js";
 
@@ -29,6 +38,9 @@ function makeEvent(input: {
   userId?: string;
   userName?: string;
   trustTier?: AdminSubmissionEvent["user"]["trustTier"];
+  reviewDecision?: "approved" | "rejected" | "flagged";
+  reviewedAt?: string;
+  reviewedBy?: string;
 }): AdminSubmissionEvent {
   return {
     event: {
@@ -41,6 +53,9 @@ function makeEvent(input: {
       details: {
         siteName: input.siteName,
         reviewStatus: input.reviewStatus,
+        reviewDecision: input.reviewDecision,
+        reviewedAt: input.reviewedAt,
+        reviewedBy: input.reviewedBy,
         riskScore: input.riskScore,
         secondPhotoUrl: input.secondPhotoUrl,
         clientDevice: {
@@ -180,6 +195,51 @@ test("review queue helpers bucket risk and clamp paging inputs", () => {
   assert.equal(parseAdminReviewLimit("12"), 12);
 });
 
+test("buildAdminReviewQueueRequestPath sends exact agent and risk params", () => {
+  const path = buildAdminReviewQueueRequestPath({
+    page: 2,
+    limit: 24,
+    riskFilter: "flagged",
+    userFilter: " agent-2 ",
+  });
+  const url = new URL(path, "http://localhost");
+
+  assert.equal(url.pathname, "/api/submissions");
+  assert.equal(url.searchParams.get("view"), "review_queue");
+  assert.equal(url.searchParams.get("scope"), "global");
+  assert.equal(url.searchParams.get("page"), "2");
+  assert.equal(url.searchParams.get("limit"), "24");
+  assert.equal(url.searchParams.get("risk"), "flagged");
+  assert.equal(url.searchParams.get("userId"), "agent-2");
+});
+
+test("AdminQueue review request boundary uses filter state in the actual API path", () => {
+  // This repo does not have a DOM component test harness; AdminQueue calls this exported boundary before apiJson.
+  const path = buildAdminQueueReviewRequestPath(3, "pending", "agent-7");
+  const url = new URL(path, "http://localhost");
+
+  assert.equal(url.pathname, "/api/submissions");
+  assert.equal(url.searchParams.get("view"), "review_queue");
+  assert.equal(url.searchParams.get("scope"), "global");
+  assert.equal(url.searchParams.get("page"), "3");
+  assert.equal(url.searchParams.get("limit"), "24");
+  assert.equal(url.searchParams.get("risk"), "pending");
+  assert.equal(url.searchParams.get("userId"), "agent-7");
+});
+
+test("buildAdminReviewQueueRequestPath omits cleared filters", () => {
+  const path = buildAdminReviewQueueRequestPath({
+    page: 1,
+    limit: 24,
+    riskFilter: "all",
+    userFilter: "",
+  });
+  const url = new URL(path, "http://localhost");
+
+  assert.equal(url.searchParams.has("risk"), false);
+  assert.equal(url.searchParams.has("userId"), false);
+});
+
 test("getReviewFinality marks pending submissions as not finalized", () => {
   const finality = getReviewFinality({ reviewStatus: "pending_review" });
   assert.equal(finality.state, "pending");
@@ -230,4 +290,169 @@ test("buildAdminReviewStatsFromPoints counts queue segments and eligibles", () =
     lowRisk: 1,
     eligible: 1,
   });
+});
+
+test("buildAdminReviewStatsFromPoints excludes finalized pending rows from eligibles", () => {
+  const stats = buildAdminReviewStatsFromPoints([
+    { riskScore: 20, reviewStatus: "pending_review", details: { reviewStatus: "pending_review" } },
+    {
+      riskScore: 25,
+      reviewStatus: "pending_review",
+      details: {
+        reviewStatus: "pending_review",
+        reviewDecision: "approved",
+        reviewedAt: "2026-05-08T12:00:00.000Z",
+      },
+    },
+  ]);
+
+  assert.equal(stats.pending, 2);
+  assert.equal(stats.eligible, 1);
+});
+
+test("buildAdminBulkApprovePlan posts only eligible selected event IDs and counts skips", () => {
+  const groups = buildAdminSubmissionGroups([
+    makeEvent({
+      id: "event-eligible",
+      pointId: "point-eligible",
+      createdAt: "2026-04-01T10:00:00.000Z",
+      riskScore: 20,
+      reviewStatus: "pending_review",
+      siteName: "Eligible Pharmacy",
+    }),
+    makeEvent({
+      id: "event-finalized",
+      pointId: "point-finalized",
+      createdAt: "2026-04-01T11:00:00.000Z",
+      riskScore: 25,
+      reviewStatus: "pending_review",
+      reviewDecision: "approved",
+      reviewedAt: "2026-04-01T12:00:00.000Z",
+      siteName: "Finalized Pharmacy",
+    }),
+    makeEvent({
+      id: "event-high-risk",
+      pointId: "point-high-risk",
+      createdAt: "2026-04-01T12:00:00.000Z",
+      riskScore: 80,
+      reviewStatus: "pending_review",
+      siteName: "High Risk Pharmacy",
+    }),
+  ]);
+
+  const eligible = groups.find((group) => group.pointId === "point-eligible");
+  const finalized = groups.find((group) => group.pointId === "point-finalized");
+  const highRisk = groups.find((group) => group.pointId === "point-high-risk");
+  assert.ok(eligible);
+  assert.ok(finalized);
+  assert.ok(highRisk);
+  assert.equal(isAdminSubmissionGroupBulkApprovable(eligible), true);
+  assert.equal(isAdminSubmissionGroupBulkApprovable(finalized), false);
+  assert.equal(isAdminSubmissionGroupBulkApprovable(highRisk), false);
+
+  const plan = buildAdminBulkApprovePlan(
+    groups,
+    new Set(["point-eligible", "point-finalized", "point-high-risk"]),
+  );
+
+  assert.deepEqual(plan.eventIds, ["event-eligible"]);
+  assert.equal(plan.consideredCount, 3);
+  assert.equal(plan.skippedFinalizedCount, 1);
+  assert.equal(plan.skippedIneligibleCount, 1);
+  assert.equal(plan.skippedCount, 2);
+  assert.equal(plan.hasExplicitSelection, true);
+  assert.deepEqual(buildAdminBulkApproveRequestBody(plan), {
+    eventIds: ["event-eligible"],
+    decision: "approved",
+  });
+});
+
+test("AdminQueue batch approve request boundary posts only selected eligible event IDs", () => {
+  const groups = buildAdminSubmissionGroups([
+    makeEvent({
+      id: "event-eligible",
+      pointId: "point-eligible",
+      createdAt: "2026-04-01T10:00:00.000Z",
+      riskScore: 20,
+      reviewStatus: "pending_review",
+    }),
+    makeEvent({
+      id: "event-finalized",
+      pointId: "point-finalized",
+      createdAt: "2026-04-01T11:00:00.000Z",
+      riskScore: 20,
+      reviewStatus: "pending_review",
+      reviewDecision: "approved",
+      reviewedAt: "2026-04-01T12:00:00.000Z",
+    }),
+  ]);
+  const plan = buildAdminBulkApprovePlan(groups, new Set(["point-eligible", "point-finalized"]));
+  const request = buildAdminQueueBatchApproveRequest(plan);
+
+  assert.equal(request.path, "/api/submissions/batch-review");
+  assert.equal(request.init.method, "POST");
+  assert.deepEqual(request.init.headers, { "Content-Type": "application/json" });
+  assert.equal(request.init.body, JSON.stringify({ eventIds: ["event-eligible"], decision: "approved" }));
+});
+
+test("buildAdminBulkApprovePlan does not approve anything when selection is empty", () => {
+  const groups = buildAdminSubmissionGroups([
+    makeEvent({
+      id: "event-eligible",
+      pointId: "point-eligible",
+      createdAt: "2026-04-01T10:00:00.000Z",
+      riskScore: 20,
+      reviewStatus: "pending_review",
+    }),
+    makeEvent({
+      id: "event-finalized",
+      pointId: "point-finalized",
+      createdAt: "2026-04-01T11:00:00.000Z",
+      riskScore: 20,
+      reviewStatus: "pending_review",
+      reviewDecision: "approved",
+      reviewedAt: "2026-04-01T12:00:00.000Z",
+    }),
+  ]);
+
+  const plan = buildAdminBulkApprovePlan(groups, new Set());
+
+  assert.deepEqual(plan.eventIds, []);
+  assert.equal(plan.targetGroups.length, 0);
+  assert.equal(plan.consideredCount, 0);
+  assert.equal(plan.skippedCount, 0);
+  assert.equal(plan.hasExplicitSelection, false);
+});
+
+test("pruneAdminBulkSelection removes selected rows that became ineligible", () => {
+  const groups = buildAdminSubmissionGroups([
+    makeEvent({
+      id: "event-eligible",
+      pointId: "point-eligible",
+      createdAt: "2026-04-01T10:00:00.000Z",
+      riskScore: 20,
+      reviewStatus: "pending_review",
+    }),
+    makeEvent({
+      id: "event-finalized",
+      pointId: "point-finalized",
+      createdAt: "2026-04-01T11:00:00.000Z",
+      riskScore: 20,
+      reviewStatus: "pending_review",
+      reviewDecision: "approved",
+      reviewedAt: "2026-04-01T12:00:00.000Z",
+    }),
+    makeEvent({
+      id: "event-high-risk",
+      pointId: "point-high-risk",
+      createdAt: "2026-04-01T12:00:00.000Z",
+      riskScore: 80,
+      reviewStatus: "pending_review",
+    }),
+  ]);
+
+  assert.deepEqual(
+    [...pruneAdminBulkSelection(groups, new Set(["point-eligible", "point-finalized", "point-high-risk", "missing"]))],
+    ["point-eligible"],
+  );
 });
