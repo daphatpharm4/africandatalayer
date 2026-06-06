@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { requireUser } from "../../lib/auth.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
+import { resolveOrProvisionProfile } from "../../lib/server/adminProfileProvisioning.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { computeCanonicalUserXp } from "../../lib/server/xp.js";
 import {
@@ -422,7 +423,11 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   try {
-    const profile = await getUserProfile(auth.id);
+    const profile = await resolveOrProvisionProfile(
+      { getProfile: getUserProfile, upsertProfile: upsertUserProfile },
+      auth.id,
+      authIsAdmin,
+    );
     if (!profile) return errorResponse("Profile not found", 404);
 
     let shouldPersist = false;
