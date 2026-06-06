@@ -29,6 +29,7 @@ import {
   ADMIN_MAP_SCOPE_STORAGE_KEY,
   readStoredAdminMapScope,
 } from '../../lib/client/adminMapScope';
+import { readCachedMapPoints, writeCachedMapPoints } from '../../lib/client/mapPointsCache';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
 import { isNative } from '../../lib/client/native';
 import BrandLogo from '../BrandLogo';
@@ -124,6 +125,10 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
     { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
     { value: 'global', label: t('Worldwide', 'Monde entier') },
   ];
+  const mapCacheAuthKey = useMemo(
+    () => `${isAuthenticated ? 'auth' : 'anon'}:${isAdmin ? 'admin' : userRole}`,
+    [isAuthenticated, isAdmin, userRole],
+  );
   const viewModeTabs: Array<{ value: 'map' | 'list'; label: string }> = [
     { value: 'map', label: t('Map', 'Carte') },
     { value: 'list', label: t('List', 'Liste') },
@@ -356,8 +361,18 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
   }, [isAdmin, mapScope]);
 
   const loadPoints = async () => {
+    const cached = readCachedMapPoints(mapScope, { authKey: mapCacheAuthKey });
+    if (cached) {
+      const mapped = cached
+        .map(mapProjectedToPoint)
+        .filter((point) => (mapScope === 'bonamoussadi' ? isWithinBonamoussadi(point.coordinates) : true));
+      setPoints(mapped);
+      setIsLoadingPoints(false);
+      setPointsLoadError('');
+    }
+
     try {
-      setIsLoadingPoints(true);
+      if (!cached) setIsLoadingPoints(true);
       setPointsLoadError('');
       const params = new URLSearchParams();
       if (mapScope !== 'bonamoussadi') params.set('scope', mapScope);
@@ -367,6 +382,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
         isNative() ? { credentials: 'omit' } : {}
       );
       if (Array.isArray(data)) {
+        writeCachedMapPoints(mapScope, data, { authKey: mapCacheAuthKey });
         const mapped = data
           .map(mapProjectedToPoint)
           .filter((point) => (mapScope === 'bonamoussadi' ? isWithinBonamoussadi(point.coordinates) : true));
@@ -375,13 +391,22 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
         setPoints([]);
       }
     } catch {
-      setPoints([]);
-      setPointsLoadError(
-        t(
-          "Data points failed to load. Tap retry or check back in a moment.",
-          "Impossible de charger les points. Réessayez ou revenez dans un instant."
-        )
-      );
+      if (!cached) {
+        setPoints([]);
+        setPointsLoadError(
+          t(
+            "Data points failed to load. Tap retry or check back in a moment.",
+            "Impossible de charger les points. Réessayez ou revenez dans un instant."
+          )
+        );
+      } else {
+        setPointsLoadError(
+          t(
+            "Showing saved map data while the network catches up.",
+            "Affichage des données carte enregistrées pendant la synchronisation."
+          )
+        );
+      }
     } finally {
       setIsLoadingPoints(false);
     }
@@ -389,7 +414,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
 
   useEffect(() => {
     void loadPoints();
-  }, [mapScope]); // language removed: API response is language-independent
+  }, [mapScope, mapCacheAuthKey]); // language removed: API response is language-independent
 
   useEffect(() => {
     let cancelled = false;
