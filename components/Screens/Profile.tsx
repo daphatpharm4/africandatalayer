@@ -1169,7 +1169,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
                 key={row.label}
                 className={`flex items-center justify-between py-2 ${index < weekRows.length - 1 ? 'border-b border-gray-100' : ''}`}
               >
-                <dt className="text-[13px] text-gray-500">{row.label}</dt>
+                <dt className="text-[13px] font-medium text-ink-muted">{row.label}</dt>
                 <dd className="text-[13px] font-bold text-gray-900">{row.value}</dd>
               </div>
             ))}

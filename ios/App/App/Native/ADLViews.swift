@@ -3943,8 +3943,8 @@ private struct ProfileWeekSummaryCard: View {
                 ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                     HStack {
                         Text(row.0)
-                            .font(ADLFont.inter(13, .regular))
-                            .foregroundColor(.secondary)
+                            .font(ADLFont.inter(13, .medium))
+                            .foregroundColor(ADLColor.inkMuted)
                         Spacer()
                         Text(row.1)
                             .font(ADLFont.inter(13, .bold))
