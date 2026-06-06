@@ -4,6 +4,7 @@ import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/i
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { resolveOrProvisionProfile } from "../../lib/server/adminProfileProvisioning.js";
 import { parseProfileImagePayload, classifyBlobUploadError } from "../../lib/server/profileImageUpload.js";
+import { classifyUserViewError } from "../../lib/server/userViewErrors.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { computeCanonicalUserXp } from "../../lib/server/xp.js";
 import {
@@ -346,10 +347,9 @@ export async function GET(request: Request): Promise<Response> {
       });
       return jsonResponse(assignments, { status: 200 });
     } catch (error) {
-      if (isStorageUnavailableError(error)) {
-        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
-      }
-      throw error;
+      console.error("[api/user] assignments view failed", error);
+      const v = classifyUserViewError(error);
+      return errorResponse(v.message, v.status, { code: v.code });
     }
   }
 
@@ -369,10 +369,9 @@ export async function GET(request: Request): Promise<Response> {
       ]);
       return jsonResponse({ context, assignments }, { status: 200 });
     } catch (error) {
-      if (isStorageUnavailableError(error)) {
-        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
-      }
-      throw error;
+      console.error("[api/user] assignment_planner_context view failed", error);
+      const v = classifyUserViewError(error);
+      return errorResponse(v.message, v.status, { code: v.code });
     }
   }
 

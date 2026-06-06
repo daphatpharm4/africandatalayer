@@ -607,6 +607,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
         setPlannerZone((prev) => prev || data.context?.zones?.[0]?.id || '');
       } catch (error) {
         if (cancelled) return;
+        console.error('[AdminQueue] assignments load failed', error);
         const message =
           error instanceof Error ? error.message : t('Unable to load assignments.', 'Impossible de charger les affectations.');
         setAssignmentError(message);
