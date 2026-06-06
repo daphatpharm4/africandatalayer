@@ -1,18 +1,16 @@
-import type { MapScope, UserProfile } from "../../shared/types.ts";
-import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.ts";
+import type { MapScope, UserProfile } from "../../shared/types.js";
+import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
+import { inferDefaultDisplayName } from "../shared/identifier.js";
 
-function inferName(userId: string): string {
-  const handle = userId.includes("@") ? userId.split("@")[0] : userId;
-  const cleaned = handle.replace(/[._-]+/g, " ").trim();
-  if (!cleaned) return "Admin";
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-}
-
+/** Build a fresh, fully-formed admin profile for a bootstrap ADMIN_EMAIL account
+ *  that authenticated (via the env-var bootstrap path) without a stored
+ *  user_profiles row. Shares the same display-name inference as every other
+ *  identifier-derived name in the app. */
 export function buildBootstrapAdminProfile(userId: string): UserProfile {
   const isEmail = userId.includes("@");
   return {
     id: userId,
-    name: inferName(userId),
+    name: inferDefaultDisplayName(userId),
     email: isEmail ? userId : null,
     phone: isEmail ? null : userId,
     image: encodeAvatarPresetImage(DEFAULT_AVATAR_PRESET),
@@ -36,22 +34,21 @@ export interface ProvisionDeps {
   upsertProfile: (id: string, profile: UserProfile) => Promise<void>;
 }
 
+/** Returns the viewer's profile, provisioning a fresh admin profile when an
+ *  admin-token viewer has no stored row (the bootstrap ADMIN_EMAIL case).
+ *
+ *  This owns exactly one responsibility: provision-when-missing. Upgrading an
+ *  existing non-admin row to admin access is the caller's job via
+ *  `applyAdminProfileAccess`, so that logic lives in exactly one place. An
+ *  existing row is therefore returned unchanged; a non-admin with no row
+ *  returns null (preserving the original 404 behavior). */
 export async function resolveOrProvisionProfile(
   deps: ProvisionDeps,
   userId: string,
   isAdmin: boolean,
 ): Promise<UserProfile | null> {
   const existing = await deps.getProfile(userId);
-  if (existing) {
-    if (isAdmin) {
-      let changed = false;
-      if (existing.role !== "admin") { existing.role = "admin"; changed = true; }
-      if (existing.isAdmin !== true) { existing.isAdmin = true; changed = true; }
-      if (existing.mapScope !== "global") { existing.mapScope = "global" as MapScope; changed = true; }
-      if (changed) await deps.upsertProfile(userId, existing);
-    }
-    return existing;
-  }
+  if (existing) return existing;
   if (!isAdmin) return null;
   const provisioned = buildBootstrapAdminProfile(userId);
   await deps.upsertProfile(userId, provisioned);

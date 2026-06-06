@@ -49,21 +49,21 @@ test("resolveOrProvisionProfile does NOT provision for a non-admin missing row",
   assert.equal(result, null);
 });
 
-test("resolveOrProvisionProfile upgrades an existing admin-token row to admin access", async () => {
+test("resolveOrProvisionProfile returns an existing row unchanged without upserting", async () => {
+  // Upgrading an existing row to admin access is the caller's job
+  // (applyAdminProfileAccess), so this module must not mutate or persist it.
   const existing = { id: "admin@example.com", role: "agent", isAdmin: false, mapScope: "bonamoussadi", XP: 7 };
   const store = new Map<string, unknown>([["admin@example.com", existing]]);
-  let upserted = false;
   const result = await resolveOrProvisionProfile(
     {
       getProfile: async (id) => (store.get(id) as never) ?? null,
-      upsertProfile: async (id, p) => { store.set(id, p); upserted = true; },
+      upsertProfile: async () => { throw new Error("should not upsert an existing row"); },
     },
     "admin@example.com",
     true,
   );
-  assert.equal(result!.isAdmin, true);
-  assert.equal(result!.role, "admin");
-  assert.equal(result!.mapScope, "global");
-  assert.equal(result!.XP, 7);
-  assert.equal(upserted, true);
+  assert.equal(result, existing);
+  assert.equal(result!.role, "agent");
+  assert.equal(result!.isAdmin, false);
+  assert.equal(result!.mapScope, "bonamoussadi");
 });
