@@ -59,6 +59,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const [accountLookupInput, setAccountLookupInput] = useState('');
   const [managedAccount, setManagedAccount] = useState<UserProfile | null>(null);
   const [managedRole, setManagedRole] = useState<UserRole>('agent');
+  const [managedHistory, setManagedHistory] = useState<Array<{ id: string; date: string; location: string; type: string; xp: number }>>([]);
+  const [isLoadingManagedHistory, setIsLoadingManagedHistory] = useState(false);
   const [lookupError, setLookupError] = useState('');
   const [accessActionError, setAccessActionError] = useState('');
   const [accessActionSuccess, setAccessActionSuccess] = useState('');
@@ -511,12 +513,34 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     }
   };
 
+  const loadManagedAccountHistory = async (account: UserProfile) => {
+    const accountId = typeof account.id === 'string' ? account.id.toLowerCase().trim() : '';
+    if (!accountId) {
+      setManagedHistory([]);
+      return;
+    }
+    setIsLoadingManagedHistory(true);
+    try {
+      // Admins receive every account's events from this endpoint; filter to the looked-up account.
+      const submissions = await apiJson<PointEvent[]>('/api/submissions?view=events&scope=global');
+      const accountSubmissions = (Array.isArray(submissions) ? submissions : [])
+        .filter((submission) => (typeof submission.userId === 'string' ? submission.userId.toLowerCase().trim() : '') === accountId)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setManagedHistory(accountSubmissions.map(submissionToHistory));
+    } catch {
+      setManagedHistory([]);
+    } finally {
+      setIsLoadingManagedHistory(false);
+    }
+  };
+
   const handleLookupAccount = async () => {
     if (isLookingUpAccount) return;
     const identifier = accountLookupInput.trim();
     if (!identifier) {
       setLookupError(t('Enter an exact email or phone number.', 'Saisissez un email ou un numero exact.'));
       setManagedAccount(null);
+      setManagedHistory([]);
       setAccessActionError('');
       setAccessActionSuccess('');
       return;
@@ -532,8 +556,10 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
       const account = await apiJson<UserProfile>(`/api/user?${params.toString()}`);
       setManagedAccount(account);
       setManagedRole(resolveRole(account));
+      void loadManagedAccountHistory(account);
     } catch (error) {
       setManagedAccount(null);
+      setManagedHistory([]);
       const message =
         error instanceof Error && error.message.trim()
           ? error.message
@@ -909,6 +935,33 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
                   <div className="micro-label text-gray-500">
                     {t('Current access', 'Acces actuel')}: {roleLabel(managedAccountRole)} · {mapScopeLabel(normalizeMapScope(managedAccount.mapScope, Boolean(managedAccount.isAdmin)))}
                   </div>
+                </div>
+
+                <div className="space-y-2 rounded-xl border border-gray-100 bg-white p-3">
+                  <div className="micro-label text-gray-400">
+                    {t('Contribution history', 'Historique des contributions')}
+                  </div>
+                  {isLoadingManagedHistory ? (
+                    <div className="text-xs text-gray-400">{t('Loading...', 'Chargement...')}</div>
+                  ) : managedHistory.length === 0 ? (
+                    <div className="text-xs text-gray-400">
+                      {t('No contributions for this account.', 'Aucune contribution pour ce compte.')}
+                    </div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {managedHistory.slice(0, 10).map((item) => (
+                        <li key={item.id} className="flex items-center justify-between gap-2 text-xs">
+                          <div className="min-w-0">
+                            <div className="truncate font-semibold text-gray-800">{item.type}</div>
+                            <div className="truncate text-gray-400">{item.location} · {item.date}</div>
+                          </div>
+                          <span className="shrink-0 rounded-full bg-forest-wash px-2 py-0.5 font-semibold text-forest">
+                            +{item.xp} XP
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
 
                 <label className="block space-y-2">
