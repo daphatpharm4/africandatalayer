@@ -47,9 +47,15 @@ export function redactEventUserIds(events: PointEvent[]): Array<Omit<PointEvent,
   });
 }
 
-export function filterEventsForViewer(events: PointEvent[], viewer: SubmissionAuthContext): PointEvent[] {
-  if (viewer.isAdmin) return events;
-  return events.filter((event) => normalizeActorId(event.userId) === viewer.id);
+export function filterEventsForViewer(
+  events: PointEvent[],
+  viewer: SubmissionAuthContext,
+  requestedUserId = "",
+): PointEvent[] {
+  const normalizedRequest = normalizeActorId(requestedUserId);
+  const visible = viewer.isAdmin ? events : events.filter((event) => normalizeActorId(event.userId) === viewer.id);
+  if (!normalizedRequest) return visible;
+  return visible.filter((event) => normalizeActorId(event.userId) === normalizedRequest);
 }
 
 export function canViewEventDetail(event: PointEvent, viewer: SubmissionAuthContext): boolean {

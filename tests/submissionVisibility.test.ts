@@ -48,6 +48,21 @@ test('view=events admin sees all events', () => {
   assert.equal(visible.length, events.length);
 });
 
+test('view=events admin can filter by exact account id', () => {
+  const viewer = toSubmissionAuthContext({ id: 'admin@example.com', token: { isAdmin: true } });
+  assert.ok(viewer);
+  const visible = filterEventsForViewer(events, viewer!, 'BOB@example.com');
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0]?.id, 'event-2');
+});
+
+test('view=events non-admin user filter cannot reveal another account', () => {
+  const viewer = toSubmissionAuthContext({ id: 'alice@example.com', token: { isAdmin: false } });
+  assert.ok(viewer);
+  const visible = filterEventsForViewer(events, viewer!, 'bob@example.com');
+  assert.equal(visible.length, 0);
+});
+
 test('view=admin_events rejects non-admin users', () => {
   const viewer = toSubmissionAuthContext({ id: 'alice@example.com', token: { isAdmin: false } });
   const access = resolveAdminViewAccess(viewer);

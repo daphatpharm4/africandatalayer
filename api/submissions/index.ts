@@ -652,7 +652,11 @@ export async function GET(request: Request): Promise<Response> {
 
     if (view === "events") {
       if (!authContext) return errorResponse("Unauthorized", 401);
-      const responseEvents = filterEventsForViewer(scopedEvents, authContext);
+      const requestedUserId = normalizeActorId(url.searchParams.get("userId") ?? "");
+      if (requestedUserId && !authContext.isAdmin && requestedUserId !== authContext.id) {
+        return errorResponse("Forbidden", 403);
+      }
+      const responseEvents = filterEventsForViewer(scopedEvents, authContext, requestedUserId);
       return jsonResponse(responseEvents, { status: 200 });
     }
 

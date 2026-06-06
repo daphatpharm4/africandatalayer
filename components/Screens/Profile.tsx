@@ -157,7 +157,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
         try {
           const userId = typeof data?.id === 'string' ? data.id.toLowerCase().trim() : '';
           const scope = normalizeMapScope(data?.mapScope, Boolean(data?.isAdmin));
-          const params = new URLSearchParams({ view: 'events' });
+          const params = new URLSearchParams({ view: 'events', userId });
           if (scope !== 'bonamoussadi') params.set('scope', scope);
           const submissions = await apiJson<PointEvent[]>(`/api/submissions?${params.toString()}`);
           if (!userId) {
@@ -522,7 +522,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     setIsLoadingManagedHistory(true);
     try {
       // Admins receive every account's events from this endpoint; filter to the looked-up account.
-      const submissions = await apiJson<PointEvent[]>('/api/submissions?view=events&scope=global');
+      const params = new URLSearchParams({ view: 'events', scope: 'global', userId: accountId });
+      const submissions = await apiJson<PointEvent[]>(`/api/submissions?${params.toString()}`);
       const accountSubmissions = (Array.isArray(submissions) ? submissions : [])
         .filter((submission) => (typeof submission.userId === 'string' ? submission.userId.toLowerCase().trim() : '') === accountId)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
