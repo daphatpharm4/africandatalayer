@@ -46,3 +46,7 @@ export function classifyBlobUploadError(error: unknown): UploadError {
   }
   return { status: 502, code: "upload_failed", message: "Could not upload the photo, please try again" };
 }
+
+export function shouldStoreProfileImageInline(error: UploadError, imageBytes: number, maxInlineBytes: number): boolean {
+  return error.code === "storage_unavailable" && imageBytes <= maxInlineBytes;
+}

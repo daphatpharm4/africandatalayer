@@ -3,7 +3,11 @@ import { requireUser } from "../../lib/auth.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { resolveOrProvisionProfile } from "../../lib/server/adminProfileProvisioning.js";
-import { parseProfileImagePayload, classifyBlobUploadError } from "../../lib/server/profileImageUpload.js";
+import {
+  parseProfileImagePayload,
+  classifyBlobUploadError,
+  shouldStoreProfileImageInline,
+} from "../../lib/server/profileImageUpload.js";
 import { classifyUserViewError } from "../../lib/server/userViewErrors.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { computeCanonicalUserXp } from "../../lib/server/xp.js";
@@ -45,6 +49,7 @@ const ASSIGNMENT_STATUSES: ReadonlySet<CollectionAssignmentStatus> = new Set([
   "expired",
 ]);
 const MAX_PROFILE_IMAGE_BYTES = 4_000_000;
+const MAX_INLINE_PROFILE_IMAGE_BYTES = 800_000;
 
 function normalizeMapScope(input: unknown): MapScope | null {
   if (typeof input !== "string") return null;
@@ -506,7 +511,11 @@ export async function PUT(request: Request): Promise<Response> {
       } catch (uploadError) {
         console.error("[api/user] profile photo upload failed", uploadError);
         const u = classifyBlobUploadError(uploadError);
-        return errorResponse(u.message, u.status, { code: u.code });
+        if (shouldStoreProfileImageInline(u, parsedImage.imageBuffer.byteLength, MAX_INLINE_PROFILE_IMAGE_BYTES)) {
+          profile.image = profileImageBase64;
+        } else {
+          return errorResponse(u.message, u.status, { code: u.code });
+        }
       }
       profile.avatarPreset = undefined;
     }

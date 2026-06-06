@@ -16,6 +16,9 @@ final class AppState: ObservableObject {
     @Published var points: [DataPoint] = []
     @Published var isLoadingPoints = false
     @Published var pointsError: String?
+    @Published var contributionEvents: [UserContributionEvent] = []
+    @Published var isLoadingContributionEvents = false
+    @Published var contributionEventsError: String?
     @Published var drafts: [ContributionDraft] = []
     @Published var queueSnapshot = QueueSnapshot.empty
     @Published var lastSyncMessage = ""
@@ -49,6 +52,8 @@ final class AppState: ObservableObject {
     @Published var reviewStats: AdminReviewStats?
     @Published var isLoadingReview = false
     @Published var reviewError: String?
+    @Published var isBatchApprovingReview = false
+    @Published var reviewActionMessage: String?
 
     // MARK: - Forgot Password (africandatalayer-955)
     @Published var resetError: String?
@@ -131,6 +136,7 @@ final class AppState: ObservableObject {
     private let queueStore = OfflineQueueStore()
     private let rewardsService: RewardsService = LocalRewardsService()
     let apiClient = ADLAPIClient()
+    private var loadedPointScope: String?
 
     /// Spendable balance = server-canonical XP minus locally-recorded redemptions.
     var spendableXP: Int { max(0, serverXP - spentXP) }
@@ -155,6 +161,17 @@ final class AppState: ObservableObject {
         do {
             let fetched = try await apiClient.fetchUserProfile()
             userProfile = fetched
+            let fetchedRole = fetched.role ?? (fetched.isAdmin == true ? .admin : nil)
+            if let role = fetchedRole {
+                selectedRole = AppReleaseMode.normalizedRole(role)
+                profile = SessionProfile(
+                    name: fetched.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? profile.name,
+                    role: selectedRole,
+                    trustTier: fetched.trustTier ?? profile.trustTier,
+                    xp: fetched.xp,
+                    streakDays: profile.streakDays
+                )
+            }
             applyServerXP(fetched.xp)
         } catch {
             profileError = (error as? APIError)?.message ?? "Unable to load profile."
@@ -477,20 +494,39 @@ final class AppState: ObservableObject {
 
     func loadPoints(force: Bool = false) async {
         guard !isLoadingPoints else { return }
-        if !points.isEmpty, !force { return }
+        let scope = activePointScope()
+        if !points.isEmpty, loadedPointScope == scope, !force { return }
         isLoadingPoints = true
         pointsError = nil
         defer { isLoadingPoints = false }
 
         do {
-            let projected = try await apiClient.fetchProjectedPoints()
+            let projected = try await apiClient.fetchProjectedPoints(scope: scope)
             points = projected.map(DataPoint.init(projected:))
+            loadedPointScope = scope
             if points.isEmpty {
                 pointsError = "No backend points returned yet."
             }
         } catch {
             points = []
             pointsError = (error as? APIError)?.message ?? "Unable to load backend points."
+        }
+    }
+
+    func loadContributionEvents(force: Bool = false) async {
+        guard !isLoadingContributionEvents else { return }
+        if !contributionEvents.isEmpty, !force { return }
+        isLoadingContributionEvents = true
+        contributionEventsError = nil
+        defer { isLoadingContributionEvents = false }
+
+        do {
+            let scope = selectedRole == .admin ? "global" : "bonamoussadi"
+            let userId = userProfile?.id?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            contributionEvents = try await apiClient.fetchContributionEvents(scope: scope, userId: userId)
+                .sorted { $0.createdDate > $1.createdDate }
+        } catch {
+            contributionEventsError = (error as? APIError)?.message ?? t("Unable to load contributions.", "Impossible de charger les contributions.")
         }
     }
 
@@ -503,7 +539,7 @@ final class AppState: ObservableObject {
         assignmentsError = nil
         defer { isLoadingAssignments = false }
         do {
-            let result = try await apiClient.fetchAssignments()
+            let result = try await apiClient.fetchAssignments(includePlannerContext: selectedRole == .admin)
             assignmentsContext = result.context
             assignments = result.assignments
         } catch {
@@ -625,6 +661,7 @@ final class AppState: ObservableObject {
         if !reviewQueue.isEmpty, !force { return }
         isLoadingReview = true
         reviewError = nil
+        reviewActionMessage = nil
         defer { isLoadingReview = false }
         do {
             let result = try await apiClient.fetchReviewQueue()
@@ -657,6 +694,36 @@ final class AppState: ObservableObject {
         }
     }
 
+    func batchApproveReview(eventIds: [String]) async {
+        let uniqueEventIds = Array(Set(eventIds)).filter { !$0.isEmpty }
+        guard !uniqueEventIds.isEmpty, !isBatchApprovingReview else { return }
+
+        isBatchApprovingReview = true
+        reviewError = nil
+        reviewActionMessage = nil
+        defer { isBatchApprovingReview = false }
+
+        do {
+            let result = try await apiClient.batchReview(eventIds: uniqueEventIds, decision: .approved)
+            let approvedIds = Set(result.results.filter { $0.status == "ok" }.map(\.eventId))
+            if !approvedIds.isEmpty {
+                reviewQueue = reviewQueue.map { group in
+                    guard approvedIds.contains(group.latestEventId) else { return group }
+                    var updated = group
+                    updated.summary.reviewStatus = "approved"
+                    return updated
+                }
+            }
+            reviewActionMessage = t(
+                "\(approvedIds.count) approved · \(result.skippedCount) skipped",
+                "\(approvedIds.count) approuvées · \(result.skippedCount) ignorées"
+            )
+            await loadReviewQueue(force: true)
+        } catch {
+            reviewError = (error as? APIError)?.message ?? t("Mass approval failed.", "Approbation en lot échouée.")
+        }
+    }
+
     /// Collapse per-category weekly rows into one ascending series of the most
     /// recent `weeks`, summing total events across categories per week.
     static func aggregateWeeklyTrend(_ rows: [WeeklyKpiRow], weeks: Int) -> [WeeklyTrendBar] {
@@ -669,6 +736,13 @@ final class AppState: ObservableObject {
             .sorted { $0.weekStart < $1.weekStart }
             .suffix(weeks)
             .map { $0 }
+    }
+
+    private func activePointScope() -> String {
+        guard selectedRole == .admin else { return "bonamoussadi" }
+        let scope = userProfile?.mapScope?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if scope == "cameroon" { return "cameroon" }
+        return "global"
     }
 
     func startMapCapture(for point: DataPoint) {
@@ -815,7 +889,7 @@ final class ADLAPIClient {
         configuration.httpCookieStorage = .shared
         configuration.httpCookieAcceptPolicy = .always
         configuration.httpShouldSetCookies = true
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        configuration.requestCachePolicy = .useProtocolCachePolicy
         return URLSession(configuration: configuration)
     }()
     private let decoder: JSONDecoder = {
@@ -939,8 +1013,29 @@ final class ADLAPIClient {
         try await fetchJSON([LeaderboardEntry].self, path: "/api/leaderboard")
     }
 
-    func fetchProjectedPoints() async throws -> [ProjectedPoint] {
-        try await fetchJSON([ProjectedPoint].self, path: "/api/submissions")
+    func fetchProjectedPoints(scope: String = "bonamoussadi") async throws -> [ProjectedPoint] {
+        let normalized = scope.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let path = normalized == "bonamoussadi" || normalized.isEmpty
+            ? "/api/submissions"
+            : "/api/submissions?scope=\(normalized)"
+        return try await fetchJSON([ProjectedPoint].self, path: path)
+    }
+
+    func fetchContributionEvents(scope: String = "bonamoussadi", userId: String? = nil) async throws -> [UserContributionEvent] {
+        var items = [
+            URLQueryItem(name: "view", value: "events"),
+        ]
+        let normalizedScope = scope.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalizedScope == "cameroon" || normalizedScope == "global" {
+            items.append(URLQueryItem(name: "scope", value: normalizedScope))
+        }
+        if let userId, !userId.isEmpty {
+            items.append(URLQueryItem(name: "userId", value: userId))
+        }
+        var components = URLComponents()
+        components.queryItems = items
+        let query = components.percentEncodedQuery ?? "view=events"
+        return try await fetchJSON([UserContributionEvent].self, path: "/api/submissions?\(query)")
     }
 
     func fetchUserProfile() async throws -> UserProfile {
@@ -987,8 +1082,11 @@ final class ADLAPIClient {
 
     // MARK: - Assignments API (africandatalayer-955)
 
-    func fetchAssignments() async throws -> AssignmentsResponse {
-        try await fetchJSON(AssignmentsResponse.self, path: "/api/user?view=assignments")
+    func fetchAssignments(includePlannerContext: Bool = false) async throws -> AssignmentsResponse {
+        let path = includePlannerContext
+            ? "/api/user?view=assignment_planner_context"
+            : "/api/user?view=assignments"
+        return try await fetchJSON(AssignmentsResponse.self, path: path)
     }
 
     // MARK: - Automation Leads API (africandatalayer-955)
@@ -1003,6 +1101,38 @@ final class ADLAPIClient {
         return try await fetchJSON(AdminReviewQueueResponse.self, path: path)
     }
 
+    func batchReview(eventIds: [String], decision: ReviewDecision) async throws -> BatchReviewResponse {
+        try await postJSON(
+            path: "/api/submissions/batch-review",
+            body: BatchReviewPayload(eventIds: eventIds, decision: decision.rawValue, notes: nil)
+        )
+    }
+
+    func createAdminAccount(identifier: String, name: String?, role: UserRole, password: String) async throws -> UserProfile {
+        try await postJSON(
+            path: "/api/user?view=account_create",
+            body: AdminAccountCreatePayload(identifier: identifier, name: name, role: role.rawValue, password: password)
+        )
+    }
+
+    func lookupAdminAccount(identifier: String) async throws -> UserProfile {
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "view", value: "lookup"),
+            URLQueryItem(name: "identifier", value: identifier),
+        ]
+        let query = components.percentEncodedQuery ?? "view=lookup"
+        return try await fetchJSON(UserProfile.self, path: "/api/user?\(query)")
+    }
+
+    func updateAdminAccountAccess(userId: String, role: UserRole) async throws -> UserProfile {
+        try await patchJSON(
+            UserProfile.self,
+            path: "/api/user?view=account_access",
+            body: AdminAccountAccessPayload(userId: userId, role: role.rawValue)
+        )
+    }
+
     /// PATCH /api/submissions/{eventId}?view=review with a ReviewDecision body.
     func patchJSON<T: Encodable>(path: String, body: T) async throws {
         var request = URLRequest(url: url(path: path))
@@ -1011,6 +1141,16 @@ final class ADLAPIClient {
         request.httpBody = try JSONEncoder().encode(body)
         let (data, response) = try await urlSession.data(for: request)
         try validate(response: response, data: data)
+    }
+
+    func patchJSON<T: Encodable, R: Decodable>(_ responseType: R.Type, path: String, body: T) async throws -> R {
+        var request = URLRequest(url: url(path: path))
+        request.httpMethod = "PATCH"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+        return try decoder.decode(R.self, from: data)
     }
 
     /// POST an Encodable body to `path`, decoding the JSON response as `R`.
@@ -1128,6 +1268,37 @@ struct UserProfileUpdatePayload: Encodable {
     var name: String?
     var avatarPreset: String?
     var imageBase64: String?
+}
+
+struct BatchReviewPayload: Encodable {
+    var eventIds: [String]
+    var decision: String
+    var notes: String?
+}
+
+struct BatchReviewResultItem: Decodable {
+    var eventId: String
+    var decision: String
+    var status: String
+    var error: String?
+    var skippedReason: String?
+}
+
+struct BatchReviewResponse: Decodable {
+    var results: [BatchReviewResultItem]
+    var skippedCount: Int
+}
+
+struct AdminAccountCreatePayload: Encodable {
+    var identifier: String
+    var name: String?
+    var role: String
+    var password: String
+}
+
+struct AdminAccountAccessPayload: Encodable {
+    var userId: String
+    var role: String
 }
 
 struct IpReportPayload: Encodable {
