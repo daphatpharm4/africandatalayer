@@ -1417,11 +1417,11 @@ struct AgentHomeView: View {
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .task {
-            if isAdminGlobalMap {
-                region = defaultRegion
-            }
             if !appState.isGuest {
                 await appState.loadProfile()
+            }
+            if isAdminGlobalMap {
+                region = defaultRegion
             }
             await appState.loadPoints()
         }
