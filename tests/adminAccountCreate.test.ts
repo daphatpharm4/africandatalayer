@@ -180,7 +180,7 @@ test("admin account access handler updates roles even if audit logging is unavai
 
   const originalWarn = console.warn;
   console.warn = () => {};
-  let response: Response | null = null;
+  let response: Response;
   try {
     response = await handler(
       makeAccessRequest({
@@ -193,12 +193,12 @@ test("admin account access handler updates roles even if audit logging is unavai
     console.warn = originalWarn;
   }
 
-  assert.equal(response?.status, 200);
+  assert.equal(response.status, 200);
   assert.equal(saved?.role, "admin");
   assert.equal(saved?.isAdmin, true);
   assert.equal(saved?.mapScope, "global");
 
-  const body = (await response?.json()) as UserProfile;
+  const body = (await response.json()) as UserProfile;
   assert.equal(body.role, "admin");
   assert.equal(body.isAdmin, true);
   assert.equal(body.mapScope, "global");
