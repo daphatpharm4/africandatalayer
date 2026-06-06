@@ -24,6 +24,11 @@ import VerticalIcon from '../shared/VerticalIcon';
 import VerticalPickerBar from '../shared/VerticalPickerBar';
 import { categoryLabel as getCategoryLabel, LEGACY_CATEGORY_MAP, VERTICALS } from '../../shared/verticals';
 import { apiJson } from '../../lib/client/api';
+import {
+  ADMIN_MAP_SCOPE_EVENT,
+  ADMIN_MAP_SCOPE_STORAGE_KEY,
+  readStoredAdminMapScope,
+} from '../../lib/client/adminMapScope';
 import { detectLowEndDevice } from '../../lib/client/deviceProfile';
 import { isNative } from '../../lib/client/native';
 import BrandLogo from '../BrandLogo';
@@ -80,20 +85,6 @@ const selectableCategories: Category[] = [
   Category.CENSUS_PROXY,
 ];
 
-const ADMIN_MAP_SCOPE_STORAGE_KEY = 'adl_admin_map_scope';
-
-function readStoredAdminMapScope(): MapScope {
-  if (typeof window === 'undefined') return 'bonamoussadi';
-  try {
-    const stored = window.localStorage.getItem(ADMIN_MAP_SCOPE_STORAGE_KEY);
-    if (stored === 'bonamoussadi' || stored === 'cameroon' || stored === 'global') {
-      return stored;
-    }
-  } catch {
-    // Ignore storage access failures and fall back to the default admin scope.
-  }
-  return 'bonamoussadi';
-}
 
 
 function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -336,6 +327,20 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
   useEffect(() => {
     setMapScope(isAdmin ? readStoredAdminMapScope() : 'bonamoussadi');
   }, [isAuthenticated, isAdmin]);
+
+  // React immediately when the scope is changed elsewhere (e.g. the Profile
+  // screen's map-access control), even if this Home view stays mounted.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isAdmin) return;
+    const handleScopeChange = (event: Event) => {
+      const next = (event as CustomEvent<MapScope>).detail;
+      if (next === 'bonamoussadi' || next === 'cameroon' || next === 'global') {
+        setMapScope((prev) => (prev === next ? prev : next));
+      }
+    };
+    window.addEventListener(ADMIN_MAP_SCOPE_EVENT, handleScopeChange);
+    return () => window.removeEventListener(ADMIN_MAP_SCOPE_EVENT, handleScopeChange);
+  }, [isAdmin]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

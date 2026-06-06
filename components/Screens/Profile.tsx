@@ -10,6 +10,7 @@ import {
   Wallet
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
+import { broadcastAdminMapScope, readStoredAdminMapScope } from '../../lib/client/adminMapScope';
 import { clearSyncErrorRecords, listQueueItems, listSyncErrorRecords, subscribeQueueSnapshot, type QueueItem, type SyncErrorRecord } from '../../lib/client/offlineQueue';
 import type { CollectionAssignment, MapScope, PointEvent, UserProfile, UserRole } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
@@ -71,6 +72,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
   const [createAccountSuccess, setCreateAccountSuccess] = useState('');
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [queuedItems, setQueuedItems] = useState<QueueItem[]>([]);
+  const [adminMapScope, setAdminMapScope] = useState<MapScope>(() => readStoredAdminMapScope());
+  const [isSavingMapScope, setIsSavingMapScope] = useState(false);
   const normalizeMapScope = (value: unknown, isAdminMode: boolean): MapScope => {
     if (isAdminMode) return 'global';
     if (value === 'cameroon' || value === 'global') return value;
@@ -91,8 +94,28 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     if (scope === 'cameroon') return t('Cameroon', 'Cameroun');
     return t('Bonamoussadi only', 'Bonamoussadi uniquement');
   };
-  const activeMapScope = normalizeMapScope(profile?.mapScope, Boolean(profile?.isAdmin));
-  const isMapUnlocked = activeMapScope !== 'bonamoussadi';
+  const activeMapScope: MapScope = profile?.isAdmin
+    ? adminMapScope
+    : normalizeMapScope(profile?.mapScope, false);
+  const isMapUnlocked = adminMapScope !== 'bonamoussadi';
+
+  const handleSetAdminMapScope = async (scope: MapScope) => {
+    if (scope === adminMapScope || isSavingMapScope) return;
+    setAdminMapScope(scope);
+    broadcastAdminMapScope(scope); // drives the live Home map (and the next time it mounts)
+    setIsSavingMapScope(true);
+    try {
+      await apiJson<UserProfile>('/api/user', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mapScope: scope }),
+      });
+    } catch {
+      // Non-fatal: the map already updated locally; server persistence is best-effort.
+    } finally {
+      setIsSavingMapScope(false);
+    }
+  };
   const managedAccountRole = resolveRole(managedAccount);
   const hasManagedAccessChanges = Boolean(managedAccount) && managedRole !== managedAccountRole;
   const canCreateAccount =
@@ -691,18 +714,33 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
 
         {profile?.isAdmin && (
           <div className="card p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <span className="micro-label text-gray-400">
-                  {t('Admin Map Access', 'Accès carte admin')}
-                </span>
-                <span className="text-sm font-bold text-gray-900">
-                  {t('Unlock worldwide map', 'Debloquer la carte mondiale')}
-                </span>
-              </div>
-              <span className="inline-flex items-center rounded-full bg-forest-wash px-3 py-1 micro-label text-forest">
-                {t('Enabled', 'Active')}
+            <div className="flex flex-col">
+              <span className="micro-label text-gray-400">
+                {t('Admin Map Access', 'Accès carte admin')}
               </span>
+              <span className="text-sm font-bold text-gray-900">
+                {t('Explorer map scope', 'Portée de la carte Explorer')}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2" role="group" aria-label={t('Map scope', 'Portée de la carte')}>
+              {(['bonamoussadi', 'cameroon', 'global'] as MapScope[]).map((scope) => {
+                const isActive = adminMapScope === scope;
+                return (
+                  <button
+                    key={scope}
+                    type="button"
+                    data-testid={`profile-map-scope-${scope}`}
+                    aria-pressed={isActive}
+                    disabled={isSavingMapScope}
+                    onClick={() => void handleSetAdminMapScope(scope)}
+                    className={`motion-pressable min-h-[44px] rounded-xl border px-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
+                      isActive ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-white text-gray-600'
+                    }`}
+                  >
+                    {mapScopeLabel(scope)}
+                  </button>
+                );
+              })}
             </div>
             <p className="text-xs text-gray-500">
               {isMapUnlocked
