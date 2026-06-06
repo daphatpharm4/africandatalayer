@@ -68,7 +68,9 @@ type AiReviewSummaryDisplay = Pick<
   'summary' | 'recommendedChecks' | 'riskDrivers' | 'supportingEvidence' | 'caveats' | 'agentFeedbackDraft' | 'confidence'
 >;
 
-const DEFAULT_ASSIGNMENT_STATUS: CollectionAssignment['status'] = 'pending';
+// Default to no status filter so admins see every assignment (pending,
+// in_progress, completed, expired) for the period — not just the pending ones.
+const DEFAULT_ASSIGNMENT_STATUS: CollectionAssignment['status'] | '' = '';
 const ASSIGNMENT_STATUSES: CollectionAssignment['status'][] = ['pending', 'in_progress', 'completed', 'expired'];
 const ASSIGNABLE_VERTICALS = VERTICAL_IDS as SubmissionCategory[];
 const AUTOMATION_LEAD_STATUSES: AutomationLeadStatus[] = [
