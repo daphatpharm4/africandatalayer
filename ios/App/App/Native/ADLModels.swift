@@ -1518,3 +1518,226 @@ struct CreateSmsCampaignBody: Encodable {
     var acknowledgeCost: Bool
     var scheduledAt: String?
 }
+
+// MARK: - Client Delta Intelligence (mirrors DeltaDashboard.tsx)
+
+/// Decodes a Double that Postgres may serialize as a JSON string.
+func adlFlexDouble<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ key: K) -> Double? {
+    if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return d }
+    if let s = try? c.decodeIfPresent(String.self, forKey: key) { return Double(s) }
+    return nil
+}
+
+func adlFlexInt<K: CodingKey>(_ c: KeyedDecodingContainer<K>, _ key: K) -> Int? {
+    if let i = try? c.decodeIfPresent(Int.self, forKey: key) { return i }
+    if let s = try? c.decodeIfPresent(String.self, forKey: key) { return Int(s) }
+    if let d = try? c.decodeIfPresent(Double.self, forKey: key) { return Int(d) }
+    return nil
+}
+
+/// Row from /api/analytics?view=snapshots (snapshot_stats table, snake_case).
+struct SnapshotStatRow: Decodable, Hashable, Identifiable {
+    var id: String
+    var snapshotDate: String
+    var verticalId: String
+    var totalPoints: Int
+    var completedPoints: Int
+    var completionRate: Double
+    var newCount: Int
+    var removedCount: Int
+    var changedCount: Int
+    var unchangedCount: Int
+    var weekOverWeekGrowth: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case snapshotDate = "snapshot_date"
+        case verticalId = "vertical_id"
+        case totalPoints = "total_points"
+        case completedPoints = "completed_points"
+        case completionRate = "completion_rate"
+        case newCount = "new_count"
+        case removedCount = "removed_count"
+        case changedCount = "changed_count"
+        case unchangedCount = "unchanged_count"
+        case weekOverWeekGrowth = "week_over_week_growth"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id                 = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? UUID().uuidString
+        snapshotDate       = String(((try? c.decodeIfPresent(String.self, forKey: .snapshotDate)) ?? "").prefix(10))
+        verticalId         = (try? c.decodeIfPresent(String.self, forKey: .verticalId)) ?? ""
+        totalPoints        = adlFlexInt(c, .totalPoints) ?? 0
+        completedPoints    = adlFlexInt(c, .completedPoints) ?? 0
+        completionRate     = adlFlexDouble(c, .completionRate) ?? 0
+        newCount           = adlFlexInt(c, .newCount) ?? 0
+        removedCount       = adlFlexInt(c, .removedCount) ?? 0
+        changedCount       = adlFlexInt(c, .changedCount) ?? 0
+        unchangedCount     = adlFlexInt(c, .unchangedCount) ?? 0
+        weekOverWeekGrowth = adlFlexDouble(c, .weekOverWeekGrowth)
+    }
+}
+
+/// Row from /api/analytics?view=deltas (snapshot_deltas table).
+struct DeltaIntelRow: Decodable, Hashable, Identifiable {
+    var id: String
+    var snapshotDate: String
+    var verticalId: String
+    var pointId: String
+    var deltaType: String       // "new" | "removed" | "changed" | ...
+    var deltaField: String?
+    var deltaSummary: String?
+    var deltaMagnitude: Double?
+    var deltaDirection: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case snapshotDate = "snapshot_date"
+        case verticalId = "vertical_id"
+        case pointId = "point_id"
+        case deltaType = "delta_type"
+        case deltaField = "delta_field"
+        case deltaSummary = "delta_summary"
+        case deltaMagnitude = "delta_magnitude"
+        case deltaDirection = "delta_direction"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id             = (try? c.decodeIfPresent(String.self, forKey: .id)) ?? UUID().uuidString
+        snapshotDate   = String(((try? c.decodeIfPresent(String.self, forKey: .snapshotDate)) ?? "").prefix(10))
+        verticalId     = (try? c.decodeIfPresent(String.self, forKey: .verticalId)) ?? ""
+        pointId        = (try? c.decodeIfPresent(String.self, forKey: .pointId)) ?? ""
+        deltaType      = (try? c.decodeIfPresent(String.self, forKey: .deltaType)) ?? "changed"
+        deltaField     = try? c.decodeIfPresent(String.self, forKey: .deltaField)
+        deltaSummary   = try? c.decodeIfPresent(String.self, forKey: .deltaSummary)
+        deltaMagnitude = adlFlexDouble(c, .deltaMagnitude)
+        deltaDirection = try? c.decodeIfPresent(String.self, forKey: .deltaDirection)
+    }
+}
+
+struct DeltasEnvelope: Decodable {
+    var deltas: [DeltaIntelRow]
+    init(from decoder: Decoder) throws {
+        if let list = try? [DeltaIntelRow](from: decoder) { deltas = list; return }
+        enum K: String, CodingKey { case deltas }
+        let c = try decoder.container(keyedBy: K.self)
+        deltas = (try? c.decodeIfPresent([DeltaIntelRow].self, forKey: .deltas)) ?? []
+    }
+}
+
+/// Point from /api/analytics?view=trends (shape: { data: [{ date, <metric> }] }).
+struct TrendPoint: Decodable, Hashable, Identifiable {
+    var id: String { date }
+    var date: String
+    var value: Double
+
+    enum CodingKeys: String, CodingKey { case date, value, totalPoints = "total_points" }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        date  = String(((try? c.decodeIfPresent(String.self, forKey: .date)) ?? "").prefix(10))
+        value = adlFlexDouble(c, .value) ?? adlFlexDouble(c, .totalPoints) ?? 0
+    }
+}
+
+struct TrendEnvelope: Decodable {
+    var data: [TrendPoint]
+    init(from decoder: Decoder) throws {
+        enum K: String, CodingKey { case data }
+        let c = try decoder.container(keyedBy: K.self)
+        data = (try? c.decodeIfPresent([TrendPoint].self, forKey: .data)) ?? []
+    }
+}
+
+/// Mirrors shared/types.ts SpatialIntelligenceCell (camelCase JSON).
+struct SpatialIntelCell: Decodable, Hashable, Identifiable {
+    var id: String { cellId }
+    var cellId: String
+    var totalPoints: Int
+    var completionRate: Double
+    var opportunityScore: Double
+    var coverageGapScore: Double
+    var changeSignalScore: Double
+    var marketSignalScore: Double
+    var summary: String
+
+    enum CodingKeys: String, CodingKey {
+        case cellId, totalPoints, completionRate, opportunityScore
+        case coverageGapScore, changeSignalScore, marketSignalScore, summary
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cellId            = (try? c.decodeIfPresent(String.self, forKey: .cellId)) ?? UUID().uuidString
+        totalPoints       = adlFlexInt(c, .totalPoints) ?? 0
+        completionRate    = adlFlexDouble(c, .completionRate) ?? 0
+        opportunityScore  = adlFlexDouble(c, .opportunityScore) ?? 0
+        coverageGapScore  = adlFlexDouble(c, .coverageGapScore) ?? 0
+        changeSignalScore = adlFlexDouble(c, .changeSignalScore) ?? 0
+        marketSignalScore = adlFlexDouble(c, .marketSignalScore) ?? 0
+        summary           = (try? c.decodeIfPresent(String.self, forKey: .summary)) ?? ""
+    }
+}
+
+/// Mirrors shared/types.ts SpatialIntelligenceResponse.
+struct SpatialIntelPayload: Decodable, Hashable {
+    var snapshotDate: String
+    var verticalId: String
+    var totalCells: Int
+    var totalPoints: Int
+    var cells: [SpatialIntelCell]
+    var narrative: String
+
+    enum CodingKeys: String, CodingKey {
+        case snapshotDate, verticalId, totalCells, totalPoints, cells, narrative
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        snapshotDate = (try? c.decodeIfPresent(String.self, forKey: .snapshotDate)) ?? ""
+        verticalId   = (try? c.decodeIfPresent(String.self, forKey: .verticalId)) ?? ""
+        totalCells   = adlFlexInt(c, .totalCells) ?? 0
+        totalPoints  = adlFlexInt(c, .totalPoints) ?? 0
+        cells        = (try? c.decodeIfPresent([SpatialIntelCell].self, forKey: .cells)) ?? []
+        narrative    = (try? c.decodeIfPresent(String.self, forKey: .narrative)) ?? ""
+    }
+}
+
+/// Mirrors shared/types.ts AiAnalyticsResponse.
+struct AnalystAnswer: Decodable, Hashable {
+    struct Fact: Decodable, Hashable {
+        var label: String
+        var value: String
+        var source: String
+
+        enum CodingKeys: String, CodingKey { case label, value, source }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            label  = (try? c.decodeIfPresent(String.self, forKey: .label)) ?? ""
+            source = (try? c.decodeIfPresent(String.self, forKey: .source)) ?? ""
+            if let s = try? c.decodeIfPresent(String.self, forKey: .value) {
+                value = s
+            } else if let d = adlFlexDouble(c, .value) {
+                value = d.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(d)) : String(format: "%.2f", d)
+            } else {
+                value = ""
+            }
+        }
+    }
+
+    var answer: String
+    var facts: [Fact]
+    var caveats: [String]
+    var confidence: Double
+
+    enum CodingKeys: String, CodingKey { case answer, facts, caveats, confidence }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        answer     = (try? c.decodeIfPresent(String.self, forKey: .answer)) ?? ""
+        facts      = (try? c.decodeIfPresent([Fact].self, forKey: .facts)) ?? []
+        caveats    = (try? c.decodeIfPresent([String].self, forKey: .caveats)) ?? []
+        confidence = adlFlexDouble(c, .confidence) ?? 0
+    }
+}

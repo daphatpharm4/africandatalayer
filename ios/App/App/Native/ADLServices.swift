@@ -28,6 +28,12 @@ final class AppState: ObservableObject {
     @Published var mapCaptureContext: MapCaptureContext?
     @Published var analyticsSummary: AnalyticsSummary?
     @Published var weeklyTrend: [WeeklyTrendBar] = []
+    @Published var clientStats: [SnapshotStatRow] = []
+    @Published var clientTrend: [TrendPoint] = []
+    @Published var clientDeltas: [DeltaIntelRow] = []
+    @Published var clientSpatial: SpatialIntelPayload?
+    @Published var isLoadingClientDelta = false
+    @Published var clientDeltaError: String?
     @Published var leaderboard: [LeaderboardEntry] = []
     @Published var isLoadingLeaderboard = false
     @Published var leaderboardError: String?
@@ -475,6 +481,38 @@ final class AppState: ObservableObject {
             weeklyTrend = Self.aggregateWeeklyTrend(weekly, weeks: 7)
         } catch {
             analyticsError = (error as? APIError)?.message ?? "Unable to load analytics."
+        }
+    }
+
+    // MARK: - Client delta intelligence (africandatalayer-5h6)
+
+    /// Loads delta intelligence for the client dashboard. vertical == nil ⇒ "all"
+    /// (snapshots only, no per-vertical panels) — mirrors DeltaDashboard.tsx.
+    func loadClientDelta(vertical: String?, spatialSort: String = "opportunity_score", force: Bool = false) async {
+        guard !isLoadingClientDelta else { return }
+        if !clientStats.isEmpty, vertical == nil, !force { return }
+        isLoadingClientDelta = true
+        clientDeltaError = nil
+        defer { isLoadingClientDelta = false }
+        do {
+            if clientStats.isEmpty || force {
+                clientStats = try await apiClient.fetchSnapshotStats()
+            }
+            if let vertical {
+                async let trend = apiClient.fetchTrend(vertical: vertical)
+                async let deltas = apiClient.fetchDeltas(vertical: vertical)
+                async let spatial = apiClient.fetchSpatialIntelligence(vertical: vertical, sort: spatialSort)
+                clientTrend = try await trend
+                clientDeltas = try await deltas
+                clientSpatial = try await spatial
+            } else {
+                clientTrend = []
+                clientDeltas = []
+                clientSpatial = nil
+            }
+        } catch {
+            clientDeltaError = (error as? APIError)?.message
+                ?? t("Unable to load delta intelligence.", "Impossible de charger l'intelligence delta.")
         }
     }
 
@@ -1010,6 +1048,37 @@ final class ADLAPIClient {
 
     func fetchWeeklyKpis(limit: Int = 24) async throws -> [WeeklyKpiRow] {
         try await fetchJSON([WeeklyKpiRow].self, path: "/api/analytics?view=kpi_weekly&limit=\(limit)")
+    }
+
+    // MARK: - Client delta intelligence (africandatalayer-5h6)
+
+    func fetchSnapshotStats(limit: Int = 52) async throws -> [SnapshotStatRow] {
+        try await fetchJSON([SnapshotStatRow].self, path: "/api/analytics?view=snapshots&limit=\(limit)")
+    }
+
+    func fetchTrend(vertical: String, weeks: Int = 12) async throws -> [TrendPoint] {
+        try await fetchJSON(TrendEnvelope.self,
+                            path: "/api/analytics?view=trends&vertical=\(vertical)&metric=total_points&weeks=\(weeks)").data
+    }
+
+    func fetchDeltas(vertical: String, limit: Int = 20) async throws -> [DeltaIntelRow] {
+        try await fetchJSON(DeltasEnvelope.self,
+                            path: "/api/analytics?view=deltas&vertical=\(vertical)&publishable=true&limit=\(limit)").deltas
+    }
+
+    func fetchSpatialIntelligence(vertical: String, sort: String, limit: Int = 8) async throws -> SpatialIntelPayload {
+        try await fetchJSON(SpatialIntelPayload.self,
+                            path: "/api/analytics?view=spatial_intelligence&vertical=\(vertical)&sort=\(sort)&limit=\(limit)")
+    }
+
+    func askAnalyticsAssistant(question: String, vertical: String?) async throws -> AnalystAnswer {
+        struct Body: Encodable {
+            let question: String
+            let vertical: String?
+            let zone: String
+        }
+        return try await postJSON(path: "/api/ai/search?view=analytics-query",
+                                  body: Body(question: question, vertical: vertical, zone: "bonamoussadi"))
     }
 
     func fetchLeaderboard() async throws -> [LeaderboardEntry] {
