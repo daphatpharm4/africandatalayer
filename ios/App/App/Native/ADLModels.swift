@@ -224,7 +224,7 @@ enum AppReleaseMode {
     }
 }
 
-private extension String {
+extension String {
     var nilIfEmpty: String? {
         isEmpty ? nil : self
     }
@@ -411,6 +411,31 @@ struct ProjectedPoint: Codable, Hashable, Identifiable {
     var eventIds: [String]
 }
 
+struct UserContributionEvent: Codable, Hashable, Identifiable {
+    var id: String
+    var eventType: String
+    var pointId: String?
+    var userId: String?
+    var createdAt: String
+    var category: SubmissionCategory
+    var location: SubmissionLocation?
+    var details: SubmissionDetails
+
+    var createdDate: Date {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: createdAt) { return date }
+        return ISO8601DateFormatter().date(from: createdAt) ?? Date.distantPast
+    }
+
+    var displayTitle: String {
+        details.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? details.siteName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? details.roadName?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+            ?? category.title
+    }
+}
+
 struct DataPoint: Codable, Hashable, Identifiable {
     var id: String
     var category: SubmissionCategory
@@ -591,6 +616,7 @@ struct AuthUser: Codable, Hashable {
     var image: String?
     var isAdmin: Bool?
     var role: UserRole?
+    var mapScope: String?
 }
 
 // MARK: - Analytics
@@ -725,16 +751,20 @@ struct LeaderboardEntry: Codable, Hashable, Identifiable {
 struct UserProfile: Codable, Hashable {
     var id: String?
     var name: String?
+    var email: String?
+    var phone: String?
     var image: String?
     var avatarPreset: String?
     var occupation: String?
     var role: UserRole?
+    var isAdmin: Bool?
+    var mapScope: String?
     var trustTier: String?
     var trustScore: Int?
     var xp: Int
 
     enum CodingKeys: String, CodingKey {
-        case id, name, image, avatarPreset, occupation, role, trustTier, trustScore
+        case id, name, email, phone, image, avatarPreset, occupation, role, isAdmin, mapScope, trustTier, trustScore
         case xp = "XP"
     }
 }
@@ -1234,8 +1264,14 @@ struct AssignmentsResponse: Decodable {
     enum CodingKeys: String, CodingKey { case context, assignments }
 
     init(from decoder: Decoder) throws {
+        if let assignmentList = try? [CollectionAssignment](from: decoder) {
+            context = AssignmentPlannerContext()
+            assignments = assignmentList
+            return
+        }
+
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        context     = try c.decode(AssignmentPlannerContext.self,   forKey: .context)
+        context     = try c.decodeIfPresent(AssignmentPlannerContext.self, forKey: .context) ?? AssignmentPlannerContext()
         assignments = try c.decodeIfPresent([CollectionAssignment].self, forKey: .assignments) ?? []
     }
 }

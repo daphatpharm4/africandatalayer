@@ -1291,6 +1291,22 @@ struct AgentHomeView: View {
         CLLocationCoordinate2D(latitude: 4.0829, longitude: 9.7371)
     ]
 
+    private var isAdminGlobalMap: Bool {
+        appState.selectedRole == .admin
+    }
+
+    private var defaultRegion: MKCoordinateRegion {
+        isAdminGlobalMap
+            ? MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 4.2, longitude: 9.3),
+                span: MKCoordinateSpan(latitudeDelta: 5.8, longitudeDelta: 5.8)
+            )
+            : MKCoordinateRegion(
+                center: CLLocationCoordinate2D(latitude: 4.0887, longitude: 9.7403),
+                span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
+            )
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             FieldMapKitView(
@@ -1364,10 +1380,7 @@ struct AgentHomeView: View {
                     .accessibilityLabel(appState.t("Center on user location", "Centrer sur votre position"))
 
                     Button {
-                        region = MKCoordinateRegion(
-                            center: CLLocationCoordinate2D(latitude: 4.0887, longitude: 9.7403),
-                            span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
-                        )
+                        region = defaultRegion
                         trackingMode = .none
                     } label: {
                         Image(systemName: "scope")
@@ -1377,7 +1390,9 @@ struct AgentHomeView: View {
                     .foregroundColor(ADLColor.navy)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .shadow(color: .black.opacity(0.16), radius: 10, y: 4)
-                    .accessibilityLabel(appState.t("Recenter Bonamoussadi zone", "Recentrer la zone Bonamoussadi"))
+                    .accessibilityLabel(isAdminGlobalMap
+                                        ? appState.t("Recenter admin map", "Recentrer la carte admin")
+                                        : appState.t("Recenter Bonamoussadi zone", "Recentrer la zone Bonamoussadi"))
 
                     Spacer()
                 }
@@ -1401,7 +1416,15 @@ struct AgentHomeView: View {
             .padding(.bottom, 16)
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .task { await appState.loadPoints() }
+        .task {
+            if !appState.isGuest {
+                await appState.loadProfile()
+            }
+            if isAdminGlobalMap {
+                region = defaultRegion
+            }
+            await appState.loadPoints()
+        }
         .sheet(item: $selectedPoint) { point in
             PointDetailSheet(
                 point: point,
@@ -1462,8 +1485,26 @@ struct FieldMapKitView: UIViewRepresentable {
             mapView.setRegion(region, animated: true)
         }
 
-        mapView.removeAnnotations(mapView.annotations.filter { !($0 is MKUserLocation) })
-        mapView.addAnnotations(points.map(FieldPointAnnotation.init(point:)))
+        let existingAnnotations = mapView.annotations.compactMap { $0 as? FieldPointAnnotation }
+        let nextIds = Set(points.map(\.id))
+        let staleAnnotations = existingAnnotations.filter { !nextIds.contains($0.point.id) }
+        if !staleAnnotations.isEmpty {
+            mapView.removeAnnotations(staleAnnotations)
+        }
+
+        let existingIds = Set(existingAnnotations.map { $0.point.id })
+        let pointsById = Dictionary(points.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for annotation in existingAnnotations {
+            if let nextPoint = pointsById[annotation.point.id], nextPoint != annotation.point {
+                annotation.point = nextPoint
+            }
+        }
+        let newAnnotations = points
+            .filter { !existingIds.contains($0.id) }
+            .map(FieldPointAnnotation.init(point:))
+        if !newAnnotations.isEmpty {
+            mapView.addAnnotations(newAnnotations)
+        }
 
         // Geofence polygon intentionally not drawn (removed yellow zone outline).
         // Strip any stray polygon overlays while preserving the CARTO tile overlay.
@@ -1582,7 +1623,7 @@ final class FieldPointAnnotationView: MKAnnotationView {
 }
 
 final class FieldPointAnnotation: NSObject, MKAnnotation {
-    let point: DataPoint
+    var point: DataPoint
 
     var coordinate: CLLocationCoordinate2D {
         point.location.coordinate
@@ -1603,10 +1644,10 @@ final class FieldPointAnnotation: NSObject, MKAnnotation {
 
 private extension MKCoordinateRegion {
     func isClose(to other: MKCoordinateRegion) -> Bool {
-        abs(center.latitude - other.center.latitude) < 0.000_001 &&
-            abs(center.longitude - other.center.longitude) < 0.000_001 &&
-            abs(span.latitudeDelta - other.span.latitudeDelta) < 0.000_001 &&
-            abs(span.longitudeDelta - other.span.longitudeDelta) < 0.000_001
+        abs(center.latitude - other.center.latitude) < 0.000_08 &&
+            abs(center.longitude - other.center.longitude) < 0.000_08 &&
+            abs(span.latitudeDelta - other.span.latitudeDelta) < 0.000_08 &&
+            abs(span.longitudeDelta - other.span.longitudeDelta) < 0.000_08
     }
 }
 
@@ -1622,10 +1663,14 @@ struct FieldMapHeader: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(appState.t("Bonamoussadi field map", "Carte terrain Bonamoussadi"))
+                    Text(appState.selectedRole == .admin
+                         ? appState.t("Worldwide admin map", "Carte admin mondiale")
+                         : appState.t("Bonamoussadi field map", "Carte terrain Bonamoussadi"))
                         .font(ADLFont.inter(17, .bold))
                         .foregroundColor(ADLColor.ink)
-                    Text(appState.t("Collection zone, trusted points, and next captures.", "Zone de collecte, points vérifiés et prochaines captures."))
+                    Text(appState.selectedRole == .admin
+                         ? appState.t("Global scope, reviewer context, and trusted points.", "Vue globale, contexte revue et points vérifiés.")
+                         : appState.t("Collection zone, trusted points, and next captures.", "Zone de collecte, points vérifiés et prochaines captures."))
                         .font(ADLFont.inter(13, .medium))
                         .foregroundColor(.secondary)
                 }
@@ -4172,6 +4217,51 @@ private struct AnalyticsStatusNote: View {
 struct AdminReviewView: View {
     @EnvironmentObject private var appState: AppState
     @State private var activeMode: AdminNativeMode = .review
+    @State private var reviewRiskFilter = "all"
+    @State private var reviewAgentFilter = "all"
+    @State private var selectedReviewEventIds: Set<String> = []
+
+    private var filteredReviewQueue: [AdminReviewGroup] {
+        appState.reviewQueue.filter { group in
+            if reviewRiskFilter != "all", group.summary.riskBucket != reviewRiskFilter { return false }
+            if reviewAgentFilter != "all", group.latestUser?.id != reviewAgentFilter { return false }
+            return true
+        }
+    }
+
+    private var reviewAgentOptions: [AdminReviewUser] {
+        var seen = Set<String>()
+        return appState.reviewQueue.compactMap { group in
+            guard let user = group.latestUser, !user.id.isEmpty, !seen.contains(user.id) else { return nil }
+            seen.insert(user.id)
+            return user
+        }
+        .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    private var selectedBulkEventIds: [String] {
+        filteredReviewQueue
+            .filter { selectedReviewEventIds.contains($0.latestEventId) && isBulkEligible($0) }
+            .map(\.latestEventId)
+    }
+
+    private func isBulkEligible(_ group: AdminReviewGroup) -> Bool {
+        !group.latestEventId.isEmpty && AdminResolvedStatus.from(group.summary.reviewStatus) == nil
+    }
+
+    private func riskTitle(_ risk: String) -> String {
+        switch risk {
+        case "flagged": return appState.t("High risk", "Risque élevé")
+        case "pending": return appState.t("Pending", "En attente")
+        case "low_risk": return appState.t("Low risk", "Faible risque")
+        default: return appState.t("All risk", "Tous risques")
+        }
+    }
+
+    private func agentTitle(_ agentId: String) -> String {
+        if agentId == "all" { return appState.t("All agents", "Tous agents") }
+        return reviewAgentOptions.first { $0.id == agentId }?.name ?? agentId
+    }
 
     // Map riskBucket String → RiskLevel
     private func riskLevel(for group: AdminReviewGroup) -> RiskLevel {
@@ -4226,31 +4316,46 @@ struct AdminReviewView: View {
     }
 
     private var adminModeTabs: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+        VStack(spacing: 10) {
+            Menu {
                 ForEach(AdminNativeMode.allCases, id: \.self) { mode in
                     Button {
                         activeMode = mode
                     } label: {
-                        Text(mode.title(appState.language))
-                            .font(ADLFont.inter(12, .bold))
-                            .tracking(1.6)
-                            .textCase(.uppercase)
-                            .foregroundColor(activeMode == mode ? .white : ADLColor.inkMuted)
-                            .frame(minWidth: mode == .communications ? 152 : 118)
-                            .frame(height: 48)
-                            .background(activeMode == mode ? ADLColor.navy : Color.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(activeMode == mode ? ADLColor.navy : ADLColor.lineStrong, lineWidth: 1)
-                            )
+                        Label(mode.title(appState.language), systemImage: mode.systemImage)
                     }
-                    .buttonStyle(.plain)
                 }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: activeMode.systemImage)
+                        .font(.system(size: 16, weight: .bold))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(appState.t("Cockpit", "Cockpit").uppercased())
+                            .font(ADLFont.inter(10, .bold))
+                            .tracking(1.4)
+                            .foregroundColor(ADLColor.inkMuted)
+                        Text(activeMode.title(appState.language))
+                            .font(ADLFont.inter(15, .bold))
+                            .foregroundColor(ADLColor.ink)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(ADLColor.navy)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 58)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(ADLColor.lineStrong, lineWidth: 1)
+                )
             }
+            .buttonStyle(.plain)
             .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
         }
         .background(Color.white)
         .overlay(Rectangle().fill(ADLColor.line).frame(height: 1), alignment: .bottom)
@@ -4319,27 +4424,50 @@ struct AdminReviewView: View {
                     AnalyticsStatusNote()
                         .padding(.horizontal, 16)
 
+                    reviewFiltersCard
+                        .padding(.horizontal, 16)
+
                     // Section label
                     SectionLabel(text: appState.t("Review Queue", "File de révision"), wide: true)
                         .padding(.horizontal, 16)
                         .padding(.top, 4)
 
                     // Submission cards
-                    if !appState.isLoadingReview && appState.reviewQueue.isEmpty {
+                    if !appState.isLoadingReview && filteredReviewQueue.isEmpty {
                         ADLCard {
-                            Text(appState.t("No submissions in queue.", "Aucune soumission dans la file."))
+                            Text(appState.reviewQueue.isEmpty
+                                 ? appState.t("No submissions in queue.", "Aucune soumission dans la file.")
+                                 : appState.t("No submissions match these filters.", "Aucune soumission ne correspond à ces filtres."))
                                 .font(ADLFont.inter(13, .semibold))
                                 .foregroundColor(Color(hex: 0x374151))
                         }
                         .padding(.horizontal, 16)
                     } else {
                         VStack(spacing: 10) {
-                            ForEach(appState.reviewQueue) { group in
-                                AdminSubmissionCard(
-                                    group: group,
-                                    riskLevel: riskLevel(for: group),
-                                    trustTier: trustTier(for: group)
-                                )
+                            ForEach(filteredReviewQueue) { group in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Button {
+                                        if selectedReviewEventIds.contains(group.latestEventId) {
+                                            selectedReviewEventIds.remove(group.latestEventId)
+                                        } else {
+                                            selectedReviewEventIds.insert(group.latestEventId)
+                                        }
+                                    } label: {
+                                        Image(systemName: selectedReviewEventIds.contains(group.latestEventId) ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: 22, weight: .bold))
+                                            .foregroundColor(isBulkEligible(group) ? ADLColor.navy : Color(hex: 0x9ca3af))
+                                            .frame(width: 36, height: 44)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .disabled(!isBulkEligible(group))
+                                    .accessibilityLabel(appState.t("Select for mass approval", "Sélectionner pour approbation en lot"))
+
+                                    AdminSubmissionCard(
+                                        group: group,
+                                        riskLevel: riskLevel(for: group),
+                                        trustTier: trustTier(for: group)
+                                    )
+                                }
                             }
                         }
                         .padding(.horizontal, 16)
@@ -4347,6 +4475,137 @@ struct AdminReviewView: View {
                 }
                 .padding(.bottom, 24)
             }
+    }
+
+    private var reviewFiltersCard: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    SectionLabel(text: appState.t("Filters", "Filtres"), wide: true)
+                    Spacer()
+                    Text("\(filteredReviewQueue.count)")
+                        .font(ADLFont.inter(12, .bold))
+                        .foregroundColor(ADLColor.navy)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(ADLColor.navyLight)
+                        .clipShape(Capsule())
+                }
+
+                HStack(spacing: 10) {
+                    Menu {
+                        ForEach(["all", "flagged", "pending", "low_risk"], id: \.self) { risk in
+                            Button(riskTitle(risk)) { reviewRiskFilter = risk }
+                        }
+                    } label: {
+                        filterButtonLabel(
+                            title: appState.t("Risk", "Risque"),
+                            value: riskTitle(reviewRiskFilter),
+                            systemImage: "shield.lefthalf.filled"
+                        )
+                    }
+
+                    Menu {
+                        Button(agentTitle("all")) { reviewAgentFilter = "all" }
+                        ForEach(reviewAgentOptions, id: \.id) { agent in
+                            Button(agent.name) { reviewAgentFilter = agent.id }
+                        }
+                    } label: {
+                        filterButtonLabel(
+                            title: appState.t("Agent", "Agent"),
+                            value: agentTitle(reviewAgentFilter),
+                            systemImage: "person.crop.circle"
+                        )
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        selectedReviewEventIds = Set(filteredReviewQueue.filter(isBulkEligible).map(\.latestEventId))
+                    } label: {
+                        Text(appState.t("Select visible", "Sélectionner visibles"))
+                            .font(ADLFont.inter(12, .bold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 42)
+                            .foregroundColor(ADLColor.navy)
+                            .background(ADLColor.navyWash)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        selectedReviewEventIds.removeAll()
+                    } label: {
+                        Text(appState.t("Clear", "Effacer"))
+                            .font(ADLFont.inter(12, .bold))
+                            .frame(width: 84, height: 42)
+                            .foregroundColor(ADLColor.inkMuted)
+                            .background(ADLColor.line)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                Button {
+                    let ids = selectedBulkEventIds
+                    Task {
+                        await appState.batchApproveReview(eventIds: ids)
+                        selectedReviewEventIds.subtract(ids)
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        if appState.isBatchApprovingReview {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "checkmark.seal.fill")
+                        }
+                        Text(appState.t("Mass approve", "Approuver en lot"))
+                            .font(ADLFont.inter(13, .bold))
+                        Text("(\(selectedBulkEventIds.count))")
+                            .font(ADLFont.inter(12, .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 46)
+                    .foregroundColor(.white)
+                    .background(selectedBulkEventIds.isEmpty || appState.isBatchApprovingReview ? Color(hex: 0x9ca3af) : ADLColor.forest)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(selectedBulkEventIds.isEmpty || appState.isBatchApprovingReview)
+
+                if let message = appState.reviewActionMessage {
+                    Text(message)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.forest)
+                }
+            }
+        }
+    }
+
+    private func filterButtonLabel(title: String, value: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .bold))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title.uppercased())
+                    .font(ADLFont.inter(9, .bold))
+                    .tracking(1.1)
+                    .foregroundColor(ADLColor.inkMuted)
+                Text(value)
+                    .font(ADLFont.inter(12, .bold))
+                    .foregroundColor(ADLColor.ink)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(ADLColor.navy)
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity)
+        .frame(height: 48)
+        .background(ADLColor.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     // MARK: - Assignments cockpit (africandatalayer-955)
@@ -5189,6 +5448,52 @@ private struct AssignmentCard: View {
                 }
             }
         }
+    }
+}
+
+private struct AssignmentCompactRow: View {
+    @EnvironmentObject private var appState: AppState
+    let assignment: CollectionAssignment
+    let context: AssignmentPlannerContext
+
+    private var agentName: String {
+        context.agents.first(where: { $0.id == assignment.agentUserId })?.name
+            ?? assignment.agentUserId
+    }
+
+    private var progress: Double {
+        guard assignment.pointsExpected > 0 else { return 0 }
+        return min(1, Double(assignment.pointsSubmitted) / Double(assignment.pointsExpected))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "map.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(ADLColor.forest)
+                    .frame(width: 34, height: 34)
+                    .background(ADLColor.forestWash)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(assignment.zoneLabel)
+                        .font(ADLFont.inter(13, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(appState.selectedRole == .admin ? agentName : "\(appState.t("Due", "Échéance")) \(assignment.dueDate.prefix(10))")
+                        .font(ADLFont.inter(11, .medium))
+                        .foregroundColor(ADLColor.inkMuted)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Text("\(assignment.pointsSubmitted)/\(assignment.pointsExpected)")
+                    .font(ADLFont.inter(11, .bold))
+                    .foregroundColor(ADLColor.navy)
+            }
+            ADLProgressBar(value: progress, tint: ADLColor.forest, height: 7)
+        }
+        .padding(10)
+        .background(ADLColor.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 }
 
@@ -7664,6 +7969,7 @@ struct ProfileView: View {
 
                             if appState.selectedRole == .admin {
                                 adminMapAccessCard
+                                adminAccountAccessCard
                             }
 
                             assignmentsCard
@@ -7679,13 +7985,19 @@ struct ProfileView: View {
                         .padding(.bottom, 24)
                     }
                 }
-                .refreshable { await appState.loadProfile(force: true) }
+                .refreshable {
+                    await appState.loadProfile(force: true)
+                    await appState.loadAssignments(force: true)
+                    await appState.loadContributionEvents(force: true)
+                }
             }
         }
         .background(ADLColor.paper.ignoresSafeArea())
         .task {
             if !appState.isGuest {
                 await appState.loadProfile()
+                await appState.loadAssignments()
+                await appState.loadContributionEvents()
             }
         }
     }
@@ -7727,7 +8039,7 @@ struct ProfileView: View {
     }
 
     private var pointsTotal: Int {
-        appState.queueSnapshot.synced + appState.drafts.count
+        appState.contributionEvents.count + appState.drafts.count
     }
 
     private var failedDrafts: [ContributionDraft] {
@@ -7736,7 +8048,15 @@ struct ProfileView: View {
 
     private var pointsThisWeek: Int {
         let calendar = Calendar.current
-        return appState.drafts.filter { calendar.isDate($0.createdAt, equalTo: Date(), toGranularity: .weekOfYear) }.count
+        let localCount = appState.drafts.filter { calendar.isDate($0.createdAt, equalTo: Date(), toGranularity: .weekOfYear) }.count
+        let serverCount = appState.contributionEvents.filter { calendar.isDate($0.createdDate, equalTo: Date(), toGranularity: .weekOfYear) }.count
+        return localCount + serverCount
+    }
+
+    private var activeAssignments: [CollectionAssignment] {
+        appState.assignments.filter { assignment in
+            assignment.status != .completed && assignment.status != .cancelled
+        }
     }
 
     private var weeklyTarget: Int { 50 }
@@ -7969,6 +8289,10 @@ struct ProfileView: View {
         }
     }
 
+    private var adminAccountAccessCard: some View {
+        AdminAccountAccessCard()
+    }
+
     // MARK: - Assignments card
 
     private var assignmentsCard: some View {
@@ -7982,7 +8306,7 @@ struct ProfileView: View {
                             .foregroundColor(ADLColor.ink)
                     }
                     Spacer()
-                    Text("0")
+                    Text("\(activeAssignments.count)")
                         .font(ADLFont.inter(11, .bold))
                         .foregroundColor(ADLColor.navy)
                         .padding(.horizontal, 12)
@@ -7990,9 +8314,28 @@ struct ProfileView: View {
                         .background(ADLColor.navyLight)
                         .clipShape(Capsule())
                 }
-                Text(appState.t("No active assignments yet.", "Aucune mission active pour le moment."))
-                    .font(ADLFont.inter(12))
-                    .foregroundColor(ADLColor.inkMuted)
+                if appState.isLoadingAssignments {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(appState.t("Loading assignments…", "Chargement des missions…"))
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                } else if let error = appState.assignmentsError, appState.assignments.isEmpty {
+                    Text(error)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                } else if activeAssignments.isEmpty {
+                    Text(appState.t("No active assignments yet.", "Aucune mission active pour le moment."))
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                } else {
+                    VStack(spacing: 10) {
+                        ForEach(activeAssignments.prefix(3)) { assignment in
+                            AssignmentCompactRow(assignment: assignment, context: appState.assignmentsContext)
+                        }
+                    }
+                }
             }
         }
     }
@@ -8106,15 +8449,52 @@ struct ProfileView: View {
                 Spacer()
             }
 
-            if appState.drafts.isEmpty {
+            if appState.isLoadingContributionEvents {
                 ADLCard {
-                    Text(appState.t("No contributions yet. Add your first report to build your history.", "Aucune contribution pour le moment. Ajoutez votre premier rapport pour commencer votre historique."))
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text(appState.t("Loading contributions…", "Chargement des contributions…"))
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                }
+            } else if appState.contributionEvents.isEmpty && appState.drafts.isEmpty {
+                ADLCard {
+                    Text(appState.contributionEventsError ?? appState.t("No contributions yet. Add your first report to build your history.", "Aucune contribution pour le moment. Ajoutez votre premier rapport pour commencer votre historique."))
                         .font(ADLFont.inter(12))
-                        .foregroundColor(ADLColor.inkMuted)
+                        .foregroundColor(appState.contributionEventsError == nil ? ADLColor.inkMuted : ADLColor.terracotta)
                 }
             } else {
                 VStack(spacing: 12) {
-                    ForEach(appState.drafts.prefix(5)) { draft in
+                    ForEach(appState.contributionEvents.prefix(5)) { event in
+                        ADLCard {
+                            HStack(spacing: 12) {
+                                Image(systemName: event.eventType == "ENRICH_EVENT" ? "plus.magnifyingglass" : "mappin.and.ellipse")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(ADLColor.navy)
+                                    .frame(width: 40, height: 40)
+                                    .background(ADLColor.navyWash)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(event.category.title)
+                                        .font(ADLFont.inter(12, .bold))
+                                        .foregroundColor(ADLColor.ink)
+                                    Text(event.createdDate.formatted(date: .abbreviated, time: .omitted).uppercased())
+                                        .font(ADLFont.inter(11, .bold))
+                                        .foregroundColor(ADLColor.navy.opacity(0.5))
+                                    Text(event.displayTitle)
+                                        .font(ADLFont.inter(11, .medium))
+                                        .foregroundColor(ADLColor.inkMuted)
+                                        .lineLimit(1)
+                                }
+                                Spacer()
+                                Text(appState.t("Synced", "Synchronisé"))
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(ADLColor.forest)
+                            }
+                        }
+                    }
+                    ForEach(appState.drafts.prefix(max(0, 5 - appState.contributionEvents.prefix(5).count))) { draft in
                         ADLCard {
                             HStack(spacing: 12) {
                                 Image(systemName: "calendar")
@@ -8191,6 +8571,311 @@ struct ProfileView: View {
         }
     }
 
+}
+
+private struct AdminAccountAccessCard: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var createIdentifier = ""
+    @State private var createName = ""
+    @State private var createRole: UserRole = .client
+    @State private var createPassword = ""
+    @State private var lookupIdentifier = ""
+    @State private var managedAccount: UserProfile?
+    @State private var managedRole: UserRole = .client
+    @State private var isCreating = false
+    @State private var isLookingUp = false
+    @State private var isSavingAccess = false
+    @State private var message: String?
+    @State private var error: String?
+
+    private var canCreate: Bool {
+        !createIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            createPassword.count >= 10
+    }
+
+    private var canSaveAccess: Bool {
+        guard let account = managedAccount else { return false }
+        return account.role != managedRole || (account.isAdmin == true) != (managedRole == .admin)
+    }
+
+    var body: some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionLabel(text: appState.t("Account Access", "Accès aux comptes"))
+                    Text(appState.t("Create or manage account access", "Créer ou gérer les accès aux comptes"))
+                        .font(ADLFont.inter(15, .bold))
+                        .foregroundColor(ADLColor.ink)
+                    Text(appState.t(
+                        "Create client accounts, then look up email or phone to adjust Agent, Client, or Admin access. Admin accounts automatically unlock worldwide map views.",
+                        "Créez des comptes client, puis recherchez email ou téléphone pour régler les accès Agent, Client ou Admin. Les comptes admin débloquent automatiquement la vue mondiale."
+                    ))
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text(appState.t("Create account", "Créer un compte"))
+                            .font(ADLFont.inter(13, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        Spacer()
+                        rolePill(createRole)
+                    }
+                    Text(appState.t("Default role is Client. The user accepts policies on first login.", "Le rôle par défaut est Client. L'utilisateur accepte les politiques à la première connexion."))
+                        .font(ADLFont.inter(11))
+                        .foregroundColor(ADLColor.inkMuted)
+
+                    adminTextField(
+                        title: appState.t("Email or phone", "Email ou téléphone"),
+                        text: $createIdentifier,
+                        placeholder: "client@example.com / +237..."
+                    )
+                    adminTextField(
+                        title: appState.t("Display name", "Nom affiché"),
+                        text: $createName,
+                        placeholder: appState.t("Client team name", "Nom équipe client")
+                    )
+                    roleMenu(title: appState.t("Role", "Rôle"), role: $createRole)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(appState.t("Temporary password", "Mot de passe temporaire").uppercased())
+                            .font(ADLFont.inter(10, .bold))
+                            .tracking(1.1)
+                            .foregroundColor(ADLColor.inkMuted)
+                        SecureField(appState.t("Minimum 10 chars, mixed case, number", "10 caractères min., majuscule, minuscule, chiffre"), text: $createPassword)
+                            .font(ADLFont.inter(14))
+                            .textContentType(.newPassword)
+                            .padding(.horizontal, 12)
+                            .frame(height: 46)
+                            .background(Color.white)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(ADLColor.lineStrong, lineWidth: 1))
+                    }
+
+                    Button {
+                        createAccount()
+                    } label: {
+                        actionLabel(
+                            title: appState.t("Create account", "Créer le compte"),
+                            loading: isCreating,
+                            tint: canCreate ? ADLColor.navy : Color(hex: 0x9ca3af)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canCreate || isCreating)
+                }
+                .padding(12)
+                .background(ADLColor.paper)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 10) {
+                    adminTextField(
+                        title: appState.t("Load account", "Charger le compte"),
+                        text: $lookupIdentifier,
+                        placeholder: "name@example.com / +237..."
+                    )
+                    Button {
+                        lookupAccount()
+                    } label: {
+                        actionLabel(
+                            title: appState.t("Load account", "Charger le compte"),
+                            loading: isLookingUp,
+                            tint: lookupIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color(hex: 0x9ca3af) : ADLColor.navy
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(lookupIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLookingUp)
+                }
+
+                if let account = managedAccount {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(account.name?.nilIfEmpty ?? account.id ?? appState.t("Loaded account", "Compte chargé"))
+                            .font(ADLFont.inter(14, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        Text(account.email?.nilIfEmpty ?? account.phone?.nilIfEmpty ?? account.id ?? "")
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                        Text("\(appState.t("Current access", "Accès actuel")): \(roleTitle(account.role ?? .client)) · \(account.mapScope ?? "bonamoussadi")")
+                            .font(ADLFont.inter(11, .bold))
+                            .foregroundColor(ADLColor.inkMuted)
+                        roleMenu(title: appState.t("Role", "Rôle"), role: $managedRole)
+                        Button {
+                            saveAccess()
+                        } label: {
+                            actionLabel(
+                                title: appState.t("Save access", "Enregistrer l'accès"),
+                                loading: isSavingAccess,
+                                tint: canSaveAccess ? ADLColor.terracotta : Color(hex: 0x9ca3af)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!canSaveAccess || isSavingAccess)
+                    }
+                    .padding(12)
+                    .background(ADLColor.paper)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+
+                if let error {
+                    Text(error)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                }
+                if let message {
+                    Text(message)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.forest)
+                }
+            }
+        }
+    }
+
+    private func roleTitle(_ role: UserRole) -> String {
+        switch role {
+        case .client: return appState.t("Client", "Client")
+        case .agent: return appState.t("Agent", "Agent")
+        case .admin: return appState.t("Admin", "Admin")
+        }
+    }
+
+    private func rolePill(_ role: UserRole) -> some View {
+        Text(roleTitle(role))
+            .font(ADLFont.inter(10, .bold))
+            .tracking(1.1)
+            .foregroundColor(ADLColor.amber)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(ADLColor.goldWash)
+            .clipShape(Capsule())
+    }
+
+    private func roleMenu(title: String, role: Binding<UserRole>) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(ADLFont.inter(10, .bold))
+                .tracking(1.1)
+                .foregroundColor(ADLColor.inkMuted)
+            Menu {
+                ForEach([UserRole.client, .agent, .admin], id: \.self) { option in
+                    Button(roleTitle(option)) { role.wrappedValue = option }
+                }
+            } label: {
+                HStack {
+                    Text(roleTitle(role.wrappedValue))
+                        .font(ADLFont.inter(14, .bold))
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundColor(ADLColor.ink)
+                .padding(.horizontal, 12)
+                .frame(height: 46)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(ADLColor.lineStrong, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func adminTextField(title: String, text: Binding<String>, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title.uppercased())
+                .font(ADLFont.inter(10, .bold))
+                .tracking(1.1)
+                .foregroundColor(ADLColor.inkMuted)
+            TextField(placeholder, text: text)
+                .font(ADLFont.inter(14))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .padding(.horizontal, 12)
+                .frame(height: 46)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(ADLColor.lineStrong, lineWidth: 1))
+        }
+    }
+
+    private func actionLabel(title: String, loading: Bool, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            if loading {
+                ProgressView().tint(.white)
+            }
+            Text(title)
+                .font(ADLFont.inter(13, .bold))
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 46)
+        .foregroundColor(.white)
+        .background(tint)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func createAccount() {
+        let identifier = createIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name = createName.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+        isCreating = true
+        error = nil
+        message = nil
+        Task {
+            do {
+                let created = try await appState.apiClient.createAdminAccount(
+                    identifier: identifier,
+                    name: name,
+                    role: createRole,
+                    password: createPassword
+                )
+                managedAccount = created
+                managedRole = created.role ?? createRole
+                lookupIdentifier = created.email?.nilIfEmpty ?? created.phone?.nilIfEmpty ?? created.id ?? identifier
+                createIdentifier = ""
+                createName = ""
+                createRole = .client
+                createPassword = ""
+                message = appState.t("Account created. Share the temporary password through a trusted channel.", "Compte créé. Partagez le mot de passe temporaire via un canal de confiance.")
+            } catch {
+                self.error = (error as? APIError)?.message ?? appState.t("Unable to create account.", "Impossible de créer le compte.")
+            }
+            isCreating = false
+        }
+    }
+
+    private func lookupAccount() {
+        let identifier = lookupIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        isLookingUp = true
+        error = nil
+        message = nil
+        Task {
+            do {
+                let account = try await appState.apiClient.lookupAdminAccount(identifier: identifier)
+                managedAccount = account
+                managedRole = account.role ?? (account.isAdmin == true ? .admin : .client)
+            } catch {
+                managedAccount = nil
+                self.error = (error as? APIError)?.message ?? appState.t("Unable to load account.", "Impossible de charger le compte.")
+            }
+            isLookingUp = false
+        }
+    }
+
+    private func saveAccess() {
+        guard let account = managedAccount, let userId = account.id?.nilIfEmpty else { return }
+        isSavingAccess = true
+        error = nil
+        message = nil
+        Task {
+            do {
+                let updated = try await appState.apiClient.updateAdminAccountAccess(userId: userId, role: managedRole)
+                managedAccount = updated
+                managedRole = updated.role ?? managedRole
+                message = appState.t("Account access updated.", "Accès du compte mis à jour.")
+            } catch {
+                self.error = (error as? APIError)?.message ?? appState.t("Unable to update account access.", "Impossible de mettre à jour l'accès du compte.")
+            }
+            isSavingAccess = false
+        }
+    }
 }
 
 
@@ -9335,7 +10020,7 @@ struct ProfileImagePicker: UIViewControllerRepresentable {
 }
 
 private extension UIImage {
-    func adlProfileImageDataURL(maxDimension: CGFloat = 1024, compressionQuality: CGFloat = 0.76) -> String? {
+    func adlProfileImageDataURL(maxDimension: CGFloat = 768, compressionQuality: CGFloat = 0.68) -> String? {
         let source = adlScaledProfileImage(maxDimension: maxDimension)
         guard let data = source.jpegData(compressionQuality: compressionQuality) else { return nil }
         return "data:image/jpeg;base64,\(data.base64EncodedString())"
