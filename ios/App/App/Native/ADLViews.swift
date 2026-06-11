@@ -4401,6 +4401,8 @@ struct AdminReviewView: View {
                         Text(activeMode.title(appState.language))
                             .font(ADLFont.inter(15, .bold))
                             .foregroundColor(ADLColor.ink)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     Spacer()
                     Image(systemName: "chevron.down")
@@ -4409,14 +4411,18 @@ struct AdminReviewView: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 58)
+                .frame(maxWidth: .infinity)
                 .background(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
                         .stroke(ADLColor.lineStrong, lineWidth: 1)
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .buttonStyle(.plain)
+            .animation(nil, value: activeMode)
+            .transaction { $0.animation = nil }
             .padding(.horizontal, 16)
             .padding(.top, 12)
             .padding(.bottom, 10)
