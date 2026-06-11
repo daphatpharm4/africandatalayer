@@ -543,7 +543,10 @@ final class AppState: ObservableObject {
             assignmentsContext = result.context
             assignments = result.assignments
         } catch {
-            assignmentsError = (error as? APIError)?.message ?? t("Unable to load assignments.", "Impossible de charger les affectations.")
+            // Surface the transport error too — the generic fallback hid URLErrors
+            // and made on-device diagnosis impossible (africandatalayer-kvi).
+            assignmentsError = (error as? APIError)?.message
+                ?? "\(t("Unable to load assignments.", "Impossible de charger les affectations.")) (\(error.localizedDescription))"
         }
     }
 

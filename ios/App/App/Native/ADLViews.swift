@@ -4636,6 +4636,19 @@ struct AdminReviewView: View {
                             Text(err)
                                 .font(ADLFont.inter(12))
                                 .foregroundColor(ADLColor.inkMuted)
+                            Button {
+                                Task { await appState.loadAssignments(force: true) }
+                            } label: {
+                                Text(appState.t("Retry", "Réessayer"))
+                                    .font(ADLFont.inter(12, .bold))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 40)
+                                    .foregroundColor(.white)
+                                    .background(ADLColor.navy)
+                                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 6)
                         }
                     }
                     .padding(.horizontal, 16)
