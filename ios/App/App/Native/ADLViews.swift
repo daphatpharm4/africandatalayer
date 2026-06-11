@@ -4281,6 +4281,36 @@ struct AdminReviewView: View {
         }
     }
 
+    // MARK: - Weekly assignment grouping (africandatalayer-jau)
+
+    private static let assignmentDueFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    private func assignmentDueDate(_ a: CollectionAssignment) -> Date? {
+        if let d = Self.assignmentDueFormatter.date(from: a.dueDate) { return d }
+        // dueDate may be plain YYYY-MM-DD
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+        df.timeZone = TimeZone(identifier: "UTC")
+        return df.date(from: String(a.dueDate.prefix(10)))
+    }
+
+    private var thisWeekAssignments: [CollectionAssignment] {
+        let cal = Calendar(identifier: .iso8601)
+        return appState.assignments.filter { a in
+            guard let due = assignmentDueDate(a) else { return false }
+            return cal.isDate(due, equalTo: Date(), toGranularity: .weekOfYear)
+        }
+    }
+
+    private var otherAssignments: [CollectionAssignment] {
+        let thisWeekIds = Set(thisWeekAssignments.map(\.id))
+        return appState.assignments.filter { !thisWeekIds.contains($0.id) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             ADLScreenHeader(title: "African Data Layer",
@@ -4660,15 +4690,33 @@ struct AdminReviewView: View {
                     }
                     .padding(.horizontal, 16)
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(appState.assignments) { assignment in
-                            AssignmentCard(
-                                assignment: assignment,
-                                context: appState.assignmentsContext
-                            )
+                    if !thisWeekAssignments.isEmpty {
+                        SectionLabel(text: appState.t("This week", "Cette semaine"), wide: true)
+                            .padding(.horizontal, 16)
+                        VStack(spacing: 10) {
+                            ForEach(thisWeekAssignments) { assignment in
+                                AssignmentCard(
+                                    assignment: assignment,
+                                    context: appState.assignmentsContext
+                                )
+                            }
                         }
+                        .padding(.horizontal, 16)
                     }
-                    .padding(.horizontal, 16)
+                    if !otherAssignments.isEmpty {
+                        SectionLabel(text: appState.t("Later & overdue", "À venir & en retard"), wide: true)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                        VStack(spacing: 10) {
+                            ForEach(otherAssignments) { assignment in
+                                AssignmentCard(
+                                    assignment: assignment,
+                                    context: appState.assignmentsContext
+                                )
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
                 }
             }
             .padding(.bottom, 24)
