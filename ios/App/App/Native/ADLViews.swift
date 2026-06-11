@@ -1330,6 +1330,10 @@ struct AgentHomeView: View {
                         if let selectedPoint, let category, selectedPoint.category != category {
                             self.selectedPoint = nil
                         }
+                    },
+                    onJumpToRegion: { newRegion in
+                        trackingMode = .none
+                        withAnimation { region = newRegion }
                     }
                 )
 
@@ -1691,7 +1695,16 @@ struct FieldMapHeader: View {
     let locationStatus: String
     let activeCategory: SubmissionCategory?
     let onSelectCategory: (SubmissionCategory?) -> Void
+    var onJumpToRegion: ((MKCoordinateRegion) -> Void)? = nil
     @EnvironmentObject private var appState: AppState
+
+    private static let jumpPresets: [(en: String, fr: String, lat: Double, lng: Double, span: Double)] = [
+        ("Bonamoussadi", "Bonamoussadi", 4.0911, 9.7375, 0.03),
+        ("Douala", "Douala", 4.05, 9.70, 0.25),
+        ("Yaoundé", "Yaoundé", 3.87, 11.52, 0.25),
+        ("Cameroon", "Cameroun", 5.7, 12.3, 9),
+        ("World", "Monde", 20, 0, 120),
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1709,7 +1722,28 @@ struct FieldMapHeader: View {
                         .foregroundColor(.secondary)
                 }
                 Spacer()
-                StatusPill(title: "Apple Maps", tint: ADLColor.forest)
+                if appState.selectedRole == .admin, let onJumpToRegion {
+                    Menu {
+                        ForEach(Self.jumpPresets, id: \.en) { preset in
+                            Button(appState.t(preset.en, preset.fr)) {
+                                onJumpToRegion(MKCoordinateRegion(
+                                    center: CLLocationCoordinate2D(latitude: preset.lat, longitude: preset.lng),
+                                    span: MKCoordinateSpan(latitudeDelta: preset.span, longitudeDelta: preset.span)))
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "globe.europe.africa.fill")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(ADLColor.navy)
+                            .frame(width: 40, height: 40)
+                            .background(ADLColor.navyWash)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(appState.t("Jump to region", "Aller à une région"))
+                } else {
+                    StatusPill(title: "Apple Maps", tint: ADLColor.forest)
+                }
             }
 
             HStack(spacing: 8) {
