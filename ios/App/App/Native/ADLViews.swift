@@ -10222,10 +10222,21 @@ struct ProfileImagePicker: UIViewControllerRepresentable {
 }
 
 private extension UIImage {
-    func adlProfileImageDataURL(maxDimension: CGFloat = 768, compressionQuality: CGFloat = 0.68) -> String? {
-        let source = adlScaledProfileImage(maxDimension: maxDimension)
-        guard let data = source.jpegData(compressionQuality: compressionQuality) else { return nil }
-        return "data:image/jpeg;base64,\(data.base64EncodedString())"
+    /// Server stores the image inline when blob storage is down only if the decoded
+    /// payload is <= 800_000 bytes (api/user MAX_INLINE_PROFILE_IMAGE_BYTES). Clamp
+    /// to 700KB so that fallback always applies.
+    func adlProfileImageDataURL(maxBytes: Int = 700_000) -> String? {
+        var dimension: CGFloat = 768
+        var quality: CGFloat = 0.68
+        for _ in 0..<4 {
+            let scaled = adlScaledProfileImage(maxDimension: dimension)
+            if let data = scaled.jpegData(compressionQuality: quality), data.count <= maxBytes {
+                return "data:image/jpeg;base64,\(data.base64EncodedString())"
+            }
+            dimension *= 0.75
+            quality = max(0.5, quality - 0.08)
+        }
+        return nil
     }
 
     func adlScaledProfileImage(maxDimension: CGFloat) -> UIImage {
