@@ -8068,9 +8068,28 @@ struct ProfileView: View {
                             DailyProgressWidget(goal: appState.dailyGoal)
                             ProfileStreakTracker(streakDays: appState.profile.streakDays)
 
-                            if appState.selectedRole == .admin {
+                            if appState.selectedRole == .admin || appState.userProfile?.isAdmin == true {
                                 adminMapAccessCard
                                 adminAccountAccessCard
+                            } else if let profileLoadError = appState.profileError {
+                                ADLCard {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(appState.t("Profile not fully loaded", "Profil partiellement chargé"))
+                                            .font(ADLFont.inter(13, .semibold))
+                                            .foregroundColor(ADLColor.ink)
+                                        Text(profileLoadError)
+                                            .font(ADLFont.inter(12))
+                                            .foregroundColor(ADLColor.terracotta)
+                                        Button {
+                                            Task { await appState.loadProfile(force: true) }
+                                        } label: {
+                                            Text(appState.t("Retry", "Réessayer"))
+                                                .font(ADLFont.inter(12, .bold))
+                                                .foregroundColor(ADLColor.navy)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
                             }
 
                             assignmentsCard
@@ -8683,6 +8702,8 @@ private struct AdminAccountAccessCard: View {
     @State private var lookupIdentifier = ""
     @State private var managedAccount: UserProfile?
     @State private var managedRole: UserRole = .client
+    @State private var lookupHistory: [UserContributionEvent] = []
+    @State private var lookupHistoryError: String?
     @State private var isCreating = false
     @State private var isLookingUp = false
     @State private var isSavingAccess = false
@@ -8812,6 +8833,39 @@ private struct AdminAccountAccessCard: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!canSaveAccess || isSavingAccess)
+
+                        Divider().background(ADLColor.line).padding(.vertical, 6)
+                        SectionLabel(text: appState.t("Recent contributions", "Contributions récentes"), wide: true)
+                        if let historyError = lookupHistoryError {
+                            Text(historyError)
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.terracotta)
+                        } else if lookupHistory.isEmpty {
+                            Text(appState.t("No contributions for this account.", "Aucune contribution pour ce compte."))
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        } else {
+                            ForEach(lookupHistory.prefix(5)) { event in
+                                HStack(spacing: 10) {
+                                    Image(systemName: event.eventType == "ENRICH_EVENT" ? "plus.magnifyingglass" : "mappin.and.ellipse")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundColor(ADLColor.navy)
+                                        .frame(width: 30, height: 30)
+                                        .background(ADLColor.navyWash)
+                                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(event.displayTitle)
+                                            .font(ADLFont.inter(12, .bold))
+                                            .foregroundColor(ADLColor.ink)
+                                            .lineLimit(1)
+                                        Text(event.createdDate.formatted(date: .abbreviated, time: .omitted))
+                                            .font(ADLFont.inter(11))
+                                            .foregroundColor(ADLColor.inkMuted)
+                                    }
+                                    Spacer()
+                                }
+                            }
+                        }
                     }
                     .padding(12)
                     .background(ADLColor.paper)
@@ -8952,8 +9006,21 @@ private struct AdminAccountAccessCard: View {
                 let account = try await appState.apiClient.lookupAdminAccount(identifier: identifier)
                 managedAccount = account
                 managedRole = account.role ?? (account.isAdmin == true ? .admin : .client)
+                lookupHistory = []
+                lookupHistoryError = nil
+                do {
+                    lookupHistory = try await appState.apiClient
+                        .fetchContributionEvents(scope: "global", userId: account.id ?? identifier)
+                        .sorted { $0.createdDate > $1.createdDate }
+                } catch {
+                    lookupHistoryError = (error as? APIError)?.message
+                        ?? appState.t("Unable to load this account's contributions.",
+                                      "Impossible de charger les contributions de ce compte.")
+                }
             } catch {
                 managedAccount = nil
+                lookupHistory = []
+                lookupHistoryError = nil
                 self.error = (error as? APIError)?.message ?? appState.t("Unable to load account.", "Impossible de charger le compte.")
             }
             isLookingUp = false
