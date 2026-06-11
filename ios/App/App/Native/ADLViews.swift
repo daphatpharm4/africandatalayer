@@ -6488,6 +6488,24 @@ struct AgentPerformanceView: View {
 
 struct ClientDashboardView: View {
     @EnvironmentObject private var appState: AppState
+    @State private var selectedVertical: String = "all"
+    @State private var spatialSort: String = "opportunity_score"
+    @State private var analystQuestion: String = ""
+    @State private var analystAnswer: AnalystAnswer?
+    @State private var analystLoading = false
+    @State private var analystError: String?
+
+    private var verticalOptions: [(id: String, title: String)] {
+        [("all", appState.t("All", "Toutes"))]
+        + SubmissionCategory.allCases.map { ($0.rawValue, $0.title) }
+    }
+
+    private let spatialSorts: [(id: String, en: String, fr: String)] = [
+        ("opportunity_score", "Opportunity", "Opportunité"),
+        ("coverage_gap_score", "Coverage gap", "Couverture"),
+        ("change_signal_score", "Change signal", "Signal de changement"),
+        ("market_signal_score", "Market signal", "Signal marché"),
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -6556,6 +6574,8 @@ struct ClientDashboardView: View {
                         )
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+
+                    verticalSelectorSection
 
                     // KPI grid — mirrors the 4-tile grid in DeltaDashboard.tsx
                     let totalPoints = summary?.verification.totalPoints ?? 0
@@ -6675,14 +6695,401 @@ struct ClientDashboardView: View {
                         }
                         .padding(.vertical, 4)
                     }
+
+                    byVerticalSection
+                    deltaBreakdownSection
+                    if selectedVertical != "all" {
+                        recentDeltasSection
+                        spatialIntelligenceSection
+                    }
+                    analystSection
                 }
                 .padding(16)
                 .padding(.bottom, 24)
             }
-            .refreshable { await appState.loadAnalytics(force: true) }
+            .refreshable {
+                await appState.loadAnalytics(force: true)
+                await appState.loadClientDelta(
+                    vertical: selectedVertical == "all" ? nil : selectedVertical,
+                    spatialSort: spatialSort,
+                    force: true)
+            }
         }
         .background(ADLColor.paper.ignoresSafeArea())
-        .task { await appState.loadAnalytics() }
+        .task {
+            await appState.loadAnalytics()
+            await appState.loadClientDelta(vertical: nil)
+        }
+    }
+
+    // MARK: - Vertical selector (africandatalayer-ugy)
+
+    private var verticalSelectorSection: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(verticalOptions, id: \.id) { option in
+                    Button {
+                        selectedVertical = option.id
+                        Task {
+                            await appState.loadClientDelta(
+                                vertical: option.id == "all" ? nil : option.id,
+                                spatialSort: spatialSort,
+                                force: false)
+                        }
+                    } label: {
+                        Text(option.title)
+                            .font(ADLFont.inter(12, .bold))
+                            .padding(.horizontal, 14)
+                            .frame(height: 36)
+                            .foregroundColor(selectedVertical == option.id ? .white : ADLColor.navy)
+                            .background(selectedVertical == option.id ? ADLColor.navy : ADLColor.navyWash)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    // MARK: - By vertical, current week
+
+    private var byVerticalRows: [(id: String, current: Int, previous: Int)] {
+        let dates = Array(Set(appState.clientStats.map(\.snapshotDate))).sorted(by: >)
+        guard let latestDate = dates.first else { return [] }
+        let prevDate = dates.count > 1 ? dates[1] : nil
+        return verticalOptions
+            .filter { $0.id != "all" }
+            .map { option in
+                let current = appState.clientStats
+                    .first { $0.verticalId == option.id && $0.snapshotDate == latestDate }?.totalPoints ?? 0
+                let previous = prevDate.flatMap { p in
+                    appState.clientStats.first { $0.verticalId == option.id && $0.snapshotDate == p }?.totalPoints
+                } ?? 0
+                return (option.id, current, previous)
+            }
+            .filter { $0.current > 0 }
+    }
+
+    @ViewBuilder
+    private var byVerticalSection: some View {
+        let rows = byVerticalRows
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: appState.t("By vertical — current week", "Par verticale — semaine en cours"))
+                ADLCard {
+                    VStack(spacing: 10) {
+                        let maxCurrent = max(rows.map(\.current).max() ?? 1, 1)
+                        ForEach(rows, id: \.id) { row in
+                            let delta = row.current - row.previous
+                            HStack(spacing: 10) {
+                                Text(verticalOptions.first { $0.id == row.id }?.title ?? row.id)
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(ADLColor.ink)
+                                    .frame(width: 92, alignment: .leading)
+                                    .lineLimit(1)
+                                GeometryReader { geo in
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .fill(ADLColor.navy)
+                                        .frame(width: max(geo.size.width * CGFloat(row.current) / CGFloat(maxCurrent), 4))
+                                }
+                                .frame(height: 14)
+                                Text("\(row.current)")
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(ADLColor.navy)
+                                Text(delta == 0 ? "·" : (delta > 0 ? "+\(delta)" : "\(delta)"))
+                                    .font(ADLFont.inter(11, .bold))
+                                    .foregroundColor(delta >= 0 ? ADLColor.forest : ADLColor.terracotta)
+                                    .frame(width: 36, alignment: .trailing)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Delta breakdown
+
+    private var deltaBreakdownBars: [(date: String, newC: Int, changed: Int, removed: Int)] {
+        let rows = selectedVertical == "all"
+            ? appState.clientStats
+            : appState.clientStats.filter { $0.verticalId == selectedVertical }
+        var byDate: [String: (Int, Int, Int)] = [:]
+        for r in rows {
+            let cur = byDate[r.snapshotDate] ?? (0, 0, 0)
+            byDate[r.snapshotDate] = (cur.0 + r.newCount, cur.1 + r.changedCount, cur.2 + r.removedCount)
+        }
+        return byDate.keys.sorted().suffix(8).map { d in
+            let v = byDate[d]!
+            return (d, v.0, v.1, v.2)
+        }
+    }
+
+    @ViewBuilder
+    private var deltaBreakdownSection: some View {
+        let breakdown = deltaBreakdownBars
+        if !breakdown.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionLabel(text: appState.t("Delta breakdown", "Détail des deltas"))
+                ADLCard {
+                    VStack(spacing: 12) {
+                        HStack(alignment: .bottom, spacing: 8) {
+                            let maxTotal = max(breakdown.map { $0.newC + $0.changed + $0.removed }.max() ?? 1, 1)
+                            ForEach(breakdown, id: \.date) { bar in
+                                VStack(spacing: 4) {
+                                    GeometryReader { geo in
+                                        let unit = geo.size.height / CGFloat(maxTotal)
+                                        VStack(spacing: 1) {
+                                            Spacer(minLength: 0)
+                                            Rectangle().fill(ADLColor.terracotta)
+                                                .frame(height: unit * CGFloat(bar.removed))
+                                            Rectangle().fill(ADLColor.gold)
+                                                .frame(height: unit * CGFloat(bar.changed))
+                                            Rectangle().fill(ADLColor.forest)
+                                                .frame(height: unit * CGFloat(bar.newC))
+                                        }
+                                        .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                                    }
+                                    Text(String(bar.date.suffix(5)))
+                                        .font(ADLFont.inter(8))
+                                        .foregroundColor(Color(hex: 0x9ca3af))
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .frame(height: 110)
+                        HStack(spacing: 14) {
+                            legendDot(ADLColor.forest, appState.t("New", "Nouveaux"))
+                            legendDot(ADLColor.gold, appState.t("Changed", "Modifiés"))
+                            legendDot(ADLColor.terracotta, appState.t("Removed", "Retirés"))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func legendDot(_ color: Color, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text(label)
+                .font(ADLFont.inter(10, .semibold))
+                .foregroundColor(ADLColor.inkMuted)
+        }
+    }
+
+    // MARK: - Recent deltas (per-vertical)
+
+    private var recentDeltasSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: appState.t("Recent changes", "Changements récents"))
+            if appState.clientDeltas.isEmpty {
+                ADLCard {
+                    Text(appState.clientDeltaError
+                         ?? appState.t("No published changes this week.", "Aucun changement publié cette semaine."))
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(appState.clientDeltas.prefix(10)) { delta in
+                        ADLCard {
+                            HStack(spacing: 10) {
+                                Text(delta.deltaType.uppercased())
+                                    .font(ADLFont.inter(9, .bold))
+                                    .tracking(1)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .foregroundColor(delta.deltaType == "new" ? ADLColor.forest
+                                                     : delta.deltaType == "removed" ? ADLColor.terracotta : ADLColor.navy)
+                                    .background(delta.deltaType == "new" ? ADLColor.forestWash
+                                                : delta.deltaType == "removed" ? ADLColor.terraWash : ADLColor.navyWash)
+                                    .clipShape(Capsule())
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(delta.deltaSummary ?? delta.deltaField ?? delta.pointId)
+                                        .font(ADLFont.inter(12, .semibold))
+                                        .foregroundColor(ADLColor.ink)
+                                        .lineLimit(2)
+                                    Text(delta.snapshotDate)
+                                        .font(ADLFont.inter(10))
+                                        .foregroundColor(ADLColor.inkMuted)
+                                }
+                                Spacer()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Spatial intelligence (per-vertical)
+
+    private func spatialScore(_ cell: SpatialIntelCell) -> Double {
+        switch spatialSort {
+        case "coverage_gap_score": return cell.coverageGapScore
+        case "change_signal_score": return cell.changeSignalScore
+        case "market_signal_score": return cell.marketSignalScore
+        default: return cell.opportunityScore
+        }
+    }
+
+    private var spatialIntelligenceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionLabel(text: appState.t("Spatial intelligence", "Intelligence spatiale"))
+                Spacer()
+                Menu {
+                    ForEach(spatialSorts, id: \.id) { sort in
+                        Button(appState.t(sort.en, sort.fr)) {
+                            spatialSort = sort.id
+                            Task {
+                                await appState.loadClientDelta(
+                                    vertical: selectedVertical, spatialSort: sort.id, force: true)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(spatialSorts.first { $0.id == spatialSort }
+                                .map { appState.t($0.en, $0.fr) } ?? "")
+                            .font(ADLFont.inter(11, .bold))
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundColor(ADLColor.navy)
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let spatial = appState.clientSpatial, !spatial.cells.isEmpty {
+                if !spatial.narrative.isEmpty {
+                    ADLCard {
+                        Text(spatial.narrative)
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                }
+                VStack(spacing: 8) {
+                    ForEach(spatial.cells) { cell in
+                        ADLCard {
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(cell.cellId)
+                                        .font(ADLFont.inter(11, .bold))
+                                        .foregroundColor(ADLColor.inkMuted)
+                                    Spacer()
+                                    Text(String(format: "%.0f", spatialScore(cell)))
+                                        .font(ADLFont.inter(15, .heavy))
+                                        .foregroundColor(ADLColor.navy)
+                                }
+                                Text(cell.summary)
+                                    .font(ADLFont.inter(12))
+                                    .foregroundColor(ADLColor.ink)
+                                    .lineLimit(3)
+                                Text("\(cell.totalPoints) pts · \(String(format: "%.0f%%", cell.completionRate <= 1 ? cell.completionRate * 100 : cell.completionRate))")
+                                    .font(ADLFont.inter(10, .semibold))
+                                    .foregroundColor(ADLColor.inkMuted)
+                            }
+                        }
+                    }
+                }
+            } else if appState.isLoadingClientDelta {
+                ADLCard {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text(appState.t("Loading…", "Chargement…"))
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                }
+            } else {
+                ADLCard {
+                    Text(appState.t("No spatial data for this vertical yet.", "Pas encore de données spatiales pour cette verticale."))
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+            }
+        }
+    }
+
+    // MARK: - Client analysis (AI analyst)
+
+    private var analystSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionLabel(text: appState.t("Client analysis", "Analyse client"))
+            ADLCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    TextField(
+                        appState.t("What changed in this vertical this week?",
+                                   "Qu'est-ce qui a changé dans cette verticale cette semaine ?"),
+                        text: $analystQuestion,
+                        axis: .vertical
+                    )
+                    .font(ADLFont.inter(13))
+                    .lineLimit(2...4)
+
+                    Button {
+                        askAnalyst()
+                    } label: {
+                        HStack(spacing: 8) {
+                            if analystLoading { ProgressView().tint(.white) }
+                            Text(appState.t("Ask the analyst", "Demander à l'analyste"))
+                                .font(ADLFont.inter(13, .bold))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 44)
+                        .foregroundColor(.white)
+                        .background(analystLoading ? Color(hex: 0x9ca3af) : ADLColor.navy)
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(analystLoading)
+
+                    if let err = analystError {
+                        Text(err).font(ADLFont.inter(12)).foregroundColor(ADLColor.terracotta)
+                    }
+                    if let answer = analystAnswer {
+                        Text(answer.answer)
+                            .font(ADLFont.inter(13))
+                            .foregroundColor(ADLColor.ink)
+                        ForEach(answer.facts, id: \.self) { fact in
+                            HStack(spacing: 6) {
+                                Text(fact.label + ":")
+                                    .font(ADLFont.inter(11, .bold))
+                                    .foregroundColor(ADLColor.inkMuted)
+                                Text(fact.value)
+                                    .font(ADLFont.inter(11, .semibold))
+                                    .foregroundColor(ADLColor.navy)
+                            }
+                        }
+                        if !answer.caveats.isEmpty {
+                            Text(answer.caveats.joined(separator: " · "))
+                                .font(ADLFont.inter(10))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func askAnalyst() {
+        let q = analystQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty, !analystLoading else { return }
+        analystLoading = true
+        analystError = nil
+        Task {
+            do {
+                analystAnswer = try await appState.apiClient.askAnalyticsAssistant(
+                    question: q,
+                    vertical: selectedVertical == "all" ? nil : selectedVertical)
+            } catch {
+                analystAnswer = nil
+                analystError = (error as? APIError)?.message
+                    ?? appState.t("Analyst answer unavailable.", "Réponse analyste indisponible.")
+            }
+            analystLoading = false
+        }
     }
 }
 
