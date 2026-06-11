@@ -1450,6 +1450,34 @@ struct AgentHomeView: View {
     }
 }
 
+/// Tile overlay that routes through URLCache so CARTO tiles survive map teardowns
+/// and short offline windows (field-first: no re-download on every visit).
+final class CachedTileOverlay: MKTileOverlay {
+    private let session: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.requestCachePolicy = .returnCacheDataElseLoad
+        cfg.urlCache = URLCache.shared
+        return URLSession(configuration: cfg)
+    }()
+
+    override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
+        let request = URLRequest(url: url(forTilePath: path),
+                                 cachePolicy: .returnCacheDataElseLoad,
+                                 timeoutInterval: 20)
+        session.dataTask(with: request) { data, _, error in
+            result(data, error)
+        }.resume()
+    }
+}
+
+/// Session-scoped holder so the MKMapView (and its loaded tiles/annotations)
+/// survives SwiftUI recreating FieldMapKitView on tab switches.
+@MainActor
+final class FieldMapHolder {
+    static let shared = FieldMapHolder()
+    var mapView: MKMapView?
+}
+
 struct FieldMapKitView: UIViewRepresentable {
     let points: [DataPoint]
     let collectionZone: [CLLocationCoordinate2D]
@@ -1458,6 +1486,11 @@ struct FieldMapKitView: UIViewRepresentable {
     @Binding var selectedPoint: DataPoint?
 
     func makeUIView(context: Context) -> MKMapView {
+        if let cached = FieldMapHolder.shared.mapView {
+            cached.delegate = context.coordinator
+            return cached
+        }
+
         let mapView = MKMapView(frame: .zero)
         mapView.delegate = context.coordinator
         mapView.mapType = .standard
@@ -1468,12 +1501,13 @@ struct FieldMapKitView: UIViewRepresentable {
         mapView.setRegion(region, animated: false)
 
         // CARTO light_all basemap — matches web Home map tile layer
-        let cartoTiles = MKTileOverlay(
+        let cartoTiles = CachedTileOverlay(
             urlTemplate: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"
         )
         cartoTiles.canReplaceMapContent = true
         mapView.addOverlay(cartoTiles, level: .aboveLabels)
 
+        FieldMapHolder.shared.mapView = mapView
         return mapView
     }
 
