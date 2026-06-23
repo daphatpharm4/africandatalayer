@@ -19,7 +19,7 @@ import { normalizeCreatedAt } from "./createdAt.js";
 import type { StorageStore } from "./types.js";
 
 const VALID_MAP_SCOPES: ReadonlySet<MapScope> = new Set(["bonamoussadi", "cameroon", "global"]);
-const VALID_ROLES: ReadonlySet<UserRole> = new Set(["agent", "admin", "client"]);
+const VALID_ROLES: ReadonlySet<UserRole> = new Set(["agent", "admin", "client", "point_operator"]);
 const VALID_TRUST_TIERS: ReadonlySet<TrustTier> = new Set(["new", "standard", "trusted", "restricted"]);
 const VALID_CONSENT_STATUSES: ReadonlySet<ConsentStatus> = new Set([
   "obtained",
@@ -125,6 +125,7 @@ function rowToUserProfile(row: Record<string, unknown>): UserProfile {
     isAdmin: Boolean(row.is_admin),
     role: normalizeRole(row.role),
     mapScope: normalizeMapScope(row.map_scope),
+    mustChangePassword: row.must_change_password === true,
     trustScore: parseTrustScore(row.trust_score),
     trustTier: normalizeTrustTier(row.trust_tier),
     suspendedUntil: typeof row.suspended_until === "string" ? normalizeCreatedAt(row.suspended_until) : null,
@@ -148,7 +149,8 @@ async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
   const result = await query<Record<string, unknown>>(
     `
       select id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
-             trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until
+             must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
+             failed_login_count, locked_until
       from user_profiles
       where id = $1
       limit 1
@@ -198,7 +200,8 @@ async function getUserProfile(userId: string): Promise<UserProfile | null> {
     const result = await query<Record<string, unknown>>(
       `
         select id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope
-               , trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until
+               , must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
+               failed_login_count, locked_until
         from user_profiles
         where id = $1
         limit 1
@@ -228,6 +231,7 @@ async function upsertUserProfileLegacy(params: {
   isAdmin: boolean;
   role: UserRole;
   mapScope: MapScope;
+  mustChangePassword: boolean;
   trustScore: number;
   trustTier: TrustTier;
   suspendedUntil: string | null;
@@ -244,9 +248,13 @@ async function upsertUserProfileLegacy(params: {
     `
       insert into user_profiles (
         id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
-        trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, updated_at
+        must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
+        failed_login_count, locked_until, updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14, $15, $16::timestamptz, now())
+      values (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+        $14::timestamptz, $15, $16, $17::timestamptz, now()
+      )
       on conflict (id) do update
       set
         email = excluded.email,
@@ -258,6 +266,7 @@ async function upsertUserProfileLegacy(params: {
         is_admin = excluded.is_admin,
         role = excluded.role,
         map_scope = excluded.map_scope,
+        must_change_password = excluded.must_change_password,
         trust_score = excluded.trust_score,
         trust_tier = excluded.trust_tier,
         suspended_until = excluded.suspended_until,
@@ -277,6 +286,7 @@ async function upsertUserProfileLegacy(params: {
       params.isAdmin,
       params.role,
       params.mapScope,
+      params.mustChangePassword,
       params.trustScore,
       params.trustTier,
       params.suspendedUntil,
@@ -302,6 +312,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
   const isAdmin = profile.isAdmin === true;
   const role = normalizeRole(profile.role);
   const mapScope = normalizeMapScope(profile.mapScope);
+  const mustChangePassword = profile.mustChangePassword === true;
   const trustScore = parseTrustScore(profile.trustScore);
   const trustTier = normalizeTrustTier(profile.trustTier);
   const suspendedUntil = typeof profile.suspendedUntil === "string" ? normalizeCreatedAt(profile.suspendedUntil) : null;
@@ -317,9 +328,13 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
       `
         insert into user_profiles (
           id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
-          trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, updated_at
+          must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
+          failed_login_count, locked_until, updated_at
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::timestamptz, $15, $16, $17::timestamptz, now())
+        values (
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+          $15::timestamptz, $16, $17, $18::timestamptz, now()
+        )
         on conflict (id) do update
         set
           email = excluded.email,
@@ -332,6 +347,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
           is_admin = excluded.is_admin,
           role = excluded.role,
           map_scope = excluded.map_scope,
+          must_change_password = excluded.must_change_password,
           trust_score = excluded.trust_score,
           trust_tier = excluded.trust_tier,
           suspended_until = excluded.suspended_until,
@@ -352,6 +368,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
         isAdmin,
         role,
         mapScope,
+        mustChangePassword,
         trustScore,
         trustTier,
         suspendedUntil,
@@ -374,6 +391,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
       isAdmin,
       role,
       mapScope,
+      mustChangePassword,
       trustScore,
       trustTier,
       suspendedUntil,
@@ -401,6 +419,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
       isAdmin,
       role,
       mapScope,
+      mustChangePassword,
       trustScore,
       trustTier,
       suspendedUntil,
@@ -417,8 +436,8 @@ async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProf
 
   const fetchRows = async (includePhone: boolean): Promise<UserProfile[]> => {
     const cols = includePhone
-      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until"
-      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until";
+      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, must_change_password, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until"
+      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, must_change_password, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until";
     const result = await query<Record<string, unknown>>(
       `select ${cols} from user_profiles where id = ANY($1::text[])`,
       [normalizedIds],
