@@ -27,7 +27,6 @@ const VALID_CONSENT_STATUSES: ReadonlySet<ConsentStatus> = new Set([
   "not_required",
   "withdrawn",
 ]);
-let phoneColumnState: "unknown" | "present" | "missing" = "unknown";
 
 function normalizeUserId(input: string): string {
   return input.toLowerCase().trim();
@@ -138,31 +137,6 @@ function rowToUserProfile(row: Record<string, unknown>): UserProfile {
   };
 }
 
-function isMissingPhoneColumnError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  const pgError = error as Error & { code?: string };
-  const message = error.message.toLowerCase();
-  return pgError.code === "42703" && message.includes("phone");
-}
-
-async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
-  const result = await query<Record<string, unknown>>(
-    `
-      select id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
-             must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
-             failed_login_count, locked_until
-      from user_profiles
-      where id = $1
-      limit 1
-    `,
-    [id],
-  );
-
-  const row = result.rows[0];
-  if (!row) return null;
-  return rowToUserProfile(row);
-}
-
 function rowToPointEvent(row: Record<string, unknown>): PointEvent {
   const details = row.details && typeof row.details === "object" ? (row.details as PointEvent["details"]) : {};
   const consentStatus = normalizeConsentStatus(row.consent_status);
@@ -190,39 +164,14 @@ function rowToPointEvent(row: Record<string, unknown>): PointEvent {
   };
 }
 
-async function getUserProfile(userId: string): Promise<UserProfile | null> {
-  const id = normalizeUserId(userId);
-  if (phoneColumnState === "missing") {
-    return await getUserProfileLegacy(id);
-  }
+type ProfileColumnState = "unknown" | "present" | "missing";
+type ProfileQueryResult = { rows: Record<string, unknown>[] };
+type ProfileQuery = (text: string, values?: unknown[]) => Promise<ProfileQueryResult>;
 
-  try {
-    const result = await query<Record<string, unknown>>(
-      `
-        select id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope
-               , must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
-               failed_login_count, locked_until
-        from user_profiles
-        where id = $1
-        limit 1
-      `,
-      [id],
-    );
-
-    const row = result.rows[0];
-    if (!row) return null;
-    if (phoneColumnState === "unknown") phoneColumnState = "present";
-    return rowToUserProfile(row);
-  } catch (error) {
-    if (!isMissingPhoneColumnError(error)) throw error;
-    phoneColumnState = "missing";
-    return await getUserProfileLegacy(id);
-  }
-}
-
-async function upsertUserProfileLegacy(params: {
+interface NormalizedProfileParams {
   id: string;
   email: string | null;
+  phone: string | null;
   name: string;
   image: string;
   occupation: string;
@@ -238,66 +187,32 @@ async function upsertUserProfileLegacy(params: {
   wipeRequested: boolean;
   failedLoginCount: number;
   lockedUntil: string | null;
-}): Promise<void> {
-  const legacyEmail = params.email ?? normalizeEmail(params.id);
-  if (!legacyEmail) {
-    throw new Error("Database migration required: phone-only identifiers need user_profiles.phone column");
-  }
-
-  await query(
-    `
-      insert into user_profiles (
-        id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
-        must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
-        failed_login_count, locked_until, updated_at
-      )
-      values (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-        $14::timestamptz, $15, $16, $17::timestamptz, now()
-      )
-      on conflict (id) do update
-      set
-        email = excluded.email,
-        name = excluded.name,
-        image = excluded.image,
-        occupation = excluded.occupation,
-        xp = excluded.xp,
-        password_hash = coalesce(excluded.password_hash, user_profiles.password_hash),
-        is_admin = excluded.is_admin,
-        role = excluded.role,
-        map_scope = excluded.map_scope,
-        must_change_password = excluded.must_change_password,
-        trust_score = excluded.trust_score,
-        trust_tier = excluded.trust_tier,
-        suspended_until = excluded.suspended_until,
-        wipe_requested = excluded.wipe_requested,
-        failed_login_count = excluded.failed_login_count,
-        locked_until = excluded.locked_until,
-        updated_at = now()
-    `,
-    [
-      params.id,
-      legacyEmail,
-      params.name,
-      params.image,
-      params.occupation,
-      params.xp,
-      params.passwordHash,
-      params.isAdmin,
-      params.role,
-      params.mapScope,
-      params.mustChangePassword,
-      params.trustScore,
-      params.trustTier,
-      params.suspendedUntil,
-      params.wipeRequested,
-      params.failedLoginCount,
-      params.lockedUntil,
-    ],
-  );
 }
 
-async function upsertUserProfile(userId: string, profile: UserProfile): Promise<void> {
+interface ProfileColumnOptions {
+  includePhone: boolean;
+  includeMustChangePassword: boolean;
+}
+
+export interface PostgresProfilePersistence {
+  getUserProfile(userId: string): Promise<UserProfile | null>;
+  upsertUserProfile(userId: string, profile: UserProfile): Promise<void>;
+  getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProfile>>;
+}
+
+function isMissingProfileColumnError(error: unknown, column: "phone" | "must_change_password"): boolean {
+  if (!(error instanceof Error)) return false;
+  const pgError = error as Error & { code?: string };
+  if (pgError.code !== "42703") return false;
+  const message = error.message.toLowerCase().replace(/["']/g, "");
+  const escapedColumn = column.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `\\bcolumn\\s+(?:[a-z_][a-z0-9_]*\\.)?${escapedColumn}` +
+      `(?:\\s+of relation\\s+[a-z_][a-z0-9_.]*)?\\s+does not exist\\b`,
+  ).test(message);
+}
+
+function normalizeProfileParams(userId: string, profile: UserProfile): NormalizedProfileParams {
   const idCandidate = userId || profile.id || profile.email || profile.phone || "";
   const id = normalizeUserId(idCandidate);
   const email = normalizeEmail(profile.email);
@@ -323,144 +238,192 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
       : 0;
   const lockedUntil = typeof profile.lockedUntil === "string" ? normalizeCreatedAt(profile.lockedUntil) : null;
 
-  const runWithPhone = async () => {
-    await query(
-      `
-        insert into user_profiles (
-          id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
-          must_change_password, trust_score, trust_tier, suspended_until, wipe_requested,
-          failed_login_count, locked_until, updated_at
-        )
-        values (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-          $15::timestamptz, $16, $17, $18::timestamptz, now()
-        )
-        on conflict (id) do update
-        set
-          email = excluded.email,
-          phone = excluded.phone,
-          name = excluded.name,
-          image = excluded.image,
-          occupation = excluded.occupation,
-          xp = excluded.xp,
-          password_hash = coalesce(excluded.password_hash, user_profiles.password_hash),
-          is_admin = excluded.is_admin,
-          role = excluded.role,
-          map_scope = excluded.map_scope,
-          must_change_password = excluded.must_change_password,
-          trust_score = excluded.trust_score,
-          trust_tier = excluded.trust_tier,
-          suspended_until = excluded.suspended_until,
-          wipe_requested = excluded.wipe_requested,
-          failed_login_count = excluded.failed_login_count,
-          locked_until = excluded.locked_until,
-          updated_at = now()
-      `,
-      [
-        id,
-        email,
-        phone,
-        name,
-        image,
-        occupation,
-        xp,
-        passwordHash,
-        isAdmin,
-        role,
-        mapScope,
-        mustChangePassword,
-        trustScore,
-        trustTier,
-        suspendedUntil,
-        wipeRequested,
-        failedLoginCount,
-        lockedUntil,
-      ],
-    );
+  return {
+    id,
+    email,
+    phone,
+    name,
+    image,
+    occupation,
+    xp,
+    passwordHash,
+    isAdmin,
+    role,
+    mapScope,
+    mustChangePassword,
+    trustScore,
+    trustTier,
+    suspendedUntil,
+    wipeRequested,
+    failedLoginCount,
+    lockedUntil,
   };
-
-  if (phoneColumnState === "missing") {
-    await upsertUserProfileLegacy({
-      id,
-      email,
-      name,
-      image,
-      occupation,
-      xp,
-      passwordHash,
-      isAdmin,
-      role,
-      mapScope,
-      mustChangePassword,
-      trustScore,
-      trustTier,
-      suspendedUntil,
-      wipeRequested,
-      failedLoginCount,
-      lockedUntil,
-    });
-    return;
-  }
-
-  try {
-    await runWithPhone();
-    if (phoneColumnState === "unknown") phoneColumnState = "present";
-  } catch (error) {
-    if (!isMissingPhoneColumnError(error)) throw error;
-    phoneColumnState = "missing";
-    await upsertUserProfileLegacy({
-      id,
-      email,
-      name,
-      image,
-      occupation,
-      xp,
-      passwordHash,
-      isAdmin,
-      role,
-      mapScope,
-      mustChangePassword,
-      trustScore,
-      trustTier,
-      suspendedUntil,
-      wipeRequested,
-      failedLoginCount,
-      lockedUntil,
-    });
-  }
 }
 
-async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProfile>> {
-  if (!ids.length) return new Map();
-  const normalizedIds = ids.map(normalizeUserId);
+function profileSelectColumns(options: ProfileColumnOptions): string {
+  const columns = ["id", "email"];
+  if (options.includePhone) columns.push("phone");
+  columns.push(
+    "name",
+    "image",
+    "occupation",
+    "xp",
+    "password_hash",
+    "is_admin",
+    "role",
+    "map_scope",
+  );
+  if (options.includeMustChangePassword) columns.push("must_change_password");
+  columns.push(
+    "trust_score",
+    "trust_tier",
+    "suspended_until",
+    "wipe_requested",
+    "failed_login_count",
+    "locked_until",
+  );
+  return columns.join(", ");
+}
 
-  const fetchRows = async (includePhone: boolean): Promise<UserProfile[]> => {
-    const cols = includePhone
-      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, must_change_password, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until"
-      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, must_change_password, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until";
-    const result = await query<Record<string, unknown>>(
-      `select ${cols} from user_profiles where id = ANY($1::text[])`,
-      [normalizedIds],
-    );
-    return result.rows.map(rowToUserProfile);
+function buildProfileUpsert(
+  params: NormalizedProfileParams,
+  options: ProfileColumnOptions,
+): { text: string; values: unknown[] } {
+  const persistedEmail = options.includePhone ? params.email : params.email ?? normalizeEmail(params.id);
+  if (!options.includePhone && !persistedEmail) {
+    throw new Error("Database migration required: phone-only identifiers need user_profiles.phone column");
+  }
+
+  const entries: Array<[column: string, value: unknown, cast?: string]> = [
+    ["id", params.id],
+    ["email", persistedEmail],
+  ];
+  if (options.includePhone) entries.push(["phone", params.phone]);
+  entries.push(
+    ["name", params.name],
+    ["image", params.image],
+    ["occupation", params.occupation],
+    ["xp", params.xp],
+    ["password_hash", params.passwordHash],
+    ["is_admin", params.isAdmin],
+    ["role", params.role],
+    ["map_scope", params.mapScope],
+  );
+  if (options.includeMustChangePassword) {
+    entries.push(["must_change_password", params.mustChangePassword]);
+  }
+  entries.push(
+    ["trust_score", params.trustScore],
+    ["trust_tier", params.trustTier],
+    ["suspended_until", params.suspendedUntil, "timestamptz"],
+    ["wipe_requested", params.wipeRequested],
+    ["failed_login_count", params.failedLoginCount],
+    ["locked_until", params.lockedUntil, "timestamptz"],
+  );
+
+  const columns = entries.map(([column]) => column);
+  const values = entries.map(([, value]) => value);
+  const placeholders = entries.map(([, , cast], index) => `$${index + 1}${cast ? `::${cast}` : ""}`);
+  const updateColumns = columns.filter((column) => column !== "id" && column !== "password_hash");
+  const updates = [
+    ...updateColumns.map((column) => `${column} = excluded.${column}`),
+    "password_hash = coalesce(excluded.password_hash, user_profiles.password_hash)",
+    "updated_at = now()",
+  ];
+
+  return {
+    text: `
+      insert into user_profiles (${columns.join(", ")}, updated_at)
+      values (${placeholders.join(", ")}, now())
+      on conflict (id) do update
+      set ${updates.join(", ")}
+    `,
+    values,
   };
+}
 
-  let rows: UserProfile[];
-  if (phoneColumnState === "missing") {
-    rows = await fetchRows(false);
-  } else {
-    try {
-      rows = await fetchRows(true);
-      if (phoneColumnState === "unknown") phoneColumnState = "present";
-    } catch (error) {
-      if (!isMissingPhoneColumnError(error)) throw error;
-      phoneColumnState = "missing";
-      rows = await fetchRows(false);
+export function createPostgresProfilePersistence(queryProfile: ProfileQuery): PostgresProfilePersistence {
+  let phoneColumnState: ProfileColumnState = "unknown";
+  let mustChangePasswordColumnState: ProfileColumnState = "unknown";
+
+  const runWithColumnFallback = async <T>(
+    operation: (options: ProfileColumnOptions) => Promise<T>,
+  ): Promise<T> => {
+    while (true) {
+      const options = {
+        includePhone: phoneColumnState !== "missing",
+        includeMustChangePassword: mustChangePasswordColumnState !== "missing",
+      };
+
+      try {
+        const result = await operation(options);
+        if (options.includePhone && phoneColumnState === "unknown") phoneColumnState = "present";
+        if (options.includeMustChangePassword && mustChangePasswordColumnState === "unknown") {
+          mustChangePasswordColumnState = "present";
+        }
+        return result;
+      } catch (error) {
+        if (options.includePhone && isMissingProfileColumnError(error, "phone")) {
+          phoneColumnState = "missing";
+          continue;
+        }
+        if (
+          options.includeMustChangePassword &&
+          isMissingProfileColumnError(error, "must_change_password")
+        ) {
+          mustChangePasswordColumnState = "missing";
+          continue;
+        }
+        throw error;
+      }
     }
-  }
+  };
 
-  return new Map(rows.map((profile) => [profile.id, profile]));
+  const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
+    const id = normalizeUserId(userId);
+    return await runWithColumnFallback(async (options) => {
+      const result = await queryProfile(
+        `
+          select ${profileSelectColumns(options)}
+          from user_profiles
+          where id = $1
+          limit 1
+        `,
+        [id],
+      );
+      const row = result.rows[0];
+      return row ? rowToUserProfile(row) : null;
+    });
+  };
+
+  const upsertUserProfile = async (userId: string, profile: UserProfile): Promise<void> => {
+    const params = normalizeProfileParams(userId, profile);
+    await runWithColumnFallback(async (options) => {
+      const statement = buildProfileUpsert(params, options);
+      await queryProfile(statement.text, statement.values);
+    });
+  };
+
+  const getUserProfilesBatch = async (ids: string[]): Promise<Map<string, UserProfile>> => {
+    if (!ids.length) return new Map();
+    const normalizedIds = ids.map(normalizeUserId);
+    const rows = await runWithColumnFallback(async (options) => {
+      const result = await queryProfile(
+        `select ${profileSelectColumns(options)} from user_profiles where id = ANY($1::text[])`,
+        [normalizedIds],
+      );
+      return result.rows.map(rowToUserProfile);
+    });
+    return new Map(rows.map((profile) => [profile.id, profile]));
+  };
+
+  return { getUserProfile, upsertUserProfile, getUserProfilesBatch };
 }
+
+const profilePersistence = createPostgresProfilePersistence(
+  async (text, values = []) => await query<Record<string, unknown>>(text, values),
+);
+const { getUserProfile, upsertUserProfile, getUserProfilesBatch } = profilePersistence;
 
 async function getPointEvents(filter?: PointEventFilter): Promise<PointEvent[]> {
   const { text, values } = buildPointEventsQuery(filter);
