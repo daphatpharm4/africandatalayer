@@ -55,38 +55,18 @@ struct BootSplashView: View {
     }
 }
 
-// MARK: - Layered ADL brand diamond (mirrors BrandLogo SVG)
+// MARK: - Canonical ADL logo (same artwork as the app icon)
 
 struct BrandDiamond: View {
     var size: CGFloat = 88
 
     var body: some View {
-        Canvas { ctx, sz in
-            let s = sz.width / 128
-            func diamond(cx: CGFloat, cy: CGFloat, hw: CGFloat, hh: CGFloat) -> Path {
-                var p = Path()
-                p.move(to: CGPoint(x: cx, y: cy - hh))
-                p.addLine(to: CGPoint(x: cx + hw, y: cy))
-                p.addLine(to: CGPoint(x: cx, y: cy + hh))
-                p.addLine(to: CGPoint(x: cx - hw, y: cy))
-                p.closeSubpath()
-                return p
-            }
-            let stroke = 6 * s
-            // bottom navy
-            let bottom = diamond(cx: 64 * s, cy: 88 * s, hw: 48 * s, hh: 26 * s)
-            ctx.fill(bottom, with: .color(ADLColor.navy))
-            ctx.stroke(bottom, with: .color(.white), lineWidth: stroke)
-            // middle gold
-            let mid = diamond(cx: 64 * s, cy: 70 * s, hw: 48 * s, hh: 26 * s)
-            ctx.fill(mid, with: .color(ADLColor.gold))
-            ctx.stroke(mid, with: .color(.white), lineWidth: stroke)
-            // top navy
-            let top = diamond(cx: 64 * s, cy: 40 * s, hw: 48 * s, hh: 26 * s)
-            ctx.fill(top, with: .color(ADLColor.navy))
-            ctx.stroke(top, with: .color(.white), lineWidth: stroke)
-        }
-        .frame(width: size, height: size)
+        Image("Splash")
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 
