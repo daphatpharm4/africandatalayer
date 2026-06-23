@@ -44,6 +44,7 @@ ios/App/App/public/
 keystore.properties
 # Added by code-review-graph
 .code-review-graph/
+.worktrees/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
