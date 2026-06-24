@@ -6,7 +6,9 @@ import {
   createAdminAccountCreateHandler,
 } from '../api/user/index.js';
 import { StorageUnavailableError } from '../lib/server/db.js';
-import type { IdempotencyStore } from '../lib/server/idempotencyGeneric.js';
+import type {
+  AbortableIdempotencyStore,
+} from '../lib/server/idempotencyGeneric.js';
 import { PointOperatorConflictError } from '../lib/server/pointOperatorService.js';
 import type {
   PointOperatorAssignment,
@@ -67,7 +69,7 @@ function auth(role: UserRole, token: Record<string, unknown> = {}) {
   });
 }
 
-function memStore(): IdempotencyStore {
+function memStore(): AbortableIdempotencyStore {
   const rows = new Map<
     string,
     {
@@ -105,6 +107,9 @@ function memStore(): IdempotencyStore {
       const existing = rows.get(id);
       assert.ok(existing);
       rows.set(id, { ...existing, responseJson, responseStatus });
+    },
+    async abort(scope, userId, key) {
+      rows.delete(`${scope}:${userId}:${key}`);
     },
   };
 }
@@ -319,7 +324,6 @@ test('status defaults to a controlled unavailable response until Task 5', async 
 test('admin create normalizes identity and grants a prepared profile atomically', async () => {
   let hashInput: unknown;
   let grantInput: unknown;
-  const audits: string[] = [];
   const handler = createPointOperatorHandler({
     requireUserFn: async () => ({
       id: 'admin@example.com',
@@ -341,9 +345,6 @@ test('admin create normalizes identity and grants a prepared profile atomically'
     grantAssignmentFn: async (input) => {
       grantInput = input;
       return assignment();
-    },
-    logSecurityEventFn: async ({ eventType }) => {
-      audits.push(eventType);
     },
   });
   const response = await handler(
@@ -368,7 +369,17 @@ test('admin create normalizes identity and grants a prepared profile atomically'
     password: 'StrongPass123!',
     rounds: 12,
   });
-  assert.deepEqual(grantInput, {
+  const typedGrantInput = grantInput as {
+    audit?: {
+      request?: Request;
+      identifierType?: string;
+      note?: string;
+    };
+  } & Record<string, unknown>;
+  assert.equal(typedGrantInput.audit?.request instanceof Request, true);
+  assert.deepEqual(
+    { ...typedGrantInput, audit: undefined },
+    {
     actorUserId: 'admin@example.com',
     operatorUserId: 'operator@example.com',
     pointId: 'point-1',
@@ -382,11 +393,19 @@ test('admin create normalizes identity and grants a prepared profile atomically'
       passwordHash: 'hashed-password',
       mustChangePassword: true,
     },
-  });
-  assert.deepEqual(audits, [
-    'point_operator_account_created',
-    'point_operator_assignment_granted',
-  ]);
+      audit: undefined,
+    },
+  );
+  assert.deepEqual(
+    {
+      identifierType: typedGrantInput.audit?.identifierType,
+      note: typedGrantInput.audit?.note,
+    },
+    {
+      identifierType: 'email',
+      note: 'Primary custodian',
+    },
+  );
   const body = (await response.json()) as {
     assignment?: PointOperatorAssignment;
   };
@@ -422,7 +441,6 @@ test('admin create replays an identical idempotent retry without re-granting', a
       accountExists = true;
       return assignment();
     },
-    logSecurityEventFn: async () => {},
   });
   const request = () =>
     new Request('http://localhost/api/point-operator?view=admin_create', {
@@ -485,6 +503,107 @@ test('admin create rejects an existing account without attempting a grant', asyn
   );
   assert.equal(response.status, 409);
   assert.equal(grantCalls, 0);
+});
+
+test('admin create caches deterministic 404 and 409 responses instead of leaving reservations in flight', async () => {
+  for (const [name, deps, expectedStatus] of [
+    [
+      'missing point',
+      {
+        getUserProfileFn: async () => null,
+        findReadablePointFn: async () => null,
+      },
+      404,
+    ],
+    [
+      'duplicate account',
+      {
+        getUserProfileFn: async () => ({
+          id: 'operator@example.com',
+          name: 'Existing',
+          email: 'operator@example.com',
+          XP: 0,
+          role: 'client' as const,
+        }),
+      },
+      409,
+    ],
+  ] as const) {
+    let grantCalls = 0;
+    const handler = createPointOperatorHandler({
+      requireUserFn: auth('admin'),
+      consumeRateLimitFn: allowRateLimit,
+      idempotencyStore: memStore(),
+      grantAssignmentFn: async () => {
+        grantCalls += 1;
+        return assignment();
+      },
+      ...deps,
+    });
+    const request = () =>
+      new Request('http://localhost/api/point-operator?view=admin_create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': `create-${name}`,
+        },
+        body: JSON.stringify({
+          identifier: 'operator@example.com',
+          name: 'Operator',
+          password: 'StrongPass123!',
+          pointId: 'missing-point',
+        }),
+      });
+
+    const first = await handler(request());
+    const second = await handler(request());
+
+    assert.equal(first.status, expectedStatus, name);
+    assert.equal(second.status, expectedStatus, name);
+    assert.deepEqual(await second.json(), await first.json(), name);
+    assert.equal(grantCalls, 0, name);
+  }
+});
+
+test('admin create aborts a retryable storage failure so the same key can succeed immediately', async () => {
+  let grantCalls = 0;
+  const handler = createPointOperatorHandler({
+    requireUserFn: auth('admin'),
+    consumeRateLimitFn: allowRateLimit,
+    idempotencyStore: memStore(),
+    getUserProfileFn: async () => null,
+    findReadablePointFn: async () => ({
+      point: point(),
+      source: { kind: 'point_event' },
+    }),
+    getActiveAssignmentByPointFn: async () => null,
+    hashPasswordFn: async () => 'hashed-password',
+    grantAssignmentFn: async () => {
+      grantCalls += 1;
+      if (grantCalls === 1) {
+        throw new StorageUnavailableError('database offline');
+      }
+      return assignment();
+    },
+  });
+  const request = () =>
+    new Request('http://localhost/api/point-operator?view=admin_create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'create-storage-retry',
+      },
+      body: JSON.stringify({
+        identifier: 'operator@example.com',
+        name: 'Operator',
+        password: 'StrongPass123!',
+        pointId: 'point-1',
+      }),
+    });
+
+  assert.equal((await handler(request())).status, 503);
+  assert.equal((await handler(request())).status, 201);
+  assert.equal(grantCalls, 2);
 });
 
 test('admin create maps assignment uniqueness conflicts to 409', async () => {
@@ -595,9 +714,8 @@ test('admin assignment loads active assignment, history, operator, and point', a
   assert.equal(body.point?.pointId, 'point-1');
 });
 
-test('admin revoke uses the lifecycle and writes an audit event', async () => {
+test('admin revoke passes transactional audit context to the lifecycle', async () => {
   let revokeInput: unknown;
-  let auditType: string | undefined;
   const revoked = assignment({
     status: 'revoked',
     revokedBy: 'admin@example.com',
@@ -611,9 +729,6 @@ test('admin revoke uses the lifecycle and writes an audit event', async () => {
     revokeAssignmentFn: async (input) => {
       revokeInput = input;
       return revoked;
-    },
-    logSecurityEventFn: async ({ eventType }) => {
-      auditType = eventType;
     },
   });
   const response = await handler(
@@ -630,12 +745,124 @@ test('admin revoke uses the lifecycle and writes an audit event', async () => {
     }),
   );
   assert.equal(response.status, 200);
-  assert.deepEqual(revokeInput, {
-    actorUserId: 'admin@example.com',
-    operatorUserId: 'op@example.com',
-    reason: 'Ownership changed',
+  const typedRevokeInput = revokeInput as {
+    auditRequest?: Request;
+  } & Record<string, unknown>;
+  assert.equal(typedRevokeInput.auditRequest instanceof Request, true);
+  assert.deepEqual(
+    { ...typedRevokeInput, auditRequest: undefined },
+    {
+      actorUserId: 'admin@example.com',
+      operatorUserId: 'op@example.com',
+      reason: 'Ownership changed',
+      auditRequest: undefined,
+    },
+  );
+});
+
+test('admin revoke caches deterministic failure and aborts retryable failure', async () => {
+  {
+    let calls = 0;
+    const handler = createPointOperatorHandler({
+      requireUserFn: auth('admin'),
+      consumeRateLimitFn: allowRateLimit,
+      idempotencyStore: memStore(),
+      revokeAssignmentFn: async () => {
+        calls += 1;
+        throw new Error('Active operator assignment not found');
+      },
+    });
+    const request = () =>
+      new Request('http://localhost/api/point-operator?view=admin_revoke', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'revoke-missing',
+        },
+        body: JSON.stringify({
+          operatorUserId: 'op@example.com',
+          reason: 'Ownership changed',
+        }),
+      });
+    assert.equal((await handler(request())).status, 404);
+    assert.equal((await handler(request())).status, 404);
+    assert.equal(calls, 1);
+  }
+
+  {
+    let calls = 0;
+    const handler = createPointOperatorHandler({
+      requireUserFn: auth('admin'),
+      consumeRateLimitFn: allowRateLimit,
+      idempotencyStore: memStore(),
+      revokeAssignmentFn: async () => {
+        calls += 1;
+        if (calls === 1) {
+          throw new StorageUnavailableError('database offline');
+        }
+        return assignment({
+          status: 'revoked',
+          revokedBy: 'admin@example.com',
+          revokedAt: '2026-06-24T01:00:00.000Z',
+          revokeReason: 'Ownership changed',
+        });
+      },
+    });
+    const request = () =>
+      new Request('http://localhost/api/point-operator?view=admin_revoke', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'revoke-storage-retry',
+        },
+        body: JSON.stringify({
+          operatorUserId: 'op@example.com',
+          reason: 'Ownership changed',
+        }),
+      });
+    assert.equal((await handler(request())).status, 503);
+    assert.equal((await handler(request())).status, 200);
+    assert.equal(calls, 2);
+  }
+});
+
+test('admin revoke replays the original successful response', async () => {
+  let calls = 0;
+  const revoked = assignment({
+    status: 'revoked',
+    revokedBy: 'admin@example.com',
+    revokedAt: '2026-06-24T01:00:00.000Z',
+    revokeReason: 'Ownership changed',
   });
-  assert.equal(auditType, 'point_operator_assignment_revoked');
+  const handler = createPointOperatorHandler({
+    requireUserFn: auth('admin'),
+    consumeRateLimitFn: allowRateLimit,
+    idempotencyStore: memStore(),
+    revokeAssignmentFn: async () => {
+      calls += 1;
+      return revoked;
+    },
+  });
+  const request = () =>
+    new Request('http://localhost/api/point-operator?view=admin_revoke', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'revoke-replay',
+      },
+      body: JSON.stringify({
+        operatorUserId: 'op@example.com',
+        reason: 'Ownership changed',
+      }),
+    });
+
+  const first = await handler(request());
+  const second = await handler(request());
+
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.deepEqual(await second.json(), await first.json());
+  assert.equal(calls, 1);
 });
 
 test('operator me returns the assigned canonical point, controls, and signal placeholder', async () => {

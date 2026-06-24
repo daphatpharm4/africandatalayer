@@ -31,6 +31,7 @@ export interface RevokePointOperatorInput {
   actorUserId: string;
   operatorUserId: string;
   reason: string;
+  auditRequest?: Request | null;
 }
 
 export interface PointOperatorLifecycleDeps {
@@ -175,6 +176,9 @@ export function createPointOperatorLifecycle(
           actorUserId,
           operatorUserId,
           reason,
+          ...(input.auditRequest
+            ? { auditRequest: input.auditRequest }
+            : {}),
         });
       } catch (error) {
         const conflict = asUniqueConflict(error);

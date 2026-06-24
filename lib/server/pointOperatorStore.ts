@@ -4,6 +4,7 @@ import type {
   ProjectedPoint,
 } from "../../shared/types.js";
 import { getPool, query } from "./db.js";
+import { insertSecurityAuditEvent } from "./securityAudit.js";
 import {
   findReadableProjectedPoint,
   type ReadablePointSource,
@@ -66,6 +67,11 @@ export interface GrantAssignmentInput {
   pointId: string;
   pointSource: ReadablePointSource;
   profile: PreparedPointOperatorProfile;
+  audit?: {
+    request?: Request | null;
+    identifierType?: "email" | "phone";
+    note?: string;
+  };
 }
 
 export interface RevokeAssignmentInput {
@@ -73,6 +79,7 @@ export interface RevokeAssignmentInput {
   actorUserId: string;
   operatorUserId: string;
   reason: string;
+  auditRequest?: Request | null;
 }
 
 export interface PointOperatorStore {
@@ -417,7 +424,35 @@ export function createPointOperatorStore(
       );
       const row = result.rows[0];
       if (!row) throw new Error("Point operator assignment was not created");
-      return rowToAssignment(row);
+      const assignment = rowToAssignment(row);
+      if (input.audit) {
+        if (input.profile.kind === "new") {
+          await insertSecurityAuditEvent(client.query.bind(client), {
+            eventType: "point_operator_account_created",
+            userId: operatorUserId,
+            request: input.audit.request,
+            details: {
+              actorUserId,
+              identifierType: input.audit.identifierType ?? null,
+              pointId,
+              mustChangePassword: input.profile.mustChangePassword,
+              mapScope: "bonamoussadi",
+              ...(input.audit.note ? { note: input.audit.note } : {}),
+            },
+          });
+        }
+        await insertSecurityAuditEvent(client.query.bind(client), {
+          eventType: "point_operator_assignment_granted",
+          userId: operatorUserId,
+          request: input.audit.request,
+          details: {
+            actorUserId,
+            assignmentId: assignment.id,
+            pointId,
+          },
+        });
+      }
+      return assignment;
     });
   }
 
@@ -475,7 +510,21 @@ export function createPointOperatorStore(
       );
       const row = result.rows[0];
       if (!row) throw new Error("Active operator assignment not found");
-      return rowToAssignment(row);
+      const assignment = rowToAssignment(row);
+      if (input.auditRequest) {
+        await insertSecurityAuditEvent(client.query.bind(client), {
+          eventType: "point_operator_assignment_revoked",
+          userId: operatorUserId,
+          request: input.auditRequest,
+          details: {
+            actorUserId,
+            assignmentId: assignment.id,
+            pointId: assignment.pointId,
+            reason,
+          },
+        });
+      }
+      return assignment;
     });
   }
 

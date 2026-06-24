@@ -625,6 +625,96 @@ test("grant transaction rolls back the role update when assignment insert fails"
   assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
 });
 
+test("grant audit insertion failure rolls back the new profile and assignment", async () => {
+  let profileCreated = false;
+  let assignmentCreated = false;
+  let auditInsertCount = 0;
+  let snapshot = { profileCreated, assignmentCreated };
+  const statements: string[] = [];
+  const client = {
+    async query(text: string) {
+      statements.push(text);
+      if (/^begin$/i.test(text.trim())) {
+        snapshot = { profileCreated, assignmentCreated };
+        return { rows: [], rowCount: null };
+      }
+      if (/insert into user_profiles/i.test(text)) {
+        profileCreated = true;
+        return { rows: [{ id: "new@example.com" }], rowCount: 1 };
+      }
+      if (/insert into point_operator_assignments/i.test(text)) {
+        assignmentCreated = true;
+        return {
+          rows: [
+            {
+              id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              operator_user_id: "new@example.com",
+              point_id: "seed-point-1",
+              status: "active",
+              granted_by: "admin@example.com",
+              granted_at: "2026-06-24T08:00:00.000Z",
+              revoked_by: null,
+              revoked_at: null,
+              revoke_reason: null,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (/insert into security_audit_log/i.test(text)) {
+        auditInsertCount += 1;
+        if (auditInsertCount === 2) throw new Error("audit insert failed");
+        return { rows: [], rowCount: 1 };
+      }
+      if (/^rollback$/i.test(text.trim())) {
+        ({ profileCreated, assignmentCreated } = snapshot);
+        return { rows: [], rowCount: null };
+      }
+      return { rows: [], rowCount: null };
+    },
+    release() {},
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+    findReadablePointFn: async () => ({
+      point: projectedPoint("seed-point-1"),
+      source: { kind: "curated_seed", eventId: "seed-event-1" },
+    }),
+  });
+
+  await assert.rejects(
+    store.grantPointOperatorAssignmentTx({
+      actorUserId: "admin@example.com",
+      operatorUserId: "new@example.com",
+      pointId: "seed-point-1",
+      pointSource: { kind: "curated_seed", eventId: "seed-event-1" },
+      profile: {
+        kind: "new",
+        userId: "new@example.com",
+        email: "new@example.com",
+        phone: null,
+        name: "New Operator",
+        passwordHash: "hashed-password",
+        mustChangePassword: true,
+      },
+      audit: {
+        request: new Request("http://localhost/api/point-operator", {
+          headers: { "x-forwarded-for": "203.0.113.7" },
+        }),
+        identifierType: "email",
+        note: "Primary custodian",
+      },
+    }),
+    /audit insert failed/,
+  );
+
+  assert.equal(profileCreated, false);
+  assert.equal(assignmentCreated, false);
+  assert.equal(auditInsertCount, 2);
+  assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
+});
+
 test("grant revalidates event-backed point existence inside the transaction", async () => {
   const statements: string[] = [];
   const client = {
@@ -977,4 +1067,71 @@ test("revoke updates the active row and history retains the revoked assignment",
   assert.equal(revoked.revokeReason, "responsibility changed");
   assert.equal(history.length, 1);
   assert.equal(history[0].status, "revoked");
+});
+
+test("revoke audit insertion failure rolls back the assignment revocation", async () => {
+  let status = "active";
+  let snapshot = status;
+  const statements: string[] = [];
+  const client = {
+    async query(text: string) {
+      statements.push(text);
+      if (/^begin$/i.test(text.trim())) {
+        snapshot = status;
+        return { rows: [], rowCount: null };
+      }
+      if (/update point_operator_assignments/i.test(text)) {
+        status = "revoked";
+        return {
+          rows: [
+            {
+              id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              operator_user_id: "operator@example.com",
+              point_id: "point-1",
+              status: "revoked",
+              granted_by: "admin@example.com",
+              granted_at: "2026-06-24T08:00:00.000Z",
+              revoked_by: "admin@example.com",
+              revoked_at: "2026-06-24T09:00:00.000Z",
+              revoke_reason: "responsibility changed",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (/insert into security_audit_log/i.test(text)) {
+        throw new Error("audit insert failed");
+      }
+      if (/^rollback$/i.test(text.trim())) {
+        status = snapshot;
+        return { rows: [], rowCount: null };
+      }
+      return { rows: [], rowCount: null };
+    },
+    release() {},
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+    findReadablePointFn: async () => null,
+  });
+
+  await assert.rejects(
+    store.revokePointOperatorAssignmentTx({
+      assignmentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      reason: "responsibility changed",
+      auditRequest: new Request("http://localhost/api/point-operator"),
+    }),
+    /audit insert failed/,
+  );
+
+  assert.equal(status, "active");
+  assert.equal(
+    statements.filter((text) => /insert into security_audit_log/i.test(text))
+      .length,
+    1,
+  );
+  assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
 });

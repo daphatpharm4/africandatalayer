@@ -48,14 +48,24 @@ function requestMetadata(request: Request | null | undefined): { ip: string | nu
   };
 }
 
-export async function logSecurityEvent(input: {
+export interface SecurityAuditEventInput {
   eventType: SecurityAuditEventType;
   userId?: string | null;
   request?: Request | null;
   details?: Record<string, unknown> | null;
-}): Promise<void> {
+}
+
+export type SecurityAuditQueryFn = (
+  text: string,
+  values?: unknown[],
+) => Promise<unknown>;
+
+export async function insertSecurityAuditEvent(
+  queryFn: SecurityAuditQueryFn,
+  input: SecurityAuditEventInput,
+): Promise<void> {
   const meta = requestMetadata(input.request);
-  await query(
+  await queryFn(
     `INSERT INTO security_audit_log (event_type, user_id, ip_address, user_agent, details)
      VALUES ($1, $2, $3, $4, $5::jsonb)`,
     [
@@ -66,4 +76,10 @@ export async function logSecurityEvent(input: {
       JSON.stringify(input.details ?? {}),
     ],
   );
+}
+
+export async function logSecurityEvent(
+  input: SecurityAuditEventInput,
+): Promise<void> {
+  await insertSecurityAuditEvent(query, input);
 }

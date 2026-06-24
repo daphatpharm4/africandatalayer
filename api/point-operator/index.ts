@@ -6,10 +6,10 @@ import {
 } from '../../lib/shared/identifier.js';
 import { errorResponse, jsonResponse } from '../../lib/server/http.js';
 import {
+  type AbortableIdempotencyStore,
   hashRequestPayload,
   postgresIdempotencyStore,
   resolveIdempotency,
-  type IdempotencyStore,
 } from '../../lib/server/idempotencyGeneric.js';
 import { readIdempotencyKey } from '../../lib/server/idempotencyCore.js';
 import { getPointOperatorControls } from '../../lib/server/pointOperatorConfig.js';
@@ -28,10 +28,6 @@ import {
 } from '../../lib/server/pointOperatorStore.js';
 import { projectPointsFromEvents } from '../../lib/server/pointProjection.js';
 import { consumeRateLimit } from '../../lib/server/rateLimit.js';
-import {
-  logSecurityEvent,
-  type SecurityAuditEventType,
-} from '../../lib/server/securityAudit.js';
 import {
   buildReadableEvents,
   findReadableProjectedPoint,
@@ -69,8 +65,6 @@ type RequireUserFn = typeof requireUser;
 type ConsumeRateLimitFn = typeof consumeRateLimit;
 type GetUserProfileFn = typeof getUserProfile;
 type HashPasswordFn = typeof bcrypt.hash;
-type LogSecurityEventFn = typeof logSecurityEvent;
-
 interface SubmitSignalInput {
   operatorUserId: string;
   field: string;
@@ -96,7 +90,7 @@ interface ChangePasswordInput {
 interface PointOperatorHandlerDeps {
   requireUserFn?: RequireUserFn;
   consumeRateLimitFn?: ConsumeRateLimitFn;
-  idempotencyStore?: IdempotencyStore;
+  idempotencyStore?: AbortableIdempotencyStore;
   getUserProfileFn?: GetUserProfileFn;
   getActiveAssignmentByUserFn?: (
     userId: string,
@@ -121,7 +115,6 @@ interface PointOperatorHandlerDeps {
   revokeAssignmentFn?: (
     input: RevokePointOperatorInput,
   ) => Promise<PointOperatorAssignment>;
-  logSecurityEventFn?: LogSecurityEventFn;
   submitSignalFn?: (input: SubmitSignalInput) => Promise<unknown>;
   submitPhotoFn?: (input: SubmitPhotoInput) => Promise<unknown>;
   changePasswordFn?: (input: ChangePasswordInput) => Promise<unknown>;
@@ -290,7 +283,7 @@ async function beginWrite(
   view: PointOperatorView,
   auth: AuthenticatedUser,
   body: unknown,
-  store: IdempotencyStore,
+  store: AbortableIdempotencyStore,
 ): Promise<PreparedWrite | Response> {
   const idempotencyKey = readIdempotencyKey(request.headers);
   if (!idempotencyKey) {
@@ -328,7 +321,7 @@ async function beginWrite(
 }
 
 async function completeWrite(
-  store: IdempotencyStore,
+  store: AbortableIdempotencyStore,
   view: PointOperatorView,
   auth: AuthenticatedUser,
   prepared: PreparedWrite,
@@ -345,18 +338,29 @@ async function completeWrite(
   return jsonResponse(body, { status });
 }
 
-async function writeAuditEvents(
-  logSecurityEventFn: LogSecurityEventFn,
-  request: Request,
-  events: Array<{
-    eventType: SecurityAuditEventType;
-    userId: string;
-    details: Record<string, unknown>;
-  }>,
+async function finalizeFailedWrite(
+  store: AbortableIdempotencyStore,
+  view: PointOperatorView,
+  auth: AuthenticatedUser,
+  prepared: PreparedWrite,
+  response: Response,
 ): Promise<void> {
-  for (const event of events) {
-    await logSecurityEventFn({ ...event, request });
+  if (response.status >= 500) {
+    await store.abort(
+      `point-operator:${view}`,
+      auth.id,
+      prepared.idempotencyKey,
+    );
+    return;
   }
+  const responseBody = await response.clone().json();
+  await store.complete(
+    `point-operator:${view}`,
+    auth.id,
+    prepared.idempotencyKey,
+    responseBody,
+    response.status,
+  );
 }
 
 export function createPointOperatorHandler(
@@ -384,8 +388,6 @@ export function createPointOperatorHandler(
     deps.grantAssignmentFn ?? grantPointOperatorAssignmentTx;
   const revokeAssignmentFn =
     deps.revokeAssignmentFn ?? createPointOperatorLifecycle().revoke;
-  const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
-
   return async function handlePointOperator(
     request: Request,
   ): Promise<Response> {
@@ -432,6 +434,9 @@ export function createPointOperatorHandler(
       });
     }
 
+    let activeWrite:
+      | { view: PointOperatorView; prepared: PreparedWrite }
+      | null = null;
     try {
       if (view === 'admin_search_points') {
         const query = (new URL(request.url).searchParams.get('q') ?? '')
@@ -534,23 +539,50 @@ export function createPointOperatorHandler(
         );
         if (prepared instanceof Response) return prepared;
         if (prepared.replay) return prepared.replay;
+        activeWrite = { view, prepared };
         if (await getUserProfileFn(operatorUserId)) {
-          return errorResponse(
+          const response = errorResponse(
             'An account already exists for this phone/email',
             409,
             { code: 'point_operator_conflict' },
           );
+          await finalizeFailedWrite(
+            idempotencyStore,
+            view,
+            auth,
+            prepared,
+            response,
+          );
+          return response;
         }
         const readablePoint = await findReadablePointFn(body.pointId);
         if (!readablePoint) {
-          return errorResponse('Verified point not found', 404, {
+          const response = errorResponse('Verified point not found', 404, {
             code: 'not_found',
           });
+          await finalizeFailedWrite(
+            idempotencyStore,
+            view,
+            auth,
+            prepared,
+            response,
+          );
+          return response;
         }
         if (await getActiveAssignmentByPointFn(body.pointId)) {
-          return errorResponse('Point already has an active operator', 409, {
-            code: 'point_operator_conflict',
-          });
+          const response = errorResponse(
+            'Point already has an active operator',
+            409,
+            { code: 'point_operator_conflict' },
+          );
+          await finalizeFailedWrite(
+            idempotencyStore,
+            view,
+            auth,
+            prepared,
+            response,
+          );
+          return response;
         }
         const passwordHash = await hashPasswordFn(body.password, 12);
         const assignment = await grantAssignmentFn({
@@ -569,31 +601,13 @@ export function createPointOperatorHandler(
             passwordHash,
             mustChangePassword: true,
           },
+          audit: {
+            request,
+            identifierType: normalizedIdentifier.type,
+            ...(body.note ? { note: body.note } : {}),
+          },
         });
-        await writeAuditEvents(logSecurityEventFn, request, [
-          {
-            eventType: 'point_operator_account_created',
-            userId: operatorUserId,
-            details: {
-              actorUserId: auth.id,
-              identifierType: normalizedIdentifier.type,
-              pointId: assignment.pointId,
-              mustChangePassword: true,
-              mapScope: 'bonamoussadi',
-              ...(body.note ? { note: body.note } : {}),
-            },
-          },
-          {
-            eventType: 'point_operator_assignment_granted',
-            userId: operatorUserId,
-            details: {
-              actorUserId: auth.id,
-              assignmentId: assignment.id,
-              pointId: assignment.pointId,
-            },
-          },
-        ]);
-        return await completeWrite(
+        const response = await completeWrite(
           idempotencyStore,
           view,
           auth,
@@ -601,6 +615,8 @@ export function createPointOperatorHandler(
           { assignment },
           201,
         );
+        activeWrite = null;
+        return response;
       }
 
       if (view === 'admin_revoke') {
@@ -621,24 +637,14 @@ export function createPointOperatorHandler(
         );
         if (prepared instanceof Response) return prepared;
         if (prepared.replay) return prepared.replay;
+        activeWrite = { view, prepared };
         const assignment = await revokeAssignmentFn({
           actorUserId: auth.id,
           operatorUserId,
           reason: body.reason,
+          auditRequest: request,
         });
-        await writeAuditEvents(logSecurityEventFn, request, [
-          {
-            eventType: 'point_operator_assignment_revoked',
-            userId: operatorUserId,
-            details: {
-              actorUserId: auth.id,
-              assignmentId: assignment.id,
-              pointId: assignment.pointId,
-              reason: body.reason,
-            },
-          },
-        ]);
-        return await completeWrite(
+        const response = await completeWrite(
           idempotencyStore,
           view,
           auth,
@@ -646,6 +652,8 @@ export function createPointOperatorHandler(
           { assignment },
           200,
         );
+        activeWrite = null;
+        return response;
       }
 
       const assignment = await getActiveAssignmentByUserFn(auth.id);
@@ -676,6 +684,7 @@ export function createPointOperatorHandler(
         );
         if (prepared instanceof Response) return prepared;
         if (prepared.replay) return prepared.replay;
+        activeWrite = { view, prepared };
         const result = await deps.submitSignalFn({
           operatorUserId: auth.id,
           field: body.field,
@@ -683,7 +692,7 @@ export function createPointOperatorHandler(
           ...(body.capturedAt ? { capturedAt: body.capturedAt } : {}),
           idempotencyKey: prepared.idempotencyKey,
         });
-        return await completeWrite(
+        const response = await completeWrite(
           idempotencyStore,
           view,
           auth,
@@ -691,6 +700,8 @@ export function createPointOperatorHandler(
           result,
           201,
         );
+        activeWrite = null;
+        return response;
       }
 
       if (view === 'photo') {
@@ -716,13 +727,14 @@ export function createPointOperatorHandler(
         );
         if (prepared instanceof Response) return prepared;
         if (prepared.replay) return prepared.replay;
+        activeWrite = { view, prepared };
         const result = await deps.submitPhotoFn({
           operatorUserId: auth.id,
           imageData: body.imageData,
           ...(body.capturedAt ? { capturedAt: body.capturedAt } : {}),
           idempotencyKey: prepared.idempotencyKey,
         });
-        return await completeWrite(
+        const response = await completeWrite(
           idempotencyStore,
           view,
           auth,
@@ -730,6 +742,8 @@ export function createPointOperatorHandler(
           result,
           201,
         );
+        activeWrite = null;
+        return response;
       }
 
       const validation = pointOperatorPasswordSchema.safeParse(
@@ -756,13 +770,14 @@ export function createPointOperatorHandler(
       );
       if (prepared instanceof Response) return prepared;
       if (prepared.replay) return prepared.replay;
+      activeWrite = { view, prepared };
       const result = await deps.changePasswordFn({
         operatorUserId: auth.id,
         currentPassword: body.currentPassword,
         newPassword: body.newPassword,
         idempotencyKey: prepared.idempotencyKey,
       });
-      return await completeWrite(
+      const response = await completeWrite(
         idempotencyStore,
         view,
         auth,
@@ -770,8 +785,20 @@ export function createPointOperatorHandler(
         result,
         200,
       );
+      activeWrite = null;
+      return response;
     } catch (error) {
-      return classifyFailure(error);
+      const response = classifyFailure(error);
+      if (activeWrite) {
+        await finalizeFailedWrite(
+          idempotencyStore,
+          activeWrite.view,
+          auth,
+          activeWrite.prepared,
+          response,
+        );
+      }
+      return response;
     }
   };
 }

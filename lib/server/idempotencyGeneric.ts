@@ -24,6 +24,11 @@ export interface IdempotencyStore {
   complete(scope: string, userId: string, key: string, responseJson: unknown, responseStatus: number): Promise<void>;
 }
 
+export interface AbortableIdempotencyStore extends IdempotencyStore {
+  /** Release an unfinished reservation so a retry may execute immediately. */
+  abort(scope: string, userId: string, key: string): Promise<void>;
+}
+
 export type IdempotencyResult =
   | { status: "reserved" } //   caller is the executor — proceed
   | { status: "in_flight" } //  a duplicate is executing right now — caller must NOT proceed
@@ -75,7 +80,7 @@ export async function resolveIdempotency(
 }
 
 /** Postgres-backed store over api_idempotency_keys. */
-export const postgresIdempotencyStore: IdempotencyStore = {
+export const postgresIdempotencyStore: AbortableIdempotencyStore = {
   async find(scope, userId, key) {
     const res = await query<{
       request_hash: string;
@@ -121,6 +126,16 @@ export const postgresIdempotencyStore: IdempotencyStore = {
        SET response_json = $4::jsonb, response_status = $5, last_seen_at = NOW()
        WHERE scope = $1 AND user_id = $2 AND idempotency_key = $3`,
       [scope, userId, key, JSON.stringify(responseJson ?? null), responseStatus],
+    );
+  },
+  async abort(scope, userId, key) {
+    await query(
+      `DELETE FROM api_idempotency_keys
+       WHERE scope = $1
+         AND user_id = $2
+         AND idempotency_key = $3
+         AND response_status = 0`,
+      [scope, userId, key],
     );
   },
 };
