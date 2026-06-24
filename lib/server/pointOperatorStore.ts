@@ -1,12 +1,14 @@
 import type { PoolClient, QueryResult } from "pg";
 import type {
-  PointEvent,
   PointOperatorAssignment,
   ProjectedPoint,
 } from "../../shared/types.js";
 import { getPool, query } from "./db.js";
-import { projectPointById } from "./pointProjection.js";
-import { getPointEvents } from "./storage/index.js";
+import {
+  findReadableProjectedPoint,
+  type ReadablePointSource,
+  type ReadableProjectedPoint,
+} from "./submissionEvents.js";
 
 const ASSIGNMENT_COLUMNS = `
   id,
@@ -35,7 +37,7 @@ export interface PointOperatorTransactionClient {
     text: string,
     values?: unknown[],
   ): Promise<QueryResultLike<Record<string, unknown>>>;
-  release(): void;
+  release(error?: Error): void;
 }
 
 export interface PreparedExistingPointOperatorProfile {
@@ -62,6 +64,7 @@ export interface GrantAssignmentInput {
   actorUserId: string;
   operatorUserId: string;
   pointId: string;
+  pointSource: ReadablePointSource;
   profile: PreparedPointOperatorProfile;
 }
 
@@ -94,7 +97,16 @@ export interface PointOperatorStore {
 export interface PointOperatorStoreDeps {
   queryFn?: QueryFn;
   connectFn?: () => Promise<PointOperatorTransactionClient>;
-  getPointEventsFn?: () => Promise<PointEvent[]>;
+  findReadablePointFn?: (pointId: string) => Promise<ReadableProjectedPoint | null>;
+}
+
+export class PointOperatorDataIntegrityError extends Error {
+  readonly code = "point_operator_data_integrity";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "PointOperatorDataIntegrityError";
+  }
 }
 
 function normalizeUserId(value: string): string {
@@ -121,22 +133,60 @@ function nullableIsoString(value: unknown): string | null {
   return value === null || value === undefined ? null : toIsoString(value);
 }
 
+function requiredString(value: unknown, field: string): string {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    throw new PointOperatorDataIntegrityError(
+      `Corrupt point operator assignment: missing ${field}`,
+    );
+  }
+  return normalized;
+}
+
 function rowToAssignment(
   row: Record<string, unknown>,
 ): PointOperatorAssignment {
-  const status = row.status === "revoked" ? "revoked" : "active";
+  if (row.status !== "active" && row.status !== "revoked") {
+    throw new PointOperatorDataIntegrityError(
+      "Corrupt point operator assignment: invalid status",
+    );
+  }
+  const status = row.status;
+  let grantedAt: string;
+  let revokedAt: string | null;
+  try {
+    grantedAt = toIsoString(row.granted_at);
+    revokedAt = nullableIsoString(row.revoked_at);
+  } catch {
+    throw new PointOperatorDataIntegrityError(
+      "Corrupt point operator assignment: invalid timestamp",
+    );
+  }
+  const revokedBy =
+    row.revoked_by === null || row.revoked_by === undefined
+      ? null
+      : normalizeUserId(requiredString(row.revoked_by, "revoked_by"));
+  if (status === "active" && (revokedBy !== null || revokedAt !== null)) {
+    throw new PointOperatorDataIntegrityError(
+      "Corrupt point operator assignment: active row contains revocation data",
+    );
+  }
+  if (status === "revoked" && (revokedBy === null || revokedAt === null)) {
+    throw new PointOperatorDataIntegrityError(
+      "Corrupt point operator assignment: revoked row lacks revocation data",
+    );
+  }
   return {
-    id: normalizeAssignmentId(String(row.id ?? "")),
-    operatorUserId: normalizeUserId(String(row.operator_user_id ?? "")),
-    pointId: normalizePointId(String(row.point_id ?? "")),
+    id: normalizeAssignmentId(requiredString(row.id, "id")),
+    operatorUserId: normalizeUserId(
+      requiredString(row.operator_user_id, "operator_user_id"),
+    ),
+    pointId: normalizePointId(requiredString(row.point_id, "point_id")),
     status,
-    grantedBy: normalizeUserId(String(row.granted_by ?? "")),
-    grantedAt: toIsoString(row.granted_at),
-    revokedBy:
-      row.revoked_by === null || row.revoked_by === undefined
-        ? null
-        : normalizeUserId(String(row.revoked_by)),
-    revokedAt: nullableIsoString(row.revoked_at),
+    grantedBy: normalizeUserId(requiredString(row.granted_by, "granted_by")),
+    grantedAt,
+    revokedBy,
+    revokedAt,
     revokeReason:
       typeof row.revoke_reason === "string" ? row.revoke_reason : null,
   };
@@ -216,26 +266,41 @@ export function createPointOperatorStore(
   const connectFn =
     deps.connectFn ??
     (async () => (await getPool().connect()) as PoolClient);
-  const getPointEventsFn = deps.getPointEventsFn ?? (() => getPointEvents());
+  const findReadablePointFn =
+    deps.findReadablePointFn ?? findReadableProjectedPoint;
 
   async function withTransaction<T>(
     operation: (client: PointOperatorTransactionClient) => Promise<T>,
   ): Promise<T> {
     const client = await connectFn();
+    let releaseError: Error | undefined;
+    let commitStarted = false;
     try {
       await client.query("BEGIN");
       const result = await operation(client);
+      commitStarted = true;
       await client.query("COMMIT");
       return result;
     } catch (error) {
       try {
         await client.query("ROLLBACK");
-      } catch {
-        // Preserve the operation error; the pool will discard a broken client.
+      } catch (rollbackError) {
+        releaseError =
+          rollbackError instanceof Error
+            ? rollbackError
+            : error instanceof Error
+              ? error
+              : new Error("Point operator transaction rollback failed");
+      }
+      if (commitStarted && !releaseError) {
+        releaseError =
+          error instanceof Error
+            ? error
+            : new Error("Point operator transaction commit failed");
       }
       throw error;
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   }
 
@@ -290,8 +355,7 @@ export function createPointOperatorStore(
     pointId: string,
   ): Promise<ProjectedPoint | null> {
     const normalizedPointId = normalizePointId(pointId);
-    const events = await getPointEventsFn();
-    return projectPointById(events, normalizedPointId);
+    return (await findReadablePointFn(normalizedPointId))?.point ?? null;
   }
 
   async function grantPointOperatorAssignmentTx(
@@ -300,9 +364,31 @@ export function createPointOperatorStore(
     const actorUserId = normalizeUserId(input.actorUserId);
     const operatorUserId = normalizeUserId(input.operatorUserId);
     const pointId = normalizePointId(input.pointId);
+    const profileUserId = normalizeUserId(input.profile.userId);
+    if (profileUserId !== operatorUserId) {
+      throw new Error("Prepared profile user does not match operator");
+    }
 
     return await withTransaction(async (client) => {
       await prepareProfileForAssignment(client, input.profile);
+      if (input.pointSource.kind === "point_event") {
+        const pointResult = await client.query(
+          `
+            select point_id
+            from point_events
+            where point_id = $1
+            limit 1
+          `,
+          [pointId],
+        );
+        if (pointResult.rowCount !== 1) {
+          throw new Error("Verified point not found");
+        }
+      }
+      // Legacy and curated seed points live outside Postgres and cannot be
+      // locked in this transaction without first materializing them. The
+      // lifecycle performs an immediate canonical revalidation and passes the
+      // explicit source provenance so this limitation cannot be silent.
       const result = await client.query(
         `
           insert into point_operator_assignments (

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type {
-  PointEvent,
   PointOperatorAssignment,
   ProjectedPoint,
   UserProfile,
@@ -11,9 +10,11 @@ import {
   createPointOperatorLifecycle,
 } from "../lib/server/pointOperatorService.js";
 import {
+  PointOperatorDataIntegrityError,
   createPointOperatorStore,
   type GrantAssignmentInput,
 } from "../lib/server/pointOperatorStore.js";
+import type { ReadableProjectedPoint } from "../lib/server/submissionEvents.js";
 
 function assignment(overrides: Partial<PointOperatorAssignment> = {}): PointOperatorAssignment {
   return {
@@ -62,7 +63,10 @@ function lifecycleDeps(
   overrides: Partial<Parameters<typeof createPointOperatorLifecycle>[0]> = {},
 ): Parameters<typeof createPointOperatorLifecycle>[0] {
   return {
-    getProjectedPointFn: async () => projectedPoint(),
+    getReadablePointFn: async () => ({
+      point: projectedPoint(),
+      source: { kind: "point_event" },
+    }),
     getActiveByOperatorFn: async () => null,
     getActiveByPointFn: async () => null,
     getProfileFn: async () => profile(),
@@ -76,7 +80,7 @@ test("grant rejects a missing verified projected point", async () => {
   let transactionCalled = false;
   const lifecycle = createPointOperatorLifecycle(
     lifecycleDeps({
-      getProjectedPointFn: async () => null,
+      getReadablePointFn: async () => null,
       transactionFn: async () => {
         transactionCalled = true;
         return assignment();
@@ -162,9 +166,12 @@ test("grant ignores client point data and uses the server projection", async () 
   let transactionInput: GrantAssignmentInput | null = null;
   const lifecycle = createPointOperatorLifecycle(
     lifecycleDeps({
-      getProjectedPointFn: async (pointId) => {
+      getReadablePointFn: async (pointId) => {
         projectedLookup = pointId;
-        return projectedPoint(pointId);
+        return {
+          point: projectedPoint(pointId),
+          source: { kind: "point_event" },
+        };
       },
       transactionFn: async (input) => {
         transactionInput = input;
@@ -188,6 +195,7 @@ test("grant ignores client point data and uses the server projection", async () 
   assert.equal(projectedLookup, "point-1");
   assert.equal(transactionInput?.pointId, "point-1");
   assert.equal(transactionInput?.operatorUserId, "operator@example.com");
+  assert.deepEqual(transactionInput?.pointSource, { kind: "point_event" });
   assert.equal("point" in (transactionInput ?? {}), false);
 });
 
@@ -214,6 +222,120 @@ test("unique assignment violations become typed control conflicts", async () => 
       error.code === "point_operator_conflict" &&
       /active operator/.test(error.message),
   );
+});
+
+test("per-user assignment races become typed control conflicts", async () => {
+  const lifecycle = createPointOperatorLifecycle(
+    lifecycleDeps({
+      transactionFn: async () => {
+        throw Object.assign(new Error("duplicate key"), {
+          code: "23505",
+          constraint: "point_operator_one_active_per_user",
+        });
+      },
+    }),
+  );
+
+  await assert.rejects(
+    lifecycle.grant({
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      pointId: "point-1",
+    }),
+    (error: unknown) =>
+      error instanceof PointOperatorConflictError &&
+      /already has an active point/.test(error.message),
+  );
+});
+
+test("unrelated unique violations propagate unchanged", async () => {
+  const duplicateEmail = Object.assign(new Error("duplicate email"), {
+    code: "23505",
+    constraint: "user_profiles_email_key",
+  });
+  const lifecycle = createPointOperatorLifecycle(
+    lifecycleDeps({
+      transactionFn: async () => {
+        throw duplicateEmail;
+      },
+    }),
+  );
+
+  await assert.rejects(
+    lifecycle.grant({
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      pointId: "point-1",
+    }),
+    (error: unknown) => error === duplicateEmail,
+  );
+});
+
+test("legacy points are canonically revalidated immediately before transaction", async () => {
+  const lookups: ReadableProjectedPoint[] = [
+    {
+      point: projectedPoint("legacy-1"),
+      source: { kind: "legacy_submission", submissionId: "legacy-1" },
+    },
+    {
+      point: projectedPoint("legacy-1"),
+      source: { kind: "legacy_submission", submissionId: "legacy-1" },
+    },
+  ];
+  let transactionSource: GrantAssignmentInput["pointSource"] | null = null;
+  const lifecycle = createPointOperatorLifecycle(
+    lifecycleDeps({
+      getReadablePointFn: async () => lookups.shift() ?? null,
+      transactionFn: async (input) => {
+        transactionSource = input.pointSource;
+        return assignment({ pointId: input.pointId });
+      },
+    }),
+  );
+
+  await lifecycle.grant({
+    actorUserId: "admin@example.com",
+    operatorUserId: "operator@example.com",
+    pointId: "legacy-1",
+  });
+
+  assert.equal(lookups.length, 0);
+  assert.deepEqual(transactionSource, {
+    kind: "legacy_submission",
+    submissionId: "legacy-1",
+  });
+});
+
+test("curated seed points are canonically revalidated immediately before transaction", async () => {
+  let lookupCount = 0;
+  let transactionSource: GrantAssignmentInput["pointSource"] | null = null;
+  const lifecycle = createPointOperatorLifecycle(
+    lifecycleDeps({
+      getReadablePointFn: async () => {
+        lookupCount += 1;
+        return {
+          point: projectedPoint("seed-point-1"),
+          source: { kind: "curated_seed", eventId: "seed-event-1" },
+        };
+      },
+      transactionFn: async (input) => {
+        transactionSource = input.pointSource;
+        return assignment({ pointId: input.pointId });
+      },
+    }),
+  );
+
+  await lifecycle.grant({
+    actorUserId: "admin@example.com",
+    operatorUserId: "operator@example.com",
+    pointId: "seed-point-1",
+  });
+
+  assert.equal(lookupCount, 2);
+  assert.deepEqual(transactionSource, {
+    kind: "curated_seed",
+    eventId: "seed-event-1",
+  });
 });
 
 test("revoke trims and requires a reason, then targets the active assignment", async () => {
@@ -298,7 +420,6 @@ test("store maps assignment rows and normalizes lookup IDs", async () => {
     connectFn: async () => {
       throw new Error("transaction client not expected");
     },
-    getPointEventsFn: async () => [],
   });
 
   const result = await store.getActivePointOperatorAssignmentByUser(" OPERATOR@EXAMPLE.COM ");
@@ -307,34 +428,55 @@ test("store maps assignment rows and normalizes lookup IDs", async () => {
   assert.deepEqual(result, assignment());
 });
 
-test("findProjectedPointForAssignment loads events and projects by ID", async () => {
-  const event: PointEvent = {
-    id: "event-1",
-    pointId: "point-1",
-    eventType: "CREATE_EVENT",
-    userId: "agent@example.com",
-    category: "pharmacy",
-    location: { latitude: 4.08, longitude: 9.73 },
-    details: { name: "Server Pharmacy" },
-    createdAt: "2026-06-24T07:00:00.000Z",
-  };
-  let loaded = false;
+test("findProjectedPointForAssignment uses the canonical readable point lookup", async () => {
+  let lookedUpPointId = "";
   const store = createPointOperatorStore({
     queryFn: async () => ({ rows: [], rowCount: 0 }),
     connectFn: async () => {
       throw new Error("transaction client not expected");
     },
-    getPointEventsFn: async () => {
-      loaded = true;
-      return [event];
+    findReadablePointFn: async (pointId) => {
+      lookedUpPointId = pointId;
+      return {
+        point: projectedPoint(pointId),
+        source: { kind: "point_event" },
+      };
     },
   });
 
   const point = await store.findProjectedPointForAssignment(" point-1 ");
 
-  assert.equal(loaded, true);
+  assert.equal(lookedUpPointId, "point-1");
   assert.equal(point?.pointId, "point-1");
   assert.equal(point?.details.name, "Server Pharmacy");
+});
+
+test("store rejects mismatched prepared profile and operator IDs before opening a transaction", async () => {
+  let connected = false;
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => {
+      connected = true;
+      throw new Error("must not connect");
+    },
+    findReadablePointFn: async () => null,
+  });
+
+  await assert.rejects(
+    store.grantPointOperatorAssignmentTx({
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      pointId: "point-1",
+      pointSource: { kind: "point_event" },
+      profile: {
+        kind: "existing",
+        userId: "different@example.com",
+        mustChangePassword: false,
+      },
+    }),
+    /Prepared profile user does not match operator/,
+  );
+  assert.equal(connected, false);
 });
 
 test("grant transaction rolls back the role update when assignment insert fails", async () => {
@@ -353,6 +495,9 @@ test("grant transaction rolls back the role update when assignment insert fails"
         role = "point_operator";
         return { rows: [{ id: "operator@example.com" }], rowCount: 1 };
       }
+      if (/from point_events/i.test(text)) {
+        return { rows: [{ point_id: "point-1" }], rowCount: 1 };
+      }
       if (/insert into point_operator_assignments/i.test(text)) {
         throw new Error("assignment insert failed");
       }
@@ -369,7 +514,7 @@ test("grant transaction rolls back the role update when assignment insert fails"
   const store = createPointOperatorStore({
     queryFn: async () => ({ rows: [], rowCount: 0 }),
     connectFn: async () => client,
-    getPointEventsFn: async () => [],
+    findReadablePointFn: async () => null,
   });
 
   await assert.rejects(
@@ -377,6 +522,7 @@ test("grant transaction rolls back the role update when assignment insert fails"
       actorUserId: "admin@example.com",
       operatorUserId: "operator@example.com",
       pointId: "point-1",
+      pointSource: { kind: "point_event" },
       profile: {
         kind: "existing",
         userId: "operator@example.com",
@@ -389,6 +535,243 @@ test("grant transaction rolls back the role update when assignment insert fails"
   assert.equal(role, "agent");
   assert.equal(released, true);
   assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
+});
+
+test("grant revalidates event-backed point existence inside the transaction", async () => {
+  const statements: string[] = [];
+  const client = {
+    async query(text: string) {
+      statements.push(text);
+      if (/from point_events/i.test(text)) return { rows: [], rowCount: 0 };
+      if (/update user_profiles/i.test(text)) {
+        return { rows: [{ id: "operator@example.com" }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: null };
+    },
+    release() {},
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+    findReadablePointFn: async () => null,
+  });
+
+  await assert.rejects(
+    store.grantPointOperatorAssignmentTx({
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      pointId: "point-1",
+      pointSource: { kind: "point_event" },
+      profile: {
+        kind: "existing",
+        userId: "operator@example.com",
+        mustChangePassword: false,
+      },
+    }),
+    /Verified point not found/,
+  );
+  const profileIndex = statements.findIndex((text) => /update user_profiles/i.test(text));
+  const pointIndex = statements.findIndex((text) => /from point_events/i.test(text));
+  const assignmentIndex = statements.findIndex((text) =>
+    /insert into point_operator_assignments/i.test(text),
+  );
+  assert.equal(profileIndex >= 0, true);
+  assert.equal(pointIndex > profileIndex, true);
+  assert.equal(assignmentIndex, -1);
+  assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
+});
+
+test("prepared new profiles are created in the assignment transaction", async () => {
+  const statements: Array<{ text: string; values: unknown[] }> = [];
+  const client = {
+    async query(text: string, values: unknown[] = []) {
+      statements.push({ text, values });
+      if (/insert into user_profiles/i.test(text)) {
+        return { rows: [{ id: "new@example.com" }], rowCount: 1 };
+      }
+      if (/insert into point_operator_assignments/i.test(text)) {
+        return {
+          rows: [
+            {
+              id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              operator_user_id: "new@example.com",
+              point_id: "seed-point-1",
+              status: "active",
+              granted_by: "admin@example.com",
+              granted_at: "2026-06-24T08:00:00.000Z",
+              revoked_by: null,
+              revoked_at: null,
+              revoke_reason: null,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: null };
+    },
+    release() {},
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+    findReadablePointFn: async () => null,
+  });
+
+  const created = await store.grantPointOperatorAssignmentTx({
+    actorUserId: "admin@example.com",
+    operatorUserId: "new@example.com",
+    pointId: "seed-point-1",
+    pointSource: { kind: "curated_seed", eventId: "seed-event-1" },
+    profile: {
+      kind: "new",
+      userId: "new@example.com",
+      email: " NEW@EXAMPLE.COM ",
+      phone: null,
+      name: " New Operator ",
+      passwordHash: "prepared-hash",
+      mustChangePassword: true,
+    },
+  });
+
+  const profileInsert = statements.find(({ text }) => /insert into user_profiles/i.test(text));
+  assert.equal(created.operatorUserId, "new@example.com");
+  assert.deepEqual(profileInsert?.values, [
+    "new@example.com",
+    "new@example.com",
+    null,
+    "New Operator",
+    "prepared-hash",
+    true,
+  ]);
+  assert.equal(statements.some(({ text }) => /from point_events/i.test(text)), false);
+});
+
+test("commit failure rolls back and disposes the suspect client", async () => {
+  const commitError = new Error("commit failed");
+  const statements: string[] = [];
+  let releaseError: Error | undefined;
+  const client = {
+    async query(text: string) {
+      statements.push(text);
+      if (/update user_profiles/i.test(text)) {
+        return { rows: [{ id: "operator@example.com" }], rowCount: 1 };
+      }
+      if (/insert into point_operator_assignments/i.test(text)) {
+        return {
+          rows: [
+            {
+              id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              operator_user_id: "operator@example.com",
+              point_id: "seed-point-1",
+              status: "active",
+              granted_by: "admin@example.com",
+              granted_at: "2026-06-24T08:00:00.000Z",
+              revoked_by: null,
+              revoked_at: null,
+              revoke_reason: null,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (/^commit$/i.test(text.trim())) throw commitError;
+      return { rows: [], rowCount: null };
+    },
+    release(error?: Error) {
+      releaseError = error;
+    },
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+    findReadablePointFn: async () => null,
+  });
+
+  await assert.rejects(
+    store.grantPointOperatorAssignmentTx({
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      pointId: "seed-point-1",
+      pointSource: { kind: "curated_seed", eventId: "seed-event-1" },
+      profile: {
+        kind: "existing",
+        userId: "operator@example.com",
+        mustChangePassword: false,
+      },
+    }),
+    (error: unknown) => error === commitError,
+  );
+  assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
+  assert.equal(releaseError, commitError);
+});
+
+test("rollback failure disposes the client with the rollback error", async () => {
+  const operationError = new Error("insert failed");
+  const rollbackError = new Error("rollback failed");
+  let releaseError: Error | undefined;
+  const client = {
+    async query(text: string) {
+      if (/update user_profiles/i.test(text)) {
+        return { rows: [{ id: "operator@example.com" }], rowCount: 1 };
+      }
+      if (/insert into point_operator_assignments/i.test(text)) throw operationError;
+      if (/^rollback$/i.test(text.trim())) throw rollbackError;
+      return { rows: [], rowCount: null };
+    },
+    release(error?: Error) {
+      releaseError = error;
+    },
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+    findReadablePointFn: async () => null,
+  });
+
+  await assert.rejects(
+    store.grantPointOperatorAssignmentTx({
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      pointId: "seed-point-1",
+      pointSource: { kind: "curated_seed", eventId: "seed-event-1" },
+      profile: {
+        kind: "existing",
+        userId: "operator@example.com",
+        mustChangePassword: false,
+      },
+    }),
+    (error: unknown) => error === operationError,
+  );
+  assert.equal(releaseError, rollbackError);
+});
+
+test("corrupt assignment rows fail closed with a controlled integrity error", async () => {
+  const store = createPointOperatorStore({
+    queryFn: async () => ({
+      rows: [
+        {
+          id: "",
+          operator_user_id: "operator@example.com",
+          point_id: "point-1",
+          status: "unknown",
+          granted_by: "admin@example.com",
+          granted_at: "not-a-date",
+        },
+      ],
+      rowCount: 1,
+    }),
+    connectFn: async () => {
+      throw new Error("transaction client not expected");
+    },
+    findReadablePointFn: async () => null,
+  });
+
+  await assert.rejects(
+    store.getActivePointOperatorAssignmentByUser("operator@example.com"),
+    (error: unknown) =>
+      error instanceof PointOperatorDataIntegrityError &&
+      error.code === "point_operator_data_integrity",
+  );
 });
 
 test("revoke updates the active row and history retains the revoked assignment", async () => {
@@ -422,7 +805,7 @@ test("revoke updates the active row and history retains the revoked assignment",
   const store = createPointOperatorStore({
     queryFn: async () => ({ rows: [row], rowCount: 1 }),
     connectFn: async () => client,
-    getPointEventsFn: async () => [],
+    findReadablePointFn: async () => null,
   });
 
   const revoked = await store.revokePointOperatorAssignmentTx({

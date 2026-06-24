@@ -21,6 +21,8 @@ export interface PointEventFilter {
   bbox?: PointEventBbox;
   /** ISO timestamp lower bound — only events at/after this are returned. */
   since?: string;
+  /** Exact point identifier for point-detail and assignment reads. */
+  pointId?: string;
 }
 
 export const POINT_EVENT_COLUMNS =
@@ -52,6 +54,11 @@ export function buildPointEventsQuery(filter?: PointEventFilter): { text: string
   if (typeof filter?.since === "string" && filter.since.trim()) {
     values.push(filter.since);
     where.push(`created_at >= $${values.length}::timestamptz`);
+  }
+
+  if (typeof filter?.pointId === "string" && filter.pointId.trim()) {
+    values.push(filter.pointId.trim());
+    where.push(`point_id = $${values.length}`);
   }
 
   let text = `select ${POINT_EVENT_COLUMNS} from point_events`;

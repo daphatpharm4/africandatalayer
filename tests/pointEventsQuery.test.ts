@@ -26,6 +26,12 @@ test("since filter → created_at lower bound param", () => {
   assert.deepEqual(q.values, ["2026-06-01T00:00:00.000Z"]);
 });
 
+test("pointId filter → exact parameterized point lookup", () => {
+  const q = buildPointEventsQuery({ pointId: " point-1 " });
+  assert.match(q.text, /point_id = \$1/i);
+  assert.deepEqual(q.values, ["point-1"]);
+});
+
 test("bbox + since combine with AND and sequential param indexes", () => {
   const q = buildPointEventsQuery({
     bbox: { minLat: 1, maxLat: 2, minLng: 3, maxLng: 4 },
@@ -33,6 +39,16 @@ test("bbox + since combine with AND and sequential param indexes", () => {
   });
   assert.match(q.text, /\$5::timestamptz/);
   assert.deepEqual(q.values, [1, 2, 3, 4, "2026-06-01T00:00:00.000Z"]);
+});
+
+test("bbox + since + pointId preserve sequential parameter indexes", () => {
+  const q = buildPointEventsQuery({
+    bbox: { minLat: 1, maxLat: 2, minLng: 3, maxLng: 4 },
+    since: "2026-06-01T00:00:00.000Z",
+    pointId: "point-1",
+  });
+  assert.match(q.text, /point_id = \$6/i);
+  assert.deepEqual(q.values, [1, 2, 3, 4, "2026-06-01T00:00:00.000Z", "point-1"]);
 });
 
 test("empty filter object behaves like no filter", () => {
