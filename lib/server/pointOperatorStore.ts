@@ -4,6 +4,10 @@ import type {
   ProjectedPoint,
 } from "../../shared/types.js";
 import { getPool, query } from "./db.js";
+import {
+  completeIdempotencyReservation,
+  type IdempotencyCompletion,
+} from "./idempotencyGeneric.js";
 import { insertSecurityAuditEvent } from "./securityAudit.js";
 import {
   findReadableProjectedPoint,
@@ -72,6 +76,7 @@ export interface GrantAssignmentInput {
     identifierType?: "email" | "phone";
     note?: string;
   };
+  idempotency?: IdempotencyCompletion;
 }
 
 export interface RevokeAssignmentInput {
@@ -80,6 +85,7 @@ export interface RevokeAssignmentInput {
   operatorUserId: string;
   reason: string;
   auditRequest?: Request | null;
+  idempotency?: IdempotencyCompletion;
 }
 
 export interface PointOperatorStore {
@@ -452,6 +458,13 @@ export function createPointOperatorStore(
           },
         });
       }
+      if (input.idempotency) {
+        await completeIdempotencyReservation(
+          client.query.bind(client),
+          input.idempotency,
+          { assignment },
+        );
+      }
       return assignment;
     });
   }
@@ -523,6 +536,13 @@ export function createPointOperatorStore(
             reason,
           },
         });
+      }
+      if (input.idempotency) {
+        await completeIdempotencyReservation(
+          client.query.bind(client),
+          input.idempotency,
+          { assignment },
+        );
       }
       return assignment;
     });

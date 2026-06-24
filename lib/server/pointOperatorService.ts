@@ -32,6 +32,7 @@ export interface RevokePointOperatorInput {
   operatorUserId: string;
   reason: string;
   auditRequest?: Request | null;
+  idempotency?: RevokeAssignmentInput["idempotency"];
 }
 
 export interface PointOperatorLifecycleDeps {
@@ -178,6 +179,9 @@ export function createPointOperatorLifecycle(
           reason,
           ...(input.auditRequest
             ? { auditRequest: input.auditRequest }
+            : {}),
+          ...(input.idempotency
+            ? { idempotency: input.idempotency }
             : {}),
         });
       } catch (error) {

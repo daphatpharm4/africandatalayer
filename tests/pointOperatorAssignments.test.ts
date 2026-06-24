@@ -715,6 +715,116 @@ test("grant audit insertion failure rolls back the new profile and assignment", 
   assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
 });
 
+test("grant idempotency completion failure rolls back profile assignment and audit", async () => {
+  let profileCreated = false;
+  let assignmentCreated = false;
+  let auditCreated = false;
+  let replayCompleted = false;
+  let snapshot = {
+    profileCreated,
+    assignmentCreated,
+    auditCreated,
+    replayCompleted,
+  };
+  const client = {
+    async query(text: string) {
+      if (/^begin$/i.test(text.trim())) {
+        snapshot = {
+          profileCreated,
+          assignmentCreated,
+          auditCreated,
+          replayCompleted,
+        };
+        return { rows: [], rowCount: null };
+      }
+      if (/insert into user_profiles/i.test(text)) {
+        profileCreated = true;
+        return { rows: [{ id: "new@example.com" }], rowCount: 1 };
+      }
+      if (/insert into point_operator_assignments/i.test(text)) {
+        assignmentCreated = true;
+        return {
+          rows: [
+            {
+              id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              operator_user_id: "new@example.com",
+              point_id: "seed-point-1",
+              status: "active",
+              granted_by: "admin@example.com",
+              granted_at: "2026-06-24T08:00:00.000Z",
+              revoked_by: null,
+              revoked_at: null,
+              revoke_reason: null,
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (/insert into security_audit_log/i.test(text)) {
+        auditCreated = true;
+        return { rows: [], rowCount: 1 };
+      }
+      if (/update api_idempotency_keys/i.test(text)) {
+        replayCompleted = true;
+        throw new Error("idempotency completion failed");
+      }
+      if (/^rollback$/i.test(text.trim())) {
+        ({
+          profileCreated,
+          assignmentCreated,
+          auditCreated,
+          replayCompleted,
+        } = snapshot);
+        return { rows: [], rowCount: null };
+      }
+      return { rows: [], rowCount: null };
+    },
+    release() {},
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+    findReadablePointFn: async () => ({
+      point: projectedPoint("seed-point-1"),
+      source: { kind: "curated_seed", eventId: "seed-event-1" },
+    }),
+  });
+
+  await assert.rejects(
+    store.grantPointOperatorAssignmentTx({
+      actorUserId: "admin@example.com",
+      operatorUserId: "new@example.com",
+      pointId: "seed-point-1",
+      pointSource: { kind: "curated_seed", eventId: "seed-event-1" },
+      profile: {
+        kind: "new",
+        userId: "new@example.com",
+        email: "new@example.com",
+        phone: null,
+        name: "New Operator",
+        passwordHash: "hashed-password",
+        mustChangePassword: true,
+      },
+      audit: {
+        request: new Request("http://localhost/api/point-operator"),
+        identifierType: "email",
+      },
+      idempotency: {
+        scope: "point-operator:admin_create",
+        userId: "admin@example.com",
+        key: "create-atomic",
+        responseStatus: 201,
+      },
+    }),
+    /idempotency completion failed/,
+  );
+
+  assert.equal(profileCreated, false);
+  assert.equal(assignmentCreated, false);
+  assert.equal(auditCreated, false);
+  assert.equal(replayCompleted, false);
+});
+
 test("grant revalidates event-backed point existence inside the transaction", async () => {
   const statements: string[] = [];
   const client = {
@@ -845,6 +955,9 @@ test("prepared new profiles are created in the assignment transaction", async ()
           rowCount: 1,
         };
       }
+      if (/update api_idempotency_keys/i.test(text)) {
+        return { rows: [], rowCount: 1 };
+      }
       return { rows: [], rowCount: null };
     },
     release() {},
@@ -872,9 +985,24 @@ test("prepared new profiles are created in the assignment transaction", async ()
       passwordHash: "prepared-hash",
       mustChangePassword: true,
     },
+    idempotency: {
+      scope: "point-operator:admin_create",
+      userId: "admin@example.com",
+      key: "create-success",
+      responseStatus: 201,
+    },
   });
 
   const profileInsert = statements.find(({ text }) => /insert into user_profiles/i.test(text));
+  const assignmentIndex = statements.findIndex(({ text }) =>
+    /insert into point_operator_assignments/i.test(text),
+  );
+  const replayIndex = statements.findIndex(({ text }) =>
+    /update api_idempotency_keys/i.test(text),
+  );
+  const commitIndex = statements.findIndex(({ text }) =>
+    /^commit$/i.test(text.trim()),
+  );
   assert.equal(created.operatorUserId, "new@example.com");
   assert.deepEqual(profileInsert?.values, [
     "new@example.com",
@@ -885,6 +1013,8 @@ test("prepared new profiles are created in the assignment transaction", async ()
     true,
   ]);
   assert.equal(statements.some(({ text }) => /from point_events/i.test(text)), false);
+  assert.equal(replayIndex > assignmentIndex, true);
+  assert.equal(commitIndex > replayIndex, true);
 });
 
 test("commit failure rolls back and disposes the suspect client", async () => {
@@ -1033,8 +1163,10 @@ test("revoke updates the active row and history retains the revoked assignment",
     revoked_at: null as string | null,
     revoke_reason: null as string | null,
   };
+  const statements: string[] = [];
   const client = {
     async query(text: string, values: unknown[] = []) {
+      statements.push(text);
       if (/update point_operator_assignments/i.test(text)) {
         row = {
           ...row,
@@ -1044,6 +1176,9 @@ test("revoke updates the active row and history retains the revoked assignment",
           revoke_reason: String(values[2]),
         };
         return { rows: [row], rowCount: 1 };
+      }
+      if (/update api_idempotency_keys/i.test(text)) {
+        return { rows: [], rowCount: 1 };
       }
       return { rows: [], rowCount: null };
     },
@@ -1060,6 +1195,12 @@ test("revoke updates the active row and history retains the revoked assignment",
     actorUserId: "admin@example.com",
     operatorUserId: "operator@example.com",
     reason: "responsibility changed",
+    idempotency: {
+      scope: "point-operator:admin_revoke",
+      userId: "admin@example.com",
+      key: "revoke-success",
+      responseStatus: 200,
+    },
   });
   const history = await store.listPointOperatorAssignmentHistory("point-1");
 
@@ -1067,6 +1208,17 @@ test("revoke updates the active row and history retains the revoked assignment",
   assert.equal(revoked.revokeReason, "responsibility changed");
   assert.equal(history.length, 1);
   assert.equal(history[0].status, "revoked");
+  const revokeIndex = statements.findIndex((text) =>
+    /update point_operator_assignments/i.test(text),
+  );
+  const replayIndex = statements.findIndex((text) =>
+    /update api_idempotency_keys/i.test(text),
+  );
+  const commitIndex = statements.findIndex((text) =>
+    /^commit$/i.test(text.trim()),
+  );
+  assert.equal(replayIndex > revokeIndex, true);
+  assert.equal(commitIndex > replayIndex, true);
 });
 
 test("revoke audit insertion failure rolls back the assignment revocation", async () => {
@@ -1134,4 +1286,77 @@ test("revoke audit insertion failure rolls back the assignment revocation", asyn
     1,
   );
   assert.equal(statements.some((text) => /^rollback$/i.test(text.trim())), true);
+});
+
+test("revoke idempotency completion failure rolls back revocation and audit", async () => {
+  let status = "active";
+  let auditCreated = false;
+  let replayCompleted = false;
+  let snapshot = { status, auditCreated, replayCompleted };
+  const client = {
+    async query(text: string) {
+      if (/^begin$/i.test(text.trim())) {
+        snapshot = { status, auditCreated, replayCompleted };
+        return { rows: [], rowCount: null };
+      }
+      if (/update point_operator_assignments/i.test(text)) {
+        status = "revoked";
+        return {
+          rows: [
+            {
+              id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              operator_user_id: "operator@example.com",
+              point_id: "point-1",
+              status: "revoked",
+              granted_by: "admin@example.com",
+              granted_at: "2026-06-24T08:00:00.000Z",
+              revoked_by: "admin@example.com",
+              revoked_at: "2026-06-24T09:00:00.000Z",
+              revoke_reason: "Ownership changed",
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (/insert into security_audit_log/i.test(text)) {
+        auditCreated = true;
+        return { rows: [], rowCount: 1 };
+      }
+      if (/update api_idempotency_keys/i.test(text)) {
+        replayCompleted = true;
+        throw new Error("idempotency completion failed");
+      }
+      if (/^rollback$/i.test(text.trim())) {
+        ({ status, auditCreated, replayCompleted } = snapshot);
+        return { rows: [], rowCount: null };
+      }
+      return { rows: [], rowCount: null };
+    },
+    release() {},
+  };
+  const store = createPointOperatorStore({
+    queryFn: async () => ({ rows: [], rowCount: 0 }),
+    connectFn: async () => client,
+  });
+
+  await assert.rejects(
+    store.revokePointOperatorAssignmentTx({
+      assignmentId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      actorUserId: "admin@example.com",
+      operatorUserId: "operator@example.com",
+      reason: "Ownership changed",
+      auditRequest: new Request("http://localhost/api/point-operator"),
+      idempotency: {
+        scope: "point-operator:admin_revoke",
+        userId: "admin@example.com",
+        key: "revoke-atomic",
+        responseStatus: 200,
+      },
+    }),
+    /idempotency completion failed/,
+  );
+
+  assert.equal(status, "active");
+  assert.equal(auditCreated, false);
+  assert.equal(replayCompleted, false);
 });

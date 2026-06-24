@@ -814,7 +814,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
               sheetSnap={sheetSnap}
               viewportTopInsetPx={listContentTopInsetPx}
               viewportBottomInsetPx={mapBottomChromePx}
-              userRole={userRole}
+              userRole={userRole === 'point_operator' ? 'agent' : userRole}
             />
           </Suspense>
         )}

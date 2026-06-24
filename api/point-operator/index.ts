@@ -346,21 +346,37 @@ async function finalizeFailedWrite(
   response: Response,
 ): Promise<void> {
   if (response.status >= 500) {
-    await store.abort(
+    try {
+      await store.abort(
+        `point-operator:${view}`,
+        auth.id,
+        prepared.idempotencyKey,
+      );
+    } catch {
+      // Preserve the original controlled response when cleanup is unavailable.
+    }
+    return;
+  }
+  try {
+    const responseBody = await response.clone().json();
+    await store.complete(
       `point-operator:${view}`,
       auth.id,
       prepared.idempotencyKey,
+      responseBody,
+      response.status,
     );
-    return;
+  } catch {
+    try {
+      await store.abort(
+        `point-operator:${view}`,
+        auth.id,
+        prepared.idempotencyKey,
+      );
+    } catch {
+      // Best effort only: cleanup must not replace the business response.
+    }
   }
-  const responseBody = await response.clone().json();
-  await store.complete(
-    `point-operator:${view}`,
-    auth.id,
-    prepared.idempotencyKey,
-    responseBody,
-    response.status,
-  );
 }
 
 export function createPointOperatorHandler(
@@ -606,17 +622,15 @@ export function createPointOperatorHandler(
             identifierType: normalizedIdentifier.type,
             ...(body.note ? { note: body.note } : {}),
           },
+          idempotency: {
+            scope: `point-operator:${view}`,
+            userId: auth.id,
+            key: prepared.idempotencyKey,
+            responseStatus: 201,
+          },
         });
-        const response = await completeWrite(
-          idempotencyStore,
-          view,
-          auth,
-          prepared,
-          { assignment },
-          201,
-        );
         activeWrite = null;
-        return response;
+        return jsonResponse({ assignment }, { status: 201 });
       }
 
       if (view === 'admin_revoke') {
@@ -643,17 +657,15 @@ export function createPointOperatorHandler(
           operatorUserId,
           reason: body.reason,
           auditRequest: request,
+          idempotency: {
+            scope: `point-operator:${view}`,
+            userId: auth.id,
+            key: prepared.idempotencyKey,
+            responseStatus: 200,
+          },
         });
-        const response = await completeWrite(
-          idempotencyStore,
-          view,
-          auth,
-          prepared,
-          { assignment },
-          200,
-        );
         activeWrite = null;
-        return response;
+        return jsonResponse({ assignment }, { status: 200 });
       }
 
       const assignment = await getActiveAssignmentByUserFn(auth.id);

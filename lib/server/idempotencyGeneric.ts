@@ -15,6 +15,18 @@ interface StoredRow {
   createdAtMs: number;
 }
 
+export interface IdempotencyCompletion {
+  scope: string;
+  userId: string;
+  key: string;
+  responseStatus: number;
+}
+
+type IdempotencyQueryFn = (
+  text: string,
+  values?: unknown[],
+) => Promise<{ rowCount: number | null }>;
+
 export interface IdempotencyStore {
   find(scope: string, userId: string, key: string): Promise<StoredRow | null>;
   /** Insert a fresh reservation. Returns true iff this caller won the insert race. */
@@ -79,6 +91,31 @@ export async function resolveIdempotency(
   return { status: "reserved" };
 }
 
+export async function completeIdempotencyReservation(
+  queryFn: IdempotencyQueryFn,
+  input: IdempotencyCompletion,
+  responseJson: unknown,
+): Promise<void> {
+  const result = await queryFn(
+    `UPDATE api_idempotency_keys
+     SET response_json = $4::jsonb, response_status = $5, last_seen_at = NOW()
+     WHERE scope = $1
+       AND user_id = $2
+       AND idempotency_key = $3
+       AND response_status = 0`,
+    [
+      input.scope,
+      input.userId,
+      input.key,
+      JSON.stringify(responseJson ?? null),
+      input.responseStatus,
+    ],
+  );
+  if (result.rowCount !== 1) {
+    throw new Error("Idempotency reservation could not be completed");
+  }
+}
+
 /** Postgres-backed store over api_idempotency_keys. */
 export const postgresIdempotencyStore: AbortableIdempotencyStore = {
   async find(scope, userId, key) {
@@ -121,11 +158,10 @@ export const postgresIdempotencyStore: AbortableIdempotencyStore = {
     );
   },
   async complete(scope, userId, key, responseJson, responseStatus) {
-    await query(
-      `UPDATE api_idempotency_keys
-       SET response_json = $4::jsonb, response_status = $5, last_seen_at = NOW()
-       WHERE scope = $1 AND user_id = $2 AND idempotency_key = $3`,
-      [scope, userId, key, JSON.stringify(responseJson ?? null), responseStatus],
+    await completeIdempotencyReservation(
+      query,
+      { scope, userId, key, responseStatus },
+      responseJson,
     );
   },
   async abort(scope, userId, key) {
