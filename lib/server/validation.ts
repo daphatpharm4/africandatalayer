@@ -170,6 +170,53 @@ export const adminAccountCreateSchema = z
   })
   .strict();
 
+const strongPasswordSchema = z
+  .string()
+  .min(10)
+  .max(128)
+  .regex(/[A-Z]/, "Password must include an uppercase letter")
+  .regex(/[a-z]/, "Password must include a lowercase letter")
+  .regex(/[0-9]/, "Password must include a number");
+
+export const pointOperatorCreateSchema = z
+  .object({
+    identifier: z.string().trim().min(3).max(160),
+    name: z.string().trim().min(1).max(160),
+    password: strongPasswordSchema,
+    pointId: z.string().trim().min(1).max(200),
+    note: z.string().trim().max(500).optional(),
+  })
+  .strict();
+
+export const pointOperatorSignalSchema = z
+  .object({
+    field: z.string().trim().min(1).max(80),
+    value: z.boolean(),
+    capturedAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+export const pointOperatorRevokeSchema = z
+  .object({
+    operatorUserId: z.string().trim().min(1).max(160),
+    reason: z.string().trim().min(3).max(500),
+  })
+  .strict();
+
+export const pointOperatorPhotoSchema = z
+  .object({
+    imageData: z.string().min(1).max(10_000_000),
+    capturedAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+export const pointOperatorPasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: strongPasswordSchema,
+  })
+  .strict();
+
 export const userUpdateSchema = z
   .object({
     name: z.string().trim().max(160).optional(),
