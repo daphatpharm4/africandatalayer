@@ -121,6 +121,21 @@ function normalizeAssignmentId(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function samePointSource(
+  left: ReadablePointSource,
+  right: ReadablePointSource,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "point_event") return true;
+  if (left.kind === "legacy_submission") {
+    return (
+      right.kind === "legacy_submission" &&
+      left.submissionId === right.submissionId
+    );
+  }
+  return right.kind === "curated_seed" && left.eventId === right.eventId;
+}
+
 function toIsoString(value: unknown): string {
   const date = value instanceof Date ? value : new Date(String(value));
   if (Number.isNaN(date.getTime())) {
@@ -358,26 +373,24 @@ export function createPointOperatorStore(
     return (await findReadablePointFn(normalizedPointId))?.point ?? null;
   }
 
-  async function grantPointOperatorAssignmentTx(
+  async function grantPointOperatorAssignmentInTransaction(
     input: GrantAssignmentInput,
+    canonicalSource: ReadablePointSource,
   ): Promise<PointOperatorAssignment> {
     const actorUserId = normalizeUserId(input.actorUserId);
     const operatorUserId = normalizeUserId(input.operatorUserId);
     const pointId = normalizePointId(input.pointId);
-    const profileUserId = normalizeUserId(input.profile.userId);
-    if (profileUserId !== operatorUserId) {
-      throw new Error("Prepared profile user does not match operator");
-    }
 
     return await withTransaction(async (client) => {
       await prepareProfileForAssignment(client, input.profile);
-      if (input.pointSource.kind === "point_event") {
+      if (canonicalSource.kind === "point_event") {
         const pointResult = await client.query(
           `
             select point_id
             from point_events
             where point_id = $1
             limit 1
+            for share
           `,
           [pointId],
         );
@@ -387,8 +400,8 @@ export function createPointOperatorStore(
       }
       // Legacy and curated seed points live outside Postgres and cannot be
       // locked in this transaction without first materializing them. The
-      // lifecycle performs an immediate canonical revalidation and passes the
-      // explicit source provenance so this limitation cannot be silent.
+      // public store wrapper performs an immediate canonical revalidation and
+      // verifies explicit source provenance so this limitation cannot be silent.
       const result = await client.query(
         `
           insert into point_operator_assignments (
@@ -406,6 +419,34 @@ export function createPointOperatorStore(
       if (!row) throw new Error("Point operator assignment was not created");
       return rowToAssignment(row);
     });
+  }
+
+  async function grantPointOperatorAssignmentTx(
+    input: GrantAssignmentInput,
+  ): Promise<PointOperatorAssignment> {
+    const operatorUserId = normalizeUserId(input.operatorUserId);
+    const pointId = normalizePointId(input.pointId);
+    const profileUserId = normalizeUserId(input.profile.userId);
+    if (profileUserId !== operatorUserId) {
+      throw new Error("Prepared profile user does not match operator");
+    }
+
+    // This canonical lookup is intentionally inside the public store boundary,
+    // immediately before acquiring the transaction client. Callers may provide
+    // expected provenance, but they cannot bypass verification with forged
+    // legacy or curated-seed identifiers.
+    const canonicalPoint = await findReadablePointFn(pointId);
+    if (!canonicalPoint || canonicalPoint.point.pointId !== pointId) {
+      throw new Error("Verified point not found");
+    }
+    if (!samePointSource(input.pointSource, canonicalPoint.source)) {
+      throw new Error("Verified point source changed before assignment");
+    }
+
+    return await grantPointOperatorAssignmentInTransaction(
+      input,
+      canonicalPoint.source,
+    );
   }
 
   async function revokePointOperatorAssignmentTx(

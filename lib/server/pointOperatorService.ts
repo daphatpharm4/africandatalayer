@@ -13,7 +13,6 @@ import {
 import { getUserProfile } from "./storage/index.js";
 import {
   findReadableProjectedPoint,
-  type ReadablePointSource,
   type ReadableProjectedPoint,
 } from "./submissionEvents.js";
 
@@ -96,21 +95,6 @@ function asUniqueConflict(error: unknown): PointOperatorConflictError | null {
   return null;
 }
 
-function samePointSource(
-  left: ReadablePointSource,
-  right: ReadablePointSource,
-): boolean {
-  if (left.kind !== right.kind) return false;
-  if (left.kind === "point_event") return true;
-  if (left.kind === "legacy_submission") {
-    return (
-      right.kind === "legacy_submission" &&
-      left.submissionId === right.submissionId
-    );
-  }
-  return right.kind === "curated_seed" && left.eventId === right.eventId;
-}
-
 const defaultDeps: PointOperatorLifecycleDeps = {
   getReadablePointFn: findReadableProjectedPoint,
   getActiveByOperatorFn: getActivePointOperatorAssignmentByUser,
@@ -154,25 +138,12 @@ export function createPointOperatorLifecycle(
         throw new Error("Admin accounts cannot become point operators");
       }
 
-      let pointSource = readablePoint.source;
-      if (pointSource.kind !== "point_event") {
-        const revalidated = await deps.getReadablePointFn(pointId);
-        if (
-          !revalidated ||
-          revalidated.point.pointId !== pointId ||
-          !samePointSource(pointSource, revalidated.source)
-        ) {
-          throw new Error("Verified point source changed before assignment");
-        }
-        pointSource = revalidated.source;
-      }
-
       try {
         return await deps.transactionFn({
           actorUserId,
           operatorUserId,
           pointId,
-          pointSource,
+          pointSource: readablePoint.source,
           profile: {
             kind: "existing",
             userId: operatorUserId,
