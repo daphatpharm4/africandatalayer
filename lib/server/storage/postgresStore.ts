@@ -398,6 +398,9 @@ export function createPostgresProfilePersistence(queryProfile: ProfileQuery): Po
 
   const upsertUserProfile = async (userId: string, profile: UserProfile): Promise<void> => {
     const params = normalizeProfileParams(userId, profile);
+    if (params.mustChangePassword && mustChangePasswordColumnState === "missing") {
+      mustChangePasswordColumnState = "unknown";
+    }
     await runWithColumnFallback(async (options) => {
       const statement = buildProfileUpsert(params, options);
       await queryProfile(statement.text, statement.values);

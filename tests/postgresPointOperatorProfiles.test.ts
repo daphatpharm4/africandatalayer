@@ -151,6 +151,28 @@ test("retries writes without must_change_password while preserving phone paramet
   assert.equal(calls[1].values.length, 17);
 });
 
+test("reprobes must_change_password for a security-sensitive upsert after migration", async () => {
+  const calls: QueryCall[] = [];
+  let columnAvailable = false;
+  const persistence = createPostgresProfilePersistence(async (text, values = []) => {
+    calls.push({ text, values });
+    if (!columnAvailable && /\bmust_change_password\b/.test(text)) {
+      throw missingColumn("must_change_password", "user_profiles");
+    }
+    return { rows: [], rowCount: 1 };
+  });
+
+  await persistence.upsertUserProfile("operator@example.com", pointOperatorProfile());
+  columnAvailable = true;
+  await persistence.upsertUserProfile("operator@example.com", pointOperatorProfile());
+
+  assert.equal(calls.length, 3);
+  assert.doesNotMatch(calls[1].text, /must_change_password/);
+  assert.match(calls[2].text, /phone/);
+  assert.match(calls[2].text, /must_change_password/);
+  assert.equal(calls[2].values[11], true);
+});
+
 test("writes mustChangePassword through the legacy no-phone path when available", async () => {
   const calls: QueryCall[] = [];
   const persistence = createPostgresProfilePersistence(async (text, values = []) => {
