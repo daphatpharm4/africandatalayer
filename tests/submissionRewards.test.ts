@@ -5,6 +5,7 @@ import {
   computeCompletionSummary,
   prioritizeMissingFields,
 } from "../shared/submissionRewards.ts";
+import { getVertical } from "../shared/verticals.js";
 
 test("create events keep the base XP only", () => {
   const result = calculateSubmissionRewardBreakdown({
@@ -46,7 +47,7 @@ test("completion summary and prioritized fields follow the vertical enrichable m
     isOpenNow: true,
   });
 
-  assert.equal(completion.total, 6);
+  assert.equal(completion.total, getVertical("pharmacy").enrichableFields.length);
   assert.equal(completion.filled, 2);
   assert.deepEqual(
     prioritizeMissingFields("pharmacy", completion.missing, 3),

@@ -1,4 +1,4 @@
-import type { SubmissionDetails } from './types.js';
+import type { SubmissionDetails } from "./types.js";
 
 // Vertical configuration
 
@@ -29,38 +29,29 @@ export interface VerticalConfig {
 // Shared normalization helpers
 
 function trimString(input: unknown): string | undefined {
-  if (typeof input !== 'string') return undefined;
+  if (typeof input !== "string") return undefined;
   const trimmed = input.trim();
   return trimmed || undefined;
 }
 
 function normalizeBoolean(input: unknown): boolean | undefined {
-  if (typeof input === 'boolean') return input;
-  if (typeof input === 'number') {
+  if (typeof input === "boolean") return input;
+  if (typeof input === "number") {
     if (input === 1) return true;
     if (input === 0) return false;
     return undefined;
   }
-  if (typeof input !== 'string') return undefined;
+  if (typeof input !== "string") return undefined;
   const normalized = input.trim().toLowerCase();
   if (!normalized) return undefined;
-  if (
-    ['true', 'yes', 'y', '1', 'open', 'available', 'oui'].includes(normalized)
-  )
-    return true;
-  if (
-    ['false', 'no', 'n', '0', 'closed', 'unavailable', 'non'].includes(
-      normalized,
-    )
-  )
-    return false;
+  if (["true", "yes", "y", "1", "open", "available", "oui"].includes(normalized)) return true;
+  if (["false", "no", "n", "0", "closed", "unavailable", "non"].includes(normalized)) return false;
   return undefined;
 }
 
 function normalizeInteger(input: unknown): number | undefined {
-  if (typeof input === 'number' && Number.isFinite(input))
-    return Math.round(input);
-  if (typeof input === 'string' && input.trim()) {
+  if (typeof input === "number" && Number.isFinite(input)) return Math.round(input);
+  if (typeof input === "string" && input.trim()) {
     const parsed = Number(input);
     if (Number.isFinite(parsed)) return Math.round(parsed);
   }
@@ -82,13 +73,10 @@ function normalizeProviders(input: unknown): string[] | undefined {
   return normalizeStringArray(input);
 }
 
-function normalizeBooleanFields(
-  details: SubmissionDetails,
-  fields: readonly string[],
-): void {
+function normalizeBooleanFields(details: SubmissionDetails, fields: readonly string[]): void {
   for (const field of fields) {
     const normalized = normalizeBoolean(details[field]);
-    if (typeof normalized === 'boolean') details[field] = normalized;
+    if (typeof normalized === "boolean") details[field] = normalized;
   }
 }
 
@@ -101,9 +89,7 @@ function identityNormalize(d: SubmissionDetails): SubmissionDetails {
     details.siteName = name;
   }
 
-  const openingHours =
-    trimString((details as Record<string, unknown>).opening_hours) ??
-    trimString(details.openingHours);
+  const openingHours = trimString((details as Record<string, unknown>).opening_hours) ?? trimString(details.openingHours);
   if (openingHours) details.openingHours = openingHours;
 
   const phone = trimString(details.phone);
@@ -121,49 +107,28 @@ function normalizePharmacy(d: SubmissionDetails): SubmissionDetails {
   const details = identityNormalize(d);
   const raw = details as Record<string, unknown>;
 
-  normalizeBooleanFields(details, [
-    'isOpenNow',
-    'hasEssentialMedicinesAvailable',
-  ]);
+  normalizeBooleanFields(details, ["isOpenNow", "hasEssentialMedicinesAvailable"]);
 
-  if (
-    typeof details.isOpenNow !== 'boolean' &&
-    typeof details.availability === 'string'
-  ) {
+  if (typeof details.isOpenNow !== "boolean" && typeof details.availability === "string") {
     const normalized = details.availability.toLowerCase();
-    details.isOpenNow =
-      !normalized.includes('out') && !normalized.includes('closed');
+    details.isOpenNow = !normalized.includes("out") && !normalized.includes("closed");
   }
 
-  const isOnDuty = normalizeBoolean(
-    raw.isOnDuty ?? raw.isOnCall ?? raw.onDuty ?? raw.pharmacyDeGarde,
-  );
-  if (typeof isOnDuty === 'boolean') details.isOnDuty = isOnDuty;
+  const isOnDuty = normalizeBoolean(raw.isOnDuty ?? raw.isOnCall ?? raw.onDuty ?? raw.pharmacyDeGarde);
+  if (typeof isOnDuty === "boolean") details.isOnDuty = isOnDuty;
 
   const isLicensed = normalizeBoolean(raw.isLicensed ?? raw.licensed);
-  if (typeof isLicensed === 'boolean') details.isLicensed = isLicensed;
+  if (typeof isLicensed === "boolean") details.isLicensed = isLicensed;
 
-  const hasPrescriptionService = normalizeBoolean(
-    raw.hasPrescriptionService ?? raw.prescriptionService,
-  );
-  if (typeof hasPrescriptionService === 'boolean')
-    details.hasPrescriptionService = hasPrescriptionService;
+  const hasPrescriptionService = normalizeBoolean(raw.hasPrescriptionService ?? raw.prescriptionService);
+  if (typeof hasPrescriptionService === "boolean") details.hasPrescriptionService = hasPrescriptionService;
 
-  const medicineCategories = normalizeStringArray(
-    raw.medicineCategories ?? raw.medicine_types,
-  );
+  const medicineCategories = normalizeStringArray(raw.medicineCategories ?? raw.medicine_types);
   if (medicineCategories) details.medicineCategories = medicineCategories;
 
-  if (
-    typeof details.isOnDuty !== 'boolean' &&
-    typeof details.availability === 'string'
-  ) {
+  if (typeof details.isOnDuty !== "boolean" && typeof details.availability === "string") {
     const normalized = details.availability.toLowerCase();
-    if (
-      normalized.includes('on-call') ||
-      normalized.includes('on call') ||
-      normalized.includes('garde')
-    ) {
+    if (normalized.includes("on-call") || normalized.includes("on call") || normalized.includes("garde")) {
       details.isOnDuty = true;
     }
   }
@@ -174,7 +139,7 @@ function normalizePharmacy(d: SubmissionDetails): SubmissionDetails {
 function normalizeMobileMoney(d: SubmissionDetails): SubmissionDetails {
   const details = identityNormalize(d);
 
-  normalizeBooleanFields(details, ['isOpenNow']);
+  normalizeBooleanFields(details, ["isOpenNow"]);
 
   const providers = normalizeProviders(details.providers ?? details.provider);
   if (providers) details.providers = providers;
@@ -182,30 +147,24 @@ function normalizeMobileMoney(d: SubmissionDetails): SubmissionDetails {
   const cashThreshold =
     normalizeBoolean(details.hasMin50000XafAvailable) ??
     normalizeBoolean(details.hasCashAvailable) ??
-    (typeof details.availability === 'string'
-      ? !details.availability.toLowerCase().includes('out')
-      : undefined);
-  if (typeof cashThreshold === 'boolean') {
+    (typeof details.availability === "string" ? !details.availability.toLowerCase().includes("out") : undefined);
+  if (typeof cashThreshold === "boolean") {
     details.hasMin50000XafAvailable = cashThreshold;
   }
-  if ('hasCashAvailable' in details) {
+  if ("hasCashAvailable" in details) {
     delete details.hasCashAvailable;
   }
 
   const isActive = normalizeBoolean(details.isActive);
-  if (typeof isActive === 'boolean') details.isActive = isActive;
+  if (typeof isActive === "boolean") details.isActive = isActive;
 
   const hasFloat = normalizeBoolean(details.hasFloat);
-  if (typeof hasFloat === 'boolean') details.hasFloat = hasFloat;
+  if (typeof hasFloat === "boolean") details.hasFloat = hasFloat;
 
   const agentType = trimString(details.agentType);
   if (agentType) details.agentType = agentType;
 
-  if (
-    details.merchantId &&
-    providers?.length &&
-    !details.merchantIdByProvider
-  ) {
+  if (details.merchantId && providers?.length && !details.merchantIdByProvider) {
     details.merchantIdByProvider = { [providers[0]]: details.merchantId };
   }
 
@@ -215,37 +174,25 @@ function normalizeMobileMoney(d: SubmissionDetails): SubmissionDetails {
 function normalizeFuelStation(d: SubmissionDetails): SubmissionDetails {
   const details = identityNormalize(d);
 
-  normalizeBooleanFields(details, [
-    'isOpenNow',
-    'hasFuelAvailable',
-    'isQueueBusy',
-  ]);
+  normalizeBooleanFields(details, ["isOpenNow", "hasFuelAvailable", "isQueueBusy"]);
 
   const fuelType = trimString(details.fuelType);
   if (fuelType && !details.fuelTypes?.length) details.fuelTypes = [fuelType];
 
   const parsedPrice =
-    typeof details.fuelPrice === 'number'
+    typeof details.fuelPrice === "number"
       ? details.fuelPrice
-      : typeof details.price === 'number'
+      : typeof details.price === "number"
         ? details.price
         : undefined;
 
-  if (
-    typeof details.hasFuelAvailable !== 'boolean' &&
-    typeof details.availability === 'string'
-  ) {
-    details.hasFuelAvailable = !details.availability
-      .toLowerCase()
-      .includes('out');
+  if (typeof details.hasFuelAvailable !== "boolean" && typeof details.availability === "string") {
+    details.hasFuelAvailable = !details.availability.toLowerCase().includes("out");
   }
 
   if (parsedPrice !== undefined) {
-    const priceKey = fuelType ?? 'super';
-    details.pricesByFuel = {
-      ...(details.pricesByFuel ?? {}),
-      [priceKey]: parsedPrice,
-    };
+    const priceKey = fuelType ?? "super";
+    details.pricesByFuel = { ...(details.pricesByFuel ?? {}), [priceKey]: parsedPrice };
     details.fuelPrice = parsedPrice;
     details.price = parsedPrice;
   }
@@ -258,29 +205,22 @@ function normalizeFuelStation(d: SubmissionDetails): SubmissionDetails {
 
 function normalizeAlcoholOutlet(d: SubmissionDetails): SubmissionDetails {
   const details = identityNormalize(d);
-  normalizeBooleanFields(details, [
-    'isOpenNow',
-    'isFoodAvailableNow',
-    'isSeatingAvailableNow',
-  ]);
+  normalizeBooleanFields(details, ["isOpenNow", "isFoodAvailableNow", "isSeatingAvailableNow"]);
   return details;
 }
 
 function normalizeBillboard(d: SubmissionDetails): SubmissionDetails {
   const details = identityNormalize(d);
-  normalizeBooleanFields(details, ['isOccupied', 'isLit', 'isOperational']);
+  normalizeBooleanFields(details, ["isOccupied", "isLit", "isOperational"]);
   return details;
 }
 
 function normalizeTransportRoad(d: SubmissionDetails): SubmissionDetails {
   const details = identityNormalize(d);
-  normalizeBooleanFields(details, ['isBlocked', 'isFlooded']);
+  normalizeBooleanFields(details, ["isBlocked", "isFlooded"]);
 
-  const hasWorkingStreetLight = normalizeBoolean(
-    details.hasWorkingStreetLight ?? details.hasStreetLight,
-  );
-  if (typeof hasWorkingStreetLight === 'boolean')
-    details.hasWorkingStreetLight = hasWorkingStreetLight;
+  const hasWorkingStreetLight = normalizeBoolean(details.hasWorkingStreetLight ?? details.hasStreetLight);
+  if (typeof hasWorkingStreetLight === "boolean") details.hasWorkingStreetLight = hasWorkingStreetLight;
 
   const roadName = trimString(details.roadName) ?? trimString(details.name);
   if (roadName) {
@@ -311,22 +251,18 @@ function normalizeCensusProxy(d: SubmissionDetails): SubmissionDetails {
   if (estimatedUnits !== undefined) details.estimatedUnits = estimatedUnits;
 
   const hasCommercialGround = normalizeBoolean(details.hasCommercialGround);
-  if (typeof hasCommercialGround === 'boolean')
-    details.hasCommercialGround = hasCommercialGround;
+  if (typeof hasCommercialGround === "boolean") details.hasCommercialGround = hasCommercialGround;
 
   const hasElectricity = normalizeBoolean(details.hasElectricity);
-  if (typeof hasElectricity === 'boolean')
-    details.hasElectricity = hasElectricity;
+  if (typeof hasElectricity === "boolean") details.hasElectricity = hasElectricity;
 
   const hasWater = normalizeBoolean(details.hasWater);
-  if (typeof hasWater === 'boolean') details.hasWater = hasWater;
+  if (typeof hasWater === "boolean") details.hasWater = hasWater;
 
   const commercialTypes = normalizeStringArray(details.commercialTypes);
   if (commercialTypes) details.commercialTypes = commercialTypes;
 
-  const nearbyInfrastructure = normalizeStringArray(
-    details.nearbyInfrastructure,
-  );
+  const nearbyInfrastructure = normalizeStringArray(details.nearbyInfrastructure);
   if (nearbyInfrastructure) details.nearbyInfrastructure = nearbyInfrastructure;
 
   return details;
@@ -334,311 +270,253 @@ function normalizeCensusProxy(d: SubmissionDetails): SubmissionDetails {
 
 export const VERTICALS: Record<string, VerticalConfig> = {
   pharmacy: {
-    id: 'pharmacy',
-    labelEn: 'Pharmacy',
-    labelFr: 'Pharmacie',
-    pluralEn: 'Pharmacies',
-    pluralFr: 'Pharmacies',
-    icon: 'pill',
-    color: '#2f855a',
-    bgColor: '#eaf3ee',
-    enrichableFields: [
-      'openingHours',
-      'isOpenNow',
-      'isOnDuty',
-      'hasEssentialMedicinesAvailable',
-      'isLicensed',
-      'hasPrescriptionService',
-      'medicineCategories',
-    ],
+    id: "pharmacy",
+    labelEn: "Pharmacy",
+    labelFr: "Pharmacie",
+    pluralEn: "Pharmacies",
+    pluralFr: "Pharmacies",
+    icon: "pill",
+    color: "#2f855a",
+    bgColor: "#eaf3ee",
+    enrichableFields: ["openingHours", "isOpenNow", "isOnDuty", "hasEssentialMedicinesAvailable", "isLicensed", "hasPrescriptionService", "medicineCategories"],
     operatorControls: [
       {
-        field: 'isOpenNow',
-        labelEn: 'Open now',
-        labelFr: 'Ouvert maintenant',
+        field: "isOpenNow",
+        labelEn: "Open now",
+        labelFr: "Ouvert maintenant",
         expiryHours: 6,
       },
       {
-        field: 'isOnDuty',
-        labelEn: 'On guard',
-        labelFr: 'De garde',
+        field: "isOnDuty",
+        labelEn: "On guard",
+        labelFr: "De garde",
         expiryHours: 12,
       },
       {
-        field: 'hasEssentialMedicinesAvailable',
-        labelEn: 'Essential medicines available',
-        labelFr: 'Médicaments essentiels disponibles',
+        field: "hasEssentialMedicinesAvailable",
+        labelEn: "Essential medicines available",
+        labelFr: "Médicaments essentiels disponibles",
         expiryHours: 24,
       },
     ],
-    createRequiredFields: ['name', 'isOpenNow'],
+    createRequiredFields: ["name", "isOpenNow"],
     normalizeDetails: normalizePharmacy,
     stalenessThresholdDays: 5,
   },
   mobile_money: {
-    id: 'mobile_money',
-    labelEn: 'Mobile Money',
-    labelFr: 'Mobile money',
-    pluralEn: 'Mobile Money Points',
-    pluralFr: 'Points mobile money',
-    icon: 'landmark',
-    color: '#0f2b46',
-    bgColor: '#e7eef4',
-    enrichableFields: [
-      'merchantIdByProvider',
-      'paymentMethods',
-      'openingHours',
-      'providers',
-      'isOpenNow',
-      'isActive',
-      'hasMin50000XafAvailable',
-      'hasFloat',
-      'agentType',
-    ],
+    id: "mobile_money",
+    labelEn: "Mobile Money",
+    labelFr: "Mobile money",
+    pluralEn: "Mobile Money Points",
+    pluralFr: "Points mobile money",
+    icon: "landmark",
+    color: "#0f2b46",
+    bgColor: "#e7eef4",
+    enrichableFields: ["merchantIdByProvider", "paymentMethods", "openingHours", "providers", "isOpenNow", "isActive", "hasMin50000XafAvailable", "hasFloat", "agentType"],
     operatorControls: [
       {
-        field: 'isOpenNow',
-        labelEn: 'Open now',
-        labelFr: 'Ouvert maintenant',
+        field: "isOpenNow",
+        labelEn: "Open now",
+        labelFr: "Ouvert maintenant",
         expiryHours: 6,
       },
       {
-        field: 'hasMin50000XafAvailable',
-        labelEn: 'At least 50,000 XAF cash available',
-        labelFr: 'Au moins 50 000 XAF disponibles en espèces',
+        field: "hasMin50000XafAvailable",
+        labelEn: "At least 50,000 XAF cash available",
+        labelFr: "Au moins 50 000 XAF disponibles en espèces",
         expiryHours: 4,
       },
       {
-        field: 'hasFloat',
-        labelEn: 'Electronic float available',
-        labelFr: 'Liquidité électronique disponible',
+        field: "hasFloat",
+        labelEn: "Electronic float available",
+        labelFr: "Liquidité électronique disponible",
         expiryHours: 4,
       },
     ],
-    createRequiredFields: ['providers'],
+    createRequiredFields: ["providers"],
     normalizeDetails: normalizeMobileMoney,
     stalenessThresholdDays: 3,
   },
   fuel_station: {
-    id: 'fuel_station',
-    labelEn: 'Fuel Station',
-    labelFr: 'Station-service',
-    pluralEn: 'Fuel Stations',
-    pluralFr: 'Stations-service',
-    icon: 'fuel',
-    color: '#c86b4a',
-    bgColor: '#f7e8e1',
+    id: "fuel_station",
+    labelEn: "Fuel Station",
+    labelFr: "Station-service",
+    pluralEn: "Fuel Stations",
+    pluralFr: "Stations-service",
+    icon: "fuel",
+    color: "#c86b4a",
+    bgColor: "#f7e8e1",
     enrichableFields: [
-      'fuelTypes',
-      'pricesByFuel',
-      'quality',
-      'paymentMethods',
-      'openingHours',
-      'isOpenNow',
-      'hasFuelAvailable',
-      'queueLength',
-      'isQueueBusy',
-      'hasConvenienceStore',
-      'hasCarWash',
-      'hasATM',
+      "fuelTypes",
+      "pricesByFuel",
+      "quality",
+      "paymentMethods",
+      "openingHours",
+      "isOpenNow",
+      "hasFuelAvailable",
+      "queueLength",
+      "isQueueBusy",
+      "hasConvenienceStore",
+      "hasCarWash",
+      "hasATM",
     ],
     operatorControls: [
       {
-        field: 'isOpenNow',
-        labelEn: 'Open now',
-        labelFr: 'Ouvert maintenant',
+        field: "isOpenNow",
+        labelEn: "Open now",
+        labelFr: "Ouvert maintenant",
         expiryHours: 6,
       },
       {
-        field: 'hasFuelAvailable',
-        labelEn: 'Fuel available',
-        labelFr: 'Carburant disponible',
+        field: "hasFuelAvailable",
+        labelEn: "Fuel available",
+        labelFr: "Carburant disponible",
         expiryHours: 6,
       },
       {
-        field: 'isQueueBusy',
-        labelEn: 'Long queue',
-        labelFr: 'File d’attente longue',
+        field: "isQueueBusy",
+        labelEn: "Long queue",
+        labelFr: "File d’attente longue",
         expiryHours: 2,
       },
     ],
-    createRequiredFields: ['name', 'hasFuelAvailable'],
+    createRequiredFields: ["name", "hasFuelAvailable"],
     normalizeDetails: normalizeFuelStation,
     stalenessThresholdDays: 3,
   },
   alcohol_outlet: {
-    id: 'alcohol_outlet',
-    labelEn: 'Alcohol Outlet',
+    id: "alcohol_outlet",
+    labelEn: "Alcohol Outlet",
     labelFr: "Point de vente d'alcool",
-    pluralEn: 'Alcohol Outlets',
+    pluralEn: "Alcohol Outlets",
     pluralFr: "Points de vente d'alcool",
-    icon: 'wine',
-    color: '#9b2c2c',
-    bgColor: '#fde8e8',
-    enrichableFields: [
-      'brand',
-      'openingHours',
-      'paymentMethods',
-      'outletType',
-      'isOpenNow',
-      'isFoodAvailableNow',
-      'isSeatingAvailableNow',
-      'isFormal',
-      'servesFood',
-      'brandsAvailable',
-      'priceRange',
-    ],
+    icon: "wine",
+    color: "#9b2c2c",
+    bgColor: "#fde8e8",
+    enrichableFields: ["brand", "openingHours", "paymentMethods", "outletType", "isOpenNow", "isFoodAvailableNow", "isSeatingAvailableNow", "isFormal", "servesFood", "brandsAvailable", "priceRange"],
     operatorControls: [
       {
-        field: 'isOpenNow',
-        labelEn: 'Open now',
-        labelFr: 'Ouvert maintenant',
+        field: "isOpenNow",
+        labelEn: "Open now",
+        labelFr: "Ouvert maintenant",
         expiryHours: 6,
       },
       {
-        field: 'isFoodAvailableNow',
-        labelEn: 'Food currently available',
-        labelFr: 'Nourriture disponible actuellement',
+        field: "isFoodAvailableNow",
+        labelEn: "Food currently available",
+        labelFr: "Nourriture disponible actuellement",
         expiryHours: 6,
       },
       {
-        field: 'isSeatingAvailableNow',
-        labelEn: 'Seating currently available',
-        labelFr: 'Places assises disponibles actuellement',
+        field: "isSeatingAvailableNow",
+        labelEn: "Seating currently available",
+        labelFr: "Places assises disponibles actuellement",
         expiryHours: 6,
       },
     ],
-    createRequiredFields: ['name'],
+    createRequiredFields: ["name"],
     normalizeDetails: normalizeAlcoholOutlet,
     stalenessThresholdDays: 7,
   },
   billboard: {
-    id: 'billboard',
-    labelEn: 'Billboard',
-    labelFr: 'Panneau publicitaire',
-    pluralEn: 'Billboards',
-    pluralFr: 'Panneaux publicitaires',
-    icon: 'rectangle-horizontal',
-    color: '#d69e2e',
-    bgColor: '#fefcbf',
-    enrichableFields: [
-      'brand',
-      'billboardType',
-      'isOccupied',
-      'advertiserBrand',
-      'advertiserCategory',
-      'condition',
-      'size',
-      'isLit',
-      'isOperational',
-    ],
+    id: "billboard",
+    labelEn: "Billboard",
+    labelFr: "Panneau publicitaire",
+    pluralEn: "Billboards",
+    pluralFr: "Panneaux publicitaires",
+    icon: "rectangle-horizontal",
+    color: "#d69e2e",
+    bgColor: "#fefcbf",
+    enrichableFields: ["brand", "billboardType", "isOccupied", "advertiserBrand", "advertiserCategory", "condition", "size", "isLit", "isOperational"],
     operatorControls: [
       {
-        field: 'isOccupied',
-        labelEn: 'Currently occupied',
-        labelFr: 'Actuellement occupé',
+        field: "isOccupied",
+        labelEn: "Currently occupied",
+        labelFr: "Actuellement occupé",
         expiryHours: 168,
       },
       {
-        field: 'isLit',
-        labelEn: 'Lit at night',
-        labelFr: 'Éclairé la nuit',
+        field: "isLit",
+        labelEn: "Lit at night",
+        labelFr: "Éclairé la nuit",
         expiryHours: 720,
       },
       {
-        field: 'isOperational',
-        labelEn: 'Operational / undamaged',
-        labelFr: 'Opérationnel / intact',
+        field: "isOperational",
+        labelEn: "Operational / undamaged",
+        labelFr: "Opérationnel / intact",
         expiryHours: 168,
       },
     ],
-    createRequiredFields: ['name'],
+    createRequiredFields: ["name"],
     normalizeDetails: normalizeBillboard,
     stalenessThresholdDays: 14,
   },
   transport_road: {
-    id: 'transport_road',
-    labelEn: 'Road Segment',
-    labelFr: 'Segment routier',
-    pluralEn: 'Road Segments',
-    pluralFr: 'Segments routiers',
-    icon: 'route',
-    color: '#718096',
-    bgColor: '#edf2f7',
-    enrichableFields: [
-      'condition',
-      'isBlocked',
-      'isFlooded',
-      'blockageType',
-      'surfaceType',
-      'passableBy',
-      'trafficLevel',
-      'hasStreetLight',
-      'hasWorkingStreetLight',
-    ],
+    id: "transport_road",
+    labelEn: "Road Segment",
+    labelFr: "Segment routier",
+    pluralEn: "Road Segments",
+    pluralFr: "Segments routiers",
+    icon: "route",
+    color: "#718096",
+    bgColor: "#edf2f7",
+    enrichableFields: ["condition", "isBlocked", "isFlooded", "blockageType", "surfaceType", "passableBy", "trafficLevel", "hasStreetLight", "hasWorkingStreetLight"],
     operatorControls: [
       {
-        field: 'isBlocked',
-        labelEn: 'Blocked',
-        labelFr: 'Bloquée',
+        field: "isBlocked",
+        labelEn: "Blocked",
+        labelFr: "Bloquée",
         expiryHours: 4,
       },
       {
-        field: 'isFlooded',
-        labelEn: 'Flooded',
-        labelFr: 'Inondée',
+        field: "isFlooded",
+        labelEn: "Flooded",
+        labelFr: "Inondée",
         expiryHours: 4,
       },
       {
-        field: 'hasWorkingStreetLight',
-        labelEn: 'Street lighting working',
-        labelFr: 'Éclairage public fonctionnel',
+        field: "hasWorkingStreetLight",
+        labelEn: "Street lighting working",
+        labelFr: "Éclairage public fonctionnel",
         expiryHours: 168,
       },
     ],
-    createRequiredFields: ['roadName', 'condition'],
+    createRequiredFields: ["roadName", "condition"],
     normalizeDetails: normalizeTransportRoad,
     stalenessThresholdDays: 14,
   },
   census_proxy: {
-    id: 'census_proxy',
-    labelEn: 'Building / Census Point',
-    labelFr: 'Batiment / Point de recensement',
-    pluralEn: 'Buildings',
-    pluralFr: 'Batiments',
-    icon: 'building-2',
-    color: '#4a5568',
-    bgColor: '#e2e8f0',
-    enrichableFields: [
-      'occupancyStatus',
-      'storeyCount',
-      'estimatedUnits',
-      'hasElectricity',
-      'hasWater',
-      'constructionMaterial',
-      'hasCommercialGround',
-    ],
+    id: "census_proxy",
+    labelEn: "Building / Census Point",
+    labelFr: "Batiment / Point de recensement",
+    pluralEn: "Buildings",
+    pluralFr: "Batiments",
+    icon: "building-2",
+    color: "#4a5568",
+    bgColor: "#e2e8f0",
+    enrichableFields: ["occupancyStatus", "storeyCount", "estimatedUnits", "hasElectricity", "hasWater", "constructionMaterial", "hasCommercialGround"],
     operatorControls: [
       {
-        field: 'hasElectricity',
-        labelEn: 'Electricity available',
-        labelFr: 'Électricité disponible',
+        field: "hasElectricity",
+        labelEn: "Electricity available",
+        labelFr: "Électricité disponible",
         expiryHours: 720,
       },
       {
-        field: 'hasWater',
-        labelEn: 'Water available',
-        labelFr: 'Eau disponible',
+        field: "hasWater",
+        labelEn: "Water available",
+        labelFr: "Eau disponible",
         expiryHours: 720,
       },
       {
-        field: 'hasCommercialGround',
-        labelEn: 'Commercial ground floor active',
-        labelFr: 'Rez-de-chaussée commercial actif',
+        field: "hasCommercialGround",
+        labelEn: "Commercial ground floor active",
+        labelFr: "Rez-de-chaussée commercial actif",
         expiryHours: 720,
       },
     ],
-    createRequiredFields: ['buildingType', 'occupancyStatus'],
+    createRequiredFields: ["buildingType", "occupancyStatus"],
     normalizeDetails: normalizeCensusProxy,
     stalenessThresholdDays: 30,
   },
@@ -656,28 +534,28 @@ export function getVertical(id: string): VerticalConfig {
   return vertical;
 }
 
-export function categoryLabel(id: string, lang: 'en' | 'fr'): string {
+export function categoryLabel(id: string, lang: "en" | "fr"): string {
   const vertical = VERTICALS[id];
   if (!vertical) return id;
-  return lang === 'fr' ? vertical.labelFr : vertical.labelEn;
+  return lang === "fr" ? vertical.labelFr : vertical.labelEn;
 }
 
-export function categoryPluralLabel(id: string, lang: 'en' | 'fr'): string {
+export function categoryPluralLabel(id: string, lang: "en" | "fr"): string {
   const vertical = VERTICALS[id];
   if (!vertical) return id;
-  return lang === 'fr' ? vertical.pluralFr : vertical.pluralEn;
+  return lang === "fr" ? vertical.pluralFr : vertical.pluralEn;
 }
 
 // Map legacy Category enum values to SubmissionCategory IDs.
 export const LEGACY_CATEGORY_MAP: Record<string, string> = {
-  PHARMACY: 'pharmacy',
-  FUEL: 'fuel_station',
-  MOBILE_MONEY: 'mobile_money',
-  ALCOHOL_OUTLET: 'alcohol_outlet',
-  BILLBOARD: 'billboard',
-  TRANSPORT_ROAD: 'transport_road',
-  CENSUS_PROXY: 'census_proxy',
-  KIOSK: 'mobile_money',
+  PHARMACY: "pharmacy",
+  FUEL: "fuel_station",
+  MOBILE_MONEY: "mobile_money",
+  ALCOHOL_OUTLET: "alcohol_outlet",
+  BILLBOARD: "billboard",
+  TRANSPORT_ROAD: "transport_road",
+  CENSUS_PROXY: "census_proxy",
+  KIOSK: "mobile_money",
 };
 
 export function normalizeCategoryAlias(raw: string): string | null {

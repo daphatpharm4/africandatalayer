@@ -29,6 +29,11 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
   },
   isOpenNow: { labelEn: "Open Now", labelFr: "Ouvert maintenant", kind: "boolean" },
   isOnDuty: { labelEn: "On-call Pharmacy", labelFr: "Pharmacie de garde", kind: "boolean" },
+  hasEssentialMedicinesAvailable: {
+    labelEn: "Essential medicines available",
+    labelFr: "Médicaments essentiels disponibles",
+    kind: "boolean",
+  },
   isLicensed: { labelEn: "Licensed", labelFr: "Avec licence", kind: "boolean" },
   hasPrescriptionService: { labelEn: "Prescription Service", labelFr: "Service ordonnance", kind: "boolean" },
   medicineCategories: {
@@ -61,6 +66,11 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     labelFr: "Operateurs",
     kind: "multi_select",
     options: [option("MTN"), option("Orange"), option("Airtel")],
+  },
+  hasMin50000XafAvailable: {
+    labelEn: "At least 50,000 XAF cash available",
+    labelFr: "Au moins 50 000 XAF disponibles en espèces",
+    kind: "boolean",
   },
   isActive: { labelEn: "Agent Active", labelFr: "Agent actif", kind: "boolean" },
   hasFloat: { labelEn: "Has Float", labelFr: "A de la liquidite", kind: "boolean" },
@@ -102,6 +112,7 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
       option("long", "Long", "Longue"),
     ],
   },
+  isQueueBusy: { labelEn: "Long queue", labelFr: "File d’attente longue", kind: "boolean" },
   hasConvenienceStore: { labelEn: "Convenience Store", labelFr: "Suprette", kind: "boolean" },
   hasCarWash: { labelEn: "Car Wash", labelFr: "Lavage auto", kind: "boolean" },
   hasATM: { labelEn: "ATM", labelFr: "GAB", kind: "boolean" },
@@ -127,6 +138,16 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
   },
   isFormal: { labelEn: "Formal / Licensed", labelFr: "Formel / licence", kind: "boolean" },
   servesFood: { labelEn: "Serves Food", labelFr: "Sert des repas", kind: "boolean" },
+  isFoodAvailableNow: {
+    labelEn: "Food currently available",
+    labelFr: "Nourriture disponible actuellement",
+    kind: "boolean",
+  },
+  isSeatingAvailableNow: {
+    labelEn: "Seating currently available",
+    labelFr: "Places assises disponibles actuellement",
+    kind: "boolean",
+  },
   brandsAvailable: {
     labelEn: "Brands Available",
     labelFr: "Marques disponibles",
@@ -193,8 +214,14 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     placeholderFr: "ex. 4m x 3m",
   },
   isLit: { labelEn: "Lit at Night", labelFr: "Eclaire la nuit", kind: "boolean" },
+  isOperational: {
+    labelEn: "Operational / undamaged",
+    labelFr: "Opérationnel / intact",
+    kind: "boolean",
+  },
 
   isBlocked: { labelEn: "Blocked", labelFr: "Bloque", kind: "boolean" },
+  isFlooded: { labelEn: "Flooded", labelFr: "Inondée", kind: "boolean" },
   blockageType: {
     labelEn: "Blockage Type",
     labelFr: "Type de blocage",
@@ -242,6 +269,11 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     ],
   },
   hasStreetLight: { labelEn: "Street Light", labelFr: "Eclairage public", kind: "boolean" },
+  hasWorkingStreetLight: {
+    labelEn: "Street lighting working",
+    labelFr: "Éclairage public fonctionnel",
+    kind: "boolean",
+  },
 
   occupancyStatus: {
     labelEn: "Occupancy Status",
@@ -257,6 +289,7 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
   storeyCount: { labelEn: "Storey Count", labelFr: "Nombre d'etages", kind: "number" },
   estimatedUnits: { labelEn: "Estimated Units", labelFr: "Unites estimees", kind: "number" },
   hasElectricity: { labelEn: "Has Electricity", labelFr: "A l'electricite", kind: "boolean" },
+  hasWater: { labelEn: "Water available", labelFr: "Eau disponible", kind: "boolean" },
   constructionMaterial: {
     labelEn: "Construction Material",
     labelFr: "Materiau de construction",
