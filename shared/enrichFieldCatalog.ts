@@ -19,6 +19,58 @@ function option(value: string, labelEn = value, labelFr = labelEn): EnrichFieldO
   return { value, labelEn, labelFr };
 }
 
+export const POINT_OPERATOR_FIELD_LABELS = {
+  isOpenNow: { labelEn: "Open now", labelFr: "Ouvert maintenant" },
+  isOnDuty: { labelEn: "On guard", labelFr: "De garde" },
+  hasEssentialMedicinesAvailable: {
+    labelEn: "Essential medicines available",
+    labelFr: "Médicaments essentiels disponibles",
+  },
+  hasMin50000XafAvailable: {
+    labelEn: "At least 50,000 XAF cash available",
+    labelFr: "Au moins 50 000 XAF disponibles en espèces",
+  },
+  hasFloat: {
+    labelEn: "Electronic float available",
+    labelFr: "Liquidité électronique disponible",
+  },
+  hasFuelAvailable: { labelEn: "Fuel available", labelFr: "Carburant disponible" },
+  isQueueBusy: { labelEn: "Long queue", labelFr: "File d’attente longue" },
+  isFoodAvailableNow: {
+    labelEn: "Food currently available",
+    labelFr: "Nourriture disponible actuellement",
+  },
+  isSeatingAvailableNow: {
+    labelEn: "Seating currently available",
+    labelFr: "Places assises disponibles actuellement",
+  },
+  isOccupied: { labelEn: "Currently occupied", labelFr: "Actuellement occupé" },
+  isLit: { labelEn: "Lit at night", labelFr: "Éclairé la nuit" },
+  isOperational: {
+    labelEn: "Operational / undamaged",
+    labelFr: "Opérationnel / intact",
+  },
+  isBlocked: { labelEn: "Blocked", labelFr: "Bloquée" },
+  isFlooded: { labelEn: "Flooded", labelFr: "Inondée" },
+  hasWorkingStreetLight: {
+    labelEn: "Street lighting working",
+    labelFr: "Éclairage public fonctionnel",
+  },
+  hasElectricity: {
+    labelEn: "Electricity available",
+    labelFr: "Électricité disponible",
+  },
+  hasWater: { labelEn: "Water available", labelFr: "Eau disponible" },
+  hasCommercialGround: {
+    labelEn: "Commercial ground floor active",
+    labelFr: "Rez-de-chaussée commercial actif",
+  },
+} as const;
+
+function operatorBooleanField(field: keyof typeof POINT_OPERATOR_FIELD_LABELS): EnrichFieldConfig {
+  return { ...POINT_OPERATOR_FIELD_LABELS[field], kind: "boolean" };
+}
+
 export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
   openingHours: {
     labelEn: "Opening Hours",
@@ -27,13 +79,9 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     placeholderEn: "e.g. 08:00 - 20:00",
     placeholderFr: "ex. 08:00 - 20:00",
   },
-  isOpenNow: { labelEn: "Open Now", labelFr: "Ouvert maintenant", kind: "boolean" },
-  isOnDuty: { labelEn: "On-call Pharmacy", labelFr: "Pharmacie de garde", kind: "boolean" },
-  hasEssentialMedicinesAvailable: {
-    labelEn: "Essential medicines available",
-    labelFr: "Médicaments essentiels disponibles",
-    kind: "boolean",
-  },
+  isOpenNow: operatorBooleanField("isOpenNow"),
+  isOnDuty: operatorBooleanField("isOnDuty"),
+  hasEssentialMedicinesAvailable: operatorBooleanField("hasEssentialMedicinesAvailable"),
   isLicensed: { labelEn: "Licensed", labelFr: "Avec licence", kind: "boolean" },
   hasPrescriptionService: { labelEn: "Prescription Service", labelFr: "Service ordonnance", kind: "boolean" },
   medicineCategories: {
@@ -67,13 +115,9 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     kind: "multi_select",
     options: [option("MTN"), option("Orange"), option("Airtel")],
   },
-  hasMin50000XafAvailable: {
-    labelEn: "At least 50,000 XAF cash available",
-    labelFr: "Au moins 50 000 XAF disponibles en espèces",
-    kind: "boolean",
-  },
+  hasMin50000XafAvailable: operatorBooleanField("hasMin50000XafAvailable"),
   isActive: { labelEn: "Agent Active", labelFr: "Agent actif", kind: "boolean" },
-  hasFloat: { labelEn: "Has Float", labelFr: "A de la liquidite", kind: "boolean" },
+  hasFloat: operatorBooleanField("hasFloat"),
   agentType: {
     labelEn: "Agent Type",
     labelFr: "Type d'agent",
@@ -100,7 +144,7 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     kind: "single_select",
     options: [option("Premium"), option("Standard"), option("Low", "Low", "Faible")],
   },
-  hasFuelAvailable: { labelEn: "Fuel Available", labelFr: "Carburant disponible", kind: "boolean" },
+  hasFuelAvailable: operatorBooleanField("hasFuelAvailable"),
   queueLength: {
     labelEn: "Queue Length",
     labelFr: "Longueur de file",
@@ -112,7 +156,7 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
       option("long", "Long", "Longue"),
     ],
   },
-  isQueueBusy: { labelEn: "Long queue", labelFr: "File d’attente longue", kind: "boolean" },
+  isQueueBusy: operatorBooleanField("isQueueBusy"),
   hasConvenienceStore: { labelEn: "Convenience Store", labelFr: "Suprette", kind: "boolean" },
   hasCarWash: { labelEn: "Car Wash", labelFr: "Lavage auto", kind: "boolean" },
   hasATM: { labelEn: "ATM", labelFr: "GAB", kind: "boolean" },
@@ -138,16 +182,8 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
   },
   isFormal: { labelEn: "Formal / Licensed", labelFr: "Formel / licence", kind: "boolean" },
   servesFood: { labelEn: "Serves Food", labelFr: "Sert des repas", kind: "boolean" },
-  isFoodAvailableNow: {
-    labelEn: "Food currently available",
-    labelFr: "Nourriture disponible actuellement",
-    kind: "boolean",
-  },
-  isSeatingAvailableNow: {
-    labelEn: "Seating currently available",
-    labelFr: "Places assises disponibles actuellement",
-    kind: "boolean",
-  },
+  isFoodAvailableNow: operatorBooleanField("isFoodAvailableNow"),
+  isSeatingAvailableNow: operatorBooleanField("isSeatingAvailableNow"),
   brandsAvailable: {
     labelEn: "Brands Available",
     labelFr: "Marques disponibles",
@@ -180,7 +216,7 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
       option("informal", "Informal", "Informel"),
     ],
   },
-  isOccupied: { labelEn: "Occupied", labelFr: "Occupe", kind: "boolean" },
+  isOccupied: operatorBooleanField("isOccupied"),
   advertiserBrand: {
     labelEn: "Advertiser Brand",
     labelFr: "Marque annonceur",
@@ -213,15 +249,11 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     placeholderEn: "e.g. 4m x 3m",
     placeholderFr: "ex. 4m x 3m",
   },
-  isLit: { labelEn: "Lit at Night", labelFr: "Eclaire la nuit", kind: "boolean" },
-  isOperational: {
-    labelEn: "Operational / undamaged",
-    labelFr: "Opérationnel / intact",
-    kind: "boolean",
-  },
+  isLit: operatorBooleanField("isLit"),
+  isOperational: operatorBooleanField("isOperational"),
 
-  isBlocked: { labelEn: "Blocked", labelFr: "Bloque", kind: "boolean" },
-  isFlooded: { labelEn: "Flooded", labelFr: "Inondée", kind: "boolean" },
+  isBlocked: operatorBooleanField("isBlocked"),
+  isFlooded: operatorBooleanField("isFlooded"),
   blockageType: {
     labelEn: "Blockage Type",
     labelFr: "Type de blocage",
@@ -269,11 +301,7 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
     ],
   },
   hasStreetLight: { labelEn: "Street Light", labelFr: "Eclairage public", kind: "boolean" },
-  hasWorkingStreetLight: {
-    labelEn: "Street lighting working",
-    labelFr: "Éclairage public fonctionnel",
-    kind: "boolean",
-  },
+  hasWorkingStreetLight: operatorBooleanField("hasWorkingStreetLight"),
 
   occupancyStatus: {
     labelEn: "Occupancy Status",
@@ -288,8 +316,8 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
   },
   storeyCount: { labelEn: "Storey Count", labelFr: "Nombre d'etages", kind: "number" },
   estimatedUnits: { labelEn: "Estimated Units", labelFr: "Unites estimees", kind: "number" },
-  hasElectricity: { labelEn: "Has Electricity", labelFr: "A l'electricite", kind: "boolean" },
-  hasWater: { labelEn: "Water available", labelFr: "Eau disponible", kind: "boolean" },
+  hasElectricity: operatorBooleanField("hasElectricity"),
+  hasWater: operatorBooleanField("hasWater"),
   constructionMaterial: {
     labelEn: "Construction Material",
     labelFr: "Materiau de construction",
@@ -303,7 +331,7 @@ export const ENRICH_FIELD_CATALOG: Record<string, EnrichFieldConfig> = {
       option("other", "Other", "Autre"),
     ],
   },
-  hasCommercialGround: { labelEn: "Commercial Ground Floor", labelFr: "Rez-de-chaussee commercial", kind: "boolean" },
+  hasCommercialGround: operatorBooleanField("hasCommercialGround"),
 };
 
 export function getEnrichFieldLabel(field: string, lang: "en" | "fr"): string {

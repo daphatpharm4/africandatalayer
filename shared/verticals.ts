@@ -1,13 +1,7 @@
-import type { SubmissionDetails } from "./types.js";
+import { POINT_OPERATOR_FIELD_LABELS } from "./enrichFieldCatalog.js";
+import type { PointOperatorControlDefinition, SubmissionDetails } from "./types.js";
 
 // Vertical configuration
-
-export interface PointOperatorControl {
-  field: string;
-  labelEn: string;
-  labelFr: string;
-  expiryHours: number;
-}
 
 export interface VerticalConfig {
   id: string;
@@ -19,7 +13,7 @@ export interface VerticalConfig {
   color: string;
   bgColor: string;
   enrichableFields: readonly string[];
-  operatorControls: readonly PointOperatorControl[];
+  operatorControls: readonly PointOperatorControlDefinition[];
   createRequiredFields: readonly string[];
   normalizeDetails: (d: SubmissionDetails) => SubmissionDetails;
   /** Days after which a point is considered stale and agents are prompted to refresh */
@@ -78,6 +72,13 @@ function normalizeBooleanFields(details: SubmissionDetails, fields: readonly str
     const normalized = normalizeBoolean(details[field]);
     if (typeof normalized === "boolean") details[field] = normalized;
   }
+}
+
+function operatorControl(
+  field: keyof typeof POINT_OPERATOR_FIELD_LABELS,
+  expiryHours: number,
+): PointOperatorControlDefinition {
+  return { field, ...POINT_OPERATOR_FIELD_LABELS[field], expiryHours };
 }
 
 // Identity normalizer for verticals with no special normalization logic
@@ -217,10 +218,7 @@ function normalizeBillboard(d: SubmissionDetails): SubmissionDetails {
 
 function normalizeTransportRoad(d: SubmissionDetails): SubmissionDetails {
   const details = identityNormalize(d);
-  normalizeBooleanFields(details, ["isBlocked", "isFlooded"]);
-
-  const hasWorkingStreetLight = normalizeBoolean(details.hasWorkingStreetLight ?? details.hasStreetLight);
-  if (typeof hasWorkingStreetLight === "boolean") details.hasWorkingStreetLight = hasWorkingStreetLight;
+  normalizeBooleanFields(details, ["isBlocked", "isFlooded", "hasStreetLight", "hasWorkingStreetLight"]);
 
   const roadName = trimString(details.roadName) ?? trimString(details.name);
   if (roadName) {
@@ -280,24 +278,9 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     bgColor: "#eaf3ee",
     enrichableFields: ["openingHours", "isOpenNow", "isOnDuty", "hasEssentialMedicinesAvailable", "isLicensed", "hasPrescriptionService", "medicineCategories"],
     operatorControls: [
-      {
-        field: "isOpenNow",
-        labelEn: "Open now",
-        labelFr: "Ouvert maintenant",
-        expiryHours: 6,
-      },
-      {
-        field: "isOnDuty",
-        labelEn: "On guard",
-        labelFr: "De garde",
-        expiryHours: 12,
-      },
-      {
-        field: "hasEssentialMedicinesAvailable",
-        labelEn: "Essential medicines available",
-        labelFr: "Médicaments essentiels disponibles",
-        expiryHours: 24,
-      },
+      operatorControl("isOpenNow", 6),
+      operatorControl("isOnDuty", 12),
+      operatorControl("hasEssentialMedicinesAvailable", 24),
     ],
     createRequiredFields: ["name", "isOpenNow"],
     normalizeDetails: normalizePharmacy,
@@ -314,24 +297,9 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     bgColor: "#e7eef4",
     enrichableFields: ["merchantIdByProvider", "paymentMethods", "openingHours", "providers", "isOpenNow", "isActive", "hasMin50000XafAvailable", "hasFloat", "agentType"],
     operatorControls: [
-      {
-        field: "isOpenNow",
-        labelEn: "Open now",
-        labelFr: "Ouvert maintenant",
-        expiryHours: 6,
-      },
-      {
-        field: "hasMin50000XafAvailable",
-        labelEn: "At least 50,000 XAF cash available",
-        labelFr: "Au moins 50 000 XAF disponibles en espèces",
-        expiryHours: 4,
-      },
-      {
-        field: "hasFloat",
-        labelEn: "Electronic float available",
-        labelFr: "Liquidité électronique disponible",
-        expiryHours: 4,
-      },
+      operatorControl("isOpenNow", 6),
+      operatorControl("hasMin50000XafAvailable", 4),
+      operatorControl("hasFloat", 4),
     ],
     createRequiredFields: ["providers"],
     normalizeDetails: normalizeMobileMoney,
@@ -361,24 +329,9 @@ export const VERTICALS: Record<string, VerticalConfig> = {
       "hasATM",
     ],
     operatorControls: [
-      {
-        field: "isOpenNow",
-        labelEn: "Open now",
-        labelFr: "Ouvert maintenant",
-        expiryHours: 6,
-      },
-      {
-        field: "hasFuelAvailable",
-        labelEn: "Fuel available",
-        labelFr: "Carburant disponible",
-        expiryHours: 6,
-      },
-      {
-        field: "isQueueBusy",
-        labelEn: "Long queue",
-        labelFr: "File d’attente longue",
-        expiryHours: 2,
-      },
+      operatorControl("isOpenNow", 6),
+      operatorControl("hasFuelAvailable", 6),
+      operatorControl("isQueueBusy", 2),
     ],
     createRequiredFields: ["name", "hasFuelAvailable"],
     normalizeDetails: normalizeFuelStation,
@@ -395,24 +348,9 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     bgColor: "#fde8e8",
     enrichableFields: ["brand", "openingHours", "paymentMethods", "outletType", "isOpenNow", "isFoodAvailableNow", "isSeatingAvailableNow", "isFormal", "servesFood", "brandsAvailable", "priceRange"],
     operatorControls: [
-      {
-        field: "isOpenNow",
-        labelEn: "Open now",
-        labelFr: "Ouvert maintenant",
-        expiryHours: 6,
-      },
-      {
-        field: "isFoodAvailableNow",
-        labelEn: "Food currently available",
-        labelFr: "Nourriture disponible actuellement",
-        expiryHours: 6,
-      },
-      {
-        field: "isSeatingAvailableNow",
-        labelEn: "Seating currently available",
-        labelFr: "Places assises disponibles actuellement",
-        expiryHours: 6,
-      },
+      operatorControl("isOpenNow", 6),
+      operatorControl("isFoodAvailableNow", 6),
+      operatorControl("isSeatingAvailableNow", 6),
     ],
     createRequiredFields: ["name"],
     normalizeDetails: normalizeAlcoholOutlet,
@@ -429,24 +367,9 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     bgColor: "#fefcbf",
     enrichableFields: ["brand", "billboardType", "isOccupied", "advertiserBrand", "advertiserCategory", "condition", "size", "isLit", "isOperational"],
     operatorControls: [
-      {
-        field: "isOccupied",
-        labelEn: "Currently occupied",
-        labelFr: "Actuellement occupé",
-        expiryHours: 168,
-      },
-      {
-        field: "isLit",
-        labelEn: "Lit at night",
-        labelFr: "Éclairé la nuit",
-        expiryHours: 720,
-      },
-      {
-        field: "isOperational",
-        labelEn: "Operational / undamaged",
-        labelFr: "Opérationnel / intact",
-        expiryHours: 168,
-      },
+      operatorControl("isOccupied", 168),
+      operatorControl("isLit", 720),
+      operatorControl("isOperational", 168),
     ],
     createRequiredFields: ["name"],
     normalizeDetails: normalizeBillboard,
@@ -463,24 +386,9 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     bgColor: "#edf2f7",
     enrichableFields: ["condition", "isBlocked", "isFlooded", "blockageType", "surfaceType", "passableBy", "trafficLevel", "hasStreetLight", "hasWorkingStreetLight"],
     operatorControls: [
-      {
-        field: "isBlocked",
-        labelEn: "Blocked",
-        labelFr: "Bloquée",
-        expiryHours: 4,
-      },
-      {
-        field: "isFlooded",
-        labelEn: "Flooded",
-        labelFr: "Inondée",
-        expiryHours: 4,
-      },
-      {
-        field: "hasWorkingStreetLight",
-        labelEn: "Street lighting working",
-        labelFr: "Éclairage public fonctionnel",
-        expiryHours: 168,
-      },
+      operatorControl("isBlocked", 4),
+      operatorControl("isFlooded", 4),
+      operatorControl("hasWorkingStreetLight", 168),
     ],
     createRequiredFields: ["roadName", "condition"],
     normalizeDetails: normalizeTransportRoad,
@@ -497,24 +405,9 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     bgColor: "#e2e8f0",
     enrichableFields: ["occupancyStatus", "storeyCount", "estimatedUnits", "hasElectricity", "hasWater", "constructionMaterial", "hasCommercialGround"],
     operatorControls: [
-      {
-        field: "hasElectricity",
-        labelEn: "Electricity available",
-        labelFr: "Électricité disponible",
-        expiryHours: 720,
-      },
-      {
-        field: "hasWater",
-        labelEn: "Water available",
-        labelFr: "Eau disponible",
-        expiryHours: 720,
-      },
-      {
-        field: "hasCommercialGround",
-        labelEn: "Commercial ground floor active",
-        labelFr: "Rez-de-chaussée commercial actif",
-        expiryHours: 720,
-      },
+      operatorControl("hasElectricity", 720),
+      operatorControl("hasWater", 720),
+      operatorControl("hasCommercialGround", 720),
     ],
     createRequiredFields: ["buildingType", "occupancyStatus"],
     normalizeDetails: normalizeCensusProxy,

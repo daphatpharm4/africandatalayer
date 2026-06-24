@@ -2,7 +2,7 @@ import type { SubmissionCategory } from '../../shared/types.js';
 import { getVertical } from '../../shared/verticals.js';
 
 export function getPointOperatorControls(category: SubmissionCategory) {
-  return [...getVertical(category).operatorControls];
+  return getVertical(category).operatorControls.map((control) => ({ ...control }));
 }
 
 export function getPointOperatorControl(

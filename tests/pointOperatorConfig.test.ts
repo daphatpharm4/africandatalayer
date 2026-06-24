@@ -5,7 +5,8 @@ import {
   getPointOperatorControls,
   resolvePointOperatorExpiry,
 } from '../lib/server/pointOperatorConfig.js';
-import type { SubmissionCategory } from '../shared/types.js';
+import { ENRICH_FIELD_CATALOG } from '../shared/enrichFieldCatalog.js';
+import type { SubmissionCategory, SubmissionDetails } from '../shared/types.js';
 import { getVertical } from '../shared/verticals.js';
 
 const EXPECTED_CONTROLS = {
@@ -174,15 +175,19 @@ test('every vertical exposes the exact approved operator-control matrix', () => 
   }
 });
 
-test('every operator field is enrichable and normalized as a boolean', () => {
+test('every operator field is enrichable and normalizes yes and no as booleans', () => {
   for (const [category, controls] of Object.entries(EXPECTED_CONTROLS) as Array<
     [SubmissionCategory, (typeof EXPECTED_CONTROLS)[SubmissionCategory]]
   >) {
     const vertical = getVertical(category);
-    const raw = Object.fromEntries(
+    const positiveRaw = Object.fromEntries(
       controls.map((control) => [control.field, 'yes']),
     );
-    const normalized = vertical.normalizeDetails(raw);
+    const negativeRaw = Object.fromEntries(
+      controls.map((control) => [control.field, 'no']),
+    );
+    const positive = vertical.normalizeDetails(positiveRaw);
+    const negative = vertical.normalizeDetails(negativeRaw);
 
     for (const control of controls) {
       assert.ok(
@@ -190,12 +195,50 @@ test('every operator field is enrichable and normalized as a boolean', () => {
         `${category}:${control.field} must be enrichable`,
       );
       assert.equal(
-        normalized[control.field],
+        positive[control.field],
         true,
-        `${category}:${control.field} must normalize to boolean`,
+        `${category}:${control.field} must normalize yes to true`,
+      );
+      assert.equal(
+        negative[control.field],
+        false,
+        `${category}:${control.field} must normalize no to false`,
       );
     }
   }
+});
+
+test('operator controls and enrich-field catalog use the same canonical labels', () => {
+  for (const category of Object.keys(EXPECTED_CONTROLS) as SubmissionCategory[]) {
+    for (const control of getPointOperatorControls(category)) {
+      const catalogField = ENRICH_FIELD_CATALOG[control.field];
+      assert.ok(catalogField, `${category}:${control.field} must exist in the catalog`);
+      assert.equal(catalogField.labelEn, control.labelEn);
+      assert.equal(catalogField.labelFr, control.labelFr);
+      assert.equal(catalogField.kind, 'boolean');
+    }
+  }
+});
+
+test('control lookups return clones that cannot mutate global vertical config', () => {
+  const controls = getPointOperatorControls('pharmacy');
+  controls[0].labelEn = 'Mutated';
+
+  const control = getPointOperatorControl('pharmacy', 'isOpenNow');
+  assert.ok(control);
+  control.labelFr = 'Modifié';
+
+  assert.equal(getPointOperatorControls('pharmacy')[0].labelEn, 'Open now');
+  assert.equal(getPointOperatorControl('pharmacy', 'isOpenNow')?.labelFr, 'Ouvert maintenant');
+});
+
+test('legacy street-light presence does not populate working street-light status', () => {
+  const normalized = getVertical('transport_road').normalizeDetails({
+    hasStreetLight: 'yes',
+  } as unknown as SubmissionDetails);
+
+  assert.equal(normalized.hasStreetLight, true);
+  assert.equal(normalized.hasWorkingStreetLight, undefined);
 });
 
 test('pharmacy open-now expires exactly six hours after report time', () => {
