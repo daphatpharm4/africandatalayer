@@ -10,7 +10,9 @@ export type SubmissionCategory =
   | "census_proxy";
 export type PointEventType = "CREATE_EVENT" | "ENRICH_EVENT";
 export type MapScope = "bonamoussadi" | "cameroon" | "global";
-export type UserRole = "agent" | "admin" | "client";
+export type UserRole = "agent" | "admin" | "client" | "point_operator";
+export type PointOperatorAssignmentStatus = "active" | "revoked";
+export type PointOperatorReviewState = "auto_approved" | "pending_review" | "rejected";
 export type CollectionAssignmentStatus = "pending" | "in_progress" | "completed" | "expired";
 export type DedupDecision = "allow_create" | "use_existing";
 export type ConsentStatus = "obtained" | "refused_pii_only" | "not_required" | "withdrawn";
@@ -161,6 +163,20 @@ export interface SubmissionDetails {
   externalId?: string;
   isImported?: boolean;
   reviewerApproved?: boolean;
+  hasEssentialMedicinesAvailable?: boolean;
+  isQueueBusy?: boolean;
+  isFoodAvailableNow?: boolean;
+  isSeatingAvailableNow?: boolean;
+  isOperational?: boolean;
+  isFlooded?: boolean;
+  hasWorkingStreetLight?: boolean;
+  operatorSignal?: {
+    field: string;
+    reportedAt: string;
+    expiresAt: string;
+    reviewState: PointOperatorReviewState;
+  };
+  operatorPhotoUpdate?: boolean;
   [key: string]: unknown;
 }
 
@@ -194,9 +210,53 @@ export interface ProjectedPoint {
   updatedAt: string;
   source?: string;
   externalId?: string;
+  operatorSignals?: Record<string, PointOperatorSignalState>;
   gaps: string[];
   eventsCount: number;
   eventIds: string[];
+}
+
+export interface PointOperatorAssignment {
+  id: string;
+  operatorUserId: string;
+  pointId: string;
+  status: PointOperatorAssignmentStatus;
+  grantedBy: string;
+  grantedAt: string;
+  revokedBy?: string | null;
+  revokedAt?: string | null;
+  revokeReason?: string | null;
+}
+
+export interface PointOperatorSignalState {
+  field: string;
+  value: boolean | null;
+  reportedBy: "point_operator";
+  reportedAt: string;
+  expiresAt: string;
+  isExpired: boolean;
+  eventId: string;
+  reviewState: PointOperatorReviewState;
+}
+
+export interface PointOperatorControlDefinition {
+  field: string;
+  labelEn: string;
+  labelFr: string;
+  expiryHours: number;
+}
+
+export interface PointOperatorMeResponse {
+  assignment: PointOperatorAssignment;
+  point: ProjectedPoint;
+  controls: PointOperatorControlDefinition[];
+  signals: Record<string, PointOperatorSignalState>;
+}
+
+export interface PointOperatorMutationResponse {
+  eventId: string;
+  point: ProjectedPoint;
+  signal?: PointOperatorSignalState;
 }
 
 export type AiLanguage = "en" | "fr";
@@ -353,6 +413,7 @@ export interface UserProfile {
   wipeRequested?: boolean;
   failedLoginCount?: number;
   lockedUntil?: string | null;
+  mustChangePassword?: boolean;
 }
 
 export interface PrivacyRequest {

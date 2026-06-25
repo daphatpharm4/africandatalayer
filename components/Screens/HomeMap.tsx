@@ -72,7 +72,7 @@ interface Props {
   sheetSnap?: string;
   viewportTopInsetPx?: number;
   viewportBottomInsetPx?: number;
-  userRole?: 'agent' | 'admin' | 'client';
+  userRole?: 'agent' | 'admin' | 'client' | 'point_operator';
   onPrefetchDetails?: () => void;
 }
 

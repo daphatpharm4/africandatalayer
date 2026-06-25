@@ -37,7 +37,8 @@ interface HelpCenterProps {
 }
 
 function roleToAudience(role: UserRole): DocsAudience {
-  return role;
+  // point_operator help content is introduced later; treat as public for now.
+  return role === 'point_operator' ? 'public' : role;
 }
 
 const toneClass: Record<DocsTone, string> = {

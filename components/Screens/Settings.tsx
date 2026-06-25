@@ -17,7 +17,7 @@ interface Props {
   language: 'en' | 'fr';
   onLanguageChange: (language: 'en' | 'fr') => void;
   navigateTo: (screen: Screen) => void;
-  userRole?: 'agent' | 'admin' | 'client';
+  userRole?: 'agent' | 'admin' | 'client' | 'point_operator';
 }
 
 const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChange, navigateTo, userRole }) => {

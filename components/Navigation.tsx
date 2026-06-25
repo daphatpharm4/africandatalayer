@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-type UserRole = 'agent' | 'admin' | 'client';
+type UserRole = 'agent' | 'admin' | 'client' | 'point_operator';
 
 interface Props {
   currentScreen: Screen;
