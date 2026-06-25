@@ -137,8 +137,17 @@ export async function grantPointOperatorAssignmentTx(
   try {
     await client.query("BEGIN");
 
-    // 1. Load current profile (required to preserve existing fields)
-    const currentProfile = await getUserProfile(input.operatorUserId);
+    // 1. Load current profile with row lock (required to preserve existing fields)
+    const profileResult = await client.query<{ id: string; name: string; email: string | null; xp: number }>(
+      `SELECT id, name, email, xp FROM public.profiles WHERE id = $1 FOR UPDATE`,
+      [input.operatorUserId],
+    );
+    const currentProfile = profileResult.rows[0] ? {
+      id: profileResult.rows[0].id,
+      name: profileResult.rows[0].name,
+      email: profileResult.rows[0].email,
+      XP: profileResult.rows[0].xp,
+    } : null;
     const updatedProfile: UserProfile = {
       ...(currentProfile ?? {
         id: input.operatorUserId,
@@ -220,7 +229,6 @@ export async function revokePointOperatorAssignmentTx(
     );
 
     if (!updateResult.rows.length) {
-      await client.query("ROLLBACK");
       throw new Error("Active operator assignment not found");
     }
 
