@@ -10,7 +10,7 @@
 import type { PointOperatorAssignment, ProjectedPoint, UserProfile } from "../../shared/types.js";
 import { getPool, query } from "./db.js";
 import { getPointEvents } from "./storage/index.js";
-import { projectPointById } from "./pointProjection.js";
+import { projectPointById, projectPointsFromEvents } from "./pointProjection.js";
 import { getUserProfile, upsertUserProfile } from "./storage/index.js";
 
 // ─── Input types ────────────────────────────────────────────────────────────
@@ -119,6 +119,31 @@ export async function findProjectedPointForAssignment(
 ): Promise<ProjectedPoint | null> {
   const events = await getPointEvents();
   return projectPointById(events, pointId);
+}
+
+/**
+ * Returns all projected points that are VERIFIED (i.e. they still exist after
+ * projection — i.e. not removed/null). Optionally filters by a case-insensitive
+ * substring match on pointId, name (details.name / details.siteName), or category.
+ *
+ * Used by the admin po_admin_search_points view to find assignable points.
+ */
+export async function searchAssignableProjectedPoints(query?: string): Promise<ProjectedPoint[]> {
+  const events = await getPointEvents();
+  const allProjected = projectPointsFromEvents(events);
+
+  if (!query) return allProjected;
+
+  const needle = query.toLowerCase();
+  return allProjected.filter((point) => {
+    if (point.pointId.toLowerCase().includes(needle)) return true;
+    if (point.category.toLowerCase().includes(needle)) return true;
+    const name = (point.details as Record<string, unknown>)?.name;
+    if (typeof name === "string" && name.toLowerCase().includes(needle)) return true;
+    const siteName = (point.details as Record<string, unknown>)?.siteName;
+    if (typeof siteName === "string" && siteName.toLowerCase().includes(needle)) return true;
+    return false;
+  });
 }
 
 // ─── Write functions (transactional) ────────────────────────────────────────

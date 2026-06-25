@@ -39,6 +39,7 @@ import { getUserProfile, upsertUserProfile } from "./storage/index.js";
 import {
   getActivePointOperatorAssignmentByUser,
   findProjectedPointForAssignment,
+  searchAssignableProjectedPoints,
 } from "./pointOperatorStore.js";
 import { createPointOperatorLifecycle } from "./pointOperatorService.js";
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
@@ -80,6 +81,7 @@ export interface PointOperatorHandlerDeps {
   lifecycleFn?: () => ReturnType<typeof createPointOperatorLifecycle>;
   getActiveAssignmentByUserFn?: (userId: string) => Promise<PointOperatorAssignment | null>;
   getPointFn?: (pointId: string) => Promise<ProjectedPoint | null>;
+  searchAssignablePointsFn?: (query?: string) => Promise<ProjectedPoint[]>;
   submitSignalFn?: SubmitSignalFn;
   getUserProfileFn?: typeof getUserProfile;
   upsertUserProfileFn?: typeof upsertUserProfile;
@@ -104,13 +106,13 @@ function isOperatorRole(role: UserRole | undefined): boolean {
 }
 
 /** Map lifecycle error messages to HTTP status codes */
-function lifecycleErrorStatus(message: string): number {
+function lifecycleErrorStatus(message: string): number | null {
   if (message.includes("Verified point not found")) return 404;
   if (message.includes("Active operator assignment not found")) return 404;
   if (message.includes("Admin accounts cannot become point operators")) return 403;
   if (message.includes("Operator already has an active point")) return 409;
   if (message.includes("Point already has an active operator")) return 409;
-  return 500;
+  return null;
 }
 
 // ─── Handler factory ──────────────────────────────────────────────────────────
@@ -135,6 +137,7 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   const lifecycleFn = deps.lifecycleFn ?? (() => createPointOperatorLifecycle());
   const getActiveAssignmentByUserFn = deps.getActiveAssignmentByUserFn ?? getActivePointOperatorAssignmentByUser;
   const getPointFn = deps.getPointFn ?? findProjectedPointForAssignment;
+  const searchAssignablePointsFn = deps.searchAssignablePointsFn ?? searchAssignableProjectedPoints;
   const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
   const upsertUserProfileFn = deps.upsertUserProfileFn ?? upsertUserProfile;
   const hashPasswordFn = deps.hashPasswordFn ?? bcrypt.hash;
@@ -178,15 +181,22 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   };
 
   // ── Admin: search available verified points ──────────────────────────────────
-  async function handleAdminSearchPoints(_request: Request, auth: AuthUser): Promise<Response> {
+  async function handleAdminSearchPoints(request: Request, auth: AuthUser): Promise<Response> {
     if (!isAdminRole(auth.role)) return errorResponse("Forbidden", 403);
-    // Stub: Task 5 wires this to a real store query. For Task 4, return 200 + empty list.
-    return jsonResponse({ points: [] }, { status: 200 });
+    const url = new URL(request.url);
+    const query = url.searchParams.get("q")?.trim() || undefined;
+    const points = await searchAssignablePointsFn(query);
+    return jsonResponse({ points }, { status: 200 });
   }
 
   // ── Admin: create operator account and grant assignment ─────────────────────
   async function handleAdminCreate(request: Request, auth: AuthUser): Promise<Response> {
     if (!isAdminRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) {
+      return errorResponse("Idempotency-Key header is required", 422);
+    }
 
     let rawBody: unknown;
     try {
@@ -223,6 +233,7 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       const status = lifecycleErrorStatus(msg);
+      if (status === null) throw err;
       return errorResponse(msg, status);
     }
 
@@ -255,25 +266,27 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
       } catch {
         // Profile may already be upserted by the lifecycle tx; best-effort
       }
-
-      try {
-        await logSecurityEventFn({
-          eventType: "point_operator_granted" as SecurityAuditEventType,
-          userId,
-          request,
-          details: {
-            actorUserId: auth.id,
-            pointId: body.pointId,
-            assignmentId: assignment.id,
-            accountProvisioned: true,
-          },
-        });
-      } catch {
-        // Audit is best-effort
-      }
     }
 
-    return jsonResponse({ assignment: assignment }, { status: 201 });
+    // Audit fires for EVERY successful grant, regardless of whether the account
+    // was newly provisioned or already existed.
+    try {
+      await logSecurityEventFn({
+        eventType: "point_operator_granted" as SecurityAuditEventType,
+        userId,
+        request,
+        details: {
+          actorUserId: auth.id,
+          pointId: body.pointId,
+          assignmentId: assignment.id,
+          accountProvisioned: !alreadyExists,
+        },
+      });
+    } catch {
+      // Audit is best-effort
+    }
+
+    return jsonResponse({ assignment }, { status: 201 });
   }
 
   // ── Admin: look up assignment (history) for an operator ────────────────────
@@ -290,6 +303,11 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   // ── Admin: revoke an active assignment ──────────────────────────────────────
   async function handleAdminRevoke(request: Request, auth: AuthUser): Promise<Response> {
     if (!isAdminRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) {
+      return errorResponse("Idempotency-Key header is required", 422);
+    }
 
     let rawBody: unknown;
     try {
@@ -315,6 +333,7 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       const status = lifecycleErrorStatus(msg);
+      if (status === null) throw err;
       return errorResponse(msg, status);
     }
 
@@ -429,6 +448,11 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   // ── Operator: change password ────────────────────────────────────────────────
   async function handleOperatorPassword(request: Request, auth: AuthUser): Promise<Response> {
     if (!isOperatorRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) {
+      return errorResponse("Idempotency-Key header is required", 422);
+    }
 
     let rawBody: unknown;
     try {

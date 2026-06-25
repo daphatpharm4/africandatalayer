@@ -242,6 +242,7 @@ test("admin can create a point operator and receives the assignment", async () =
   });
   const response = await handler(
     makeRequest("admin_create", {
+      headers: { "Idempotency-Key": "idem-create-1" },
       body: {
         identifier: "newop@example.com",
         name: "New Op",
@@ -273,6 +274,7 @@ test("po_admin_create rejects when operator already has an active point (409)", 
   });
   const response = await handler(
     makeRequest("admin_create", {
+      headers: { "Idempotency-Key": "idem-create-2" },
       body: {
         identifier: "op2@example.com",
         name: "Op Two",
@@ -302,6 +304,7 @@ test("po_admin_create returns 404 when point not found", async () => {
   });
   const response = await handler(
     makeRequest("admin_create", {
+      headers: { "Idempotency-Key": "idem-create-3" },
       body: {
         identifier: "op3@example.com",
         name: "Op Three",
@@ -331,6 +334,7 @@ test("po_admin_create returns 403 when target is an admin account", async () => 
   });
   const response = await handler(
     makeRequest("admin_create", {
+      headers: { "Idempotency-Key": "idem-create-4" },
       body: {
         identifier: "other.admin@example.com",
         name: "Other Admin",
@@ -355,6 +359,7 @@ test("admin can revoke an active operator assignment", async () => {
   });
   const response = await handler(
     makeRequest("admin_revoke", {
+      headers: { "Idempotency-Key": "idem-revoke-1" },
       body: {
         operatorUserId: "op@example.com",
         reason: "Closed their business",
@@ -379,6 +384,7 @@ test("po_admin_revoke returns 404 when assignment not found", async () => {
   });
   const response = await handler(
     makeRequest("admin_revoke", {
+      headers: { "Idempotency-Key": "idem-revoke-2" },
       body: {
         operatorUserId: "nobody@example.com",
         reason: "Test reason",
@@ -419,6 +425,7 @@ test("po_admin_create schema rejects extra fields (strict)", async () => {
   });
   const response = await handler(
     makeRequest("admin_create", {
+      headers: { "Idempotency-Key": "idem-schema-1" },
       body: {
         identifier: "newop@example.com",
         name: "New Op",
@@ -441,6 +448,7 @@ test("po_password rejects body with extra fields (strict schema)", async () => {
   });
   const response = await handler(
     makeRequest("password", {
+      headers: { "Idempotency-Key": "idem-pw-strict" },
       body: {
         currentPassword: "OldPass123",
         newPassword: "NewPass1234!",
@@ -463,4 +471,242 @@ test("unknown po_ view returns 400", async () => {
     }),
   );
   assert.equal(response.status, 400);
+});
+
+// ─── Fix 1: po_admin_search_points real implementation ───────────────────────
+
+test("po_admin_search_points returns all projected points when no query", async () => {
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "admin@example.com", token: {}, role: "admin" }),
+    searchAssignablePointsFn: async () => [MOCK_POINT],
+  });
+  const response = await handler(
+    new Request("http://localhost/api/user?view=po_admin_search_points", {
+      method: "GET",
+    }),
+  );
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { points: ProjectedPoint[] };
+  assert.equal(body.points.length, 1);
+  assert.equal(body.points[0].pointId, "point-1");
+});
+
+test("po_admin_search_points passes query param to searchFn and returns matches", async () => {
+  let receivedQuery: string | undefined;
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "admin@example.com", token: {}, role: "admin" }),
+    searchAssignablePointsFn: async (q) => {
+      receivedQuery = q;
+      // Only return MOCK_POINT if query matches "pharmacy"
+      return q && MOCK_POINT.category.includes(q) ? [MOCK_POINT] : [];
+    },
+  });
+  const response = await handler(
+    new Request("http://localhost/api/user?view=po_admin_search_points&q=pharmacy", {
+      method: "GET",
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.equal(receivedQuery, "pharmacy");
+  const body = (await response.json()) as { points: ProjectedPoint[] };
+  assert.equal(body.points.length, 1);
+});
+
+test("po_admin_search_points excludes projected-away points (not returned by searchFn)", async () => {
+  // A "projected-away" point is one not returned by the store (projection returned null for it).
+  // The fake searchFn returns only the verified point, not the projected-away one.
+  const projectedAwayPoint: ProjectedPoint = {
+    ...MOCK_POINT,
+    id: "point-gone",
+    pointId: "point-gone",
+  };
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "admin@example.com", token: {}, role: "admin" }),
+    searchAssignablePointsFn: async () =>
+      // searchAssignableProjectedPoints only returns points that projected successfully;
+      // "point-gone" is excluded because its projection returned null.
+      [MOCK_POINT],
+  });
+  const response = await handler(
+    new Request("http://localhost/api/user?view=po_admin_search_points", {
+      method: "GET",
+    }),
+  );
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { points: ProjectedPoint[] };
+  // projected-away point must not appear
+  const ids = body.points.map((p) => p.pointId);
+  assert.equal(ids.includes(projectedAwayPoint.pointId), false, "projected-away point must be excluded");
+  assert.equal(ids.includes(MOCK_POINT.pointId), true, "verified point must be included");
+});
+
+test("non-admin cannot call po_admin_search_points", async () => {
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "op@example.com", token: {}, role: "point_operator" }),
+    searchAssignablePointsFn: async () => [MOCK_POINT],
+  });
+  const response = await handler(
+    new Request("http://localhost/api/user?view=po_admin_search_points", {
+      method: "GET",
+    }),
+  );
+  assert.equal(response.status, 403);
+});
+
+// ─── Fix 2: audit fires for existing-account grants ──────────────────────────
+
+test("audit event fires even when operator account already exists", async () => {
+  const auditEvents: Array<{ eventType: string; details: Record<string, unknown> }> = [];
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "admin@example.com", token: {}, role: "admin" }),
+    lifecycleFn: () => ({
+      grant: async () => MOCK_ASSIGNMENT,
+      revoke: async () => MOCK_ASSIGNMENT,
+    }),
+    // Simulate existing account: getUserProfileFn returns a profile
+    getUserProfileFn: async () => ({
+      id: "op@example.com",
+      name: "Existing Op",
+      email: "op@example.com",
+      phone: null,
+      image: null,
+      avatarPreset: null,
+      occupation: "",
+      XP: 100,
+      isAdmin: false,
+      role: "point_operator" as const,
+      mapScope: "bonamoussadi" as const,
+      trustScore: 50,
+      trustTier: "standard" as const,
+      failedLoginCount: 0,
+      lockedUntil: null,
+      wipeRequested: false,
+      suspendedUntil: null,
+      mustChangePassword: false,
+    }),
+    upsertUserProfileFn: async () => {},
+    hashPasswordFn: async (pw: string) => `hashed:${pw}`,
+    logSecurityEventFn: async (event) => {
+      auditEvents.push({
+        eventType: event.eventType,
+        details: event.details as Record<string, unknown>,
+      });
+    },
+  });
+
+  const response = await handler(
+    makeRequest("admin_create", {
+      headers: { "Idempotency-Key": "idem-existing-1" },
+      body: {
+        identifier: "op@example.com",
+        name: "Existing Op",
+        password: "Secure1234!",
+        pointId: "point-1",
+      },
+    }),
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal(auditEvents.length, 1, "audit event must fire for existing-account grant");
+  assert.equal(auditEvents[0].eventType, "point_operator_granted");
+  assert.equal(auditEvents[0].details.accountProvisioned, false, "accountProvisioned must be false for existing accounts");
+});
+
+test("audit event fires for new account with accountProvisioned=true", async () => {
+  const auditEvents: Array<{ eventType: string; details: Record<string, unknown> }> = [];
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "admin@example.com", token: {}, role: "admin" }),
+    lifecycleFn: () => ({
+      grant: async () => MOCK_ASSIGNMENT,
+      revoke: async () => MOCK_ASSIGNMENT,
+    }),
+    getUserProfileFn: async () => null, // new account
+    upsertUserProfileFn: async () => {},
+    hashPasswordFn: async (pw: string) => `hashed:${pw}`,
+    logSecurityEventFn: async (event) => {
+      auditEvents.push({
+        eventType: event.eventType,
+        details: event.details as Record<string, unknown>,
+      });
+    },
+  });
+
+  const response = await handler(
+    makeRequest("admin_create", {
+      headers: { "Idempotency-Key": "idem-new-1" },
+      body: {
+        identifier: "brand.new@example.com",
+        name: "Brand New Op",
+        password: "Secure1234!",
+        pointId: "point-1",
+      },
+    }),
+  );
+
+  assert.equal(response.status, 201);
+  assert.equal(auditEvents.length, 1, "audit event must fire for new account grant");
+  assert.equal(auditEvents[0].eventType, "point_operator_granted");
+  assert.equal(auditEvents[0].details.accountProvisioned, true, "accountProvisioned must be true for new accounts");
+});
+
+// ─── Fix 3: idempotency key required on all po_ writes ───────────────────────
+
+test("po_admin_create returns 422 when Idempotency-Key header is missing", async () => {
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "admin@example.com", token: {}, role: "admin" }),
+    getUserProfileFn: async () => null,
+    upsertUserProfileFn: async () => {},
+    hashPasswordFn: async (pw: string) => `hashed:${pw}`,
+    logSecurityEventFn: async () => {},
+  });
+  const response = await handler(
+    makeRequest("admin_create", {
+      // no Idempotency-Key header
+      body: {
+        identifier: "op@example.com",
+        name: "Op",
+        password: "Secure1234!",
+        pointId: "point-1",
+      },
+    }),
+  );
+  assert.equal(response.status, 422);
+});
+
+test("po_admin_revoke returns 422 when Idempotency-Key header is missing", async () => {
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "admin@example.com", token: {}, role: "admin" }),
+    lifecycleFn: () => ({
+      grant: async () => MOCK_ASSIGNMENT,
+      revoke: async () => ({ ...MOCK_ASSIGNMENT, status: "revoked" as const }),
+    }),
+    logSecurityEventFn: async () => {},
+  });
+  const response = await handler(
+    makeRequest("admin_revoke", {
+      // no Idempotency-Key header
+      body: {
+        operatorUserId: "op@example.com",
+        reason: "Test",
+      },
+    }),
+  );
+  assert.equal(response.status, 422);
+});
+
+test("po_password returns 422 when Idempotency-Key header is missing", async () => {
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "op@example.com", token: {}, role: "point_operator" }),
+    getActiveAssignmentByUserFn: async () => MOCK_ASSIGNMENT,
+  });
+  const response = await handler(
+    makeRequest("password", {
+      // no Idempotency-Key header
+      body: {
+        currentPassword: "OldPass123",
+        newPassword: "NewPass1234!",
+      },
+    }),
+  );
+  assert.equal(response.status, 422);
 });
