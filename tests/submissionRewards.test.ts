@@ -46,7 +46,7 @@ test("completion summary and prioritized fields follow the vertical enrichable m
     isOpenNow: true,
   });
 
-  assert.equal(completion.total, 6);
+  assert.equal(completion.total, 7);
   assert.equal(completion.filled, 2);
   assert.deepEqual(
     prioritizeMissingFields("pharmacy", completion.missing, 3),
