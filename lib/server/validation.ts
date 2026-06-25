@@ -287,3 +287,55 @@ export const ipReportPatchSchema = z
     resolutionNotes: z.string().trim().max(4000).optional(),
   })
   .strict();
+
+// ─── Point Operator schemas ───────────────────────────────────────────────────
+
+export const pointOperatorCreateSchema = z
+  .object({
+    identifier: z.string().trim().min(3).max(160),
+    name: z.string().trim().min(1).max(160),
+    password: z.string().min(10).max(128),
+    pointId: z.string().trim().min(1).max(200),
+    note: z.string().trim().max(500).optional(),
+  })
+  .strict();
+
+export const pointOperatorSignalSchema = z
+  .object({
+    field: z.string().trim().min(1).max(80),
+    value: z.boolean(),
+    capturedAt: z.string().datetime().optional(),
+    // pointId is accepted but ignored — the server resolves the point from the
+    // operator's active assignment. Including it here prevents the strict()
+    // rejection so clients sending it (accidentally or spoofing) get a clean 201.
+    // category is NOT listed so strict() still rejects that field.
+    pointId: z.string().optional(),
+  })
+  .strict();
+
+export const pointOperatorRevokeSchema = z
+  .object({
+    operatorUserId: z.string().trim().min(1).max(160),
+    reason: z.string().trim().min(3).max(500),
+  })
+  .strict();
+
+export const pointOperatorPhotoSchema = z
+  .object({
+    imageData: z.string().min(1).max(10_000_000),
+    capturedAt: z.string().datetime().optional(),
+  })
+  .strict();
+
+export const pointOperatorPasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: z
+      .string()
+      .min(10)
+      .max(128)
+      .regex(/[A-Z]/)
+      .regex(/[a-z]/)
+      .regex(/[0-9]/),
+  })
+  .strict();

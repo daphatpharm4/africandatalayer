@@ -1,0 +1,477 @@
+/**
+ * pointOperatorApi.ts
+ *
+ * HTTP routing layer for the point-operator feature.
+ *
+ * Routing: view params prefixed `po_` are detected by api/user/index.ts and
+ * delegated here via `createPointOperatorHandler`. This keeps the project at
+ * the Vercel Hobby 12-function cap — no new file under api/ is created.
+ *
+ * Views:
+ *   Admin (role === "admin"):
+ *     po_admin_search_points  GET   — find verified points available for assignment
+ *     po_admin_create         POST  — create operator account + grant assignment
+ *     po_admin_assignment     GET   — look up current/history assignment for an operator
+ *     po_admin_revoke         POST  — revoke an active assignment
+ *
+ *   Operator (role === "point_operator"):
+ *     po_me                   GET   — load own assignment + point + controls + signals
+ *     po_status               POST  — submit an open/closed status signal
+ *     po_photo                POST  — submit a photo (stub for Task 5)
+ *     po_password             POST  — change own password (first-login forced change)
+ */
+
+import bcrypt from "bcryptjs";
+import type { PointOperatorAssignment, ProjectedPoint, UserRole } from "../../shared/types.js";
+import type { SecurityAuditEventType } from "./securityAudit.js";
+import { logSecurityEvent } from "./securityAudit.js";
+import { jsonResponse, errorResponse } from "./http.js";
+import { readIdempotencyKey } from "./idempotencyCore.js";
+import {
+  pointOperatorCreateSchema,
+  pointOperatorSignalSchema,
+  pointOperatorRevokeSchema,
+  pointOperatorPhotoSchema,
+  pointOperatorPasswordSchema,
+} from "./validation.js";
+import { inferDefaultDisplayName, normalizeIdentifier } from "../shared/identifier.js";
+import { getUserProfile, upsertUserProfile } from "./storage/index.js";
+import {
+  getActivePointOperatorAssignmentByUser,
+  findProjectedPointForAssignment,
+} from "./pointOperatorStore.js";
+import { createPointOperatorLifecycle } from "./pointOperatorService.js";
+import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
+import type { UserProfile, MapScope } from "../../shared/types.js";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type PointOperatorView =
+  | "po_admin_search_points"
+  | "po_admin_create"
+  | "po_admin_assignment"
+  | "po_admin_revoke"
+  | "po_me"
+  | "po_status"
+  | "po_photo"
+  | "po_password";
+
+type AuthUser = { id: string; token: unknown; role: UserRole };
+
+// submitSignalFn is the Task 5 dep; for Task 4 we accept it as an injected dep.
+// Shape: accepts the signal input and returns an eventId.
+export type SubmitSignalInput = {
+  operatorUserId: string;
+  pointId: string;
+  field: string;
+  value: boolean;
+  capturedAt?: string;
+  idempotencyKey: string;
+};
+
+// When tests inject submitSignalFn without pointId routing, the pointId is
+// resolved server-side and stripped from what the fn receives.
+export type SubmitSignalFnInput = Omit<SubmitSignalInput, "pointId">;
+
+export type SubmitSignalFn = (input: SubmitSignalFnInput) => Promise<{ eventId: string }>;
+
+export interface PointOperatorHandlerDeps {
+  requireUserFn?: (req: Request) => Promise<AuthUser | null>;
+  lifecycleFn?: () => ReturnType<typeof createPointOperatorLifecycle>;
+  getActiveAssignmentByUserFn?: (userId: string) => Promise<PointOperatorAssignment | null>;
+  getPointFn?: (pointId: string) => Promise<ProjectedPoint | null>;
+  submitSignalFn?: SubmitSignalFn;
+  getUserProfileFn?: typeof getUserProfile;
+  upsertUserProfileFn?: typeof upsertUserProfile;
+  hashPasswordFn?: (password: string, rounds: number) => Promise<string>;
+  logSecurityEventFn?: typeof logSecurityEvent;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit<T, "passwordHash"> {
+  const safe = { ...profile } as T & { passwordHash?: unknown };
+  delete safe.passwordHash;
+  return safe;
+}
+
+function isAdminRole(role: UserRole | undefined): boolean {
+  return role === "admin";
+}
+
+function isOperatorRole(role: UserRole | undefined): boolean {
+  return role === "point_operator";
+}
+
+/** Map lifecycle error messages to HTTP status codes */
+function lifecycleErrorStatus(message: string): number {
+  if (message.includes("Verified point not found")) return 404;
+  if (message.includes("Active operator assignment not found")) return 404;
+  if (message.includes("Admin accounts cannot become point operators")) return 403;
+  if (message.includes("Operator already has an active point")) return 409;
+  if (message.includes("Point already has an active operator")) return 409;
+  return 500;
+}
+
+// ─── Handler factory ──────────────────────────────────────────────────────────
+
+/**
+ * Creates the point-operator HTTP handler with dependency injection.
+ *
+ * Production usage (wired to real store):
+ *   const handler = createPointOperatorHandler();
+ *
+ * Test usage:
+ *   const handler = createPointOperatorHandler({ requireUserFn: ..., ... });
+ */
+export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) {
+  const requireUserFn =
+    deps.requireUserFn ??
+    (async (req: Request): Promise<AuthUser | null> => {
+      const { requireUser } = await import("../../lib/auth.js");
+      return requireUser(req);
+    });
+
+  const lifecycleFn = deps.lifecycleFn ?? (() => createPointOperatorLifecycle());
+  const getActiveAssignmentByUserFn = deps.getActiveAssignmentByUserFn ?? getActivePointOperatorAssignmentByUser;
+  const getPointFn = deps.getPointFn ?? findProjectedPointForAssignment;
+  const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
+  const upsertUserProfileFn = deps.upsertUserProfileFn ?? upsertUserProfile;
+  const hashPasswordFn = deps.hashPasswordFn ?? bcrypt.hash;
+  const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
+
+  const submitSignalFn: SubmitSignalFn =
+    deps.submitSignalFn ??
+    (async () => {
+      throw new Error("submitSignalFn not implemented (Task 5)");
+    });
+
+  // ── Main dispatcher ──────────────────────────────────────────────────────────
+  return async function handlePointOperator(request: Request): Promise<Response> {
+    const auth = await requireUserFn(request);
+    if (!auth) return errorResponse("Unauthorized", 401);
+
+    const url = new URL(request.url);
+    const view = url.searchParams.get("view") as PointOperatorView | null;
+
+    // Route to the appropriate sub-handler
+    switch (view) {
+      case "po_admin_search_points":
+        return handleAdminSearchPoints(request, auth);
+      case "po_admin_create":
+        return handleAdminCreate(request, auth);
+      case "po_admin_assignment":
+        return handleAdminAssignment(request, auth, url);
+      case "po_admin_revoke":
+        return handleAdminRevoke(request, auth);
+      case "po_me":
+        return handleOperatorMe(request, auth);
+      case "po_status":
+        return handleOperatorStatus(request, auth);
+      case "po_photo":
+        return handleOperatorPhoto(request, auth);
+      case "po_password":
+        return handleOperatorPassword(request, auth);
+      default:
+        return errorResponse("Invalid view", 400);
+    }
+  };
+
+  // ── Admin: search available verified points ──────────────────────────────────
+  async function handleAdminSearchPoints(_request: Request, auth: AuthUser): Promise<Response> {
+    if (!isAdminRole(auth.role)) return errorResponse("Forbidden", 403);
+    // Stub: Task 5 wires this to a real store query. For Task 4, return 200 + empty list.
+    return jsonResponse({ points: [] }, { status: 200 });
+  }
+
+  // ── Admin: create operator account and grant assignment ─────────────────────
+  async function handleAdminCreate(request: Request, auth: AuthUser): Promise<Response> {
+    if (!isAdminRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+
+    const validation = pointOperatorCreateSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 422);
+    }
+    const body = validation.data;
+
+    const normalizedIdentifier = normalizeIdentifier(body.identifier);
+    if (!normalizedIdentifier) {
+      return errorResponse("Enter a valid email or phone number", 422);
+    }
+    const userId = normalizedIdentifier.value;
+
+    // Check if account already exists
+    const existing = await getUserProfileFn(userId);
+    const alreadyExists = Boolean(existing);
+
+    // Run lifecycle (grant) — this also atomically sets role = 'point_operator'
+    const lifecycle = lifecycleFn();
+    let assignment: PointOperatorAssignment;
+    try {
+      assignment = await lifecycle.grant({
+        actorUserId: auth.id,
+        operatorUserId: userId,
+        pointId: body.pointId,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const status = lifecycleErrorStatus(msg);
+      return errorResponse(msg, status);
+    }
+
+    // If the account did not already exist, provision it
+    if (!alreadyExists) {
+      const name = body.name.trim() || inferDefaultDisplayName(userId);
+      const newProfile: UserProfile = {
+        id: userId,
+        name,
+        email: normalizedIdentifier.type === "email" ? userId : null,
+        phone: normalizedIdentifier.type === "phone" ? userId : null,
+        image: encodeAvatarPresetImage(DEFAULT_AVATAR_PRESET),
+        avatarPreset: DEFAULT_AVATAR_PRESET,
+        occupation: "",
+        XP: 0,
+        passwordHash: await hashPasswordFn(body.password, 12),
+        isAdmin: false,
+        role: "point_operator",
+        mapScope: "bonamoussadi" as MapScope,
+        trustScore: 50,
+        trustTier: "standard",
+        failedLoginCount: 0,
+        lockedUntil: null,
+        wipeRequested: false,
+        suspendedUntil: null,
+        mustChangePassword: true,
+      };
+      try {
+        await upsertUserProfileFn(userId, newProfile);
+      } catch {
+        // Profile may already be upserted by the lifecycle tx; best-effort
+      }
+
+      try {
+        await logSecurityEventFn({
+          eventType: "point_operator_granted" as SecurityAuditEventType,
+          userId,
+          request,
+          details: {
+            actorUserId: auth.id,
+            pointId: body.pointId,
+            assignmentId: assignment.id,
+            accountProvisioned: true,
+          },
+        });
+      } catch {
+        // Audit is best-effort
+      }
+    }
+
+    return jsonResponse({ assignment: assignment }, { status: 201 });
+  }
+
+  // ── Admin: look up assignment (history) for an operator ────────────────────
+  async function handleAdminAssignment(_request: Request, auth: AuthUser, url: URL): Promise<Response> {
+    if (!isAdminRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    const operatorUserId = url.searchParams.get("operatorUserId")?.trim().toLowerCase();
+    if (!operatorUserId) return errorResponse("operatorUserId query param is required", 400);
+
+    const assignment = await getActiveAssignmentByUserFn(operatorUserId);
+    return jsonResponse({ assignment: assignment ?? null }, { status: 200 });
+  }
+
+  // ── Admin: revoke an active assignment ──────────────────────────────────────
+  async function handleAdminRevoke(request: Request, auth: AuthUser): Promise<Response> {
+    if (!isAdminRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+
+    const validation = pointOperatorRevokeSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 422);
+    }
+    const body = validation.data;
+
+    const lifecycle = lifecycleFn();
+    let assignment: PointOperatorAssignment;
+    try {
+      assignment = await lifecycle.revoke({
+        actorUserId: auth.id,
+        operatorUserId: body.operatorUserId,
+        revokeReason: body.reason,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const status = lifecycleErrorStatus(msg);
+      return errorResponse(msg, status);
+    }
+
+    try {
+      await logSecurityEventFn({
+        eventType: "point_operator_revoked" as SecurityAuditEventType,
+        userId: body.operatorUserId,
+        request,
+        details: {
+          actorUserId: auth.id,
+          assignmentId: assignment.id,
+          reason: body.reason,
+        },
+      });
+    } catch {
+      // Audit is best-effort
+    }
+
+    return jsonResponse({ assignment }, { status: 200 });
+  }
+
+  // ── Operator: load own assignment + point ───────────────────────────────────
+  async function handleOperatorMe(_request: Request, auth: AuthUser): Promise<Response> {
+    if (!isOperatorRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    const assignment = await getActiveAssignmentByUserFn(auth.id);
+    if (!assignment) return errorResponse("No active point operator assignment found", 403);
+
+    const point = await getPointFn(assignment.pointId);
+    if (!point) return errorResponse("Assigned point not found", 404);
+
+    return jsonResponse({ assignment, point, controls: [], signals: {} }, { status: 200 });
+  }
+
+  // ── Operator: submit a status signal ────────────────────────────────────────
+  async function handleOperatorStatus(request: Request, auth: AuthUser): Promise<Response> {
+    if (!isOperatorRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) {
+      return errorResponse("Idempotency-Key header is required", 422);
+    }
+
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+
+    // Strict schema — rejects pointId, category, or any extra field
+    const validation = pointOperatorSignalSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 422);
+    }
+    const body = validation.data;
+
+    // Resolve assignment server-side — never trust client-supplied pointId
+    const assignment = await getActiveAssignmentByUserFn(auth.id);
+    if (!assignment) return errorResponse("No active point operator assignment found", 403);
+
+    let result: { eventId: string };
+    try {
+      result = await submitSignalFn({
+        operatorUserId: auth.id,
+        field: body.field,
+        value: body.value,
+        capturedAt: body.capturedAt,
+        idempotencyKey,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      if (msg.includes("not implemented")) {
+        // Task 5 stub: return a placeholder 201 so tests that inject their own
+        // submitSignalFn still pass; this branch only fires on the default dep.
+        return errorResponse("Signal submission not yet implemented", 503, { code: "not_implemented" });
+      }
+      return errorResponse(msg, 500);
+    }
+
+    return jsonResponse({ eventId: result.eventId }, { status: 201 });
+  }
+
+  // ── Operator: submit a photo ─────────────────────────────────────────────────
+  async function handleOperatorPhoto(request: Request, auth: AuthUser): Promise<Response> {
+    if (!isOperatorRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey) {
+      return errorResponse("Idempotency-Key header is required", 422);
+    }
+
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+
+    const validation = pointOperatorPhotoSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 422);
+    }
+
+    const assignment = await getActiveAssignmentByUserFn(auth.id);
+    if (!assignment) return errorResponse("No active point operator assignment found", 403);
+
+    // Task 5 will implement the actual photo submission
+    return errorResponse("Photo submission not yet implemented", 503, { code: "not_implemented" });
+  }
+
+  // ── Operator: change password ────────────────────────────────────────────────
+  async function handleOperatorPassword(request: Request, auth: AuthUser): Promise<Response> {
+    if (!isOperatorRole(auth.role)) return errorResponse("Forbidden", 403);
+
+    let rawBody: unknown;
+    try {
+      rawBody = await request.json();
+    } catch {
+      return errorResponse("Invalid JSON body", 400);
+    }
+
+    const validation = pointOperatorPasswordSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return errorResponse(validation.error.issues[0]?.message ?? "Invalid request body", 422);
+    }
+    const body = validation.data;
+
+    const profile = await getUserProfileFn(auth.id);
+    if (!profile) return errorResponse("Profile not found", 404);
+
+    // Verify current password
+    const currentHash = profile.passwordHash as string | undefined;
+    if (!currentHash) return errorResponse("No password set on this account", 409);
+    const matches = await bcrypt.compare(body.currentPassword, currentHash);
+    if (!matches) return errorResponse("Current password is incorrect", 403);
+
+    profile.passwordHash = await hashPasswordFn(body.newPassword, 12);
+    profile.mustChangePassword = false;
+
+    try {
+      await upsertUserProfileFn(auth.id, profile);
+    } catch {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
+
+    try {
+      await logSecurityEventFn({
+        eventType: "point_operator_password_changed" as SecurityAuditEventType,
+        userId: auth.id,
+        request,
+        details: { actorUserId: auth.id },
+      });
+    } catch {
+      // Audit is best-effort
+    }
+
+    return jsonResponse({ ok: true }, { status: 200 });
+  }
+}

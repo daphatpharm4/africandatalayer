@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { requireUser } from "../../lib/auth.js";
+import { createPointOperatorHandler } from "../../lib/server/pointOperatorApi.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { resolveOrProvisionProfile } from "../../lib/server/adminProfileProvisioning.js";
@@ -221,6 +222,7 @@ export function createAdminAccountCreateHandler(deps: AdminAccountCreateDeps = {
 }
 
 const handleAdminAccountCreate = createAdminAccountCreateHandler();
+const handlePointOperator = createPointOperatorHandler();
 
 export function createAdminAccountAccessHandler(deps: AdminAccountAccessDeps = {}) {
   const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
@@ -305,6 +307,11 @@ export async function GET(request: Request): Promise<Response> {
   const authIsAdmin = isAdminToken(auth.token, auth.role);
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
+
+  // Delegate all po_* views to the point-operator handler
+  if (view?.startsWith("po_")) {
+    return handlePointOperator(request);
+  }
 
   if (view === "status") {
     const requestedUserId = url.searchParams.get("userId")?.trim().toLowerCase() ?? auth.id;
@@ -542,11 +549,18 @@ export async function PUT(request: Request): Promise<Response> {
 export async function POST(request: Request): Promise<Response> {
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
-  const authIsAdmin = isAdminToken(auth.token, auth.role);
-  if (!authIsAdmin) return errorResponse("Forbidden", 403);
 
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
+
+  // Delegate all po_* views to the point-operator handler (handles its own auth)
+  if (view?.startsWith("po_")) {
+    return handlePointOperator(request);
+  }
+
+  const authIsAdmin = isAdminToken(auth.token, auth.role);
+  if (!authIsAdmin) return errorResponse("Forbidden", 403);
+
   if (view === "account_create") {
     return await handleAdminAccountCreate(request, auth.id);
   }
@@ -582,6 +596,11 @@ export async function PATCH(request: Request): Promise<Response> {
 
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
+
+  // Delegate all po_* views to the point-operator handler (handles its own auth)
+  if (view?.startsWith("po_")) {
+    return handlePointOperator(request);
+  }
 
   if (view === "status") {
     if (!authIsAdmin) return errorResponse("Forbidden", 403);

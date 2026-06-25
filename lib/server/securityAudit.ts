@@ -23,7 +23,12 @@ export type SecurityAuditEventType =
   | "suspicious_activity"
   | "policy_accepted"
   | "ip_report_filed"
-  | "ip_report_updated";
+  | "ip_report_updated"
+  | "point_operator_granted"
+  | "point_operator_revoked"
+  | "point_operator_signal_submitted"
+  | "point_operator_photo_submitted"
+  | "point_operator_password_changed";
 
 function normalizeIp(raw: string | null): string | null {
   const value = raw?.split(",")[0]?.trim();
