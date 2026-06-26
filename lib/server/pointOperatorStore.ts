@@ -146,6 +146,37 @@ export async function searchAssignableProjectedPoints(query?: string): Promise<P
   });
 }
 
+// ─── Classifier data helpers ─────────────────────────────────────────────────
+
+/**
+ * Returns recent point-operator signal events for a given point + field.
+ *
+ * Filters the full event list to events that:
+ *   - belong to the given pointId
+ *   - have source === "point_operator"
+ *   - carry operatorSignal metadata for the given field
+ *   - were created within withinMs of `now`
+ *
+ * Used to feed real data into classifyPointOperatorSignal so the pending_review
+ * pathway is live in production (not just in unit tests).
+ */
+export async function listRecentOperatorSignalEvents(
+  pointId: string,
+  field: string,
+  withinMs: number,
+  now: Date = new Date(),
+): Promise<import("../../shared/types.js").PointEvent[]> {
+  const events = await getPointEvents();
+  const cutoff = now.getTime() - withinMs;
+  return events.filter((event) => {
+    if (event.pointId !== pointId) return false;
+    if (event.source !== "point_operator") return false;
+    const signal = event.details.operatorSignal;
+    if (!signal || signal.field !== field) return false;
+    return new Date(event.createdAt).getTime() >= cutoff;
+  });
+}
+
 // ─── Write functions (transactional) ────────────────────────────────────────
 
 /**

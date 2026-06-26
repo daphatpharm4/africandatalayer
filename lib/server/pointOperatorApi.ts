@@ -40,6 +40,7 @@ import {
   getActivePointOperatorAssignmentByUser,
   findProjectedPointForAssignment,
   searchAssignableProjectedPoints,
+  listRecentOperatorSignalEvents,
 } from "./pointOperatorStore.js";
 import { createPointOperatorLifecycle, submitPointOperatorSignal, submitPointOperatorPhoto } from "./pointOperatorService.js";
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
@@ -94,6 +95,8 @@ export interface PointOperatorHandlerDeps {
   getActiveAssignmentByUserFn?: (userId: string) => Promise<PointOperatorAssignment | null>;
   getPointFn?: (pointId: string) => Promise<ProjectedPoint | null>;
   searchAssignablePointsFn?: (query?: string) => Promise<ProjectedPoint[]>;
+  /** Injectable for the classifier data loader — allows tests to inject fake recent events. */
+  listRecentSignalEventsFn?: typeof listRecentOperatorSignalEvents;
   submitSignalFn?: SubmitSignalFn;
   submitPhotoFn?: SubmitPhotoFn;
   getUserProfileFn?: typeof getUserProfile;
@@ -151,12 +154,15 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   const getActiveAssignmentByUserFn = deps.getActiveAssignmentByUserFn ?? getActivePointOperatorAssignmentByUser;
   const getPointFn = deps.getPointFn ?? findProjectedPointForAssignment;
   const searchAssignablePointsFn = deps.searchAssignablePointsFn ?? searchAssignableProjectedPoints;
+  const listRecentSignalEventsFn = deps.listRecentSignalEventsFn ?? listRecentOperatorSignalEvents;
   const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
   const upsertUserProfileFn = deps.upsertUserProfileFn ?? upsertUserProfile;
   const hashPasswordFn = deps.hashPasswordFn ?? bcrypt.hash;
   const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
 
-  // Default submitSignalFn: resolves assignment → loads projected point → calls submitPointOperatorSignal
+  // Default submitSignalFn: resolves assignment → loads projected point → feeds real
+  // classifier inputs (recentSameFieldEvents + recentVerifiedAgentValue) → calls submitPointOperatorSignal.
+  // This ensures the pending_review pathway is live in production, not just in unit tests.
   const submitSignalFn: SubmitSignalFn =
     deps.submitSignalFn ??
     (async (input: SubmitSignalFnInput): Promise<{ eventId: string }> => {
@@ -165,6 +171,20 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
       if (!assignment) throw new Error("No active point operator assignment found");
       const point = await getPointFn(assignment.pointId);
       if (!point) throw new Error("Assigned point not found");
+
+      // Load real classifier inputs: recent same-field events (60min window) and
+      // the current projected consensus value for the field (if it's a boolean).
+      const reportedAt = input.capturedAt ? new Date(input.capturedAt) : new Date();
+      const recentSameFieldEvents = await listRecentSignalEventsFn(
+        point.pointId,
+        input.field,
+        60 * 60 * 1000,
+        reportedAt,
+      );
+      const currentFieldValue = (point.details as Record<string, unknown>)[input.field];
+      const recentVerifiedAgentValue =
+        typeof currentFieldValue === "boolean" ? currentFieldValue : undefined;
+
       const event = await submitPointOperatorSignal(
         {
           operatorUserId: input.operatorUserId,
@@ -173,8 +193,10 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
           location: point.location,
           field: input.field,
           value: input.value,
-          reportedAt: input.capturedAt ? new Date(input.capturedAt) : new Date(),
+          reportedAt,
           idempotencyKey: input.idempotencyKey,
+          recentSameFieldEvents,
+          recentVerifiedAgentValue,
         },
         insertPointEvent,
       );

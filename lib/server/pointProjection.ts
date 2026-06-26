@@ -173,15 +173,9 @@ export function projectPointsFromEvents(
     existing.updatedAt = event.createdAt;
     existing.eventsCount += 1;
     existing.eventIds.push(event.id);
-    // Operator photo events (pending/approved but not rejected — rejected already skipped above)
-    // must NOT replace photoUrl if they were operator photo submissions that got rejected.
-    // Since rejected events are already skipped, any non-rejected operator photo can update photoUrl.
-    if (event.photoUrl && !isOperatorPhoto) {
-      existing.photoUrl = event.photoUrl;
-    } else if (event.photoUrl && isOperatorPhoto) {
-      // Operator photos (non-rejected) replace photoUrl
-      existing.photoUrl = event.photoUrl;
-    }
+    // Both regular and operator-photo events (non-rejected — rejected are already skipped above)
+    // may update photoUrl. Rejected events never reach this point.
+    if (event.photoUrl) existing.photoUrl = event.photoUrl;
     if (event.source) existing.source = event.source;
     if (event.externalId) existing.externalId = event.externalId;
     existing.gaps = listMissingFields(existing.category, existing.details);
