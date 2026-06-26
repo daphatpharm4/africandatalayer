@@ -7,11 +7,11 @@
  * role updates and assignment mutations are always atomic.
  */
 
-import type { PointOperatorAssignment, ProjectedPoint, UserProfile } from "../../shared/types.js";
+import type { PointEvent, PointOperatorAssignment, ProjectedPoint, UserProfile } from "../../shared/types.js";
 import { getPool, query } from "./db.js";
 import { getPointEvents } from "./storage/index.js";
 import { projectPointById, projectPointsFromEvents } from "./pointProjection.js";
-import { getUserProfile, upsertUserProfile } from "./storage/index.js";
+import { upsertUserProfile } from "./storage/index.js";
 
 // ─── Input types ────────────────────────────────────────────────────────────
 
@@ -165,7 +165,7 @@ export async function listRecentOperatorSignalEvents(
   field: string,
   withinMs: number,
   now: Date = new Date(),
-): Promise<import("../../shared/types.js").PointEvent[]> {
+): Promise<PointEvent[]> {
   const events = await getPointEvents();
   const cutoff = now.getTime() - withinMs;
   return events.filter((event) => {

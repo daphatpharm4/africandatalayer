@@ -712,9 +712,10 @@ test("po_password returns 422 when Idempotency-Key header is missing", async () 
 });
 
 // ─── Fix 1: production wiring — classifier uses real inputs ──────────────────
-// These tests exercise the DEFAULT submitSignalFn (no submitSignalFn injected).
-// They inject fakes for getActiveAssignmentByUserFn, getPointFn,
-// listRecentSignalEventsFn, and a fake persistFn via a custom insertPointEvent.
+// These tests exercise the REAL production default submitSignalFn closure.
+// No submitSignalFn is injected — the tests inject the seams the closure depends on:
+//   getActiveAssignmentByUserFn, getPointFn, listRecentSignalEventsFn, insertPointEventFn.
+// insertPointEventFn captures the persisted PointEvent so we can assert reviewStatus.
 
 /**
  * Helper: builds a fake PointEvent representing a recent operator signal for a field.
@@ -742,69 +743,26 @@ function makeFakeSignalEvent(field: string, value: boolean, minsAgo: number, bas
 }
 
 test("Fix1: production wiring classifies pending_review when 6 recent same-field events exist", async () => {
-  // Build 6 recent same-field events to trigger the velocity threshold
-  const capturedAt = new Date("2026-06-24T10:00:00.000Z");
+  // Build 6 recent same-field events relative to now so they fall within the 60-min window
+  // the classifier uses. The closure uses new Date() as reportedAt when capturedAt is absent.
+  const now = new Date();
   const recentEvents: PointEvent[] = Array.from({ length: 6 }, (_, i) =>
-    makeFakeSignalEvent("isOpenNow", true, i + 1, capturedAt),
+    makeFakeSignalEvent("isOpenNow", true, i + 1, now),
   );
 
-  let persistedEvent: PointEvent | undefined;
-
-  const handler = createPointOperatorHandler({
-    requireUserFn: async () => ({ id: "op@example.com", token: {}, role: "point_operator" }),
-    getActiveAssignmentByUserFn: async () => MOCK_ASSIGNMENT,
-    getPointFn: async () => ({
-      ...MOCK_POINT,
-      details: {},
-    }),
-    // Inject 6 recent same-field events — triggers velocity threshold
-    listRecentSignalEventsFn: async () => recentEvents,
-    submitSignalFn: undefined, // use the production default
-  });
-
-  // We need to intercept the insertPointEvent call. The default submitSignalFn
-  // dynamically imports insertPointEvent. We can't intercept it easily in pure Node
-  // without module mocking. Instead, we verify the HTTP response and use a known
-  // side-channel: inject a custom submitSignalFn that internally calls
-  // submitPointOperatorSignal with the injected recent events directly.
-  //
-  // Alternative approach: inject a submitSignalFn that calls the service layer directly
-  // with real classifier inputs to verify pending_review is returned.
-  //
-  // Since the handler's default submitSignalFn calls storage.insertPointEvent (a real
-  // import), we test the wiring via a submitSignalFn that mirrors what the default does
-  // but with a fake persist function, proving the classifier gets the right inputs.
-  const { submitPointOperatorSignal: realSubmit } = await import("../lib/server/pointOperatorService.js");
   let savedEvent: PointEvent | undefined;
 
-  const wiringHandler = createPointOperatorHandler({
+  // No submitSignalFn — exercises the real production default closure.
+  // insertPointEventFn captures the event instead of hitting the DB.
+  const handler = createPointOperatorHandler({
     requireUserFn: async () => ({ id: "op@example.com", token: {}, role: "point_operator" }),
     getActiveAssignmentByUserFn: async () => MOCK_ASSIGNMENT,
     getPointFn: async () => ({ ...MOCK_POINT, details: {} }),
     listRecentSignalEventsFn: async () => recentEvents,
-    submitSignalFn: async (input) => {
-      // Mirror production default: load the classifier inputs from the injected
-      // listRecentSignalEventsFn, then call the real service function with a fake persist
-      const event = await realSubmit(
-        {
-          operatorUserId: input.operatorUserId,
-          pointId: MOCK_POINT.pointId,
-          category: MOCK_POINT.category,
-          location: MOCK_POINT.location,
-          field: input.field,
-          value: input.value,
-          reportedAt: input.capturedAt ? new Date(input.capturedAt) : capturedAt,
-          idempotencyKey: input.idempotencyKey,
-          recentSameFieldEvents: recentEvents, // the 6 events that trigger pending_review
-          recentVerifiedAgentValue: undefined,
-        },
-        async (e) => { savedEvent = e; },
-      );
-      return { eventId: event.id };
-    },
+    insertPointEventFn: async (e) => { savedEvent = e; },
   });
 
-  const response = await wiringHandler(
+  const response = await handler(
     makeRequest("status", {
       body: { field: "isOpenNow", value: true },
       headers: { "Idempotency-Key": "wiring-pending-1" },
@@ -819,38 +777,24 @@ test("Fix1: production wiring classifies pending_review when 6 recent same-field
     "6 recent events → pending_review",
   );
   assert.equal(savedEvent!.details.operatorSignal?.reviewState, "pending_review");
+  // Server-side resolution: pointId and category must come from the fake point, not the body
+  assert.equal(savedEvent!.pointId, MOCK_POINT.pointId);
+  assert.equal(savedEvent!.category, MOCK_POINT.category);
 });
 
 test("Fix1: production wiring classifies auto_approved when history is quiet", async () => {
   let savedEvent: PointEvent | undefined;
-  const { submitPointOperatorSignal: realSubmit } = await import("../lib/server/pointOperatorService.js");
 
-  const wiringHandler = createPointOperatorHandler({
+  // No submitSignalFn — exercises the real production default closure.
+  const handler = createPointOperatorHandler({
     requireUserFn: async () => ({ id: "op@example.com", token: {}, role: "point_operator" }),
     getActiveAssignmentByUserFn: async () => MOCK_ASSIGNMENT,
     getPointFn: async () => ({ ...MOCK_POINT, details: {} }),
-    listRecentSignalEventsFn: async () => [], // no recent events
-    submitSignalFn: async (input) => {
-      const event = await realSubmit(
-        {
-          operatorUserId: input.operatorUserId,
-          pointId: MOCK_POINT.pointId,
-          category: MOCK_POINT.category,
-          location: MOCK_POINT.location,
-          field: input.field,
-          value: input.value,
-          reportedAt: input.capturedAt ? new Date(input.capturedAt) : new Date(),
-          idempotencyKey: input.idempotencyKey,
-          recentSameFieldEvents: [], // empty history
-          recentVerifiedAgentValue: undefined,
-        },
-        async (e) => { savedEvent = e; },
-      );
-      return { eventId: event.id };
-    },
+    listRecentSignalEventsFn: async () => [], // no recent events → auto_approved
+    insertPointEventFn: async (e) => { savedEvent = e; },
   });
 
-  const response = await wiringHandler(
+  const response = await handler(
     makeRequest("status", {
       body: { field: "isOpenNow", value: true },
       headers: { "Idempotency-Key": "wiring-approved-1" },
@@ -864,45 +808,27 @@ test("Fix1: production wiring classifies auto_approved when history is quiet", a
     "auto_approved",
     "empty history → auto_approved",
   );
+  assert.equal(savedEvent!.pointId, MOCK_POINT.pointId);
+  assert.equal(savedEvent!.category, MOCK_POINT.category);
 });
 
 test("Fix1: production wiring classifies pending_review when disagreeing with current boolean field value", async () => {
   let savedEvent: PointEvent | undefined;
-  const { submitPointOperatorSignal: realSubmit } = await import("../lib/server/pointOperatorService.js");
 
   // Point has isOpenNow = true (established boolean consensus value)
   const pointWithBooleanField = { ...MOCK_POINT, details: { isOpenNow: true } };
 
-  const wiringHandler = createPointOperatorHandler({
+  // No submitSignalFn — exercises the real production default closure.
+  // The closure reads point.details.isOpenNow and extracts recentVerifiedAgentValue.
+  const handler = createPointOperatorHandler({
     requireUserFn: async () => ({ id: "op@example.com", token: {}, role: "point_operator" }),
     getActiveAssignmentByUserFn: async () => MOCK_ASSIGNMENT,
     getPointFn: async () => pointWithBooleanField,
     listRecentSignalEventsFn: async () => [], // no recent velocity
-    submitSignalFn: async (input) => {
-      // The current boolean field value is true (from point.details.isOpenNow)
-      const currentFieldValue = (pointWithBooleanField.details as Record<string, unknown>)[input.field];
-      const recentVerifiedAgentValue = typeof currentFieldValue === "boolean" ? currentFieldValue : undefined;
-
-      const event = await realSubmit(
-        {
-          operatorUserId: input.operatorUserId,
-          pointId: MOCK_POINT.pointId,
-          category: MOCK_POINT.category,
-          location: MOCK_POINT.location,
-          field: input.field,
-          value: input.value,
-          reportedAt: input.capturedAt ? new Date(input.capturedAt) : new Date(),
-          idempotencyKey: input.idempotencyKey,
-          recentSameFieldEvents: [],
-          recentVerifiedAgentValue, // current value = true; submitted value = false → disagrees
-        },
-        async (e) => { savedEvent = e; },
-      );
-      return { eventId: event.id };
-    },
+    insertPointEventFn: async (e) => { savedEvent = e; },
   });
 
-  const response = await wiringHandler(
+  const response = await handler(
     makeRequest("status", {
       // Submit false while current consensus is true → disagreement → pending_review
       body: { field: "isOpenNow", value: false },
@@ -917,4 +843,6 @@ test("Fix1: production wiring classifies pending_review when disagreeing with cu
     "pending_review",
     "value disagrees with current boolean field → pending_review",
   );
+  assert.equal(savedEvent!.pointId, MOCK_POINT.pointId);
+  assert.equal(savedEvent!.category, MOCK_POINT.category);
 });

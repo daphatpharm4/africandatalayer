@@ -13,7 +13,6 @@
 import type {
   PointEvent,
   PointOperatorAssignment,
-  PointOperatorReviewState,
   ProjectedPoint,
   SubmissionCategory,
   SubmissionLocation,

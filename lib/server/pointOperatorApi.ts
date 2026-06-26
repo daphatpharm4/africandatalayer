@@ -22,7 +22,7 @@
  */
 
 import bcrypt from "bcryptjs";
-import type { PointOperatorAssignment, ProjectedPoint, UserRole } from "../../shared/types.js";
+import type { PointEvent, PointOperatorAssignment, ProjectedPoint, UserRole } from "../../shared/types.js";
 import type { SecurityAuditEventType } from "./securityAudit.js";
 import { logSecurityEvent } from "./securityAudit.js";
 import { jsonResponse, errorResponse } from "./http.js";
@@ -97,6 +97,12 @@ export interface PointOperatorHandlerDeps {
   searchAssignablePointsFn?: (query?: string) => Promise<ProjectedPoint[]>;
   /** Injectable for the classifier data loader — allows tests to inject fake recent events. */
   listRecentSignalEventsFn?: typeof listRecentOperatorSignalEvents;
+  /**
+   * Injectable persist function used by the default submitSignalFn and submitPhotoFn closures.
+   * Defaults to the real `insertPointEvent` from storage/index.js.
+   * Tests inject a fake to capture the persisted event without hitting the DB.
+   */
+  insertPointEventFn?: (event: PointEvent) => Promise<void>;
   submitSignalFn?: SubmitSignalFn;
   submitPhotoFn?: SubmitPhotoFn;
   getUserProfileFn?: typeof getUserProfile;
@@ -107,7 +113,7 @@ export interface PointOperatorHandlerDeps {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit<T, "passwordHash"> {
+function _sanitizeProfile<T extends { passwordHash?: unknown }>(profile: T): Omit<T, "passwordHash"> {
   const safe = { ...profile } as T & { passwordHash?: unknown };
   delete safe.passwordHash;
   return safe;
@@ -160,13 +166,21 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   const hashPasswordFn = deps.hashPasswordFn ?? bcrypt.hash;
   const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
 
+  // Resolved once; used by default submitSignalFn and submitPhotoFn closures.
+  // Tests inject a fake to capture persisted events without touching the DB.
+  const insertPointEventFn: (event: PointEvent) => Promise<void> =
+    deps.insertPointEventFn ??
+    (async (event) => {
+      const { insertPointEvent } = await import("./storage/index.js");
+      return insertPointEvent(event);
+    });
+
   // Default submitSignalFn: resolves assignment → loads projected point → feeds real
   // classifier inputs (recentSameFieldEvents + recentVerifiedAgentValue) → calls submitPointOperatorSignal.
   // This ensures the pending_review pathway is live in production, not just in unit tests.
   const submitSignalFn: SubmitSignalFn =
     deps.submitSignalFn ??
     (async (input: SubmitSignalFnInput): Promise<{ eventId: string }> => {
-      const { insertPointEvent } = await import("./storage/index.js");
       const assignment = await getActiveAssignmentByUserFn(input.operatorUserId);
       if (!assignment) throw new Error("No active point operator assignment found");
       const point = await getPointFn(assignment.pointId);
@@ -198,7 +212,7 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
           recentSameFieldEvents,
           recentVerifiedAgentValue,
         },
-        insertPointEvent,
+        insertPointEventFn,
       );
       return { eventId: event.id };
     });
@@ -207,7 +221,6 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   const submitPhotoFn: SubmitPhotoFn =
     deps.submitPhotoFn ??
     (async (input: SubmitPhotoFnInput): Promise<{ eventId: string }> => {
-      const { insertPointEvent } = await import("./storage/index.js");
       const { put } = await import("@vercel/blob");
       const assignment = await getActiveAssignmentByUserFn(input.operatorUserId);
       if (!assignment) throw new Error("No active point operator assignment found");
@@ -228,7 +241,7 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
           reportedAt: input.capturedAt ? new Date(input.capturedAt) : new Date(),
           idempotencyKey: input.idempotencyKey,
         },
-        insertPointEvent,
+        insertPointEventFn,
       );
       return { eventId: event.id };
     });
