@@ -29,6 +29,9 @@ export const SERVER_OWNED_SUBMISSION_DETAIL_KEYS = new Set([
   "xpAwarded",
   "xpBreakdown",
   "xpEscrow",
+  // Point operator internal metadata — must not be surfaced on public detail views
+  "operatorSignal",
+  "operatorPhotoUpdate",
 ]);
 
 export function stripServerOwnedSubmissionDetails(details: SubmissionDetails): SubmissionDetails {

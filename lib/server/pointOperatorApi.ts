@@ -41,7 +41,7 @@ import {
   findProjectedPointForAssignment,
   searchAssignableProjectedPoints,
 } from "./pointOperatorStore.js";
-import { createPointOperatorLifecycle } from "./pointOperatorService.js";
+import { createPointOperatorLifecycle, submitPointOperatorSignal, submitPointOperatorPhoto } from "./pointOperatorService.js";
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type { UserProfile, MapScope } from "../../shared/types.js";
 
@@ -76,6 +76,18 @@ export type SubmitSignalFnInput = Omit<SubmitSignalInput, "pointId">;
 
 export type SubmitSignalFn = (input: SubmitSignalFnInput) => Promise<{ eventId: string }>;
 
+// submitPhotoFn: injectable dep for photo submission (mirrors submitSignalFn pattern).
+// Tests can inject a fake; production uses the default closure wired to submitPointOperatorPhoto.
+// imageData: raw base64 or data URL from the client; the default fn uploads it to blob storage.
+export type SubmitPhotoFnInput = {
+  operatorUserId: string;
+  imageData: string;
+  capturedAt?: string;
+  idempotencyKey: string;
+};
+
+export type SubmitPhotoFn = (input: SubmitPhotoFnInput) => Promise<{ eventId: string }>;
+
 export interface PointOperatorHandlerDeps {
   requireUserFn?: (req: Request) => Promise<AuthUser | null>;
   lifecycleFn?: () => ReturnType<typeof createPointOperatorLifecycle>;
@@ -83,6 +95,7 @@ export interface PointOperatorHandlerDeps {
   getPointFn?: (pointId: string) => Promise<ProjectedPoint | null>;
   searchAssignablePointsFn?: (query?: string) => Promise<ProjectedPoint[]>;
   submitSignalFn?: SubmitSignalFn;
+  submitPhotoFn?: SubmitPhotoFn;
   getUserProfileFn?: typeof getUserProfile;
   upsertUserProfileFn?: typeof upsertUserProfile;
   hashPasswordFn?: (password: string, rounds: number) => Promise<string>;
@@ -143,10 +156,59 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
   const hashPasswordFn = deps.hashPasswordFn ?? bcrypt.hash;
   const logSecurityEventFn = deps.logSecurityEventFn ?? logSecurityEvent;
 
+  // Default submitSignalFn: resolves assignment → loads projected point → calls submitPointOperatorSignal
   const submitSignalFn: SubmitSignalFn =
     deps.submitSignalFn ??
-    (async () => {
-      throw new Error("submitSignalFn not implemented (Task 5)");
+    (async (input: SubmitSignalFnInput): Promise<{ eventId: string }> => {
+      const { insertPointEvent } = await import("./storage/index.js");
+      const assignment = await getActiveAssignmentByUserFn(input.operatorUserId);
+      if (!assignment) throw new Error("No active point operator assignment found");
+      const point = await getPointFn(assignment.pointId);
+      if (!point) throw new Error("Assigned point not found");
+      const event = await submitPointOperatorSignal(
+        {
+          operatorUserId: input.operatorUserId,
+          pointId: point.pointId,
+          category: point.category,
+          location: point.location,
+          field: input.field,
+          value: input.value,
+          reportedAt: input.capturedAt ? new Date(input.capturedAt) : new Date(),
+          idempotencyKey: input.idempotencyKey,
+        },
+        insertPointEvent,
+      );
+      return { eventId: event.id };
+    });
+
+  // Default submitPhotoFn: resolves assignment → uploads image to blob → calls submitPointOperatorPhoto
+  const submitPhotoFn: SubmitPhotoFn =
+    deps.submitPhotoFn ??
+    (async (input: SubmitPhotoFnInput): Promise<{ eventId: string }> => {
+      const { insertPointEvent } = await import("./storage/index.js");
+      const { put } = await import("@vercel/blob");
+      const assignment = await getActiveAssignmentByUserFn(input.operatorUserId);
+      if (!assignment) throw new Error("No active point operator assignment found");
+      const point = await getPointFn(assignment.pointId);
+      if (!point) throw new Error("Assigned point not found");
+      // Decode base64/data-URL image and upload to blob storage
+      const base64Data = input.imageData.replace(/^data:[^;]+;base64,/, "");
+      const buffer = Buffer.from(base64Data, "base64");
+      const blobKey = `point-operator-photos/${input.idempotencyKey}.jpg`;
+      const blob = await put(blobKey, buffer, { access: "public", contentType: "image/jpeg" });
+      const event = await submitPointOperatorPhoto(
+        {
+          operatorUserId: input.operatorUserId,
+          pointId: point.pointId,
+          category: point.category,
+          location: point.location,
+          photoUrl: blob.url,
+          reportedAt: input.capturedAt ? new Date(input.capturedAt) : new Date(),
+          idempotencyKey: input.idempotencyKey,
+        },
+        insertPointEvent,
+      );
+      return { eventId: event.id };
     });
 
   // ── Main dispatcher ──────────────────────────────────────────────────────────
@@ -406,11 +468,6 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
-      if (msg.includes("not implemented")) {
-        // Task 5 stub: return a placeholder 201 so tests that inject their own
-        // submitSignalFn still pass; this branch only fires on the default dep.
-        return errorResponse("Signal submission not yet implemented", 503, { code: "not_implemented" });
-      }
       return errorResponse(msg, 500);
     }
 
@@ -441,8 +498,21 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
     const assignment = await getActiveAssignmentByUserFn(auth.id);
     if (!assignment) return errorResponse("No active point operator assignment found", 403);
 
-    // Task 5 will implement the actual photo submission
-    return errorResponse("Photo submission not yet implemented", 503, { code: "not_implemented" });
+    const body = validation.data;
+    let result: { eventId: string };
+    try {
+      result = await submitPhotoFn({
+        operatorUserId: auth.id,
+        imageData: body.imageData,
+        capturedAt: body.capturedAt,
+        idempotencyKey,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      return errorResponse(msg, 500);
+    }
+
+    return jsonResponse({ eventId: result.eventId }, { status: 201 });
   }
 
   // ── Operator: change password ────────────────────────────────────────────────

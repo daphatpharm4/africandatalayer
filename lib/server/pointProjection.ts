@@ -107,31 +107,63 @@ export function eventToProjectedPoint(event: PointEvent): ProjectedPoint {
   };
 }
 
-export function projectPointsFromEvents(events: PointEvent[]): ProjectedPoint[] {
+/**
+ * Returns true if the event's reviewStatus is "rejected".
+ * Used to skip rejected events during projection.
+ */
+function isRejectedReviewEvent(details: SubmissionDetails): boolean {
+  const status = details.reviewStatus;
+  return typeof status === "string" && status.trim().toLowerCase() === "rejected";
+}
+
+export function projectPointsFromEvents(
+  events: PointEvent[],
+  options: { now?: Date } = {},
+): ProjectedPoint[] {
+  const now = options.now ?? new Date();
   const groups = new Map<string, ProjectedPoint>();
   const sorted = [...events].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   for (const event of sorted) {
+    // Skip rejected review events entirely
+    if (isRejectedReviewEvent(event.details)) continue;
+
+    const isOperatorPhoto = event.source === "point_operator" && event.details.operatorPhotoUpdate === true;
     const normalizedDetails = normalizeDetailsForCategory(event.category, event.details ?? {});
     const existing = groups.get(event.pointId);
     if (!existing) {
-      groups.set(
-        event.pointId,
-        {
-          id: event.pointId,
-          pointId: event.pointId,
-          category: event.category,
-          location: event.location,
-          details: normalizedDetails,
-          photoUrl: event.photoUrl,
-          createdAt: event.createdAt,
-          updatedAt: event.createdAt,
-          source: event.source,
-          externalId: event.externalId,
-          gaps: listMissingFields(event.category, normalizedDetails),
-          eventsCount: 1,
-          eventIds: [event.id],
-        },
-      );
+      const projected: ProjectedPoint = {
+        id: event.pointId,
+        pointId: event.pointId,
+        category: event.category,
+        location: event.location,
+        details: normalizedDetails,
+        photoUrl: isOperatorPhoto ? undefined : event.photoUrl,
+        createdAt: event.createdAt,
+        updatedAt: event.createdAt,
+        source: event.source,
+        externalId: event.externalId,
+        gaps: listMissingFields(event.category, normalizedDetails),
+        eventsCount: 1,
+        eventIds: [event.id],
+      };
+      // Apply operator signal metadata if present
+      const signalMetadata = event.details.operatorSignal;
+      if (signalMetadata && event.source === "point_operator") {
+        const isExpired = new Date(signalMetadata.expiresAt).getTime() <= now.getTime();
+        projected.operatorSignals ??= {};
+        projected.operatorSignals[signalMetadata.field] = {
+          field: signalMetadata.field,
+          value: isExpired ? null : Boolean(event.details[signalMetadata.field]),
+          reportedBy: "point_operator",
+          reportedAt: signalMetadata.reportedAt,
+          expiresAt: signalMetadata.expiresAt,
+          isExpired,
+          eventId: event.id,
+          reviewState: signalMetadata.reviewState,
+        };
+        if (isExpired) delete projected.details[signalMetadata.field];
+      }
+      groups.set(event.pointId, projected);
       continue;
     }
 
@@ -141,10 +173,36 @@ export function projectPointsFromEvents(events: PointEvent[]): ProjectedPoint[] 
     existing.updatedAt = event.createdAt;
     existing.eventsCount += 1;
     existing.eventIds.push(event.id);
-    if (event.photoUrl) existing.photoUrl = event.photoUrl;
+    // Operator photo events (pending/approved but not rejected — rejected already skipped above)
+    // must NOT replace photoUrl if they were operator photo submissions that got rejected.
+    // Since rejected events are already skipped, any non-rejected operator photo can update photoUrl.
+    if (event.photoUrl && !isOperatorPhoto) {
+      existing.photoUrl = event.photoUrl;
+    } else if (event.photoUrl && isOperatorPhoto) {
+      // Operator photos (non-rejected) replace photoUrl
+      existing.photoUrl = event.photoUrl;
+    }
     if (event.source) existing.source = event.source;
     if (event.externalId) existing.externalId = event.externalId;
     existing.gaps = listMissingFields(existing.category, existing.details);
+
+    // Apply operator signal metadata if present
+    const signalMetadata = event.details.operatorSignal;
+    if (signalMetadata && event.source === "point_operator") {
+      const isExpired = new Date(signalMetadata.expiresAt).getTime() <= now.getTime();
+      existing.operatorSignals ??= {};
+      existing.operatorSignals[signalMetadata.field] = {
+        field: signalMetadata.field,
+        value: isExpired ? null : Boolean(event.details[signalMetadata.field]),
+        reportedBy: "point_operator",
+        reportedAt: signalMetadata.reportedAt,
+        expiresAt: signalMetadata.expiresAt,
+        isExpired,
+        eventId: event.id,
+        reviewState: signalMetadata.reviewState,
+      };
+      if (isExpired) delete existing.details[signalMetadata.field];
+    }
   }
 
   return Array.from(groups.values()).sort(

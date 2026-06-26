@@ -740,7 +740,9 @@ export async function runWeeklySnapshot(dateOverride?: string): Promise<Snapshot
     getLegacySubmissions(),
   ]);
   const allEvents = mergePointEventsWithLegacy(pointEvents, legacySubs);
-  const projectedPoints = projectPointsFromEvents(allEvents);
+  // Pass the snapshot run time so operator signal expiry is evaluated at snapshot time
+  const snapshotRunTime = new Date(`${snapshotDate}T23:59:59.999Z`);
+  const projectedPoints = projectPointsFromEvents(allEvents, { now: snapshotRunTime });
 
   // Step 2: build snapshot rows with freshly computed confidence.
   const snapshotRows = buildSnapshotRows(snapshotDate, projectedPoints);

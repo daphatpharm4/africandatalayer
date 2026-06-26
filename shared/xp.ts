@@ -33,7 +33,10 @@ export function isRejectedSubmission(input: Pick<PointEvent, "details"> | Submis
   return normalizeReviewDecision(details) === "rejected" || hasRejectedFlag(details);
 }
 
-export function getEffectiveEventXp(input: Pick<PointEvent, "details"> | SubmissionDetails | null | undefined): number {
+export function getEffectiveEventXp(input: Pick<PointEvent, "details" | "source"> | SubmissionDetails | null | undefined): number {
+  // Point operator signals always award 0 XP regardless of other fields
+  if (input && "source" in input && input.source === "point_operator") return 0;
+
   const details = getDetails(input);
   if (isRejectedSubmission(details)) return 0;
 
