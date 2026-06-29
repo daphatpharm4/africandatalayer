@@ -1,6 +1,19 @@
 import { getApiBase, isNative, getPlatform } from './native';
 
 const API_BASE = getApiBase();
+const PERMANENT_STATUS_CODES = new Set([401, 403, 409, 422]);
+
+export class ApiError extends Error {
+  status: number;
+  retryable: boolean;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryable = !PERMANENT_STATUS_CODES.has(status);
+  }
+}
 
 export function buildUrl(path: string) {
   if (!API_BASE) return path;
@@ -50,7 +63,7 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
     if (path.startsWith('/api/auth')) {
       console.error('[API] apiJson non-OK:', path, response.status, bodyText.slice(0, 200));
     }
-    throw new Error(bodyText || "Request failed");
+    throw new ApiError(bodyText || response.statusText || "Request failed", response.status);
   }
 
   try {

@@ -20,3 +20,29 @@ test("apiJson reports HTML fallback clearly for auth endpoints", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("apiJson preserves status and retryable metadata for permanent HTTP errors", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () =>
+    new Response("Forbidden", {
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "Content-Type": "text/plain" },
+    });
+
+  try {
+    await assert.rejects(
+      () => apiJson("/api/user?view=po_status"),
+      (error) => {
+        const typed = error as Error & { status?: number; retryable?: boolean };
+        assert.equal(typed.message, "Forbidden");
+        assert.equal(typed.status, 403);
+        assert.equal(typed.retryable, false);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

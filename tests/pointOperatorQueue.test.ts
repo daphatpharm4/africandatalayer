@@ -272,6 +272,99 @@ test("point operator API 403 error is permanent and removes queued item", async 
   }
 });
 
+test("submitPointOperatorSignal returns mutation response with point from po_me", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; method: string; idempotencyKey: string | null }> = [];
+  const point = {
+    id: "point-1",
+    pointId: "point-1",
+    category: "pharmacy",
+    location: { latitude: 4.05, longitude: 9.76 },
+    details: {},
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    gaps: [],
+    eventsCount: 1,
+    eventIds: ["event-1"],
+  };
+  const signal = {
+    field: "isOpenNow",
+    value: true,
+    reportedBy: "point_operator",
+    reportedAt: "2026-06-24T08:00:00.000Z",
+    expiresAt: "2026-06-24T12:00:00.000Z",
+    isExpired: false,
+    eventId: "event-1",
+    reviewState: "pending",
+  };
+  const responses = [
+    new Response(JSON.stringify({ eventId: "event-1" }), {
+      status: 201,
+      headers: { "Content-Type": "application/json" },
+    }),
+    new Response(
+      JSON.stringify({
+        assignment: {
+          id: "assign-1",
+          operatorUserId: "op@example.com",
+          pointId: "point-1",
+          status: "active",
+          grantedBy: "admin@example.com",
+          grantedAt: "2026-01-01T00:00:00.000Z",
+        },
+        point,
+        controls: [],
+        signals: { isOpenNow: signal },
+      }),
+      {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      },
+    ),
+  ];
+
+  globalThis.fetch = async (input, init) => {
+    const headers = new Headers(init?.headers);
+    calls.push({
+      url: String(input),
+      method: init?.method ?? "GET",
+      idempotencyKey: headers.get("Idempotency-Key"),
+    });
+    const response = responses.shift();
+    assert.ok(response, "unexpected extra fetch call");
+    return response;
+  };
+
+  try {
+    const result = await submitPointOperatorSignal(
+      {
+        field: "isOpenNow",
+        value: true,
+        capturedAt: "2026-06-24T08:00:00.000Z",
+      },
+      { idempotencyKey: "idem-signal" },
+    );
+
+    assert.equal(result.eventId, "event-1");
+    assert.deepEqual(result.point, point);
+    assert.deepEqual(result.signal, signal);
+    assert.deepEqual(calls, [
+      {
+        url: "/api/user?view=po_status",
+        method: "POST",
+        idempotencyKey: "idem-signal",
+      },
+      {
+        url: "/api/user?view=po_me",
+        method: "GET",
+        idempotencyKey: null,
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("duplicate replay does not duplicate after first flush succeeds", async () => {
   await enqueuePointOperatorMutation({
     kind: "photo",
