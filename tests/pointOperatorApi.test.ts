@@ -42,6 +42,18 @@ const MOCK_POINT: ProjectedPoint = {
   category: "pharmacy",
   location: { latitude: 4.0511, longitude: 9.7679 },
   details: {},
+  operatorSignals: {
+    isOpenNow: {
+      field: "isOpenNow",
+      value: true,
+      reportedBy: "point_operator",
+      reportedAt: "2026-01-01T01:00:00.000Z",
+      expiresAt: "2026-01-01T07:00:00.000Z",
+      isExpired: false,
+      eventId: "event-signal-1",
+      reviewState: "auto_approved",
+    },
+  },
   createdAt: "2026-01-01T00:00:00.000Z",
   updatedAt: "2026-01-01T00:00:00.000Z",
   gaps: [],
@@ -213,9 +225,20 @@ test("po_me returns assignment and point for active operator", async () => {
   });
   const response = await handler(makeRequest("me", { method: "GET" }));
   assert.equal(response.status, 200);
-  const body = (await response.json()) as { assignment: PointOperatorAssignment; point: ProjectedPoint };
+  const body = (await response.json()) as {
+    assignment: PointOperatorAssignment;
+    point: ProjectedPoint;
+    controls: Array<{ field: string }>;
+    signals: NonNullable<ProjectedPoint["operatorSignals"]>;
+  };
   assert.equal(body.assignment.id, "assign-1");
   assert.equal(body.point.id, "point-1");
+  assert.deepEqual(body.controls.map((control) => control.field), [
+    "isOpenNow",
+    "isOnDuty",
+    "hasEssentialMedicinesAvailable",
+  ]);
+  assert.equal(body.signals.isOpenNow?.value, true);
 });
 
 test("po_me returns 403 when operator has no active assignment", async () => {

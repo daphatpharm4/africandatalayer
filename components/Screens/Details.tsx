@@ -63,6 +63,21 @@ const DETAIL_TONE_BY_VERTICAL: Record<string, { chip: string; photo: string }> =
   },
 };
 
+function formatRelativeTime(iso: string | undefined, language: 'en' | 'fr'): string {
+  const fallback = language === 'fr' ? 'Inconnu' : 'Unknown';
+  if (!iso) return fallback;
+  const timestamp = new Date(iso).getTime();
+  if (Number.isNaN(timestamp)) return fallback;
+
+  const formatter = new Intl.RelativeTimeFormat(language === 'fr' ? 'fr' : 'en', { numeric: 'auto' });
+  const diffMs = timestamp - Date.now();
+  const abs = Math.abs(diffMs);
+  if (abs < 60_000) return language === 'fr' ? 'à l’instant' : 'just now';
+  if (abs < 3_600_000) return formatter.format(Math.round(diffMs / 60_000), 'minute');
+  if (abs < 86_400_000) return formatter.format(Math.round(diffMs / 3_600_000), 'hour');
+  return formatter.format(Math.round(diffMs / 86_400_000), 'day');
+}
+
 const Details: React.FC<Props> = ({
   point,
   onBack,
@@ -105,8 +120,13 @@ const Details: React.FC<Props> = ({
       : point.availability === 'Low'
         ? 'bg-gold-wash text-amber-900'
         : 'bg-red-50 text-danger';
+  const operatorSignals = Object.values(point.operatorSignals ?? {}).sort((a, b) => a.field.localeCompare(b.field));
 
   const resolveFieldValue = (fieldKey: string): unknown => {
+    const operatorSignal = point.operatorSignals?.[fieldKey];
+    if (operatorSignal && !operatorSignal.isExpired && operatorSignal.value !== null) {
+      return operatorSignal.value;
+    }
     const typed = point[fieldKey as keyof DataPoint];
     if (typed !== undefined && typed !== null) return typed;
     return (point.details as Record<string, unknown> | undefined)?.[fieldKey];
@@ -335,6 +355,51 @@ const Details: React.FC<Props> = ({
             </p>
           )}
         </section>
+
+        {operatorSignals.length > 0 && (
+          <section className="card-soft p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <ShieldCheck size={16} className="text-forest" aria-hidden="true" />
+              <h3 className="text-sm font-bold text-ink-dark">
+                {t('Point operator provenance', 'Provenance opérateur du point')}
+              </h3>
+            </div>
+            <div className="space-y-3">
+              {operatorSignals.map((signal) => {
+                const isUnknown = signal.isExpired || signal.value === null;
+                const valueLabel = isUnknown
+                  ? t('Unknown', 'Inconnu')
+                  : signal.value
+                    ? t('Yes', 'Oui')
+                    : t('No', 'Non');
+                const freshness = isUnknown
+                  ? t('Unknown', 'Inconnu')
+                  : formatRelativeTime(signal.reportedAt, language);
+                return (
+                  <div key={signal.field} className="rounded-2xl border border-forest/10 bg-forest-wash/60 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-ink-dark">
+                          {getEnrichFieldLabel(signal.field, language)}
+                        </div>
+                        <p className="mt-1 text-[11px] leading-5 text-gray-600">
+                          {t('Reported by point operator', 'Signalé par l’opérateur du point')}
+                          {' · '}
+                          {freshness}
+                        </p>
+                      </div>
+                      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                        isUnknown ? 'bg-white text-gray-500' : signal.value ? 'bg-forest text-white' : 'bg-terra text-white'
+                      }`}>
+                        {valueLabel}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         <section className="rounded-[28px] border border-terra/10 bg-terra-wash px-5 py-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">

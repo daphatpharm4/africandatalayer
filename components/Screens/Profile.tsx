@@ -5,14 +5,17 @@ import {
   BookOpen,
   Calendar,
   Gift,
+  Search,
   Settings as SettingsIcon,
+  ShieldCheck,
   Trash2,
+  UserPlus,
   Wallet
 } from 'lucide-react';
 import { apiJson } from '../../lib/client/api';
 import { broadcastAdminMapScope, readStoredAdminMapScope } from '../../lib/client/adminMapScope';
 import { clearSyncErrorRecords, listQueueItems, listSyncErrorRecords, subscribeQueueSnapshot, type QueueItem, type SyncErrorRecord } from '../../lib/client/offlineQueue';
-import type { CollectionAssignment, MapScope, PointEvent, UserProfile, UserRole } from '../../shared/types';
+import type { CollectionAssignment, MapScope, PointEvent, PointOperatorAssignment, ProjectedPoint, UserProfile, UserRole } from '../../shared/types';
 import { categoryLabel as getCategoryLabelFromRegistry } from '../../shared/verticals';
 import { getEffectiveEventXp } from '../../shared/xp';
 import {
@@ -37,6 +40,454 @@ interface Props {
   onSubmissionQueue: () => void;
   language: 'en' | 'fr';
 }
+
+type AdminPointOperatorAssignmentResponse = {
+  assignment: PointOperatorAssignment | null;
+  events?: Array<{ id: string; label: string; at: string; detail?: string }>;
+};
+
+function idempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  return `po-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function pointDisplayName(point: ProjectedPoint): string {
+  const details = (point.details ?? {}) as Record<string, unknown>;
+  return (
+    (typeof details.name === 'string' && details.name.trim()) ||
+    (typeof details.siteName === 'string' && details.siteName.trim()) ||
+    point.pointId
+  );
+}
+
+function formatDateTime(value: string | null | undefined, language: 'en' | 'fr'): string {
+  if (!value) return language === 'fr' ? 'Inconnu' : 'Unknown';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return language === 'fr' ? 'Inconnu' : 'Unknown';
+  return new Intl.DateTimeFormat(language === 'fr' ? 'fr-FR' : 'en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
+const PointOperatorAccessCard: React.FC<{ language: 'en' | 'fr' }> = ({ language }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [identifier, setIdentifier] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [temporaryPassword, setTemporaryPassword] = useState('');
+  const [pointQuery, setPointQuery] = useState('');
+  const [pointResults, setPointResults] = useState<ProjectedPoint[]>([]);
+  const [selectedPoint, setSelectedPoint] = useState<ProjectedPoint | null>(null);
+  const [assignment, setAssignment] = useState<PointOperatorAssignment | null>(null);
+  const [recentEvents, setRecentEvents] = useState<Array<{ id: string; label: string; at: string; detail?: string }>>([]);
+  const [revokeReason, setRevokeReason] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [isSearching, setIsSearching] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isLoadingAssignment, setIsLoadingAssignment] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
+
+  const normalizedIdentifier = identifier.trim().toLowerCase();
+  const isActiveAssignment = assignment?.status === 'active';
+  const canCreateAndLink =
+    normalizedIdentifier.length > 0 &&
+    displayName.trim().length > 0 &&
+    temporaryPassword.trim().length >= 10 &&
+    Boolean(selectedPoint) &&
+    !isCreating;
+  const canLoadAssignment = normalizedIdentifier.length > 0 && !isLoadingAssignment;
+  const canRevoke = Boolean(assignment?.operatorUserId) && isActiveAssignment && revokeReason.trim().length >= 3 && !isRevoking;
+
+  useEffect(() => {
+    if (!isExpanded) return undefined;
+    const query = pointQuery.trim();
+    if (query.length < 2) {
+      setPointResults([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        setIsSearching(true);
+        const params = new URLSearchParams({ view: 'po_admin_search_points', q: query });
+        const response = await apiJson<{ points: ProjectedPoint[] }>(`/api/user?${params.toString()}`);
+        if (!cancelled) setPointResults(Array.isArray(response.points) ? response.points : []);
+      } catch {
+        if (!cancelled) setPointResults([]);
+      } finally {
+        if (!cancelled) setIsSearching(false);
+      }
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [isExpanded, pointQuery]);
+
+  const assignmentEvents = useMemo(() => {
+    if (recentEvents.length > 0) return recentEvents;
+    if (!assignment) return [];
+    const events = [
+      {
+        id: `${assignment.id}-grant`,
+        label: t('Operator granted', 'Opérateur autorisé'),
+        at: assignment.grantedAt,
+        detail: assignment.pointId,
+      },
+    ];
+    if (assignment.revokedAt) {
+      events.unshift({
+        id: `${assignment.id}-revoke`,
+        label: t('Operator revoked', 'Opérateur révoqué'),
+        at: assignment.revokedAt,
+        detail: assignment.revokeReason ?? undefined,
+      });
+    }
+    return events;
+  }, [assignment, recentEvents, t]);
+
+  const lastUpdate = assignment?.revokedAt ?? assignment?.grantedAt;
+
+  const handleCreateAndLink = async () => {
+    if (!canCreateAndLink || !selectedPoint) {
+      setErrorMessage(t('Enter operator details and select a verified point.', 'Saisissez les détails opérateur et sélectionnez un point vérifié.'));
+      return;
+    }
+
+    setErrorMessage('');
+    setStatusMessage('');
+    try {
+      setIsCreating(true);
+      const response = await apiJson<AdminPointOperatorAssignmentResponse>('/api/user?view=po_admin_create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey(),
+        },
+        body: JSON.stringify({
+          identifier: normalizedIdentifier,
+          name: displayName.trim(),
+          password: temporaryPassword,
+          pointId: selectedPoint.pointId,
+        }),
+      });
+      setAssignment(response.assignment);
+      setRecentEvents(response.events ?? []);
+      setRevokeReason('');
+      setStatusMessage(t('Operator linked.', 'Opérateur lié.'));
+    } catch (error) {
+      setErrorMessage(error instanceof Error && error.message.trim()
+        ? error.message
+        : t('Unable to create and link operator.', 'Impossible de créer et lier l’opérateur.'));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleLoadAssignment = async () => {
+    if (!canLoadAssignment) return;
+    setErrorMessage('');
+    setStatusMessage('');
+    try {
+      setIsLoadingAssignment(true);
+      const params = new URLSearchParams({ view: 'po_admin_assignment', operatorUserId: normalizedIdentifier });
+      const response = await apiJson<AdminPointOperatorAssignmentResponse>(`/api/user?${params.toString()}`);
+      setAssignment(response.assignment);
+      setRecentEvents(response.events ?? []);
+      setStatusMessage(response.assignment
+        ? t('Active assignment loaded.', 'Affectation active chargée.')
+        : t('No active assignment for this operator.', 'Aucune affectation active pour cet opérateur.'));
+    } catch (error) {
+      setAssignment(null);
+      setRecentEvents([]);
+      setErrorMessage(error instanceof Error && error.message.trim()
+        ? error.message
+        : t('Unable to load assignment.', 'Impossible de charger l’affectation.'));
+    } finally {
+      setIsLoadingAssignment(false);
+    }
+  };
+
+  const handleRevoke = async () => {
+    if (!canRevoke || !assignment) return;
+    setErrorMessage('');
+    setStatusMessage('');
+    try {
+      setIsRevoking(true);
+      const response = await apiJson<AdminPointOperatorAssignmentResponse>('/api/user?view=po_admin_revoke', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey(),
+        },
+        body: JSON.stringify({
+          operatorUserId: assignment.operatorUserId,
+          reason: revokeReason.trim(),
+        }),
+      });
+      setAssignment(response.assignment);
+      setRecentEvents(response.events ?? []);
+      setStatusMessage(t('Operator access revoked. You can assign a replacement now.', 'Accès opérateur révoqué. Vous pouvez affecter un remplaçant.'));
+    } catch (error) {
+      setErrorMessage(error instanceof Error && error.message.trim()
+        ? error.message
+        : t('Unable to revoke operator access.', 'Impossible de révoquer l’accès opérateur.'));
+    } finally {
+      setIsRevoking(false);
+    }
+  };
+
+  return (
+    <section data-testid="profile-point-operator-access" className="card p-4 space-y-4">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((value) => !value)}
+        aria-expanded={isExpanded}
+        className="flex min-h-[48px] w-full items-center justify-between gap-3 text-left"
+      >
+        <span>
+          <span className="micro-label text-gray-400">
+            {t('Point operator access', 'Accès opérateur du point')}
+          </span>
+          <span className="mt-1 block text-sm font-bold text-gray-900">
+            {t('Create and link a point operator', 'Créer et lier un opérateur du point')}
+          </span>
+        </span>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-forest-wash text-forest">
+          <UserPlus size={18} aria-hidden="true" />
+        </span>
+      </button>
+
+      {isExpanded && (
+        <div className="space-y-4">
+          <p className="text-xs leading-5 text-gray-500">
+            {t(
+              'Point operators are tied to one verified point. Create them here, load the current assignment, and revoke access with a reason when staff changes.',
+              'Les opérateurs du point sont liés à un point vérifié. Créez-les ici, chargez l’affectation active et révoquez l’accès avec un motif lors d’un changement d’équipe.',
+            )}
+          </p>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Email or phone', 'Email ou téléphone')}
+              </span>
+              <input
+                type="text"
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+                placeholder={t('operator@example.com', 'operateur@exemple.com')}
+              />
+            </label>
+            <label className="block space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Display name', 'Nom affiché')}
+              </span>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+                placeholder={t('Market Operator', 'Opérateur du marché')}
+              />
+            </label>
+          </div>
+
+          <label className="block space-y-2">
+            <span className="micro-label text-gray-400">
+              {t('Temporary password', 'Mot de passe temporaire')}
+            </span>
+            <input
+              type="password"
+              value={temporaryPassword}
+              onChange={(event) => setTemporaryPassword(event.target.value)}
+              className="h-11 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+              placeholder={t('Minimum 10 characters', 'Minimum 10 caractères')}
+            />
+          </label>
+
+          <div className="space-y-2">
+            <label className="block space-y-2">
+              <span className="micro-label text-gray-400">
+                {t('Search verified point', 'Rechercher un point vérifié')}
+              </span>
+              <div className="relative">
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true" />
+                <input
+                  type="text"
+                  value={pointQuery}
+                  onChange={(event) => {
+                    setPointQuery(event.target.value);
+                    setSelectedPoint(null);
+                  }}
+                  className="h-11 w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm text-gray-900 outline-none transition-colors focus:border-navy"
+                  placeholder={t('Pharmacie du Marché', 'Pharmacie du Marché')}
+                  role="combobox"
+                  aria-expanded={pointResults.length > 0}
+                  aria-controls="point-operator-point-results"
+                />
+              </div>
+            </label>
+            {isSearching && (
+              <div className="text-xs text-gray-400">{t('Searching...', 'Recherche...')}</div>
+            )}
+            {pointResults.length > 0 && (
+              <div id="point-operator-point-results" role="listbox" className="space-y-2 rounded-2xl border border-gray-100 bg-white p-2">
+                {pointResults.map((point) => (
+                  <button
+                    key={point.pointId}
+                    type="button"
+                    role="option"
+                    aria-selected={selectedPoint?.pointId === point.pointId}
+                    onClick={() => {
+                      setSelectedPoint(point);
+                      setPointQuery(pointDisplayName(point));
+                      setPointResults([]);
+                    }}
+                    className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm font-semibold text-gray-900 hover:bg-forest-wash"
+                  >
+                    <span className="min-w-0 truncate">{pointDisplayName(point)}</span>
+                    <span className="shrink-0 text-[11px] font-bold uppercase text-forest">
+                      {t('Verified', 'Vérifié')}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedPoint && (
+              <div className="rounded-xl border border-forest/20 bg-forest-wash p-3 text-xs font-semibold text-forest-dark">
+                {t('Selected point', 'Point sélectionné')}: {pointDisplayName(selectedPoint)}
+              </div>
+            )}
+          </div>
+
+          {statusMessage && (
+            <div className="rounded-xl border border-forest/20 bg-forest-wash p-3 text-[11px] font-semibold text-forest-dark">
+              {statusMessage}
+            </div>
+          )}
+          {errorMessage && (
+            <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-[11px] font-semibold text-red-600">
+              {errorMessage}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={handleCreateAndLink}
+              disabled={!canCreateAndLink}
+              className={`min-h-[44px] rounded-xl px-4 text-sm font-semibold ${
+                canCreateAndLink ? 'bg-navy text-white' : 'bg-gray-100 text-gray-400'
+              }`}
+            >
+              {isCreating ? t('Creating...', 'Création...') : t('Create and link', 'Créer et lier')}
+            </button>
+            <button
+              type="button"
+              onClick={handleLoadAssignment}
+              disabled={!canLoadAssignment}
+              className={`min-h-[44px] rounded-xl border px-4 text-sm font-semibold ${
+                canLoadAssignment ? 'border-navy text-navy' : 'border-gray-100 text-gray-400'
+              }`}
+            >
+              {isLoadingAssignment ? t('Loading...', 'Chargement...') : t('Load active assignment', 'Charger l’affectation active')}
+            </button>
+          </div>
+
+          {assignment && (
+            <div className="space-y-3 rounded-2xl border border-navy-border bg-page p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck size={16} className={isActiveAssignment ? 'text-forest' : 'text-gray-400'} aria-hidden="true" />
+                    <h4 className="text-sm font-bold text-gray-900">
+                      {t('Active operator', 'Opérateur actif')}: {assignment.operatorUserId}
+                    </h4>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    {t('Point', 'Point')}: {selectedPoint ? pointDisplayName(selectedPoint) : assignment.pointId}
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${
+                  isActiveAssignment ? 'bg-forest-wash text-forest' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {isActiveAssignment ? t('Active', 'Actif') : t('Revoked', 'Révoqué')}
+                </span>
+              </div>
+
+              <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                <div className="rounded-xl bg-white p-3">
+                  <dt className="font-bold uppercase text-gray-400">{t('Grant date', 'Date d’octroi')}</dt>
+                  <dd className="mt-1 font-semibold text-gray-900">{formatDateTime(assignment.grantedAt, language)}</dd>
+                </div>
+                <div className="rounded-xl bg-white p-3">
+                  <dt className="font-bold uppercase text-gray-400">{t('Last update', 'Dernière mise à jour')}</dt>
+                  <dd className="mt-1 font-semibold text-gray-900">{formatDateTime(lastUpdate, language)}</dd>
+                </div>
+              </dl>
+
+              {isActiveAssignment && (
+                <div className="space-y-2">
+                  <label className="block space-y-2">
+                    <span className="micro-label text-gray-400">
+                      {t('Revocation reason', 'Motif de révocation')}
+                    </span>
+                    <textarea
+                      value={revokeReason}
+                      onChange={(event) => setRevokeReason(event.target.value)}
+                      rows={2}
+                      className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none transition-colors focus:border-terra"
+                      placeholder={t('Staff changed, access no longer valid', 'Changement d’équipe, accès non valide')}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleRevoke}
+                    disabled={!canRevoke}
+                    className={`min-h-[44px] rounded-xl px-4 text-sm font-semibold ${
+                      canRevoke ? 'bg-terra text-white' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {isRevoking ? t('Revoking...', 'Révocation...') : t('Revoke operator', 'Révoquer l’opérateur')}
+                  </button>
+                </div>
+              )}
+
+              <div className="space-y-2 rounded-xl border border-gray-100 bg-white p-3">
+                <div className="micro-label text-gray-400">
+                  {t('Recent events', 'Événements récents')}
+                </div>
+                {assignmentEvents.length === 0 ? (
+                  <div className="text-xs text-gray-400">
+                    {t('No events yet.', 'Aucun événement pour le moment.')}
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {assignmentEvents.slice(0, 5).map((event) => (
+                      <li key={event.id} className="text-xs">
+                        <div className="font-semibold text-gray-900">{event.label}</div>
+                        <div className="text-gray-400">
+                          {formatDateTime(event.at, language)}
+                          {event.detail ? ` · ${event.detail}` : ''}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+};
 
 const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, onSubmissionQueue, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -1008,6 +1459,8 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
             )}
           </div>
         )}
+
+        {profile?.isAdmin && <PointOperatorAccessCard language={language} />}
 
         <div className="card p-4 space-y-3">
           <div className="flex items-center justify-between">

@@ -45,6 +45,7 @@ import {
 import { createPointOperatorLifecycle, submitPointOperatorSignal, submitPointOperatorPhoto } from "./pointOperatorService.js";
 import { DEFAULT_AVATAR_PRESET, encodeAvatarPresetImage } from "../../shared/avatarPresets.js";
 import type { UserProfile, MapScope } from "../../shared/types.js";
+import { getPointOperatorControls } from "./pointOperatorConfig.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -462,7 +463,12 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
     const point = await getPointFn(assignment.pointId);
     if (!point) return errorResponse("Assigned point not found", 404);
 
-    return jsonResponse({ assignment, point, controls: [], signals: {} }, { status: 200 });
+    return jsonResponse({
+      assignment,
+      point,
+      controls: getPointOperatorControls(point.category),
+      signals: point.operatorSignals ?? {},
+    }, { status: 200 });
   }
 
   // ── Operator: submit a status signal ────────────────────────────────────────
