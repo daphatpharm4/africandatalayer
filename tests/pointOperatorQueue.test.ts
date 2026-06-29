@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { beforeEach } from "node:test";
+import { submitPointOperatorSignal } from "../lib/client/pointOperatorApi.ts";
 import {
   enqueuePointOperatorMutation,
   flushPointOperatorQueue,
@@ -222,6 +223,55 @@ test("permanent 403 removes item and reports permanent failure", async () => {
   assert.deepEqual(await listPointOperatorQueueItems(), []);
 });
 
+test("point operator API 403 error is permanent and removes queued item", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response("Forbidden", {
+      status: 403,
+      statusText: "Forbidden",
+      headers: { "Content-Type": "text/plain" },
+    });
+
+  try {
+    await assert.rejects(
+      () =>
+        submitPointOperatorSignal(
+          {
+            field: "isOpenNow",
+            value: true,
+            capturedAt: "2026-06-24T08:00:00.000Z",
+          },
+          { idempotencyKey: "idem-direct" },
+        ),
+      (error) => {
+        const typed = error as Error & { status?: number; retryable?: boolean };
+        assert.equal(typed.status, 403);
+        assert.equal(typed.retryable, false);
+        return true;
+      },
+    );
+
+    const item = await enqueuePointOperatorMutation({
+      kind: "signal",
+      field: "isOpenNow",
+      value: true,
+      capturedAt: "2026-06-24T08:00:00.000Z",
+    });
+    const result = await flushPointOperatorQueue((mutation, options) => {
+      assert.equal(mutation.kind, "signal");
+      return submitPointOperatorSignal(mutation, options);
+    });
+
+    assert.equal(result.permanentFailures, 1);
+    assert.deepEqual(result.permanentFailureIds, [item.id]);
+    assert.deepEqual(result.permanentFailureMessages, ["Forbidden"]);
+    assert.equal(result.remaining, 0);
+    assert.deepEqual(await listPointOperatorQueueItems(), []);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("duplicate replay does not duplicate after first flush succeeds", async () => {
   await enqueuePointOperatorMutation({
     kind: "photo",
@@ -240,6 +290,37 @@ test("duplicate replay does not duplicate after first flush succeeds", async () 
   assert.equal(first.synced, 1);
   assert.equal(second.synced, 0);
   assert.equal(calls, 1);
+});
+
+test("concurrent flushes do not double-send the same queued item", async () => {
+  await enqueuePointOperatorMutation({
+    kind: "signal",
+    field: "isOpenNow",
+    value: true,
+    capturedAt: "2026-06-24T08:00:00.000Z",
+  });
+  let calls = 0;
+  let releaseSend: (() => void) | null = null;
+  const sendStarted = new Promise<void>((resolve) => {
+    releaseSend = resolve;
+  });
+
+  const first = flushPointOperatorQueue(async () => {
+    calls += 1;
+    await sendStarted;
+  });
+  const second = flushPointOperatorQueue(async () => {
+    calls += 1;
+  });
+
+  assert.equal(calls, 0);
+  releaseSend?.();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assert.equal(calls, 1);
+  assert.equal(firstResult.synced, 1);
+  assert.equal(secondResult.synced, 1);
+  assert.deepEqual(await listPointOperatorQueueItems(), []);
 });
 
 test("queue capacity is enforced", async () => {

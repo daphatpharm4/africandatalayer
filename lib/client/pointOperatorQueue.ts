@@ -33,7 +33,9 @@ export interface PointOperatorQueueFlushSummary {
 type SendPointOperatorMutation = (
   mutation: PointOperatorMutation,
   options: { idempotencyKey: string },
-) => Promise<void>;
+) => Promise<unknown>;
+
+let activeFlush: Promise<PointOperatorQueueFlushSummary> | null = null;
 
 function ensureIndexedDb(): IDBFactory {
   if (typeof indexedDB === "undefined") {
@@ -74,10 +76,13 @@ async function openDb(): Promise<IDBDatabase> {
 
 async function putItem(item: PointOperatorQueueItem): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(STORE_NAME, "readwrite");
-  tx.objectStore(STORE_NAME).put(item);
-  await transactionDone(tx);
-  db.close();
+  try {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).put(item);
+    await transactionDone(tx);
+  } finally {
+    db.close();
+  }
 }
 
 async function updateItem(id: string, updater: (item: PointOperatorQueueItem) => PointOperatorQueueItem): Promise<void> {
@@ -142,35 +147,55 @@ export async function enqueuePointOperatorMutation(
 
 export async function listPointOperatorQueueItems(): Promise<PointOperatorQueueItem[]> {
   const db = await openDb();
-  const tx = db.transaction(STORE_NAME, "readonly");
-  const request = tx.objectStore(STORE_NAME).getAll();
-  const result = await requestToPromise(request);
-  await transactionDone(tx);
-  db.close();
-  return (result as PointOperatorQueueItem[]).sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
+  try {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const request = tx.objectStore(STORE_NAME).getAll();
+    const result = await requestToPromise(request);
+    await transactionDone(tx);
+    return (result as PointOperatorQueueItem[]).sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+  } finally {
+    db.close();
+  }
 }
 
 export async function getPointOperatorQueueItem(id: string): Promise<PointOperatorQueueItem | null> {
   const db = await openDb();
-  const tx = db.transaction(STORE_NAME, "readonly");
-  const request = tx.objectStore(STORE_NAME).get(id);
-  const result = await requestToPromise(request);
-  await transactionDone(tx);
-  db.close();
-  return (result as PointOperatorQueueItem | undefined) ?? null;
+  try {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const request = tx.objectStore(STORE_NAME).get(id);
+    const result = await requestToPromise(request);
+    await transactionDone(tx);
+    return (result as PointOperatorQueueItem | undefined) ?? null;
+  } finally {
+    db.close();
+  }
 }
 
 export async function removePointOperatorQueueItem(id: string): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(STORE_NAME, "readwrite");
-  tx.objectStore(STORE_NAME).delete(id);
-  await transactionDone(tx);
-  db.close();
+  try {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    tx.objectStore(STORE_NAME).delete(id);
+    await transactionDone(tx);
+  } finally {
+    db.close();
+  }
 }
 
 export async function flushPointOperatorQueue(
+  sendFn: SendPointOperatorMutation,
+): Promise<PointOperatorQueueFlushSummary> {
+  if (activeFlush) return activeFlush;
+
+  activeFlush = flushPointOperatorQueueInternal(sendFn).finally(() => {
+    activeFlush = null;
+  });
+  return activeFlush;
+}
+
+async function flushPointOperatorQueueInternal(
   sendFn: SendPointOperatorMutation,
 ): Promise<PointOperatorQueueFlushSummary> {
   const items = await listPointOperatorQueueItems();
