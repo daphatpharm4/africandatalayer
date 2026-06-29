@@ -11,6 +11,7 @@ test("point operator migration defines role, password gate, and active uniquenes
   const sql = await readFile(migrationPath, "utf8");
   assert.match(sql, /point_operator/);
   assert.match(sql, /must_change_password boolean not null default false/i);
+  assert.match(sql, /session_version integer not null default 0/i);
   assert.match(sql, /create table if not exists public\.point_operator_assignments/i);
   assert.match(sql, /where status = 'active'/i);
   assert.match(sql, /operator_user_id/);

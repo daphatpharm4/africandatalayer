@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import bcrypt from "bcryptjs";
 import { createPointOperatorHandler } from "../lib/server/pointOperatorApi.js";
-import type { PointEvent, PointOperatorAssignment, ProjectedPoint } from "../shared/types.js";
+import type { PointEvent, PointOperatorAssignment, ProjectedPoint, UserProfile } from "../shared/types.js";
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
 
@@ -457,6 +458,56 @@ test("po_password rejects body with extra fields (strict schema)", async () => {
     }),
   );
   assert.equal(response.status, 422);
+});
+
+test("po_password changes password, clears gate, increments session version, and requires reauth", async () => {
+  const profile: UserProfile & { sessionVersion?: number } = {
+    id: "op@example.com",
+    email: "op@example.com",
+    phone: null,
+    name: "Operator",
+    XP: 0,
+    passwordHash: await bcrypt.hash("OldPass123!", 4),
+    role: "point_operator",
+    mustChangePassword: true,
+    sessionVersion: 2,
+  };
+  let savedProfile: (UserProfile & { sessionVersion?: number }) | null = null;
+  const auditEvents: string[] = [];
+
+  const handler = createPointOperatorHandler({
+    requireUserFn: async () => ({ id: "op@example.com", token: {}, role: "point_operator" }),
+    getActiveAssignmentByUserFn: async () => MOCK_ASSIGNMENT,
+    getUserProfileFn: async () => profile,
+    upsertUserProfileFn: async (_id, nextProfile) => {
+      savedProfile = nextProfile as UserProfile & { sessionVersion?: number };
+    },
+    hashPasswordFn: async (password, rounds) => {
+      assert.equal(password, "NewPass1234!");
+      assert.equal(rounds, 12);
+      return `hashed:${password}:${rounds}`;
+    },
+    logSecurityEventFn: async (event) => {
+      auditEvents.push(event.eventType);
+    },
+  });
+
+  const response = await handler(
+    makeRequest("password", {
+      headers: { "Idempotency-Key": "idem-pw-change" },
+      body: {
+        currentPassword: "OldPass123!",
+        newPassword: "NewPass1234!",
+      },
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { changed: true, reauthenticate: true });
+  assert.equal(savedProfile?.passwordHash, "hashed:NewPass1234!:12");
+  assert.equal(savedProfile?.mustChangePassword, false);
+  assert.equal(savedProfile?.sessionVersion, 3);
+  assert.deepEqual(auditEvents, ["point_operator_password_changed"]);
 });
 
 // ─── unknown view ─────────────────────────────────────────────────────────────

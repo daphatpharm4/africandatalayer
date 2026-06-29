@@ -1,6 +1,7 @@
 import { decode, getToken } from "@auth/core/jwt";
 import type { JWT } from "@auth/core/jwt";
 import type { UserRole } from "../shared/types.js";
+import { getUserProfile } from "./server/storage/index.js";
 
 export const SESSION_CONFIG = {
   maxAge: 8 * 60 * 60,
@@ -43,17 +44,46 @@ export async function getAuthToken(request: Request): Promise<JWT | null> {
   return await getToken({ req: request, secret, salt, cookieName, secureCookie });
 }
 
-export async function requireUser(request: Request): Promise<{ id: string; token: JWT; role: UserRole } | null> {
+type AuthTokenClaims = JWT & {
+  uid?: unknown;
+  role?: unknown;
+  mustChangePassword?: unknown;
+  sessionVersion?: unknown;
+};
+
+export async function requireUser(request: Request): Promise<{
+  id: string;
+  token: JWT;
+  role: UserRole;
+  mustChangePassword?: boolean;
+  sessionVersion?: number;
+} | null> {
   const token = await getAuthToken(request);
   if (!token) return null;
   const email = typeof token.email === "string" ? token.email.toLowerCase().trim() : null;
-  const uid = (token as JWT & { uid?: unknown }).uid;
+  const tokenClaims = token as AuthTokenClaims;
+  const uid = tokenClaims.uid;
   const normalizedUid = typeof uid === "string" ? uid.trim() : null;
   const sub = typeof token.sub === "string" ? token.sub.trim() : null;
   const id = email || normalizedUid || sub;
   if (!id) return null;
-  const role = typeof (token as JWT & { role?: unknown }).role === "string"
-    ? (token as JWT & { role?: unknown }).role as UserRole
+  const role = typeof tokenClaims.role === "string"
+    ? tokenClaims.role as UserRole
     : "agent";
-  return { id, token, role };
+  const mustChangePassword = tokenClaims.mustChangePassword === true;
+  const sessionVersion =
+    typeof tokenClaims.sessionVersion === "number" && Number.isFinite(tokenClaims.sessionVersion)
+      ? Math.max(0, Math.floor(tokenClaims.sessionVersion))
+      : undefined;
+  try {
+    const profile = await getUserProfile(id);
+    if (profile && typeof profile.sessionVersion === "number" && Number.isFinite(profile.sessionVersion)) {
+      const storedSessionVersion = Math.max(0, Math.floor(profile.sessionVersion));
+      if ((sessionVersion ?? 0) !== storedSessionVersion) return null;
+    }
+  } catch {
+    // Profile lookup is a defense-in-depth session revocation check. Do not
+    // make unrelated authenticated routes unavailable when storage is degraded.
+  }
+  return { id, token, role, mustChangePassword, sessionVersion };
 }

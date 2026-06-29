@@ -8,6 +8,9 @@ ALTER TABLE public.user_profiles
 ALTER TABLE public.user_profiles
   ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
 
+ALTER TABLE public.user_profiles
+  ADD COLUMN IF NOT EXISTS session_version integer NOT NULL DEFAULT 0;
+
 CREATE TABLE IF NOT EXISTS public.point_operator_assignments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   operator_user_id text NOT NULL REFERENCES public.user_profiles(id),

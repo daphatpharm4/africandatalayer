@@ -583,6 +583,11 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
 
     profile.passwordHash = await hashPasswordFn(body.newPassword, 12);
     profile.mustChangePassword = false;
+    const currentSessionVersion = (profile as { sessionVersion?: unknown }).sessionVersion;
+    (profile as unknown as { sessionVersion: number }).sessionVersion =
+      typeof currentSessionVersion === "number" && Number.isFinite(currentSessionVersion)
+        ? Math.max(0, Math.floor(currentSessionVersion)) + 1
+        : 1;
 
     try {
       await upsertUserProfileFn(auth.id, profile);
@@ -601,6 +606,6 @@ export function createPointOperatorHandler(deps: PointOperatorHandlerDeps = {}) 
       // Audit is best-effort
     }
 
-    return jsonResponse({ ok: true }, { status: 200 });
+    return jsonResponse({ changed: true, reauthenticate: true }, { status: 200 });
   }
 }

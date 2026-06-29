@@ -5,12 +5,12 @@ export type RbacAction = "submit" | "read" | "review" | "manage_users" | "delete
 const ROLE_PERMISSIONS: Record<string, ReadonlySet<RbacAction>> = {
   agent: new Set<RbacAction>(["submit", "read"]),
   client: new Set<RbacAction>(["read"]),
+  point_operator: new Set<RbacAction>(["read"]),
   admin: new Set<RbacAction>(["submit", "read", "review", "manage_users", "delete"]),
 };
 
 export function canPerformAction(role: string, action: RbacAction): boolean {
-  const allowed = ROLE_PERMISSIONS[role] ?? ROLE_PERMISSIONS.agent!;
-  return allowed.has(action);
+  return ROLE_PERMISSIONS[role]?.has(action) ?? false;
 }
 
 export interface SubmissionAuthContext {

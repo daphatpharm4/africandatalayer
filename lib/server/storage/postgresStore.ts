@@ -53,6 +53,12 @@ function parseXp(input: unknown): number {
   return Math.max(0, Math.round(value));
 }
 
+function parseSessionVersion(input: unknown): number {
+  const value = typeof input === "number" ? input : Number(input);
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
 function parseTrustScore(input: unknown): number {
   const value = typeof input === "number" ? input : Number(input);
   if (!Number.isFinite(value)) return 50;
@@ -135,6 +141,7 @@ function rowToUserProfile(row: Record<string, unknown>): UserProfile {
         : 0,
     lockedUntil: typeof row.locked_until === "string" ? normalizeCreatedAt(row.locked_until) : null,
     mustChangePassword: row.must_change_password === true,
+    sessionVersion: parseSessionVersion(row.session_version),
   };
 }
 
@@ -150,7 +157,7 @@ async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
     `
       select id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
              trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until,
-             must_change_password
+             must_change_password, session_version
       from user_profiles
       where id = $1
       limit 1
@@ -201,7 +208,7 @@ async function getUserProfile(userId: string): Promise<UserProfile | null> {
       `
         select id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope
                , trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until
-               , must_change_password
+               , must_change_password, session_version
         from user_profiles
         where id = $1
         limit 1
@@ -238,6 +245,7 @@ async function upsertUserProfileLegacy(params: {
   failedLoginCount: number;
   lockedUntil: string | null;
   mustChangePassword: boolean | null;
+  sessionVersion: number | null;
 }): Promise<void> {
   const legacyEmail = params.email ?? normalizeEmail(params.id);
   if (!legacyEmail) {
@@ -249,9 +257,9 @@ async function upsertUserProfileLegacy(params: {
       insert into user_profiles (
         id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
         trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until,
-        must_change_password, updated_at
+        must_change_password, session_version, updated_at
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14, $15, $16::timestamptz, coalesce($17, false), now())
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::timestamptz, $14, $15, $16::timestamptz, coalesce($17, false), coalesce($18, 0), now())
       on conflict (id) do update
       set
         email = excluded.email,
@@ -270,6 +278,7 @@ async function upsertUserProfileLegacy(params: {
         failed_login_count = excluded.failed_login_count,
         locked_until = excluded.locked_until,
         must_change_password = coalesce($17, user_profiles.must_change_password),
+        session_version = coalesce($18, user_profiles.session_version),
         updated_at = now()
     `,
     [
@@ -290,6 +299,7 @@ async function upsertUserProfileLegacy(params: {
       params.failedLoginCount,
       params.lockedUntil,
       params.mustChangePassword,
+      params.sessionVersion,
     ],
   );
 }
@@ -319,6 +329,10 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
       : 0;
   const lockedUntil = typeof profile.lockedUntil === "string" ? normalizeCreatedAt(profile.lockedUntil) : null;
   const mustChangePassword = typeof profile.mustChangePassword === "boolean" ? profile.mustChangePassword : null;
+  const sessionVersion =
+    typeof profile.sessionVersion === "number" && Number.isFinite(profile.sessionVersion)
+      ? Math.max(0, Math.floor(profile.sessionVersion))
+      : null;
 
   const runWithPhone = async () => {
     await query(
@@ -326,9 +340,9 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
         insert into user_profiles (
           id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
           trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until,
-          must_change_password, updated_at
+          must_change_password, session_version, updated_at
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::timestamptz, $15, $16, $17::timestamptz, coalesce($18, false), now())
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::timestamptz, $15, $16, $17::timestamptz, coalesce($18, false), coalesce($19, 0), now())
         on conflict (id) do update
         set
           email = excluded.email,
@@ -348,6 +362,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
           failed_login_count = excluded.failed_login_count,
           locked_until = excluded.locked_until,
           must_change_password = coalesce($18, user_profiles.must_change_password),
+          session_version = coalesce($19, user_profiles.session_version),
           updated_at = now()
       `,
       [
@@ -369,6 +384,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
         failedLoginCount,
         lockedUntil,
         mustChangePassword,
+        sessionVersion,
       ],
     );
   };
@@ -392,6 +408,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
       failedLoginCount,
       lockedUntil,
       mustChangePassword,
+      sessionVersion,
     });
     return;
   }
@@ -420,6 +437,7 @@ async function upsertUserProfile(userId: string, profile: UserProfile): Promise<
       failedLoginCount,
       lockedUntil,
       mustChangePassword,
+      sessionVersion,
     });
   }
 }
@@ -430,8 +448,8 @@ async function getUserProfilesBatch(ids: string[]): Promise<Map<string, UserProf
 
   const fetchRows = async (includePhone: boolean): Promise<UserProfile[]> => {
     const cols = includePhone
-      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, must_change_password"
-      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, must_change_password";
+      ? "id, email, phone, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, must_change_password, session_version"
+      : "id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope, trust_score, trust_tier, suspended_until, wipe_requested, failed_login_count, locked_until, must_change_password, session_version";
     const result = await query<Record<string, unknown>>(
       `select ${cols} from user_profiles where id = ANY($1::text[])`,
       [normalizedIds],

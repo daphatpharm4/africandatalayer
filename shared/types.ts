@@ -414,6 +414,7 @@ export interface UserProfile {
   failedLoginCount?: number;
   lockedUntil?: string | null;
   mustChangePassword?: boolean;
+  sessionVersion?: number;
 }
 
 export interface PrivacyRequest {

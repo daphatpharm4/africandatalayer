@@ -59,7 +59,14 @@ type JwtRoleClaimsToken = {
   sub?: string | null;
   isAdmin?: boolean;
   role?: string;
+  mustChangePassword?: boolean;
+  sessionVersion?: number;
 };
+
+function normalizeSessionVersion(input: unknown): number | undefined {
+  if (typeof input !== "number" || !Number.isFinite(input)) return undefined;
+  return Math.max(0, Math.floor(input));
+}
 
 async function persistLoginFailure(
   profile: UserProfile | null,
@@ -260,10 +267,7 @@ export async function applyRoleClaimsToToken(
   // by a conflicting stored role in user_profiles.
   const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
   const email = normalizeEmail(user?.email ?? token.email);
-  if (adminEmail && email && adminEmail === email) {
-    token.isAdmin = true;
-    token.role = "admin";
-  }
+  const isBootstrapAdmin = Boolean(adminEmail && email && adminEmail === email);
   if (email) {
     token.uid = email.trim();
   } else if (user?.id) {
@@ -271,21 +275,32 @@ export async function applyRoleClaimsToToken(
   } else if (typeof token.sub === "string" && token.sub.trim()) {
     token.uid = token.sub.trim();
   }
-  if (!token.role) {
-    const uid = typeof token.uid === "string" ? token.uid.trim() : "";
-    if (uid) {
-      try {
-        const profile = await getUserProfileFn(uid);
+  const uid = typeof token.uid === "string" ? token.uid.trim() : "";
+  if (uid) {
+    try {
+      const profile = await getUserProfileFn(uid);
+      if (isBootstrapAdmin) {
+        token.role = "admin";
+        token.isAdmin = true;
+      } else {
         token.role = profile?.role ?? (profile?.isAdmin ? "admin" : "agent");
-        if (profile?.role === "admin" || profile?.isAdmin === true) {
-          token.isAdmin = true;
-        }
-      } catch {
-        token.role = "agent";
+        token.isAdmin = profile?.role === "admin" || profile?.isAdmin === true;
       }
+      token.mustChangePassword = profile?.mustChangePassword === true;
+      const sessionVersion = normalizeSessionVersion((profile as { sessionVersion?: unknown } | null)?.sessionVersion);
+      if (sessionVersion !== undefined) token.sessionVersion = sessionVersion;
+    } catch {
+      if (!token.role) token.role = "agent";
+      if (token.mustChangePassword !== true) token.mustChangePassword = false;
+    }
+  } else {
+    if (isBootstrapAdmin) {
+      token.role = "admin";
+      token.isAdmin = true;
     } else {
       token.role = "agent";
     }
+    token.mustChangePassword = false;
   }
   if (token.role === "admin") {
     token.isAdmin = true;
@@ -542,6 +557,14 @@ export default async function handler(request: Request): Promise<Response> {
           }
           if (session.user && (token as { role?: string })?.role) {
             (session.user as { role?: string }).role = (token as { role?: string }).role;
+          }
+          if (session.user && (token as { mustChangePassword?: boolean })?.mustChangePassword !== undefined) {
+            (session.user as { mustChangePassword?: boolean }).mustChangePassword = Boolean(
+              (token as { mustChangePassword?: boolean }).mustChangePassword,
+            );
+          }
+          if (session.user && typeof (token as { sessionVersion?: unknown }).sessionVersion === "number") {
+            (session.user as { sessionVersion?: number }).sessionVersion = (token as { sessionVersion: number }).sessionVersion;
           }
           return session;
         },
