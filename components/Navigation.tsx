@@ -42,6 +42,10 @@ const Navigation: React.FC<Props> = ({
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
+  if (userRole === 'point_operator') {
+    return null;
+  }
+
   const agentNav: NavItem[] = [
     { id: Screen.HOME, label: t('Explore', 'Explorer'), icon: Map },
     {

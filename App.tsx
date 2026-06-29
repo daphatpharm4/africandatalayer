@@ -26,10 +26,20 @@ import { Network } from '@capacitor/network';
 import Splash from './components/Screens/Splash';
 import Home from './components/Screens/Home';
 import Navigation from './components/Navigation';
+import PointOperatorNavigation from './components/PointOperatorNavigation';
 import ErrorBoundary from './components/ErrorBoundary';
 import SyncStatusBar from './components/SyncStatusBar';
 import HelpCenter from './components/docs/HelpCenter';
 import { docsPathForAudience } from './lib/docs/helpCenter';
+import { defaultScreenForRole, routesForRole } from './lib/client/pointOperatorUi';
+import {
+  flushPointOperatorQueue,
+  type PointOperatorMutation,
+} from './lib/client/pointOperatorQueue';
+import {
+  submitPointOperatorPhoto,
+  submitPointOperatorSignal,
+} from './lib/client/pointOperatorApi';
 
 const importDetails = () => import('./components/Screens/Details');
 const Details = lazy(importDetails);
@@ -51,6 +61,9 @@ const TermsOfUse = lazy(() => import('./components/Screens/TermsOfUse'));
 const DataCompliance = lazy(() => import('./components/Screens/DataCompliance'));
 const IpReport = lazy(() => import('./components/Screens/IpReport'));
 const ForgotPassword = lazy(() => import('./components/Screens/ForgotPassword'));
+const PointOperatorStatus = lazy(() => import('./components/Screens/PointOperatorStatus'));
+const PointOperatorProfile = lazy(() => import('./components/Screens/PointOperatorProfile'));
+const PointOperatorPasswordChange = lazy(() => import('./components/Screens/PointOperatorPasswordChange'));
 
 type WindowWithIdleCallback = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -73,6 +86,8 @@ const defaultQueueSnapshot: QueueSnapshot = {
   storageBytes: 0,
 };
 
+const POINT_OPERATOR_SCREENS = routesForRole('point_operator');
+
 const App: React.FC = () => {
   const isSyncingRef = useRef(false);
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
@@ -87,6 +102,7 @@ const App: React.FC = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [userRole, setUserRole] = useState<UserRole>('agent');
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   const [language, setLanguage] = useState<'en' | 'fr'>(() => {
     try { const saved = localStorage.getItem('adl_language'); return saved === 'en' ? 'en' : 'fr'; } catch { return 'fr'; }
   });
@@ -104,8 +120,21 @@ const App: React.FC = () => {
   const [policyAcceptPending, setPolicyAcceptPending] = useState(false);
 
   const isClient = userRole === 'client';
+  const isPointOperator = userRole === 'point_operator';
   const isDocsMode = pathname.startsWith('/docs');
   const docsAudience = isAdmin ? 'admin' : isClient ? 'client' : 'agent';
+
+  const normalizeScreenForRole = useCallback((screen: Screen, role: UserRole = userRole): Screen => {
+    if (role !== 'point_operator') return screen;
+    if (mustChangePassword && ![Screen.SPLASH, Screen.AUTH].includes(screen)) {
+      return Screen.POINT_OPERATOR_PASSWORD;
+    }
+    if (POINT_OPERATOR_SCREENS.includes(screen)) return screen;
+    if (screen === Screen.POINT_OPERATOR_PASSWORD) return screen;
+    if ([Screen.SPLASH, Screen.AUTH, Screen.PRIVACY_POLICY, Screen.TERMS_OF_USE].includes(screen)) return screen;
+    if (screen === Screen.PROFILE) return Screen.POINT_OPERATOR_PROFILE;
+    return Screen.POINT_OPERATOR_STATUS;
+  }, [mustChangePassword, userRole]);
 
   const navigatePath = (path: string) => {
     if (typeof window === 'undefined') {
@@ -131,18 +160,19 @@ const App: React.FC = () => {
 
 
   const navigateTo = useCallback((screen: Screen, point: DataPoint | null = null) => {
+    const nextScreen = normalizeScreenForRole(screen);
     setCurrentScreen((prev) => {
-      if (prev === Screen.SPLASH && screen !== Screen.SPLASH) {
+      if (prev === Screen.SPLASH && nextScreen !== Screen.SPLASH) {
         try { localStorage.setItem('adl_splash_seen', 'true'); } catch { /* private browsing */ }
       }
-      if (screen === Screen.AUTH) {
+      if (nextScreen === Screen.AUTH) {
         setAuthReturnScreen(prev);
       }
       setHistory((h) => [...h, prev]);
-      return screen;
+      return nextScreen;
     });
     if (point) setSelectedPoint(point);
-  }, []);
+  }, [normalizeScreenForRole]);
 
   const clearContributionContext = () => {
     setContributionMode('CREATE');
@@ -164,27 +194,36 @@ const App: React.FC = () => {
       return;
     }
     setHistory([]);
-    setCurrentScreen(isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
-  }, [history, currentScreen, authReturnScreen, isClient]);
+    setCurrentScreen(isPointOperator ? Screen.POINT_OPERATOR_STATUS : isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
+  }, [history, currentScreen, authReturnScreen, isClient, isPointOperator]);
 
   const switchTab = useCallback((screen: Screen) => {
+    const nextScreen = normalizeScreenForRole(screen);
     setHistory([]);
-    if (screen === Screen.CONTRIBUTE && isClient) {
+    if (nextScreen === Screen.POINT_OPERATOR_PASSWORD) {
+      setCurrentScreen(nextScreen);
       return;
     }
-    if (screen !== Screen.CONTRIBUTE) {
+    if (isPointOperator && !POINT_OPERATOR_SCREENS.includes(nextScreen)) {
+      setCurrentScreen(Screen.POINT_OPERATOR_STATUS);
+      return;
+    }
+    if (nextScreen === Screen.CONTRIBUTE && isClient) {
+      return;
+    }
+    if (nextScreen !== Screen.CONTRIBUTE) {
       clearContributionContext();
     }
-    if (screen === Screen.CONTRIBUTE && !isAuthenticated) {
+    if (nextScreen === Screen.CONTRIBUTE && !isAuthenticated) {
       setAuthReturnScreen(currentScreen);
       setCurrentScreen(Screen.AUTH);
       return;
     }
-    if (screen === Screen.AUTH) {
+    if (nextScreen === Screen.AUTH) {
       setAuthReturnScreen(currentScreen);
     }
-    setCurrentScreen(screen);
-  }, [isClient, isAuthenticated, currentScreen]);
+    setCurrentScreen(nextScreen);
+  }, [normalizeScreenForRole, isPointOperator, isClient, isAuthenticated, currentScreen]);
 
   const openContribution = useCallback((mode: ContributionMode, options: ContributionLaunchOptions = {}) => {
     setContributionMode(mode);
@@ -199,7 +238,7 @@ const App: React.FC = () => {
     navigateTo(Screen.AUTH);
   }, [isAuthenticated, navigateTo]);
 
-  const checkSecurityStatus = async (): Promise<{
+  const checkSecurityStatus = useCallback(async (): Promise<{
     wipeRequested: boolean;
     suspendedUntil: string | null;
   } | null> => {
@@ -209,9 +248,9 @@ const App: React.FC = () => {
     } catch {
       return null;
     }
-  };
+  }, [isAuthenticated]);
 
-  const runQueueSync = async () => {
+  const runQueueSync = useCallback(async () => {
     if (isSyncingRef.current) return;
     isSyncingRef.current = true;
     setIsSyncing(true);
@@ -225,13 +264,35 @@ const App: React.FC = () => {
         return;
       }
       await flushOfflineQueue(sendSubmissionPayload);
+      if (isPointOperator) {
+        await flushPointOperatorQueue(async (mutation: PointOperatorMutation, options) => {
+          if (mutation.kind === 'signal') {
+            await submitPointOperatorSignal(
+              {
+                field: mutation.field,
+                value: mutation.value,
+                capturedAt: mutation.capturedAt,
+              },
+              options,
+            );
+            return;
+          }
+          await submitPointOperatorPhoto(
+            {
+              imageData: mutation.imageData,
+              capturedAt: mutation.capturedAt,
+            },
+            options,
+          );
+        });
+      }
     } catch (error) {
       console.error('[App] Offline queue sync failed:', error);
     } finally {
       isSyncingRef.current = false;
       setIsSyncing(false);
     }
-  };
+  }, [checkSecurityStatus, isPointOperator]);
 
   useEffect(() => {
     try { localStorage.setItem('adl_language', language); } catch { /* private browsing */ }
@@ -285,7 +346,7 @@ const App: React.FC = () => {
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
-  }, [isDocsMode]);
+  }, [isDocsMode, runQueueSync]);
 
   const refreshSession = async () => {
     const session = await getSession();
@@ -293,6 +354,7 @@ const App: React.FC = () => {
     setIsAuthenticated(hasUser);
     setIsAdmin(Boolean(session?.user?.isAdmin));
     setUserRole((session?.user?.role as UserRole) ?? 'agent');
+    setMustChangePassword(Boolean(session?.user?.mustChangePassword));
     if (hasUser) {
       try {
         const result = await fetchOutstandingPolicies();
@@ -303,7 +365,25 @@ const App: React.FC = () => {
     } else {
       setOutstandingPolicies([]);
     }
-    return hasUser;
+    return session;
+  };
+
+  const completeSignOut = async (nextScreen: Screen = Screen.SPLASH) => {
+    try {
+      await signOut();
+    } catch {
+      // Fallback to local logout even if server sign-out fails.
+    } finally {
+      await refreshSession();
+      setIsAuthenticated(false);
+      setIsAdmin(false);
+      setUserRole('agent');
+      setMustChangePassword(false);
+      setOutstandingPolicies([]);
+      setHistory([]);
+      clearContributionContext();
+      setCurrentScreen(nextScreen);
+    }
   };
 
   const handleAcceptOutstandingPolicies = async () => {
@@ -320,28 +400,22 @@ const App: React.FC = () => {
   };
 
   const handleDeclineOutstandingPolicies = async () => {
-    try {
-      await signOut();
-    } catch {
-      /* best effort */
-    } finally {
-      await refreshSession();
-      setIsAuthenticated(false);
-      setOutstandingPolicies([]);
-      setHistory([]);
-      setCurrentScreen(Screen.SPLASH);
-    }
+    await completeSignOut();
   };
 
   useEffect(() => {
     const bootstrap = async () => {
-      const hasUser = await refreshSession();
+      const session = await refreshSession();
+      const hasUser = !!session?.user;
       const hasSeenSplash = (() => { try { return localStorage.getItem('adl_splash_seen') === 'true'; } catch { return false; } })();
       if (currentScreen === Screen.SPLASH && (hasUser || hasSeenSplash)) {
         setHistory([]);
-        const session = await getSession();
         const role = (session?.user?.role as UserRole) ?? 'agent';
-        setCurrentScreen(role === 'client' ? Screen.DELTA_DASHBOARD : Screen.HOME);
+        if (session?.user?.mustChangePassword && role === 'point_operator') {
+          setCurrentScreen(Screen.POINT_OPERATOR_PASSWORD);
+        } else {
+          setCurrentScreen(defaultScreenForRole(role));
+        }
       }
     };
     void bootstrap();
@@ -380,9 +454,9 @@ const App: React.FC = () => {
     const hasSeenSplash = (() => { try { return localStorage.getItem('adl_splash_seen') === 'true'; } catch { return false; } })();
     if (currentScreen === Screen.SPLASH && hasSeenSplash) {
       setHistory([]);
-      setCurrentScreen(isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
+      setCurrentScreen(isPointOperator ? Screen.POINT_OPERATOR_STATUS : isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
     }
-  }, [currentScreen, isClient]);
+  }, [currentScreen, isClient, isPointOperator]);
 
   const renderScreen = () => {
     switch (currentScreen) {
@@ -438,14 +512,38 @@ const App: React.FC = () => {
             initialMode={splashAuthHint ?? (hasAuthenticated ? 'signin' : 'signup')}
             navigateTo={(screen) => navigateTo(screen)}
             onComplete={async () => {
-              await refreshSession();
-              const session = await getSession();
+              const session = await refreshSession();
               const role = (session?.user?.role as UserRole) ?? 'agent';
-              switchTab(role === 'client' ? Screen.DELTA_DASHBOARD : Screen.HOME);
+              if (session?.user?.mustChangePassword && role === 'point_operator') {
+                setHistory([]);
+                setCurrentScreen(Screen.POINT_OPERATOR_PASSWORD);
+                return;
+              }
+              switchTab(defaultScreenForRole(role));
             }}
           />
         );
       }
+      case Screen.POINT_OPERATOR_STATUS:
+        return <PointOperatorStatus language={language} />;
+      case Screen.POINT_OPERATOR_PROFILE:
+        return (
+          <PointOperatorProfile
+            language={language}
+            onLanguageChange={setLanguage}
+            navigateTo={(screen) => navigateTo(screen)}
+            onOpenDocs={() => navigatePath(docsPathForAudience(docsAudience))}
+            onLogout={() => void completeSignOut()}
+          />
+        );
+      case Screen.POINT_OPERATOR_PASSWORD:
+        return (
+          <PointOperatorPasswordChange
+            language={language}
+            onCancel={mustChangePassword ? undefined : () => setCurrentScreen(Screen.POINT_OPERATOR_PROFILE)}
+            onSignedOut={() => void completeSignOut(Screen.AUTH)}
+          />
+        );
       case Screen.CONTRIBUTE:
         return (
           <ContributionFlow
@@ -486,16 +584,7 @@ const App: React.FC = () => {
               onOpenDocs={() => navigatePath(docsPathForAudience(docsAudience))}
               navigateTo={(screen) => navigateTo(screen)}
               onLogout={async () => {
-                try {
-                  await signOut();
-                } catch {
-                  // Fallback to local logout even if server sign-out fails.
-                } finally {
-                  await refreshSession();
-                  setIsAuthenticated(false);
-                  clearContributionContext();
-                  switchTab(Screen.SPLASH);
-                }
+                await completeSignOut();
               }}
             />
           );
@@ -532,16 +621,7 @@ const App: React.FC = () => {
             navigateTo={(screen) => navigateTo(screen)}
             userRole={userRole}
             onLogout={async () => {
-              try {
-                await signOut();
-              } catch {
-                // Fallback to local logout even if server sign-out fails.
-              } finally {
-                await refreshSession();
-                setIsAuthenticated(false);
-                clearContributionContext();
-                switchTab(Screen.SPLASH);
-              }
+              await completeSignOut();
             }}
           />
         );
@@ -590,8 +670,8 @@ const App: React.FC = () => {
     }
   };
 
-  const showSyncBar = ![Screen.SPLASH, Screen.AUTH].includes(currentScreen);
-  const showNavigation = ![Screen.SPLASH, Screen.AUTH, Screen.CONTRIBUTE].includes(currentScreen);
+  const showSyncBar = !isPointOperator && ![Screen.SPLASH, Screen.AUTH].includes(currentScreen);
+  const showNavigation = ![Screen.SPLASH, Screen.AUTH, Screen.CONTRIBUTE, Screen.POINT_OPERATOR_PASSWORD].includes(currentScreen);
   const wideShell =
     currentScreen === Screen.ADMIN
     || currentScreen === Screen.AGENT_PERFORMANCE
@@ -648,7 +728,15 @@ const App: React.FC = () => {
           </Suspense>
         </main>
 
-        {showNavigation && (
+        {showNavigation && isPointOperator && (
+          <PointOperatorNavigation
+            currentScreen={currentScreen}
+            onNavigate={(screen) => switchTab(screen)}
+            language={language}
+          />
+        )}
+
+        {showNavigation && !isPointOperator && (
           <Navigation
             currentScreen={currentScreen}
             onNavigate={(screen) => switchTab(screen)}

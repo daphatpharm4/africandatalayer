@@ -3,7 +3,7 @@ import { getApiBase, isNative } from './native';
 import { normalizeIdentifier } from '../shared/identifier';
 import { sanitizeErrorMessage } from './errorUtils';
 
-export type UserRole = 'agent' | 'admin' | 'client';
+export type UserRole = 'agent' | 'admin' | 'client' | 'point_operator';
 
 export interface AuthSession {
   user?: {
@@ -13,6 +13,7 @@ export interface AuthSession {
     image?: string | null;
     isAdmin?: boolean;
     role?: UserRole;
+    mustChangePassword?: boolean;
   };
   expires?: string;
 }
