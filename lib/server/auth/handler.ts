@@ -268,6 +268,7 @@ export async function applyRoleClaimsToToken(
   const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL);
   const email = normalizeEmail(user?.email ?? token.email);
   const isBootstrapAdmin = Boolean(adminEmail && email && adminEmail === email);
+  const isSignIn = Boolean(user?.email || user?.id);
   if (email) {
     token.uid = email.trim();
   } else if (user?.id) {
@@ -276,7 +277,7 @@ export async function applyRoleClaimsToToken(
     token.uid = token.sub.trim();
   }
   const uid = typeof token.uid === "string" ? token.uid.trim() : "";
-  if (uid) {
+  if (uid && isSignIn) {
     try {
       const profile = await getUserProfileFn(uid);
       if (isBootstrapAdmin) {
@@ -297,10 +298,10 @@ export async function applyRoleClaimsToToken(
     if (isBootstrapAdmin) {
       token.role = "admin";
       token.isAdmin = true;
-    } else {
+    } else if (!token.role) {
       token.role = "agent";
     }
-    token.mustChangePassword = false;
+    if (token.mustChangePassword !== true) token.mustChangePassword = false;
   }
   if (token.role === "admin") {
     token.isAdmin = true;

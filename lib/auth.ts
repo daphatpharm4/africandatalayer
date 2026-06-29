@@ -51,14 +51,35 @@ type AuthTokenClaims = JWT & {
   sessionVersion?: unknown;
 };
 
+type RequireUserDeps = {
+  getAuthTokenFn?: typeof getAuthToken;
+  getUserProfileFn?: typeof getUserProfile;
+};
+
 export async function requireUser(request: Request): Promise<{
   id: string;
   token: JWT;
   role: UserRole;
   mustChangePassword?: boolean;
   sessionVersion?: number;
+} | null>;
+export async function requireUser(request: Request, deps?: RequireUserDeps): Promise<{
+  id: string;
+  token: JWT;
+  role: UserRole;
+  mustChangePassword?: boolean;
+  sessionVersion?: number;
+} | null>;
+export async function requireUser(request: Request, deps: RequireUserDeps = {}): Promise<{
+  id: string;
+  token: JWT;
+  role: UserRole;
+  mustChangePassword?: boolean;
+  sessionVersion?: number;
 } | null> {
-  const token = await getAuthToken(request);
+  const getAuthTokenFn = deps.getAuthTokenFn ?? getAuthToken;
+  const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
+  const token = await getAuthTokenFn(request);
   if (!token) return null;
   const email = typeof token.email === "string" ? token.email.toLowerCase().trim() : null;
   const tokenClaims = token as AuthTokenClaims;
@@ -76,14 +97,13 @@ export async function requireUser(request: Request): Promise<{
       ? Math.max(0, Math.floor(tokenClaims.sessionVersion))
       : undefined;
   try {
-    const profile = await getUserProfile(id);
+    const profile = await getUserProfileFn(id);
     if (profile && typeof profile.sessionVersion === "number" && Number.isFinite(profile.sessionVersion)) {
       const storedSessionVersion = Math.max(0, Math.floor(profile.sessionVersion));
       if ((sessionVersion ?? 0) !== storedSessionVersion) return null;
     }
   } catch {
-    // Profile lookup is a defense-in-depth session revocation check. Do not
-    // make unrelated authenticated routes unavailable when storage is degraded.
+    return null;
   }
   return { id, token, role, mustChangePassword, sessionVersion };
 }
