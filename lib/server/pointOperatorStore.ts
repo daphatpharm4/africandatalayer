@@ -124,7 +124,7 @@ export async function findProjectedPointForAssignment(
 /**
  * Returns all projected points that are VERIFIED (i.e. they still exist after
  * projection — i.e. not removed/null). Optionally filters by a case-insensitive
- * substring match on pointId, name (details.name / details.siteName), or category.
+ * substring match on pointId, category, or common human-readable detail fields.
  *
  * Used by the admin po_admin_search_points view to find assignable points.
  */
@@ -138,10 +138,15 @@ export async function searchAssignableProjectedPoints(query?: string): Promise<P
   return allProjected.filter((point) => {
     if (point.pointId.toLowerCase().includes(needle)) return true;
     if (point.category.toLowerCase().includes(needle)) return true;
-    const name = (point.details as Record<string, unknown>)?.name;
-    if (typeof name === "string" && name.toLowerCase().includes(needle)) return true;
-    const siteName = (point.details as Record<string, unknown>)?.siteName;
-    if (typeof siteName === "string" && siteName.toLowerCase().includes(needle)) return true;
+    const details = point.details as Record<string, unknown>;
+    for (const field of ["name", "siteName", "brand", "operator", "provider", "merchantId", "roadName"]) {
+      const value = details[field];
+      if (typeof value === "string" && value.toLowerCase().includes(needle)) return true;
+    }
+    for (const field of ["providers", "paymentMethods", "paymentModes"]) {
+      const value = details[field];
+      if (Array.isArray(value) && value.some((item) => typeof item === "string" && item.toLowerCase().includes(needle))) return true;
+    }
     return false;
   });
 }
@@ -195,7 +200,7 @@ export async function grantPointOperatorAssignmentTx(
 
     // 1. Load current profile with row lock (required to preserve existing fields)
     const profileResult = await client.query<{ id: string; name: string; email: string | null; xp: number }>(
-      `SELECT id, name, email, xp FROM public.profiles WHERE id = $1 FOR UPDATE`,
+      `SELECT id, name, email, xp FROM public.user_profiles WHERE id = $1 FOR UPDATE`,
       [input.operatorUserId],
     );
     const currentProfile = profileResult.rows[0] ? {
@@ -218,7 +223,7 @@ export async function grantPointOperatorAssignmentTx(
 
     // 2. Update profile within transaction (using raw query to stay in the tx)
     await client.query(
-      `INSERT INTO public.profiles (id, name, email, xp, role, must_change_password)
+      `INSERT INTO public.user_profiles (id, name, email, xp, role, must_change_password)
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (id) DO UPDATE SET
          role = EXCLUDED.role,

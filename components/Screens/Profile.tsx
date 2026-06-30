@@ -51,13 +51,50 @@ function idempotencyKey(): string {
   return `po-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function pointDisplayName(point: ProjectedPoint): string {
+function pointDisplayNameForLanguage(point: ProjectedPoint, language: 'en' | 'fr'): string {
+  const namedValue = readPointPrimaryDetail(point);
+  if (namedValue) return namedValue;
+
+  return `${getCategoryLabelFromRegistry(point.category, language)} · ${pointCoordinateLabel(point)}`;
+}
+
+function pointSecondaryLabel(point: ProjectedPoint): string {
+  const details = (point.details ?? {}) as Record<string, unknown>;
+  const provider = readPointProviderDetail(details);
+  const merchantId = readPointDetail(details, 'merchantId');
+  return [provider, merchantId, pointCoordinateLabel(point), point.pointId].filter(Boolean).join(' · ');
+}
+
+function readPointDetail(details: Record<string, unknown>, key: string): string {
+  const value = details[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function readPointPrimaryDetail(point: ProjectedPoint): string {
   const details = (point.details ?? {}) as Record<string, unknown>;
   return (
-    (typeof details.name === 'string' && details.name.trim()) ||
-    (typeof details.siteName === 'string' && details.siteName.trim()) ||
-    point.pointId
+    readPointDetail(details, 'name') ||
+    readPointDetail(details, 'siteName') ||
+    readPointDetail(details, 'brand') ||
+    readPointDetail(details, 'operator') ||
+    readPointDetail(details, 'provider') ||
+    readPointProviderDetail(details) ||
+    readPointDetail(details, 'roadName')
   );
+}
+
+function readPointProviderDetail(details: Record<string, unknown>): string {
+  const provider = readPointDetail(details, 'provider');
+  if (provider) return provider;
+  const providers = details.providers;
+  if (!Array.isArray(providers)) return '';
+  return providers.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).join(', ');
+}
+
+function pointCoordinateLabel(point: ProjectedPoint): string {
+  const { latitude, longitude } = point.location;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return point.pointId;
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
 }
 
 function formatDateTime(value: string | null | undefined, language: 'en' | 'fr'): string {
@@ -346,12 +383,17 @@ const PointOperatorAccessCard: React.FC<{ language: 'en' | 'fr' }> = ({ language
                     aria-selected={selectedPoint?.pointId === point.pointId}
                     onClick={() => {
                       setSelectedPoint(point);
-                      setPointQuery(pointDisplayName(point));
+                      setPointQuery(pointDisplayNameForLanguage(point, language));
                       setPointResults([]);
                     }}
-                    className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm font-semibold text-gray-900 hover:bg-forest-wash"
+                    className="flex min-h-[56px] w-full items-center justify-between gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-gray-900 hover:bg-forest-wash"
                   >
-                    <span className="min-w-0 truncate">{pointDisplayName(point)}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate">{pointDisplayNameForLanguage(point, language)}</span>
+                      <span className="mt-0.5 block truncate text-[11px] font-medium text-gray-500">
+                        {pointSecondaryLabel(point)}
+                      </span>
+                    </span>
                     <span className="shrink-0 text-[11px] font-bold uppercase text-forest">
                       {t('Verified', 'Vérifié')}
                     </span>
@@ -360,8 +402,13 @@ const PointOperatorAccessCard: React.FC<{ language: 'en' | 'fr' }> = ({ language
               </div>
             )}
             {selectedPoint && (
-              <div className="rounded-xl border border-forest/20 bg-forest-wash p-3 text-xs font-semibold text-forest-dark">
-                {t('Selected point', 'Point sélectionné')}: {pointDisplayName(selectedPoint)}
+              <div className="rounded-xl border border-forest/20 bg-forest-wash p-3 text-xs text-forest-dark">
+                <div className="font-bold">
+                  {t('Selected point', 'Point sélectionné')}: {pointDisplayNameForLanguage(selectedPoint, language)}
+                </div>
+                <div className="mt-1 break-words font-medium text-forest">
+                  {pointSecondaryLabel(selectedPoint)}
+                </div>
               </div>
             )}
           </div>
@@ -411,7 +458,7 @@ const PointOperatorAccessCard: React.FC<{ language: 'en' | 'fr' }> = ({ language
                     </h4>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    {t('Point', 'Point')}: {selectedPoint ? pointDisplayName(selectedPoint) : assignment.pointId}
+                    {t('Point', 'Point')}: {selectedPoint ? pointDisplayNameForLanguage(selectedPoint, language) : assignment.pointId}
                   </p>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase ${

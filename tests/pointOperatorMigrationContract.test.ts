@@ -6,6 +6,7 @@ const migrationPath = new URL(
   "../supabase/migrations/20260624_point_operator_accounts.sql",
   import.meta.url,
 );
+const storePath = new URL("../lib/server/pointOperatorStore.ts", import.meta.url);
 
 test("point operator migration defines role, password gate, and active uniqueness", async () => {
   const sql = await readFile(migrationPath, "utf8");
@@ -16,4 +17,10 @@ test("point operator migration defines role, password gate, and active uniquenes
   assert.match(sql, /where status = 'active'/i);
   assert.match(sql, /operator_user_id/);
   assert.match(sql, /point_id/);
+});
+
+test("point operator assignment store writes the real user profile table", async () => {
+  const source = await readFile(storePath, "utf8");
+  assert.match(source, /public\.user_profiles/);
+  assert.doesNotMatch(source, /public\.profiles\b/);
 });
