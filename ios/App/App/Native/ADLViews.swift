@@ -19,6 +19,8 @@ struct RootView: View {
                     hasSeenSplash = true
                     appState.continueAsGuest()
                 })
+            } else if appState.mustChangePassword && appState.selectedRole == .pointOperator {
+                PointOperatorPasswordChangeView()
             } else if appState.isAuthenticated || appState.isGuest {
                 AppShellView()
             } else {
@@ -1138,6 +1140,8 @@ struct AppShellView: View {
         case .clientDashboard: ClientDashboardView()
         case .investor: InvestorDashboardView()
         case .analytics: AnalyticsView()
+        case .pointOperatorStatus: PointOperatorStatusView()
+        case .pointOperatorProfile: PointOperatorProfileView()
         }
     }
 }
@@ -1227,6 +1231,8 @@ struct ADLTabBar: View {
         case .agentPerformance: return appState.t("Agents", "Agents")
         case .clientDashboard: return "Delta"
         case .investor: return appState.t("Dashboard", "Tableau")
+        case .pointOperatorStatus: return appState.t("Status", "Statut")
+        case .pointOperatorProfile: return appState.t("Profile", "Profil")
         case .analytics:
             if isAdmin { return appState.t("Impact", "Impact") }
             if appState.selectedRole == .client { return appState.t("Insights", "Analyses") }
@@ -1245,6 +1251,8 @@ struct ADLTabBar: View {
         case .agentPerformance: return "person.2"
         case .clientDashboard: return "chart.bar"
         case .investor: return "square.grid.2x2"
+        case .pointOperatorStatus: return "switch.2"
+        case .pointOperatorProfile: return "person.crop.square"
         case .analytics:
             if isAdmin { return "chart.bar" }
             if appState.selectedRole == .client { return "chart.line.uptrend.xyaxis" }
@@ -1431,6 +1439,434 @@ struct AgentHomeView: View {
     private var filteredPoints: [DataPoint] {
         guard let activeCategory else { return appState.points }
         return appState.points.filter { $0.category == activeCategory }
+    }
+}
+
+private struct PointOperatorStatusView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var payload: PointOperatorMeDTO?
+    @State private var isLoading = false
+    @State private var error: String?
+    @State private var controlState: [String: String] = [:]
+    @State private var localSignals: [String: PointOperatorSignalDTO] = [:]
+    private let queueStore = PointOperatorQueueStore()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let payload {
+                    header
+                    ForEach(payload.controls) { control in
+                        controlCard(control, signal: localSignals[control.field] ?? payload.signals[control.field])
+                    }
+                } else if let error {
+                    restrictedCard(error)
+                } else if isLoading {
+                    ProgressView(appState.t("Loading point...", "Chargement du point..."))
+                        .frame(maxWidth: .infinity, minHeight: 180)
+                }
+            }
+            .padding(16)
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .task { await load() }
+    }
+
+    private var header: some View {
+        ADLCard {
+            HStack(spacing: 12) {
+                if let urlString = payload?.point.photoUrl, let url = URL(string: urlString) {
+                    AsyncImage(url: url) { image in
+                        image.resizable().scaledToFill()
+                    } placeholder: {
+                        Color.white.overlay(Image(systemName: "photo").foregroundColor(ADLColor.inkMuted))
+                    }
+                    .frame(width: 64, height: 64)
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionLabel(text: appState.t("Point Operator", "Opérateur du point"))
+                    Text(pointName)
+                        .font(ADLFont.inter(18, .bold))
+                        .foregroundColor(ADLColor.navy)
+                    Text(payload?.point.category.title ?? appState.t("Verified point", "Point vérifié"))
+                        .font(ADLFont.inter(12))
+                        .foregroundColor(ADLColor.inkMuted)
+                }
+                Spacer()
+                StatusPill(title: appState.t("Verified", "Vérifié"), tint: ADLColor.forest)
+            }
+        }
+    }
+
+    private func controlCard(_ control: PointOperatorControlDTO, signal: PointOperatorSignalDTO?) -> some View {
+        let valueText = signal?.isExpired == true || signal?.value == nil
+            ? appState.t("Unknown", "Inconnu")
+            : (signal?.value == true ? appState.t("On", "Oui") : appState.t("Off", "Non"))
+        let state = controlState[control.field] ?? appState.t("Saved", "Enregistré")
+        return ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(appState.language == "fr" ? control.labelFr : control.labelEn)
+                            .font(ADLFont.inter(16, .bold))
+                            .foregroundColor(ADLColor.ink)
+                        Text("\(valueText) · \(freshness(signal))")
+                            .font(ADLFont.inter(12))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                    Spacer()
+                    Text(state)
+                        .font(ADLFont.inter(11, .bold))
+                        .foregroundColor(state.lowercased().contains("pending") ? ADLColor.terracotta : ADLColor.forest)
+                }
+                HStack(spacing: 10) {
+                    statusButton(appState.t("On", "Oui"), active: signal?.value == true && signal?.isExpired == false) {
+                        Task { await update(control, to: true) }
+                    }
+                    statusButton(appState.t("Off", "Non"), active: signal?.value == false && signal?.isExpired == false) {
+                        Task { await update(control, to: false) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func statusButton(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(ADLFont.inter(14, .bold))
+                .foregroundColor(active ? .white : ADLColor.navy)
+                .frame(maxWidth: .infinity, minHeight: 50)
+                .background(active ? ADLColor.navy : ADLColor.navyWash)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var pointName: String {
+        payload?.point.details.name?.nilIfEmpty
+            ?? payload?.point.details.siteName?.nilIfEmpty
+            ?? payload?.point.details.roadName?.nilIfEmpty
+            ?? payload?.point.pointId
+            ?? appState.t("Assigned point", "Point affecté")
+    }
+
+    private func freshness(_ signal: PointOperatorSignalDTO?) -> String {
+        guard let signal else { return appState.t("No report yet", "Aucun signal") }
+        if signal.isExpired { return appState.t("Expired", "Expiré") }
+        return appState.t("Updated \(signal.reportedAt)", "Mis à jour \(signal.reportedAt)")
+    }
+
+    private func restrictedCard(_ text: String) -> some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(text, systemImage: "lock.fill")
+                    .font(ADLFont.inter(13, .semibold))
+                    .foregroundColor(ADLColor.terracotta)
+                Text(appState.t("Point operator access is inactive. Contact ADL support or your admin reviewer.", "L'accès opérateur est inactif. Contactez le support ADL ou votre réviseur admin."))
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.inkMuted)
+                Button { appState.signOut() } label: {
+                    Text(appState.t("Sign out", "Déconnexion"))
+                        .font(ADLFont.inter(14, .bold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, minHeight: 50)
+                        .background(ADLColor.navy)
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func load() async {
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+        do {
+            let next = try await appState.apiClient.fetchPointOperatorMe()
+            payload = next
+            localSignals = next.signals
+        } catch {
+            self.error = (error as? APIError)?.message ?? appState.t("Access removed — contact ADL.", "Accès retiré — contactez ADL.")
+        }
+    }
+
+    private func update(_ control: PointOperatorControlDTO, to value: Bool) async {
+        let capturedAt = Date()
+        controlState[control.field] = appState.t("Syncing", "Synchronisation")
+        let now = ISO8601DateFormatter().string(from: capturedAt)
+        localSignals[control.field] = PointOperatorSignalDTO(
+            field: control.field,
+            value: value,
+            reportedBy: "point_operator",
+            reportedAt: now,
+            expiresAt: ISO8601DateFormatter().string(from: capturedAt.addingTimeInterval(Double(control.expiryHours) * 3600)),
+            isExpired: false,
+            eventId: "local-\(UUID().uuidString)",
+            reviewState: "pending_review"
+        )
+        let queued = try? queueStore.enqueueSignal(field: control.field, value: value, capturedAt: capturedAt)
+        do {
+            let result = try await appState.apiClient.submitPointOperatorSignal(
+                field: control.field,
+                value: value,
+                capturedAt: capturedAt,
+                idempotencyKey: queued?.idempotencyKey ?? UUID()
+            )
+            if let queued { try? queueStore.remove(queued.id) }
+            payload = PointOperatorMeDTO(
+                assignment: payload?.assignment ?? PointOperatorAssignmentDTO(id: "", operatorUserId: "", pointId: "", status: "active", grantedBy: "", grantedAt: "", revokedBy: nil, revokedAt: nil, revokeReason: nil),
+                point: result.point,
+                controls: payload?.controls ?? [],
+                signals: payload?.signals ?? [:]
+            )
+            if let signal = result.signal { localSignals[control.field] = signal }
+            controlState[control.field] = appState.t("Saved", "Enregistré")
+        } catch {
+            controlState[control.field] = appState.t("Pending sync", "En attente")
+        }
+    }
+}
+
+private struct PointOperatorProfileView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var payload: PointOperatorMeDTO?
+    @State private var error: String?
+    @State private var photoState = ""
+    @State private var showPasswordChange = false
+    @State private var photoDraft: UIImage?
+    @State private var showPhotoSource = false
+    @State private var showPhotoPicker = false
+    @State private var photoSource: UIImagePickerController.SourceType = .photoLibrary
+    private let queueStore = PointOperatorQueueStore()
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if payload == nil, let error {
+                    restrictedCard(error)
+                } else {
+                    ADLCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            if let photoDraft {
+                                Image(uiImage: photoDraft)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(height: 180)
+                                    .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                            } else if let urlString = payload?.point.photoUrl, let url = URL(string: urlString) {
+                                AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: { Color.white }
+                                    .frame(height: 180)
+                                    .clipShape(RoundedRectangle(cornerRadius: ADLRadius.card, style: .continuous))
+                            }
+                            Text(pointName)
+                                .font(ADLFont.inter(20, .bold))
+                                .foregroundColor(ADLColor.navy)
+                            profileRow(appState.t("Vertical", "Vertical"), payload?.point.category.title ?? "—")
+                            profileRow(appState.t("Locality", "Localité"), locality)
+                            profileRow(appState.t("Point ID", "ID du point"), shortPointId)
+                            Text(appState.t("Verified identity and location are managed by ADL.", "L'identité vérifiée et la localisation sont gérées par ADL."))
+                                .font(ADLFont.inter(12))
+                                .foregroundColor(ADLColor.inkMuted)
+                        }
+                    }
+                    ADLCard {
+                        VStack(spacing: 12) {
+                            Button { showPhotoSource = true } label: {
+                                actionRow(appState.t("Update photo", "Mettre à jour la photo"), systemImage: "camera.fill")
+                            }
+                            .disabled(payload == nil)
+                            Button { showPasswordChange = true } label: {
+                                actionRow(appState.t("Change password", "Changer le mot de passe"), systemImage: "key.fill")
+                            }
+                            Button { appState.signOut() } label: {
+                                actionRow(appState.t("Sign out", "Déconnexion"), systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                            if !photoState.isEmpty {
+                                Text(photoState)
+                                    .font(ADLFont.inter(12, .bold))
+                                    .foregroundColor(ADLColor.forest)
+                            }
+                        }
+                    }
+                }
+                if let error, payload != nil {
+                    Text(error)
+                        .font(ADLFont.inter(12, .semibold))
+                        .foregroundColor(ADLColor.terracotta)
+                }
+            }
+            .padding(16)
+        }
+        .background(ADLColor.paper.ignoresSafeArea())
+        .task { await load() }
+        .sheet(isPresented: $showPasswordChange) {
+            PointOperatorPasswordChangeView()
+                .environmentObject(appState)
+        }
+        .confirmationDialog(appState.t("Point photo", "Photo du point"), isPresented: $showPhotoSource, titleVisibility: .visible) {
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                Button(appState.t("Take Photo", "Prendre une photo")) {
+                    photoSource = .camera
+                    showPhotoPicker = true
+                }
+            }
+            Button(appState.t("Choose Photo", "Choisir une photo")) {
+                photoSource = .photoLibrary
+                showPhotoPicker = true
+            }
+            Button(appState.t("Cancel", "Annuler"), role: .cancel) {}
+        }
+        .sheet(isPresented: $showPhotoPicker, onDismiss: {
+            if photoDraft != nil { Task { await submitPhotoDraft() } }
+        }) {
+            ProfileImagePicker(image: $photoDraft, sourceType: photoSource)
+        }
+    }
+
+    private var pointName: String {
+        payload?.point.details.name?.nilIfEmpty ?? payload?.point.details.siteName?.nilIfEmpty ?? payload?.point.pointId ?? "—"
+    }
+    private var locality: String {
+        guard let location = payload?.point.location else { return "—" }
+        return String(format: "%.4f, %.4f", location.latitude, location.longitude)
+    }
+    private var shortPointId: String {
+        guard let id = payload?.point.pointId else { return "—" }
+        return String(id.prefix(12))
+    }
+
+    private func profileRow(_ title: String, _ value: String) -> some View {
+        HStack {
+            Text(title).font(ADLFont.inter(12, .bold)).foregroundColor(ADLColor.inkMuted)
+            Spacer()
+            Text(value).font(ADLFont.inter(13, .semibold)).foregroundColor(ADLColor.ink)
+        }
+    }
+
+    private func actionRow(_ title: String, systemImage: String) -> some View {
+        HStack {
+            Image(systemName: systemImage).foregroundColor(ADLColor.navy)
+            Text(title).font(ADLFont.inter(14, .bold)).foregroundColor(ADLColor.navy)
+            Spacer()
+            Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold)).foregroundColor(ADLColor.inkMuted)
+        }
+        .frame(minHeight: 48)
+    }
+
+    private func restrictedCard(_ text: String) -> some View {
+        ADLCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(text, systemImage: "lock.fill")
+                    .font(ADLFont.inter(13, .semibold))
+                    .foregroundColor(ADLColor.terracotta)
+                Text(appState.t("Your point operator access is inactive. Contact ADL support or your admin reviewer.", "Votre accès opérateur est inactif. Contactez le support ADL ou votre réviseur admin."))
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.inkMuted)
+                Button { appState.signOut() } label: {
+                    actionRow(appState.t("Sign out", "Déconnexion"), systemImage: "rectangle.portrait.and.arrow.right")
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func load() async {
+        do { payload = try await appState.apiClient.fetchPointOperatorMe() }
+        catch { self.error = (error as? APIError)?.message ?? appState.t("Unable to load profile.", "Profil indisponible.") }
+    }
+
+    private func submitPhotoDraft() async {
+        guard let imageDataURL = photoDraft?.adlProfileImageDataURL(maxBytes: 700_000) else {
+            photoState = appState.t("Unable to prepare photo.", "Préparation photo impossible.")
+            return
+        }
+        let capturedAt = Date()
+        let queued = try? queueStore.enqueuePhoto(imageDataURL: imageDataURL, capturedAt: capturedAt)
+        do {
+            _ = try await appState.apiClient.submitPointOperatorPhoto(
+                imageDataURL: imageDataURL,
+                capturedAt: capturedAt,
+                idempotencyKey: queued?.idempotencyKey ?? UUID()
+            )
+            if let queued { try? queueStore.remove(queued.id) }
+            photoState = appState.t("Photo saved · review pending", "Photo enregistrée · en revue")
+            photoDraft = nil
+        } catch {
+            photoState = appState.t("Pending sync", "En attente")
+        }
+    }
+}
+
+private struct PointOperatorPasswordChangeView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var currentPassword = ""
+    @State private var newPassword = ""
+    @State private var confirmPassword = ""
+    @State private var error: String?
+    @State private var isSaving = false
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            BrandDiamond(size: 64)
+            Text(appState.t("Change temporary password", "Changez le mot de passe temporaire"))
+                .font(ADLFont.inter(22, .bold))
+                .foregroundColor(ADLColor.navy)
+                .multilineTextAlignment(.center)
+            secure(appState.t("Current password", "Mot de passe actuel"), text: $currentPassword)
+            secure(appState.t("New password", "Nouveau mot de passe"), text: $newPassword)
+            secure(appState.t("Confirm new password", "Confirmer le nouveau mot de passe"), text: $confirmPassword)
+            if let error { Text(error).font(ADLFont.inter(12, .semibold)).foregroundColor(ADLColor.terracotta) }
+            Button { Task { await save() } } label: {
+                actionText(appState.t("Change password", "Changer le mot de passe"), loading: isSaving)
+            }
+            .buttonStyle(.plain)
+            Button(appState.t("Sign out", "Déconnexion")) { appState.signOut() }
+                .font(ADLFont.inter(13, .bold))
+                .foregroundColor(ADLColor.inkMuted)
+            Spacer()
+        }
+        .padding(24)
+        .background(ADLColor.paper.ignoresSafeArea())
+    }
+
+    private func secure(_ title: String, text: Binding<String>) -> some View {
+        SecureField(title, text: text)
+            .textContentType(.password)
+            .font(ADLFont.inter(15))
+            .padding(.horizontal, 14)
+            .frame(height: 52)
+            .background(Color.white)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(ADLColor.lineStrong, lineWidth: 1))
+    }
+
+    private func actionText(_ title: String, loading: Bool) -> some View {
+        Text(loading ? appState.t("Saving...", "Enregistrement...") : title)
+            .font(ADLFont.inter(15, .bold))
+            .foregroundColor(.white)
+            .frame(maxWidth: .infinity, minHeight: 52)
+            .background(ADLColor.navy)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func save() async {
+        guard newPassword == confirmPassword, newPassword.count >= 10 else {
+            error = appState.t("Passwords must match and be at least 10 characters.", "Les mots de passe doivent correspondre et contenir 10 caractères.")
+            return
+        }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await appState.apiClient.changePointOperatorPassword(currentPassword: currentPassword, newPassword: newPassword)
+            appState.mustChangePassword = false
+            appState.signOut()
+        } catch {
+            self.error = (error as? APIError)?.message ?? appState.t("Unable to change password.", "Changement impossible.")
+        }
     }
 }
 
@@ -8804,6 +9240,7 @@ struct ProfileView: View {
         case .client: path = "/docs/client"
         case .admin: path = "/docs/admin"
         case .agent: path = "/docs/agent"
+        case .pointOperator: path = "/docs/agent"
         }
         return URL(string: "https://www.app.africandatalayer.com\(path)")!
     }
@@ -9130,10 +9567,35 @@ private struct AdminAccountAccessCard: View {
     @State private var isSavingAccess = false
     @State private var message: String?
     @State private var error: String?
+    @State private var operatorPointQuery = ""
+    @State private var operatorPoints: [ProjectedPoint] = []
+    @State private var selectedOperatorPoint: ProjectedPoint?
+    @State private var operatorIdentifier = ""
+    @State private var operatorName = ""
+    @State private var operatorPassword = ""
+    @State private var operatorLookupIdentifier = ""
+    @State private var operatorAssignment: PointOperatorAssignmentDTO?
+    @State private var operatorRevokeReason = ""
+    @State private var isSearchingOperatorPoints = false
+    @State private var isCreatingOperator = false
+    @State private var isLoadingOperatorAssignment = false
+    @State private var isRevokingOperator = false
 
     private var canCreate: Bool {
         !createIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
             createPassword.count >= 10
+    }
+
+    private var canCreateOperator: Bool {
+        selectedOperatorPoint != nil &&
+            !operatorIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !operatorName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            operatorPassword.count >= 10
+    }
+
+    private var canRevokeOperator: Bool {
+        operatorAssignment?.status == "active" &&
+            operatorRevokeReason.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
     }
 
     private var canSaveAccess: Bool {
@@ -9293,6 +9755,8 @@ private struct AdminAccountAccessCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 }
 
+                pointOperatorAccessSection
+
                 if let error {
                     Text(error)
                         .font(ADLFont.inter(12, .semibold))
@@ -9312,7 +9776,182 @@ private struct AdminAccountAccessCard: View {
         case .client: return appState.t("Client", "Client")
         case .agent: return appState.t("Agent", "Agent")
         case .admin: return appState.t("Admin", "Admin")
+        case .pointOperator: return appState.t("Point Operator", "Opérateur du point")
         }
+    }
+
+    private var pointOperatorAccessSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                SectionLabel(text: appState.t("Point Operator", "Opérateur du point"))
+                Text(appState.t("Link one operator account to one verified point.", "Liez un compte opérateur à un point vérifié."))
+                    .font(ADLFont.inter(12))
+                    .foregroundColor(ADLColor.inkMuted)
+            }
+
+            adminTextField(
+                title: appState.t("Find verified point", "Trouver un point vérifié"),
+                text: $operatorPointQuery,
+                placeholder: appState.t("Point name or ID", "Nom ou ID du point")
+            )
+            Button { searchOperatorPoints() } label: {
+                actionLabel(
+                    title: appState.t("Search points", "Rechercher les points"),
+                    loading: isSearchingOperatorPoints,
+                    tint: ADLColor.navy
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isSearchingOperatorPoints)
+
+            if let selectedOperatorPoint {
+                operatorPointRow(selectedOperatorPoint, isSelected: true)
+            } else if !operatorPoints.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(operatorPoints.prefix(5)) { point in
+                        Button { self.selectedOperatorPoint = point } label: {
+                            operatorPointRow(point, isSelected: false)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            adminTextField(
+                title: appState.t("Operator email or phone", "Email ou téléphone opérateur"),
+                text: $operatorIdentifier,
+                placeholder: "operator@example.com / +237..."
+            )
+            adminTextField(
+                title: appState.t("Operator name", "Nom opérateur"),
+                text: $operatorName,
+                placeholder: appState.t("Store manager", "Responsable du point")
+            )
+            VStack(alignment: .leading, spacing: 6) {
+                Text(appState.t("Temporary password", "Mot de passe temporaire").uppercased())
+                    .font(ADLFont.inter(10, .bold))
+                    .tracking(1.1)
+                    .foregroundColor(ADLColor.inkMuted)
+                SecureField(appState.t("Minimum 10 chars", "10 caractères minimum"), text: $operatorPassword)
+                    .font(ADLFont.inter(14))
+                    .textContentType(.newPassword)
+                    .padding(.horizontal, 12)
+                    .frame(height: 46)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(ADLColor.lineStrong, lineWidth: 1))
+            }
+            Button { createOperatorAccount() } label: {
+                actionLabel(
+                    title: appState.t("Create and link operator", "Créer et lier l'opérateur"),
+                    loading: isCreatingOperator,
+                    tint: canCreateOperator ? ADLColor.terracotta : Color(hex: 0x9ca3af)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!canCreateOperator || isCreatingOperator)
+
+            Divider().background(ADLColor.line).padding(.vertical, 2)
+            adminTextField(
+                title: appState.t("Load operator assignment", "Charger l'affectation"),
+                text: $operatorLookupIdentifier,
+                placeholder: "operator@example.com / +237..."
+            )
+            Button { lookupOperatorAssignment() } label: {
+                actionLabel(
+                    title: appState.t("Load assignment", "Charger l'affectation"),
+                    loading: isLoadingOperatorAssignment,
+                    tint: operatorLookupIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Color(hex: 0x9ca3af) : ADLColor.navy
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(operatorLookupIdentifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoadingOperatorAssignment)
+
+            if let operatorAssignment {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(operatorAssignment.pointId)
+                            .font(ADLFont.inter(13, .bold))
+                            .foregroundColor(ADLColor.ink)
+                            .lineLimit(1)
+                        Spacer()
+                        StatusPill(
+                            title: operatorAssignment.status.capitalized,
+                            tint: operatorAssignment.status == "active" ? ADLColor.forest : ADLColor.terracotta
+                        )
+                    }
+                    Text("\(appState.t("Granted", "Accordé")): \(operatorAssignment.grantedAt)")
+                        .font(ADLFont.inter(11))
+                        .foregroundColor(ADLColor.inkMuted)
+                    if let revokedAt = operatorAssignment.revokedAt {
+                        Text("\(appState.t("Revoked", "Révoqué")): \(revokedAt)")
+                            .font(ADLFont.inter(11))
+                            .foregroundColor(ADLColor.inkMuted)
+                    }
+                    adminTextField(
+                        title: appState.t("Revoke reason", "Motif de révocation"),
+                        text: $operatorRevokeReason,
+                        placeholder: appState.t("Staff change, duplicate, fraud...", "Changement d'équipe, doublon, fraude...")
+                    )
+                    Button { revokeOperatorAssignment() } label: {
+                        actionLabel(
+                            title: appState.t("Revoke operator", "Révoquer l'opérateur"),
+                            loading: isRevokingOperator,
+                            tint: canRevokeOperator ? ADLColor.terracotta : Color(hex: 0x9ca3af)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!canRevokeOperator || isRevokingOperator)
+                }
+                .padding(12)
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(ADLColor.lineStrong, lineWidth: 1))
+            }
+        }
+        .padding(12)
+        .background(ADLColor.paper)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private func operatorPointRow(_ point: ProjectedPoint, isSelected: Bool) -> some View {
+        HStack(spacing: 10) {
+            if let urlString = point.photoUrl, let url = URL(string: urlString) {
+                AsyncImage(url: url) { image in image.resizable().scaledToFill() } placeholder: {
+                    ADLColor.navyWash.overlay(Image(systemName: point.category.systemImage).foregroundColor(ADLColor.navy))
+                }
+                .frame(width: 42, height: 42)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            } else {
+                Image(systemName: point.category.systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(isSelected ? .white : ADLColor.navy)
+                    .frame(width: 42, height: 42)
+                    .background(isSelected ? ADLColor.navy : ADLColor.navyWash)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(pointDisplayName(point))
+                    .font(ADLFont.inter(12, .bold))
+                    .foregroundColor(ADLColor.ink)
+                    .lineLimit(1)
+                Text("\(point.category.title) · \(String(point.pointId.prefix(12)))")
+                    .font(ADLFont.inter(11))
+                    .foregroundColor(ADLColor.inkMuted)
+                Text(String(format: "%.4f, %.4f · %@", point.location.latitude, point.location.longitude, appState.t("No active operator", "Aucun opérateur actif")))
+                    .font(ADLFont.inter(10))
+                    .foregroundColor(ADLColor.inkMuted)
+            }
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark.seal.fill")
+                    .foregroundColor(ADLColor.forest)
+            }
+        }
+        .padding(10)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(isSelected ? ADLColor.forest : ADLColor.lineStrong, lineWidth: 1))
     }
 
     private func rolePill(_ role: UserRole) -> some View {
@@ -9465,6 +10104,158 @@ private struct AdminAccountAccessCard: View {
             isSavingAccess = false
         }
     }
+
+    private func searchOperatorPoints() {
+        isSearchingOperatorPoints = true
+        error = nil
+        message = nil
+        let query = adminQuery([
+            URLQueryItem(name: "view", value: "po_admin_search_points"),
+            URLQueryItem(name: "q", value: operatorPointQuery.trimmingCharacters(in: .whitespacesAndNewlines)),
+        ])
+        Task {
+            do {
+                let response = try await appState.apiClient.fetchJSON(
+                    PointOperatorAdminSearchResponse.self,
+                    path: "/api/user?\(query)"
+                )
+                operatorPoints = response.points
+                selectedOperatorPoint = response.points.first
+                message = response.points.isEmpty
+                    ? appState.t("No assignable verified points found.", "Aucun point vérifié disponible.")
+                    : appState.t("Select a verified point, then create the operator.", "Sélectionnez un point vérifié, puis créez l'opérateur.")
+            } catch {
+                self.error = (error as? APIError)?.message ?? appState.t("Unable to search points.", "Recherche impossible.")
+            }
+            isSearchingOperatorPoints = false
+        }
+    }
+
+    private func createOperatorAccount() {
+        guard let point = selectedOperatorPoint else { return }
+        isCreatingOperator = true
+        error = nil
+        message = nil
+        let identifier = operatorIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = PointOperatorAdminCreatePayload(
+            identifier: identifier,
+            name: operatorName.trimmingCharacters(in: .whitespacesAndNewlines),
+            password: operatorPassword,
+            pointId: point.pointId
+        )
+        Task {
+            do {
+                let response = try await appState.apiClient.postJSON(
+                    PointOperatorAdminMutationResponse.self,
+                    path: "/api/user?view=po_admin_create",
+                    body: body,
+                    idempotencyKey: UUID().uuidString
+                )
+                operatorAssignment = response.assignment
+                operatorLookupIdentifier = response.assignment.operatorUserId
+                operatorIdentifier = ""
+                operatorName = ""
+                operatorPassword = ""
+                selectedOperatorPoint = nil
+                operatorPoints = []
+                message = appState.t("Operator created and linked. Share the temporary password securely.", "Opérateur créé et lié. Partagez le mot de passe temporaire de façon sûre.")
+            } catch {
+                self.error = (error as? APIError)?.message ?? appState.t("Unable to create operator.", "Création opérateur impossible.")
+            }
+            isCreatingOperator = false
+        }
+    }
+
+    private func lookupOperatorAssignment() {
+        isLoadingOperatorAssignment = true
+        error = nil
+        message = nil
+        let query = adminQuery([
+            URLQueryItem(name: "view", value: "po_admin_assignment"),
+            URLQueryItem(name: "operatorUserId", value: operatorLookupIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)),
+        ])
+        Task {
+            do {
+                let response = try await appState.apiClient.fetchJSON(
+                    PointOperatorAdminAssignmentResponse.self,
+                    path: "/api/user?\(query)"
+                )
+                operatorAssignment = response.assignment
+                operatorRevokeReason = ""
+                message = response.assignment == nil
+                    ? appState.t("No active operator assignment found.", "Aucune affectation active trouvée.")
+                    : appState.t("Operator assignment loaded.", "Affectation opérateur chargée.")
+            } catch {
+                operatorAssignment = nil
+                self.error = (error as? APIError)?.message ?? appState.t("Unable to load operator assignment.", "Chargement affectation impossible.")
+            }
+            isLoadingOperatorAssignment = false
+        }
+    }
+
+    private func revokeOperatorAssignment() {
+        guard let operatorUserId = operatorAssignment?.operatorUserId else { return }
+        isRevokingOperator = true
+        error = nil
+        message = nil
+        let body = PointOperatorAdminRevokePayload(
+            operatorUserId: operatorUserId,
+            reason: operatorRevokeReason.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        Task {
+            do {
+                let response = try await appState.apiClient.postJSON(
+                    PointOperatorAdminMutationResponse.self,
+                    path: "/api/user?view=po_admin_revoke",
+                    body: body,
+                    idempotencyKey: UUID().uuidString
+                )
+                operatorAssignment = response.assignment
+                operatorRevokeReason = ""
+                message = appState.t("Operator revoked. You can search the point and link a replacement.", "Opérateur révoqué. Vous pouvez rechercher le point et lier un remplaçant.")
+            } catch {
+                self.error = (error as? APIError)?.message ?? appState.t("Unable to revoke operator.", "Révocation impossible.")
+            }
+            isRevokingOperator = false
+        }
+    }
+
+    private func pointDisplayName(_ point: ProjectedPoint) -> String {
+        point.details.name?.nilIfEmpty
+            ?? point.details.siteName?.nilIfEmpty
+            ?? point.details.roadName?.nilIfEmpty
+            ?? point.pointId
+    }
+
+    private func adminQuery(_ items: [URLQueryItem]) -> String {
+        var components = URLComponents()
+        components.queryItems = items
+        return components.percentEncodedQuery ?? ""
+    }
+}
+
+private struct PointOperatorAdminSearchResponse: Decodable {
+    var points: [ProjectedPoint]
+}
+
+private struct PointOperatorAdminAssignmentResponse: Decodable {
+    var assignment: PointOperatorAssignmentDTO?
+}
+
+private struct PointOperatorAdminMutationResponse: Decodable {
+    var assignment: PointOperatorAssignmentDTO
+}
+
+private struct PointOperatorAdminCreatePayload: Encodable {
+    var identifier: String
+    var name: String
+    var password: String
+    var pointId: String
+}
+
+private struct PointOperatorAdminRevokePayload: Encodable {
+    var operatorUserId: String
+    var reason: String
 }
 
 
