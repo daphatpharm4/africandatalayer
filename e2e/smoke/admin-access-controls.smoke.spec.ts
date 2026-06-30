@@ -15,6 +15,7 @@ async function signInAsAdmin(page: Page) {
 test("admin can switch map scope and promote another account to admin", async ({ page }) => {
   await signInAsAdmin(page);
 
+  await page.getByTestId("main-navigation").getByRole("button", { name: /^Map$/i }).click();
   await expect(page.getByTestId("screen-home")).toBeVisible();
   await expect(page.getByTestId("home-map-scope-toggle")).toBeVisible();
   await expect(page.getByTestId("home-map-scope-bonamoussadi")).toHaveAttribute("aria-pressed", "true");
@@ -63,7 +64,7 @@ test("admin can switch map scope and promote another account to admin", async ({
 
 test("admin creates and links a point operator", async ({ page }) => {
   await signInAsAdmin(page);
-  await page.getByRole("button", { name: /profile|profil/i }).click();
+  await page.getByTestId("main-navigation").getByRole("button", { name: /profile|profil/i }).click();
   await page.getByRole("button", { name: /point operator|opérateur du point/i }).click();
   const card = page.getByTestId("profile-point-operator-access");
   await card.getByLabel(/email or phone|email ou téléphone/i).fill("new.operator@adl.test");
@@ -71,6 +72,6 @@ test("admin creates and links a point operator", async ({ page }) => {
   await card.getByLabel(/temporary password|mot de passe temporaire/i).fill("OperatorPass123!");
   await card.getByLabel(/search verified point|rechercher un point vérifié/i).fill("Bonamoussadi Pharmacy Center");
   await card.getByRole("option", { name: /Bonamoussadi Pharmacy Center/ }).click();
-  await card.getByRole("button", { name: /create and link|créer et lier/i }).click();
-  await expect(card.getByText(/operator linked|opérateur lié/i)).toBeVisible();
+  await card.getByRole("button", { name: /^(create and link|créer et lier)$/i }).click();
+  await expect(card.getByText(/operator linked\./i)).toBeVisible();
 });

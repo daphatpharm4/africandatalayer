@@ -122,7 +122,7 @@ const App: React.FC = () => {
   const isClient = userRole === 'client';
   const isPointOperator = userRole === 'point_operator';
   const isDocsMode = pathname.startsWith('/docs');
-  const docsAudience = isAdmin ? 'admin' : isClient ? 'client' : 'agent';
+  const docsAudience = isAdmin ? 'admin' : isClient ? 'client' : isPointOperator ? 'point_operator' : 'agent';
 
   const normalizeScreenForRole = useCallback((screen: Screen, role: UserRole = userRole): Screen => {
     if (role !== 'point_operator') return screen;

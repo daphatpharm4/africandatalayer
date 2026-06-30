@@ -37,8 +37,7 @@ interface HelpCenterProps {
 }
 
 function roleToAudience(role: UserRole): DocsAudience {
-  // point_operator help content is introduced later; treat as public for now.
-  return role === 'point_operator' ? 'public' : role;
+  return role;
 }
 
 const toneClass: Record<DocsTone, string> = {
@@ -68,6 +67,9 @@ const surfaceToneClass: Record<string, string> = {
   'Admin review operations': 'bg-terra/10 text-terra-dark',
   'Admin field orchestration': 'bg-terra/10 text-terra-dark',
   'Admin automation intake': 'bg-terra/10 text-terra-dark',
+  'Point operator operations': 'bg-forest-wash text-forest',
+  'Point operator account': 'bg-forest-wash text-forest',
+  'Admin account operations': 'bg-terra/10 text-terra-dark',
   'Admin performance review': 'bg-terra/10 text-terra-dark',
 };
 

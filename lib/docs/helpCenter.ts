@@ -1,4 +1,4 @@
-export type DocsAudience = 'public' | 'client' | 'agent' | 'admin';
+export type DocsAudience = 'public' | 'client' | 'agent' | 'admin' | 'point_operator';
 export type DocsTone = 'navy' | 'forest' | 'terra' | 'gold';
 export type DocsVisualCoverage = 'captured' | 'text-only';
 
@@ -575,6 +575,86 @@ const SCREEN_LIBRARY: Record<string, DocsScreen> = {
       docsImage('client', '07-client-investor-dashboard.png', 'Client investor dashboard with executive KPIs and reporting-ready trends.'),
     ],
   },
+  'point-operator-status': {
+    id: 'point-operator-status',
+    title: 'Point Operator Status',
+    surface: 'Point operator operations',
+    audiences: ['point_operator', 'admin'],
+    entryPoint: 'Point Operator bottom tab -> Status',
+    summary: 'Lets an assigned operator publish one to three configured yes/no status signals for their verified point.',
+    whyItMatters: 'Operators can keep high-value point facts fresh without gaining field-agent capture permissions or XP incentives.',
+    primaryActions: [
+      'Read the assigned verified point and available controls.',
+      'Set each control to On or Off; expired, missing, or revoked values display as Unknown.',
+      'Keep working offline when a change shows Pending sync, then let the queue replay once connectivity returns.',
+    ],
+    keySignals: [
+      'Saved, Syncing, and Pending sync state',
+      'Freshness and Unknown state',
+      'Point-operator provenance on public point details',
+    ],
+    screenshots: [],
+  },
+  'point-operator-profile': {
+    id: 'point-operator-profile',
+    title: 'Point Operator Profile',
+    surface: 'Point operator account',
+    audiences: ['point_operator', 'admin'],
+    entryPoint: 'Point Operator bottom tab -> Profile',
+    summary: 'Shows the assigned point identity, profile actions, photo update, password change, and sign-out controls.',
+    whyItMatters: 'Operators can update the visible point photo and manage account access while verified point identity stays read-only.',
+    primaryActions: [
+      'Review point name, vertical, locality, and short point ID.',
+      'Update the point photo; it publishes immediately and enters admin review.',
+      'Change password, review privacy/help content, or sign out.',
+    ],
+    keySignals: [
+      'Photo review pending state',
+      'Read-only verified identity',
+      'Inactive assignment contact path',
+    ],
+    screenshots: [],
+  },
+  'point-operator-password': {
+    id: 'point-operator-password',
+    title: 'Point Operator password gate',
+    surface: 'Point operator account',
+    audiences: ['point_operator', 'admin'],
+    entryPoint: 'First login after admin-created account',
+    summary: 'Forces operators to replace the temporary password before entering Status or Profile.',
+    whyItMatters: 'Admin-created credentials must not remain usable after handoff.',
+    primaryActions: [
+      'Enter the temporary password.',
+      'Choose and confirm a new password.',
+      'Sign in again after the password change completes.',
+    ],
+    keySignals: [
+      'mustChangePassword session claim',
+      'Temporary credential replacement',
+      'Password reset/change support path',
+    ],
+    screenshots: [],
+  },
+  'admin-point-operator-access': {
+    id: 'admin-point-operator-access',
+    title: 'Point Operator account access',
+    surface: 'Admin account operations',
+    audiences: ['admin'],
+    entryPoint: 'Admin Profile -> Account Access -> Point Operator',
+    summary: 'Lets admins search verified points, create or link an operator, load an active assignment, revoke it, and replace it.',
+    whyItMatters: 'The lifecycle stays one-to-one: one active operator per verified point and one active point per operator.',
+    primaryActions: [
+      'Search verified points by name or ID and confirm no active operator is attached.',
+      'Enter operator identifier, display name, and temporary password to create and link the assignment.',
+      'Load an operator assignment, enter a revocation reason, revoke access, then link a replacement when needed.',
+    ],
+    keySignals: [
+      'Active assignment point ID and grant timestamp',
+      'Revocation reason and immediate operator lockout',
+      'Audit log events for grant, revoke, and password change',
+    ],
+    screenshots: [],
+  },
 };
 
 const countScreens = (audience: DocsAudience) =>
@@ -602,7 +682,7 @@ export const DOCS_SECTIONS: Record<DocsAudience, DocsSection> = {
       { label: 'Documented surfaces', value: String(Object.keys(SCREEN_LIBRARY).length), tone: 'navy' },
       { label: 'Agent surfaces', value: String(countScreens('agent')), tone: 'forest' },
       { label: 'Client surfaces', value: String(countScreens('client')), tone: 'gold' },
-      { label: 'Visual captures', value: String(countScreenshots('public') + countScreenshots('agent') + countScreenshots('client') + countScreenshots('admin')), tone: 'terra' },
+      { label: 'Visual captures', value: String(countScreenshots('public') + countScreenshots('agent') + countScreenshots('client') + countScreenshots('admin') + countScreenshots('point_operator')), tone: 'terra' },
     ],
     workflows: [
       {
@@ -895,6 +975,94 @@ export const DOCS_SECTIONS: Record<DocsAudience, DocsSection> = {
       },
     ],
   },
+  point_operator: {
+    slug: 'point_operator',
+    title: 'Point Operator docs',
+    navLabel: 'Point Operator',
+    subtitle: 'How assigned point staff keep one verified location fresh without field-agent permissions.',
+    intro:
+      'Point Operators are admin-created accounts linked one-to-one to an existing verified point. Their job is to keep current point status and photo evidence fresh from the business or site itself.',
+    highlights: [
+      'Operators see exactly two tabs: Status and Profile.',
+      'Status values are On, Off, or Unknown when missing, expired, or revoked.',
+      'Offline changes show Pending sync and replay from the operator queue.',
+      'Photo updates publish immediately with point-operator provenance and stay reviewable by admins.',
+      'Revoked operators lose point access immediately and should contact ADL support or their admin reviewer.',
+    ],
+    metrics: [
+      { label: 'Operator tabs', value: '2', tone: 'navy' },
+      { label: 'Status controls', value: '1-3 / vertical', tone: 'forest' },
+      { label: 'Offline queue', value: 'Enabled', tone: 'terra' },
+      { label: 'XP awarded', value: '0', tone: 'gold' },
+    ],
+    workflows: [
+      {
+        id: 'operator-first-login',
+        title: 'First login and password change',
+        summary: 'Use the temporary credential once, then replace it before entering the operator workspace.',
+        steps: [
+          'Sign in with the identifier and temporary password provided by the admin.',
+          'Complete the required password-change screen.',
+          'Return to the app and confirm only Status and Profile are visible.',
+        ],
+        screenIds: ['point-operator-password', 'point-operator-status', 'point-operator-profile'],
+      },
+      {
+        id: 'operator-status-sync',
+        title: 'Publish current point status',
+        summary: 'Update configured yes/no controls with freshness-aware public provenance.',
+        steps: [
+          'Open Status and review the assigned verified point.',
+          'Tap On or Off for each available control.',
+          'If the device is offline, leave the item in Pending sync until connectivity returns.',
+          'If a value expires or access is removed, the public view falls back to Unknown.',
+        ],
+        screenIds: ['point-operator-status', 'point-detail'],
+      },
+      {
+        id: 'operator-profile-photo',
+        title: 'Update point photo and manage account access',
+        summary: 'Use Profile for photo review, password changes, help, privacy, and sign out.',
+        steps: [
+          'Open Profile and confirm the read-only point identity.',
+          'Choose or capture a point photo; ADL publishes it with review pending.',
+          'Use Change password when the credential must rotate.',
+          'Contact ADL support or the admin reviewer if the assignment is revoked.',
+        ],
+        screenIds: ['point-operator-profile', 'point-operator-password'],
+      },
+    ],
+    screenIds: [
+      'point-operator-password',
+      'point-operator-status',
+      'point-operator-profile',
+      'point-detail',
+    ],
+    evidenceScreenIds: [
+      'point-operator-status',
+      'point-operator-profile',
+      'point-detail',
+    ],
+    runbook: [
+      {
+        title: 'Operator checklist',
+        items: [
+          'Use Status for only the current truth of the assigned point.',
+          'Treat Unknown as the safe state when a signal is missing, expired, rejected, or the assignment is inactive.',
+          'Wait for Pending sync to clear after offline work.',
+          'Use Profile to update the point photo; admin review can later reject the photo and restore the previous value.',
+        ],
+      },
+      {
+        title: 'Account support path',
+        items: [
+          'Temporary passwords must be changed at first login.',
+          'Operators can rotate their password from Profile.',
+          'If access is revoked or the point is wrong, contact ADL support or the admin reviewer; do not create a new field-agent submission.',
+        ],
+      },
+    ],
+  },
   admin: {
     slug: 'admin',
     title: 'Admin docs',
@@ -907,6 +1075,7 @@ export const DOCS_SECTIONS: Record<DocsAudience, DocsSection> = {
       'Assignments translate review findings into the next field action.',
       'Automation and performance surfaces help ops leads scale without losing trust.',
       'Account Access lets admins promote users to admin and unlock worldwide map views.',
+      'Point Operator account access lets admins create, link, revoke, and replace operators for verified points.',
       'The Map Scope toggle switches between Bonamoussadi, Cameroon, and Worldwide data views.',
     ],
     metrics: [
@@ -962,6 +1131,19 @@ export const DOCS_SECTIONS: Record<DocsAudience, DocsSection> = {
         screenIds: ['admin-account-access', 'admin-map-scope-toggle', 'profile-dashboard'],
       },
       {
+        id: 'admin-point-operator-lifecycle',
+        title: 'Create, revoke, and replace point operators',
+        summary: 'Use the Point Operator section in Account Access to manage one-to-one operator assignments.',
+        steps: [
+          'Search for a verified point by name or ID.',
+          'Enter operator identifier, display name, and temporary password to create and link the account.',
+          'Load the active assignment when follow-up is needed.',
+          'Revoke with a reason when staff changes, fraud, duplication, or wrong-point access occurs.',
+          'Search the point again and link a replacement operator after revocation.',
+        ],
+        screenIds: ['admin-point-operator-access', 'point-operator-password', 'point-operator-status'],
+      },
+      {
         id: 'admin-performance-and-reporting',
         title: 'Coach agents and support client reporting',
         summary: 'Use Agent Performance for coaching, then pivot into Delta or Investor Dashboard for reporting support.',
@@ -979,6 +1161,7 @@ export const DOCS_SECTIONS: Record<DocsAudience, DocsSection> = {
       'admin-assignments',
       'admin-automation',
       'admin-account-access',
+      'admin-point-operator-access',
       'admin-map-scope-toggle',
       'agent-performance',
       'delta-dashboard',
@@ -994,6 +1177,7 @@ export const DOCS_SECTIONS: Record<DocsAudience, DocsSection> = {
       'admin-assignments',
       'admin-automation',
       'admin-account-access',
+      'admin-point-operator-access',
       'admin-map-scope-toggle',
       'agent-performance',
       'delta-dashboard',
@@ -1016,6 +1200,8 @@ export const DOCS_SECTIONS: Record<DocsAudience, DocsSection> = {
           'Demoting an admin back to agent resets their scope to `bonamoussadi`.',
           'Use the Home explorer Map Scope toggle to switch your own view between Bonamoussadi, Cameroon, and Worldwide.',
           'Every role change is audit-logged with actor, previous role, and new role for security review.',
+          'Point Operator grant, revoke, replacement, and password-change events are audit-logged separately from generic role changes.',
+          'After revocation, the operator immediately loses Status/Profile data access; link a replacement from the same Point Operator section.',
         ],
       },
       {
@@ -1036,6 +1222,7 @@ export function docsPathForAudience(audience: DocsAudience): string {
 
 export function audienceFromDocsPath(pathname: string): DocsAudience {
   if (pathname.startsWith('/docs/client')) return 'client';
+  if (pathname.startsWith('/docs/point_operator')) return 'point_operator';
   if (pathname.startsWith('/docs/agent')) return 'agent';
   if (pathname.startsWith('/docs/admin')) return 'admin';
   return 'public';
