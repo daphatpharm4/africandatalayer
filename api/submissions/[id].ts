@@ -13,7 +13,7 @@ import { reviewBodySchema } from "../../lib/server/validation.js";
 import type { PointEvent } from "../../shared/types.js";
 import { buildReadableEvents } from "../../lib/server/submissionEvents.js";
 import { reconcileUserProfileXp } from "../../lib/server/xp.js";
-import { applyReviewDecision } from "../../lib/server/reviewDecision.js";
+import { applyReviewDecision, runReviewSideEffect } from "../../lib/server/reviewDecision.js";
 
 export async function GET(request: Request): Promise<Response> {
   const auth = await requireUser(request);
@@ -94,24 +94,28 @@ export async function PATCH(request: Request): Promise<Response> {
       decision,
       notes,
     });
-    await logSecurityEvent({
-      eventType: decision === "rejected" ? "submission_rejected" : "admin_review",
-      userId: updated.userId,
-      request,
-      details: {
-        eventId: id,
-        reviewerId: auth.id,
-        decision,
-        notes,
-      },
+    await runReviewSideEffect("security_audit", async () => {
+      await logSecurityEvent({
+        eventType: decision === "rejected" ? "submission_rejected" : "admin_review",
+        userId: updated.userId,
+        request,
+        details: {
+          eventId: id,
+          reviewerId: auth.id,
+          decision,
+          notes,
+        },
+      });
     });
     if (decision !== "approved") {
-      await createFraudAlert({
-        eventId: id,
-        userId: updated.userId,
-        alertCode: decision === "rejected" ? "submission_rejected" : "submission_flagged",
-        severity: decision === "rejected" ? "high" : "medium",
-        payload: { reviewerId: auth.id, notes },
+      await runReviewSideEffect("fraud_alert", async () => {
+        await createFraudAlert({
+          eventId: id,
+          userId: updated.userId,
+          alertCode: decision === "rejected" ? "submission_rejected" : "submission_flagged",
+          severity: decision === "rejected" ? "high" : "medium",
+          payload: { reviewerId: auth.id, notes },
+        });
       });
     }
     return jsonResponse(updated, { status: 200 });

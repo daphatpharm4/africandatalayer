@@ -63,7 +63,19 @@ export async function apiJson<T>(path: string, init: RequestInit = {}): Promise<
     if (path.startsWith('/api/auth')) {
       console.error('[API] apiJson non-OK:', path, response.status, bodyText.slice(0, 200));
     }
-    throw new ApiError(bodyText || response.statusText || "Request failed", response.status);
+    let message = bodyText || response.statusText || "Request failed";
+    if (contentType.includes('application/json') && bodyText) {
+      try {
+        const parsed = JSON.parse(bodyText) as { error?: unknown; message?: unknown };
+        const parsedMessage = typeof parsed.error === 'string' ? parsed.error : parsed.message;
+        if (typeof parsedMessage === 'string' && parsedMessage.trim()) {
+          message = parsedMessage.trim();
+        }
+      } catch {
+        // Fall back to the raw response body.
+      }
+    }
+    throw new ApiError(message, response.status);
   }
 
   try {

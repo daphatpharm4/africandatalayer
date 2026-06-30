@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getBatchApproveSkipReason, ReviewDecisionSkippedError } from "../lib/server/reviewDecision.js";
+import { getBatchApproveSkipReason, ReviewDecisionSkippedError, runReviewSideEffect } from "../lib/server/reviewDecision.js";
 
 test("applyReviewDecision module exports the function", async () => {
   const mod = await import("../lib/server/reviewDecision.js");
@@ -79,4 +79,18 @@ test("ReviewDecisionSkippedError carries a skipped reason for batch response map
   assert.equal(error.eventId, "event-1");
   assert.equal(error.reason, "high_risk");
   assert.match(error.message, /high risk/);
+});
+
+test("review side effects are best-effort after the decision write", async () => {
+  const originalWarn = console.warn;
+  console.warn = () => undefined;
+  try {
+    await assert.doesNotReject(
+      runReviewSideEffect("test_failure", async () => {
+        throw new Error("optional audit table missing");
+      }),
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
 });

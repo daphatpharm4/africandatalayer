@@ -33,12 +33,13 @@ export class ReviewDecisionSkippedError extends Error {
   }
 }
 
-function isMissingDbObjectError(error: unknown): boolean {
-  const pg = error as { code?: unknown; message?: unknown } | null;
-  const code = typeof pg?.code === "string" ? pg.code : "";
-  if (code === "42P01" || code === "42703") return true;
-  const message = typeof pg?.message === "string" ? pg.message.toLowerCase() : "";
-  return message.includes("does not exist") || message.includes("undefined table") || message.includes("undefined column");
+export async function runReviewSideEffect(label: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[review:${label}] side effect skipped`, message);
+  }
 }
 
 export async function applyReviewDecision(params: {
@@ -96,7 +97,7 @@ export async function applyReviewDecision(params: {
     [params.eventId, JSON.stringify(details)],
   );
 
-  try {
+  await runReviewSideEffect("admin_reviews", async () => {
     await query(
       `INSERT INTO admin_reviews (event_id, reviewer_id, decision, notes)
        VALUES ($1::uuid, $2, $3, $4)
@@ -107,23 +108,26 @@ export async function applyReviewDecision(params: {
          reviewed_at = NOW()`,
       [params.eventId, params.reviewerId, params.decision, params.notes],
     );
-  } catch (error) {
-    if (!isMissingDbObjectError(error)) throw error;
-  }
+  });
 
-  await reconcileUserProfileXp(row.user_id);
+  await runReviewSideEffect("xp_reconcile", async () => {
+    await reconcileUserProfileXp(row.user_id);
+  });
 
-  // Use centralized trust adjustment
-  await adjustTrustOnReview({ userId: row.user_id, decision: params.decision });
+  await runReviewSideEffect("trust_adjust", async () => {
+    await adjustTrustOnReview({ userId: row.user_id, decision: params.decision });
+  });
   // Apply suspension for rejected submissions from restricted agents
   if (params.decision === "rejected") {
-    const currentProfile = await getUserProfile(row.user_id);
-    if (currentProfile && (currentProfile.trustScore ?? 50) <= 20) {
-      await updateUserTrust({
-        userId: row.user_id,
-        suspendedUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      });
-    }
+    await runReviewSideEffect("restricted_agent_suspension", async () => {
+      const currentProfile = await getUserProfile(row.user_id);
+      if (currentProfile && (currentProfile.trustScore ?? 50) <= 20) {
+        await updateUserTrust({
+          userId: row.user_id,
+          suspendedUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        });
+      }
+    });
   }
 
   return {

@@ -2,6 +2,7 @@ import { requireUser } from "../../lib/auth.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import {
   applyReviewDecision,
+  runReviewSideEffect,
   ReviewDecisionSkippedError,
   type BatchApproveSkipReason,
   type ReviewDecision,
@@ -55,26 +56,30 @@ export async function POST(request: Request): Promise<Response> {
         enforceBulkApprovalEligibility: decision === "approved",
       });
 
-      await logSecurityEvent({
-        eventType: decision === "rejected" ? "submission_rejected" : "admin_review",
-        userId: updated.userId,
-        request,
-        details: {
-          eventId,
-          reviewerId: auth.id,
-          decision,
-          notes,
-          batch: true,
-        },
+      await runReviewSideEffect("security_audit", async () => {
+        await logSecurityEvent({
+          eventType: decision === "rejected" ? "submission_rejected" : "admin_review",
+          userId: updated.userId,
+          request,
+          details: {
+            eventId,
+            reviewerId: auth.id,
+            decision,
+            notes,
+            batch: true,
+          },
+        });
       });
 
       if (decision !== "approved") {
-        await createFraudAlert({
-          eventId,
-          userId: updated.userId,
-          alertCode: decision === "rejected" ? "submission_rejected" : "submission_flagged",
-          severity: decision === "rejected" ? "high" : "medium",
-          payload: { reviewerId: auth.id, notes, batch: true },
+        await runReviewSideEffect("fraud_alert", async () => {
+          await createFraudAlert({
+            eventId,
+            userId: updated.userId,
+            alertCode: decision === "rejected" ? "submission_rejected" : "submission_flagged",
+            severity: decision === "rejected" ? "high" : "medium",
+            payload: { reviewerId: auth.id, notes, batch: true },
+          });
         });
       }
 

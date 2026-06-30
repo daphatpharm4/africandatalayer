@@ -46,3 +46,29 @@ test("apiJson preserves status and retryable metadata for permanent HTTP errors"
     globalThis.fetch = originalFetch;
   }
 });
+
+test("apiJson surfaces JSON error messages without raw response noise", async () => {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: "Unable to apply review decision" }), {
+      status: 400,
+      statusText: "Bad Request",
+      headers: { "Content-Type": "application/json" },
+    });
+
+  try {
+    await assert.rejects(
+      () => apiJson("/api/submissions/event-1?view=review", { method: "PATCH" }),
+      (error) => {
+        const typed = error as Error & { status?: number; retryable?: boolean };
+        assert.equal(typed.message, "Unable to apply review decision");
+        assert.equal(typed.status, 400);
+        assert.equal(typed.retryable, true);
+        return true;
+      },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
