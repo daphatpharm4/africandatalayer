@@ -1,6 +1,5 @@
-import * as Sentry from "@sentry/browser";
-
 let initialized = false;
+let initPromise: Promise<typeof import("@sentry/browser") | null> | null = null;
 
 function scrubString(value: string): string {
   return value
@@ -32,25 +31,39 @@ function scrubValue(value: unknown): unknown {
 }
 
 export function initClientSentry(): void {
-  if (initialized) return;
-  const dsn = import.meta.env.VITE_SENTRY_DSN;
-  if (!dsn) return;
+  void loadSentry();
+}
 
-  Sentry.init({
-    dsn,
-    environment: import.meta.env.MODE,
-    sendDefaultPii: false,
-    beforeSend(event) {
-      return scrubValue(event) as typeof event;
-    },
-  });
-  initialized = true;
+async function loadSentry(): Promise<typeof import("@sentry/browser") | null> {
+  if (initPromise) return initPromise;
+  const dsn = import.meta.env.VITE_SENTRY_DSN;
+  if (!dsn) return null;
+
+  initPromise = import("@sentry/browser")
+    .then((Sentry) => {
+      if (!initialized) {
+        Sentry.init({
+          dsn,
+          environment: import.meta.env.MODE,
+          sendDefaultPii: false,
+          beforeSend(event) {
+            return scrubValue(event) as typeof event;
+          },
+        });
+        initialized = true;
+      }
+      return Sentry;
+    })
+    .catch(() => null);
+
+  return initPromise;
 }
 
 export function captureClientException(error: unknown, context?: Record<string, unknown>): void {
-  initClientSentry();
-  if (!initialized) return;
-  Sentry.captureException(error, {
-    extra: scrubValue(context ?? {}) as Record<string, unknown>,
+  void loadSentry().then((Sentry) => {
+    if (!Sentry || !initialized) return;
+    Sentry.captureException(error, {
+      extra: scrubValue(context ?? {}) as Record<string, unknown>,
+    });
   });
 }

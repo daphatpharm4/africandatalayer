@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import 'leaflet/dist/leaflet.css';
 import { AlertTriangle, ChevronDown, Download, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { MapContainer, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import ScreenHeader from '../shared/ScreenHeader';

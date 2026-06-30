@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import 'leaflet/dist/leaflet.css';
 import { Circle, CircleMarker, MapContainer, Marker, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Layers, Navigation } from 'lucide-react';

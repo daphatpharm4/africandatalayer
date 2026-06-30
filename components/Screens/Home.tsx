@@ -39,6 +39,11 @@ import type { SnapPoint } from '../shared/BottomSheet';
 import MissionCards from '../MissionCards';
 import type { MissionCard } from '../MissionCards';
 
+type WindowWithIdleCallback = Window & {
+  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+  cancelIdleCallback?: (handle: number) => void;
+};
+
 interface Props {
   onSelectPoint: (point: DataPoint) => void;
   onPrefetchDetails?: () => void;
@@ -481,14 +486,39 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
   }, [assignments]);
   const [agentLocation, setAgentLocation] = useState<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
+    if (!isAuthenticated || userRole === 'client') {
+      setAgentLocation(null);
+      return undefined;
+    }
     if (!navigator.geolocation) return;
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => setAgentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
-    );
-    return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+    let cancelled = false;
+    let watchId: number | null = null;
+    let timeoutId: number | null = null;
+    let idleId: number | null = null;
+
+    const startWatch = () => {
+      if (cancelled) return;
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => setAgentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
+      );
+    };
+
+    const idleWindow = window as WindowWithIdleCallback;
+    if (typeof idleWindow.requestIdleCallback === 'function') {
+      idleId = idleWindow.requestIdleCallback(startWatch, { timeout: 3000 });
+    } else {
+      timeoutId = window.setTimeout(startWatch, 1200);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== null) idleWindow.cancelIdleCallback?.(idleId);
+      if (timeoutId !== null) window.clearTimeout(timeoutId);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [isAuthenticated, userRole]);
 
   const nearbyEnrichCount = useMemo(() => {
     if (!agentLocation) return 0;

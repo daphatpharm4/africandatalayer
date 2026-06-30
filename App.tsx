@@ -24,7 +24,6 @@ import { SplashScreen } from '@capacitor/splash-screen';
 import { StatusBar, Style } from '@capacitor/status-bar';
 import { Network } from '@capacitor/network';
 import Splash from './components/Screens/Splash';
-import Home from './components/Screens/Home';
 import Navigation from './components/Navigation';
 import PointOperatorNavigation from './components/PointOperatorNavigation';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -43,6 +42,7 @@ import {
 
 const importDetails = () => import('./components/Screens/Details');
 const Details = lazy(importDetails);
+const Home = lazy(() => import('./components/Screens/Home'));
 const Auth = lazy(() => import('./components/Screens/Auth'));
 const ContributionFlow = lazy(() => import('./components/Screens/ContributionFlow'));
 const Profile = lazy(() => import('./components/Screens/Profile'));

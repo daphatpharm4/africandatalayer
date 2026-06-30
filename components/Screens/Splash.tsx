@@ -18,9 +18,10 @@ type LeaderboardState = 'loading' | LeaderboardEntry[] | 'fallback';
 
 const t = (lang: 'en' | 'fr', en: string, fr: string) => (lang === 'fr' ? fr : en);
 
-function useLeaderboardTop3(): LeaderboardState {
+function useLeaderboardTop3(enabled: boolean): LeaderboardState {
   const [state, setState] = useState<LeaderboardState>('loading');
   useEffect(() => {
+    if (!enabled) return undefined;
     const controller = new AbortController();
     apiJson<LeaderboardEntry[]>('/api/leaderboard', { signal: controller.signal })
       .then((rows) => {
@@ -35,7 +36,7 @@ function useLeaderboardTop3(): LeaderboardState {
         if (!controller.signal.aborted) setState('fallback');
       });
     return () => controller.abort();
-  }, []);
+  }, [enabled]);
   return state;
 }
 
@@ -67,7 +68,7 @@ const SHEET_FADE = 'linear-gradient(180deg, rgba(15,43,70,0) 0%, rgba(15,43,70,0
 
 const Splash: React.FC<Props> = ({ onStart, language }) => {
   const [idx, setIdx] = useState(0);
-  const leaderboard = useLeaderboardTop3();
+  const leaderboard = useLeaderboardTop3(idx >= 3);
 
   const slides: Array<{
     id: SlideId;
