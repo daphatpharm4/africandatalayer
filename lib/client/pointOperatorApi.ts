@@ -3,6 +3,7 @@ import type {
   PointOperatorMutationResponse,
 } from "../../shared/types";
 import { apiJson } from "./api";
+import { compactPointOperatorPhotoDataUrl } from "./pointOperatorPhoto";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json",
@@ -40,10 +41,14 @@ export async function submitPointOperatorPhoto(
   payload: { imageData: string; capturedAt: string },
   options: { idempotencyKey: string },
 ): Promise<PointOperatorMutationResponse> {
+  const uploadPayload = {
+    ...payload,
+    imageData: await compactPointOperatorPhotoDataUrl(payload.imageData),
+  };
   const mutation = await apiJson<{ eventId: string }>("/api/user?view=po_photo", {
     method: "POST",
     headers: idempotencyHeaders(options.idempotencyKey),
-    body: JSON.stringify(payload),
+    body: JSON.stringify(uploadPayload),
   });
   const me = await fetchPointOperatorMe();
   return {

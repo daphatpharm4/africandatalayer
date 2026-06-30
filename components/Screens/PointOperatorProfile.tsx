@@ -14,6 +14,7 @@ import {
   type PointOperatorQueueFlushSummary,
   type PointOperatorQueueItem,
 } from '../../lib/client/pointOperatorQueue';
+import { readPointOperatorPhotoFile } from '../../lib/client/pointOperatorPhoto';
 import { summarizePointOperatorQueue } from '../../lib/client/pointOperatorUi';
 import type { PointOperatorMeResponse } from '../../shared/types';
 import { categoryLabel } from '../../shared/verticals';
@@ -158,15 +159,10 @@ const PointOperatorProfile: React.FC<Props> = ({
   const handlePhotoFile = async (file: File | undefined) => {
     if (!file) return;
     setPhotoStatus('saving');
-    setPhotoMessage('');
+    setPhotoMessage(t('Preparing photo for sync...', 'Preparation de la photo pour la synchronisation...'));
     setLastSyncSummary(null);
 
-    const imageData = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? ''));
-      reader.onerror = () => reject(reader.error ?? new Error('file_read_failed'));
-      reader.readAsDataURL(file);
-    }).catch((readError) => {
+    const imageData = await readPointOperatorPhotoFile(file).catch((readError) => {
       setPhotoStatus('error');
       setPhotoMessage(messageFrom(readError, t('Unable to read this photo.', 'Impossible de lire cette photo.')));
       return '';
