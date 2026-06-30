@@ -24,6 +24,7 @@ final class AppState: ObservableObject {
     @Published var lastSyncMessage = ""
     @Published var authError: String?
     @Published var isSigningIn = false
+    @Published var mustChangePassword = false
     @Published var isSyncingQueue = false
     @Published var mapCaptureContext: MapCaptureContext?
     @Published var analyticsSummary: AnalyticsSummary?
@@ -140,6 +141,7 @@ final class AppState: ObservableObject {
     func t(_ en: String, _ fr: String) -> String { language == "fr" ? fr : en }
 
     private let queueStore = OfflineQueueStore()
+    private let pointOperatorQueueStore = PointOperatorQueueStore()
     private let rewardsService: RewardsService = LocalRewardsService()
     let apiClient = ADLAPIClient()
     private var loadedPointScope: String?
@@ -170,6 +172,7 @@ final class AppState: ObservableObject {
             let fetchedRole = fetched.role ?? (fetched.isAdmin == true ? .admin : nil)
             if let role = fetchedRole {
                 selectedRole = AppReleaseMode.normalizedRole(role)
+                mustChangePassword = fetched.mustChangePassword == true
                 profile = SessionProfile(
                     name: fetched.name?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? profile.name,
                     role: selectedRole,
@@ -369,6 +372,7 @@ final class AppState: ObservableObject {
         isAuthenticated = false
         isAuthRequested = false
         userProfile = nil
+        mustChangePassword = false
         serverXP = 0
         profile = SessionProfile(name: "Guest", role: .agent, trustTier: "guest", xp: 0, streakDays: 0)
         refreshGamification()
@@ -898,6 +902,7 @@ final class AppState: ObservableObject {
         let accountRole = user.role ?? (user.isAdmin == true ? .admin : selectedRole)
         let resolvedRole = AppReleaseMode.normalizedRole(accountRole)
         userProfile = nil
+        mustChangePassword = user.mustChangePassword == true
         serverXP = 0
         spentXP = rewardsService.loadSpentXP()
         selectedRole = resolvedRole
@@ -1125,6 +1130,55 @@ final class ADLAPIClient {
         return try decoder.decode(UserProfile.self, from: data)
     }
 
+    // MARK: - Point Operator API
+
+    func fetchPointOperatorMe() async throws -> PointOperatorMeDTO {
+        try await fetchJSON(PointOperatorMeDTO.self, path: "/api/user?view=po_me")
+    }
+
+    func submitPointOperatorSignal(
+        field: String,
+        value: Bool,
+        capturedAt: Date,
+        idempotencyKey: UUID
+    ) async throws -> PointOperatorMutationDTO {
+        let mutation = try await postJSON(
+            PointOperatorEventAck.self,
+            path: "/api/user?view=po_status",
+            body: PointOperatorSignalPayload(field: field, value: value, capturedAt: Self.isoString(from: capturedAt)),
+            idempotencyKey: idempotencyKey.uuidString
+        )
+        let me = try await fetchPointOperatorMe()
+        return PointOperatorMutationDTO(
+            eventId: mutation.eventId,
+            point: me.point,
+            signal: me.signals[field]
+        )
+    }
+
+    func submitPointOperatorPhoto(
+        imageDataURL: String,
+        capturedAt: Date,
+        idempotencyKey: UUID
+    ) async throws -> PointOperatorMutationDTO {
+        let mutation = try await postJSON(
+            PointOperatorEventAck.self,
+            path: "/api/user?view=po_photo",
+            body: PointOperatorPhotoPayload(imageData: imageDataURL, capturedAt: Self.isoString(from: capturedAt)),
+            idempotencyKey: idempotencyKey.uuidString
+        )
+        let me = try await fetchPointOperatorMe()
+        return PointOperatorMutationDTO(eventId: mutation.eventId, point: me.point, signal: nil)
+    }
+
+    func changePointOperatorPassword(currentPassword: String, newPassword: String) async throws {
+        try await postJSON(
+            path: "/api/user?view=po_password",
+            body: PointOperatorPasswordPayload(currentPassword: currentPassword, newPassword: newPassword),
+            idempotencyKey: UUID().uuidString
+        )
+    }
+
     func submitIpReport(_ payload: IpReportPayload) async throws {
         var request = URLRequest(url: url(path: "/api/privacy?view=ip-report"))
         request.httpMethod = "POST"
@@ -1236,6 +1290,29 @@ final class ADLAPIClient {
         return try decoder.decode(R.self, from: data)
     }
 
+    /// POST an Encodable body to `path`, decoding the JSON response as `R`, with a caller-provided idempotency key.
+    func postJSON<T: Encodable, R: Decodable>(_ responseType: R.Type, path: String, body: T, idempotencyKey: String) async throws -> R {
+        var request = URLRequest(url: url(path: path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+        return try decoder.decode(R.self, from: data)
+    }
+
+    /// POST an Encodable body to `path` when only status-code validation matters.
+    func postJSON<T: Encodable>(path: String, body: T, idempotencyKey: String) async throws {
+        var request = URLRequest(url: url(path: path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(idempotencyKey, forHTTPHeaderField: "Idempotency-Key")
+        request.httpBody = try JSONEncoder().encode(body)
+        let (data, response) = try await urlSession.data(for: request)
+        try validate(response: response, data: data)
+    }
+
     // MARK: - Communications API (africandatalayer-955)
 
     func fetchEmailCampaigns() async throws -> CampaignsListResponse {
@@ -1313,6 +1390,10 @@ final class ADLAPIClient {
         }
         return nil
     }
+
+    private static func isoString(from date: Date) -> String {
+        ISO8601DateFormatter().string(from: date)
+    }
 }
 
 struct CsrfResponse: Codable {
@@ -1373,6 +1454,26 @@ struct AdminAccountAccessPayload: Encodable {
     var role: String
 }
 
+struct PointOperatorEventAck: Decodable {
+    var eventId: String
+}
+
+struct PointOperatorSignalPayload: Encodable {
+    var field: String
+    var value: Bool
+    var capturedAt: String
+}
+
+struct PointOperatorPhotoPayload: Encodable {
+    var imageData: String
+    var capturedAt: String
+}
+
+struct PointOperatorPasswordPayload: Encodable {
+    var currentPassword: String
+    var newPassword: String
+}
+
 struct IpReportPayload: Encodable {
     var reporterName: String
     var reporterEmail: String
@@ -1396,6 +1497,144 @@ enum APIError: Error {
         case .requestFailed(let message):
             return message
         }
+    }
+}
+
+struct QueuedPointOperatorMutation: Codable, Hashable, Identifiable {
+    enum Kind: String, Codable {
+        case signal
+        case photo
+    }
+
+    var id: UUID
+    var idempotencyKey: UUID
+    var kind: Kind
+    var field: String?
+    var value: Bool?
+    var imageDataURL: String?
+    var capturedAt: Date
+    var retryCount: Int
+    var nextRetryAt: Date?
+
+    static func signal(field: String, value: Bool, capturedAt: Date) -> QueuedPointOperatorMutation {
+        QueuedPointOperatorMutation(
+            id: UUID(),
+            idempotencyKey: UUID(),
+            kind: .signal,
+            field: field,
+            value: value,
+            imageDataURL: nil,
+            capturedAt: capturedAt,
+            retryCount: 0,
+            nextRetryAt: nil
+        )
+    }
+
+    static func photo(imageDataURL: String, capturedAt: Date) -> QueuedPointOperatorMutation {
+        QueuedPointOperatorMutation(
+            id: UUID(),
+            idempotencyKey: UUID(),
+            kind: .photo,
+            field: nil,
+            value: nil,
+            imageDataURL: imageDataURL,
+            capturedAt: capturedAt,
+            retryCount: 0,
+            nextRetryAt: nil
+        )
+    }
+
+    func isReady(now: Date = Date()) -> Bool {
+        guard let nextRetryAt else { return true }
+        return nextRetryAt <= now
+    }
+
+    mutating func scheduleRetry(now: Date = Date()) {
+        retryCount += 1
+        let delay = min(30.0, pow(2.0, Double(retryCount)))
+        nextRetryAt = now.addingTimeInterval(delay)
+    }
+
+    static func isPermanentFailureStatus(_ statusCode: Int) -> Bool {
+        [401, 403, 422].contains(statusCode)
+    }
+
+}
+
+final class PointOperatorQueueStore {
+    private let maxSignalItems = 75
+    private let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+    private let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    func loadItems() -> [QueuedPointOperatorMutation] {
+        guard let data = try? Data(contentsOf: queueURL()) else { return [] }
+        return (try? decoder.decode([QueuedPointOperatorMutation].self, from: data)) ?? []
+    }
+
+    @discardableResult
+    func enqueueSignal(field: String, value: Bool, capturedAt: Date) throws -> QueuedPointOperatorMutation {
+        var items = loadItems()
+        let signalCount = items.filter { $0.kind == .signal }.count
+        guard signalCount < maxSignalItems else {
+            throw APIError.requestFailed("Point operator signal queue is full.")
+        }
+
+        let item = QueuedPointOperatorMutation.signal(field: field, value: value, capturedAt: capturedAt)
+        items.append(item)
+        try saveItems(items)
+        return item
+    }
+
+    @discardableResult
+    func enqueuePhoto(imageDataURL: String, capturedAt: Date) throws -> QueuedPointOperatorMutation {
+        var items = loadItems()
+        let item = QueuedPointOperatorMutation.photo(imageDataURL: imageDataURL, capturedAt: capturedAt)
+        items.append(item)
+        try saveItems(items)
+        return item
+    }
+
+    func remove(_ id: UUID) throws {
+        try saveItems(loadItems().filter { $0.id != id })
+    }
+
+    func recordRetry(for id: UUID, now: Date = Date()) throws {
+        var items = loadItems()
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].scheduleRetry(now: now)
+        try saveItems(items)
+    }
+
+    func readyItems(now: Date = Date()) -> [QueuedPointOperatorMutation] {
+        loadItems().filter { $0.isReady(now: now) }
+    }
+
+    func removePermanentFailure(_ id: UUID) throws {
+        try remove(id)
+    }
+
+    private func saveItems(_ items: [QueuedPointOperatorMutation]) throws {
+        let directory = queueDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let data = try encoder.encode(items)
+        try data.write(to: queueURL(), options: .atomic)
+    }
+
+    private func queueDirectory() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("ADLPointOperatorQueue", isDirectory: true)
+    }
+
+    private func queueURL() -> URL {
+        queueDirectory().appendingPathComponent("mutations.json")
     }
 }
 

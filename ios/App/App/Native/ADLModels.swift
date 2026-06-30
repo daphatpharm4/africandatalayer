@@ -17,6 +17,7 @@ enum UserRole: String, CaseIterable, Codable, Identifiable {
     case agent
     case admin
     case client
+    case pointOperator = "point_operator"
 
     var id: String { rawValue }
 
@@ -28,6 +29,8 @@ enum UserRole: String, CaseIterable, Codable, Identifiable {
             return ADLModelText.t("Admin Reviewer", "Réviseur admin")
         case .client:
             return "Client"
+        case .pointOperator:
+            return ADLModelText.t("Point Operator", "Opérateur du point")
         }
     }
 }
@@ -172,6 +175,8 @@ enum AppRoute: String, CaseIterable, Hashable, Identifiable {
     case clientDashboard
     case investor
     case analytics
+    case pointOperatorStatus
+    case pointOperatorProfile
 
     var id: String { rawValue }
 }
@@ -205,6 +210,8 @@ enum AppReleaseMode {
             return .adminReview
         case .client:
             return .clientDashboard
+        case .pointOperator:
+            return .pointOperatorStatus
         }
     }
 
@@ -216,6 +223,8 @@ enum AppReleaseMode {
             return [.adminReview, .home, .analytics, .agentPerformance, .profile]
         case .client:
             return [.clientDashboard, .investor, .home, .analytics, .profile]
+        case .pointOperator:
+            return [.pointOperatorStatus, .pointOperatorProfile]
         }
     }
 
@@ -404,11 +413,59 @@ struct ProjectedPoint: Codable, Hashable, Identifiable {
     var location: SubmissionLocation
     var details: SubmissionDetails
     var photoUrl: String?
+    var operatorSignals: [String: PointOperatorSignalDTO]?
     var createdAt: String
     var updatedAt: String
     var gaps: [String]
     var eventsCount: Int
     var eventIds: [String]
+}
+
+struct PointOperatorControlDTO: Codable, Hashable, Identifiable {
+    var field: String
+    var labelEn: String
+    var labelFr: String
+    var expiryHours: Int
+
+    var id: String { field }
+}
+
+struct PointOperatorAssignmentDTO: Codable, Hashable, Identifiable {
+    var id: String
+    var operatorUserId: String
+    var pointId: String
+    var status: String
+    var grantedBy: String
+    var grantedAt: String
+    var revokedBy: String?
+    var revokedAt: String?
+    var revokeReason: String?
+}
+
+struct PointOperatorSignalDTO: Codable, Hashable, Identifiable {
+    var field: String
+    var value: Bool?
+    var reportedBy: String
+    var reportedAt: String
+    var expiresAt: String
+    var isExpired: Bool
+    var eventId: String
+    var reviewState: String
+
+    var id: String { field }
+}
+
+struct PointOperatorMeDTO: Codable, Hashable {
+    var assignment: PointOperatorAssignmentDTO
+    var point: ProjectedPoint
+    var controls: [PointOperatorControlDTO]
+    var signals: [String: PointOperatorSignalDTO]
+}
+
+struct PointOperatorMutationDTO: Codable, Hashable {
+    var eventId: String
+    var point: ProjectedPoint
+    var signal: PointOperatorSignalDTO?
 }
 
 struct UserContributionEvent: Codable, Hashable, Identifiable {
@@ -600,6 +657,8 @@ struct SessionProfile: Hashable {
             return SessionProfile(name: "Admin Reviewer", role: role, trustTier: "review lead", xp: 6120, streakDays: 14)
         case .client:
             return SessionProfile(name: "Client Analyst", role: role, trustTier: "workspace", xp: 0, streakDays: 0)
+        case .pointOperator:
+            return SessionProfile(name: "Point Operator", role: role, trustTier: "operator", xp: 0, streakDays: 0)
         }
     }
 }
@@ -617,6 +676,7 @@ struct AuthUser: Codable, Hashable {
     var isAdmin: Bool?
     var role: UserRole?
     var mapScope: String?
+    var mustChangePassword: Bool?
 }
 
 // MARK: - Analytics
@@ -759,12 +819,13 @@ struct UserProfile: Codable, Hashable {
     var role: UserRole?
     var isAdmin: Bool?
     var mapScope: String?
+    var mustChangePassword: Bool?
     var trustTier: String?
     var trustScore: Int?
     var xp: Int
 
     enum CodingKeys: String, CodingKey {
-        case id, name, email, phone, image, avatarPreset, occupation, role, isAdmin, mapScope, trustTier, trustScore
+        case id, name, email, phone, image, avatarPreset, occupation, role, isAdmin, mapScope, mustChangePassword, trustTier, trustScore
         case xp = "XP"
     }
 }
