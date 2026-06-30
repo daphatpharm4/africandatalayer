@@ -46,26 +46,10 @@ export async function runReviewSideEffect(label: string, fn: () => Promise<void>
 interface ReviewTarget {
   userId: string;
   details: Record<string, unknown>;
-  storageEvent: PointEvent | null;
+  storageEvent: PointEvent;
 }
 
 async function loadReviewTarget(eventId: string): Promise<ReviewTarget> {
-  const result = await query<{ user_id: string; details: Record<string, unknown> }>(
-    `SELECT user_id, details
-     FROM point_events
-     WHERE id = $1::uuid
-     LIMIT 1`,
-    [eventId],
-  );
-  const row = result.rows[0];
-  if (row) {
-    return {
-      userId: row.user_id,
-      details: row.details && typeof row.details === "object" ? ({ ...row.details } as Record<string, unknown>) : {},
-      storageEvent: null,
-    };
-  }
-
   const event = (await getPointEvents()).find((item) => item.id === eventId) ?? null;
   if (!event) {
     throw new Error("Submission event not found");
@@ -79,17 +63,7 @@ async function loadReviewTarget(eventId: string): Promise<ReviewTarget> {
 }
 
 async function persistReviewDetails(eventId: string, target: ReviewTarget, details: Record<string, unknown>): Promise<void> {
-  if (target.storageEvent) {
-    await bulkUpsertPointEvents([{ ...target.storageEvent, details }]);
-    return;
-  }
-
-  await query(
-    `UPDATE point_events
-     SET details = $2::jsonb
-     WHERE id = $1::uuid`,
-    [eventId, JSON.stringify(details)],
-  );
+  await bulkUpsertPointEvents([{ ...target.storageEvent, id: eventId, details }]);
 }
 
 export async function applyReviewDecision(params: {
