@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { getBatchApproveSkipReason, ReviewDecisionSkippedError, runReviewSideEffect } from "../lib/server/reviewDecision.js";
 
@@ -93,4 +94,10 @@ test("review side effects are best-effort after the decision write", async () =>
   } finally {
     console.warn = originalWarn;
   }
+});
+
+test("review decisions can materialize storage fallback point events", async () => {
+  const source = await readFile(new URL("../lib/server/reviewDecision.ts", import.meta.url), "utf8");
+  assert.match(source, /getPointEvents/);
+  assert.match(source, /bulkUpsertPointEvents/);
 });

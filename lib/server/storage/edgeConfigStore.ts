@@ -37,6 +37,9 @@ async function deletePointEvent(eventId: string): Promise<boolean> {
 
 async function bulkUpsertPointEvents(events: PointEvent[]): Promise<void> {
   const deduped = new Map<string, PointEvent>();
+  for (const event of await getPointEvents()) {
+    deduped.set(event.id, event);
+  }
   for (const event of events) {
     deduped.set(event.id, event);
   }

@@ -37,3 +37,9 @@ test("unsupported controls fail closed", () => {
     /not allowed/,
   );
 });
+
+test("mobile money operator controls exclude electronic float", () => {
+  const fields = getPointOperatorControls("mobile_money").map((control) => control.field);
+  assert.deepEqual(fields, ["isOpenNow", "hasMin50000XafAvailable"]);
+  assert.ok(!fields.includes("hasFloat"));
+});

@@ -179,8 +179,7 @@ export function createPointOperatorLifecycle(
 //   isOnDuty       → 6h  (pharmacist on duty: same semantic as isOpenNow)
 //   hasFuelAvailable→ 4h  (fuel stations deplete quickly during the day)
 //   isActive       → 8h  (mobile money agent activity, roughly one shift)
-//   hasFloat       → 4h  (float runs out quickly under load)
-//   hasMin50000XafAvailable → 4h (same semantic as hasFloat)
+//   hasMin50000XafAvailable → 4h (cash availability changes quickly under load)
 //   isOccupied     → 24h (billboard occupancy changes slowly)
 //   isBlocked      → 2h  (road blockages resolve or change quickly)
 //   isFlooded      → 3h  (flood conditions change with rainfall)
@@ -194,7 +193,6 @@ const FIELD_TTL_HOURS: Record<string, number> = {
   isOnDuty: 6,
   hasFuelAvailable: 4,
   isActive: 8,
-  hasFloat: 4,
   hasMin50000XafAvailable: 4,
   hasCashAvailable: 4,
   isOccupied: 24,

@@ -331,7 +331,6 @@ export const VERTICALS: Record<string, VerticalConfig> = {
     operatorControls: [
       { field: "isOpenNow", labelEn: "Open now", labelFr: "Ouvert maintenant", expiryHours: 6 },
       { field: "hasMin50000XafAvailable", labelEn: "At least 50,000 XAF cash available", labelFr: "Au moins 50 000 XAF disponibles", expiryHours: 4 },
-      { field: "hasFloat", labelEn: "Electronic float available", labelFr: "Float électronique disponible", expiryHours: 4 },
     ],
   },
   fuel_station: {

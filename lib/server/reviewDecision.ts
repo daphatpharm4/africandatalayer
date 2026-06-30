@@ -1,7 +1,8 @@
 import { query } from "./db.js";
-import { getUserProfile } from "./storage/index.js";
+import { bulkUpsertPointEvents, getPointEvents, getUserProfile } from "./storage/index.js";
 import { reconcileUserProfileXp } from "./xp.js";
 import { adjustTrustOnReview, updateUserTrust } from "./userTrust.js";
+import type { PointEvent } from "../../shared/types.js";
 import {
   getAdminRiskBucketFromDetails,
   getAdminReviewStatusFromDetails,
@@ -42,6 +43,55 @@ export async function runReviewSideEffect(label: string, fn: () => Promise<void>
   }
 }
 
+interface ReviewTarget {
+  userId: string;
+  details: Record<string, unknown>;
+  storageEvent: PointEvent | null;
+}
+
+async function loadReviewTarget(eventId: string): Promise<ReviewTarget> {
+  const result = await query<{ user_id: string; details: Record<string, unknown> }>(
+    `SELECT user_id, details
+     FROM point_events
+     WHERE id = $1::uuid
+     LIMIT 1`,
+    [eventId],
+  );
+  const row = result.rows[0];
+  if (row) {
+    return {
+      userId: row.user_id,
+      details: row.details && typeof row.details === "object" ? ({ ...row.details } as Record<string, unknown>) : {},
+      storageEvent: null,
+    };
+  }
+
+  const event = (await getPointEvents()).find((item) => item.id === eventId) ?? null;
+  if (!event) {
+    throw new Error("Submission event not found");
+  }
+
+  return {
+    userId: event.userId,
+    details: event.details && typeof event.details === "object" ? ({ ...event.details } as Record<string, unknown>) : {},
+    storageEvent: event,
+  };
+}
+
+async function persistReviewDetails(eventId: string, target: ReviewTarget, details: Record<string, unknown>): Promise<void> {
+  if (target.storageEvent) {
+    await bulkUpsertPointEvents([{ ...target.storageEvent, details }]);
+    return;
+  }
+
+  await query(
+    `UPDATE point_events
+     SET details = $2::jsonb
+     WHERE id = $1::uuid`,
+    [eventId, JSON.stringify(details)],
+  );
+}
+
 export async function applyReviewDecision(params: {
   eventId: string;
   reviewerId: string;
@@ -49,19 +99,8 @@ export async function applyReviewDecision(params: {
   notes: string | null;
   enforceBulkApprovalEligibility?: boolean;
 }): Promise<ReviewResult> {
-  const result = await query<{ user_id: string; details: Record<string, unknown> }>(
-    `SELECT user_id, details
-     FROM point_events
-     WHERE id = $1::uuid
-     LIMIT 1`,
-    [params.eventId],
-  );
-  const row = result.rows[0];
-  if (!row) {
-    throw new Error("Submission event not found");
-  }
-
-  const details = row.details && typeof row.details === "object" ? ({ ...row.details } as Record<string, unknown>) : {};
+  const target = await loadReviewTarget(params.eventId);
+  const details = target.details;
   if (params.enforceBulkApprovalEligibility && params.decision === "approved") {
     const skipReason = getBatchApproveSkipReason(details);
     if (skipReason) {
@@ -90,12 +129,7 @@ export async function applyReviewDecision(params: {
     details.reviewFlags = existingFlags.filter((flag) => flag !== "rejected_by_admin");
   }
 
-  await query(
-    `UPDATE point_events
-     SET details = $2::jsonb
-     WHERE id = $1::uuid`,
-    [params.eventId, JSON.stringify(details)],
-  );
+  await persistReviewDetails(params.eventId, target, details);
 
   await runReviewSideEffect("admin_reviews", async () => {
     await query(
@@ -111,19 +145,19 @@ export async function applyReviewDecision(params: {
   });
 
   await runReviewSideEffect("xp_reconcile", async () => {
-    await reconcileUserProfileXp(row.user_id);
+    await reconcileUserProfileXp(target.userId);
   });
 
   await runReviewSideEffect("trust_adjust", async () => {
-    await adjustTrustOnReview({ userId: row.user_id, decision: params.decision });
+    await adjustTrustOnReview({ userId: target.userId, decision: params.decision });
   });
   // Apply suspension for rejected submissions from restricted agents
   if (params.decision === "rejected") {
     await runReviewSideEffect("restricted_agent_suspension", async () => {
-      const currentProfile = await getUserProfile(row.user_id);
+      const currentProfile = await getUserProfile(target.userId);
       if (currentProfile && (currentProfile.trustScore ?? 50) <= 20) {
         await updateUserTrust({
-          userId: row.user_id,
+          userId: target.userId,
           suspendedUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         });
       }
@@ -135,7 +169,7 @@ export async function applyReviewDecision(params: {
     decision: params.decision,
     reviewStatus,
     xpAwarded: nextXpAwarded,
-    userId: row.user_id,
+    userId: target.userId,
   };
 }
 
