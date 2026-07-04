@@ -1,6 +1,6 @@
 import { query } from "./db.js";
 
-function isMissingDbObjectError(error: unknown): boolean {
+export function isMissingDbObjectError(error: unknown): boolean {
   const pg = error as { code?: unknown; message?: unknown } | null;
   const code = typeof pg?.code === "string" ? pg.code : "";
   if (code === "42P01" || code === "42703") return true;

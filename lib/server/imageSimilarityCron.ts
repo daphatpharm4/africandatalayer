@@ -1,5 +1,5 @@
 import { query } from "./db.js";
-import { computeDhash, computePhash, encodeSegments } from "./imageSimilarity.js";
+import { computeDhash, computePhash, encodeSegments, isMissingDbObjectError } from "./imageSimilarity.js";
 import {
   EMBEDDING_SOFT_DUP_SIM,
   findSimilarEmbeddings,
@@ -8,14 +8,26 @@ import {
   persistEmbedding,
 } from "./imageEmbeddings.js";
 
-const EMBED_BATCH_SIZE = Number(process.env.IMAGE_EMBEDDING_BATCH ?? "50") || 50;
-const BACKFILL_BATCH_SIZE = Number(process.env.IMAGE_HASH_BACKFILL_BATCH ?? "200") || 200;
+// Each item costs a Blob fetch + two sharp passes + a couple of queries
+// (~1-2s), and both drains share one 30s cron function with five other
+// jobs. Batch sizes stay small and a wall-clock budget stops the loops
+// early; leftovers are picked up by the next daily tick.
+const EMBED_BATCH_SIZE = Number(process.env.IMAGE_EMBEDDING_BATCH ?? "10") || 10;
+const BACKFILL_BATCH_SIZE = Number(process.env.IMAGE_HASH_BACKFILL_BATCH ?? "25") || 25;
+const TIME_BUDGET_MS = Number(process.env.IMAGE_CRON_BUDGET_MS ?? "20000") || 20000;
 const STATUS_UPGRADE_WINDOW_HOURS = Number(process.env.IMAGE_EMBEDDING_UPGRADE_WINDOW_HOURS ?? "24") || 24;
 const MAX_EDGE_PX = 1024;
 
 export interface ImageSimilarityDrainResult {
-  backfill: { scanned: number; updated: number; failed: number };
-  embeddings: { scanned: number; embedded: number; failed: number; skippedNoProvider: boolean; statusUpgrades: number };
+  backfill: { scanned: number; updated: number; failed: number; outOfBudget: boolean };
+  embeddings: {
+    scanned: number;
+    embedded: number;
+    failed: number;
+    skippedNoProvider: boolean;
+    statusUpgrades: number;
+    outOfBudget: boolean;
+  };
 }
 
 async function resizedJpeg(imageBuffer: Buffer): Promise<Buffer> {
@@ -55,21 +67,34 @@ async function upgradeReviewStatusIfDuplicate(
   return (result.rowCount ?? 0) > 0;
 }
 
-export async function runHashBackfill(): Promise<{ scanned: number; updated: number; failed: number }> {
-  const result = await query<{ event_id: string; photo_url: string | null }>(
-    `SELECT sih.event_id::text, pe.photo_url
-     FROM submission_image_hashes sih
-     JOIN point_events pe ON pe.id = sih.event_id
-     WHERE sih.hash_version < 2
-       AND pe.photo_url IS NOT NULL
-     ORDER BY sih.created_at DESC
-     LIMIT $1`,
-    [BACKFILL_BATCH_SIZE],
-  );
+export async function runHashBackfill(deadline: number): Promise<ImageSimilarityDrainResult["backfill"]> {
+  let result;
+  try {
+    result = await query<{ event_id: string; photo_url: string | null }>(
+      `SELECT sih.event_id::text, pe.photo_url
+       FROM submission_image_hashes sih
+       JOIN point_events pe ON pe.id = sih.event_id
+       WHERE sih.hash_version < 2
+         AND pe.photo_url IS NOT NULL
+       ORDER BY sih.created_at DESC
+       LIMIT $1`,
+      [BACKFILL_BATCH_SIZE],
+    );
+  } catch (error) {
+    // Migration not applied yet: report a clean no-op instead of failing
+    // the whole cron_dispatch response.
+    if (isMissingDbObjectError(error)) return { scanned: 0, updated: 0, failed: 0, outOfBudget: false };
+    throw error;
+  }
 
   let updated = 0;
   let failed = 0;
+  let outOfBudget = false;
   for (const row of result.rows) {
+    if (Date.now() >= deadline) {
+      outOfBudget = true;
+      break;
+    }
     if (!row.photo_url) continue;
     try {
       const bytes = await resizedJpeg(await fetchPhotoBytes(row.photo_url));
@@ -88,7 +113,8 @@ export async function runHashBackfill(): Promise<{ scanned: number; updated: num
              phash_seg_1 = $5,
              phash_seg_2 = $6,
              phash_seg_3 = $7,
-             perceptual_hash = COALESCE(perceptual_hash, $2)
+             perceptual_hash = COALESCE(perceptual_hash, $2),
+             embedding_status = CASE WHEN embedding_status = 'skipped' THEN 'pending' ELSE embedding_status END
          WHERE event_id = $1::uuid`,
         [row.event_id, phash, dhash, segs?.[0] ?? null, segs?.[1] ?? null, segs?.[2] ?? null, segs?.[3] ?? null],
       );
@@ -98,35 +124,48 @@ export async function runHashBackfill(): Promise<{ scanned: number; updated: num
       console.error("[imageSimilarityCron] backfill failed", row.event_id, error);
     }
   }
-  return { scanned: result.rowCount ?? 0, updated, failed };
+  return { scanned: result.rowCount ?? 0, updated, failed, outOfBudget };
 }
 
-export async function runEmbeddingDrain(): Promise<ImageSimilarityDrainResult["embeddings"]> {
+export async function runEmbeddingDrain(deadline: number): Promise<ImageSimilarityDrainResult["embeddings"]> {
   const provider = getEmbeddingProvider();
   if (!provider) {
-    return { scanned: 0, embedded: 0, failed: 0, skippedNoProvider: true, statusUpgrades: 0 };
+    return { scanned: 0, embedded: 0, failed: 0, skippedNoProvider: true, statusUpgrades: 0, outOfBudget: false };
   }
 
-  const result = await query<{
-    event_id: string;
-    photo_url: string | null;
-    phash: string | null;
-  }>(
-    `SELECT sih.event_id::text, pe.photo_url, sih.phash
-     FROM submission_image_hashes sih
-     JOIN point_events pe ON pe.id = sih.event_id
-     WHERE sih.embedding_status = 'pending'
-       AND pe.photo_url IS NOT NULL
-     ORDER BY sih.created_at ASC
-     LIMIT $1`,
-    [EMBED_BATCH_SIZE],
-  );
+  let result;
+  try {
+    result = await query<{
+      event_id: string;
+      photo_url: string | null;
+      phash: string | null;
+    }>(
+      `SELECT sih.event_id::text, pe.photo_url, sih.phash
+       FROM submission_image_hashes sih
+       JOIN point_events pe ON pe.id = sih.event_id
+       WHERE sih.embedding_status = 'pending'
+         AND pe.photo_url IS NOT NULL
+       ORDER BY sih.created_at ASC
+       LIMIT $1`,
+      [EMBED_BATCH_SIZE],
+    );
+  } catch (error) {
+    if (isMissingDbObjectError(error)) {
+      return { scanned: 0, embedded: 0, failed: 0, skippedNoProvider: false, statusUpgrades: 0, outOfBudget: false };
+    }
+    throw error;
+  }
 
   let embedded = 0;
   let failed = 0;
   let statusUpgrades = 0;
+  let outOfBudget = false;
 
   for (const row of result.rows) {
+    if (Date.now() >= deadline) {
+      outOfBudget = true;
+      break;
+    }
     if (!row.photo_url) {
       await markEmbeddingStatus(row.event_id, "skipped");
       continue;
@@ -167,11 +206,13 @@ export async function runEmbeddingDrain(): Promise<ImageSimilarityDrainResult["e
     failed,
     skippedNoProvider: false,
     statusUpgrades,
+    outOfBudget,
   };
 }
 
 export async function runImageSimilarityDrain(): Promise<ImageSimilarityDrainResult> {
-  const [backfill, embeddings] = await Promise.all([runHashBackfill(), runEmbeddingDrain()]);
+  const deadline = Date.now() + TIME_BUDGET_MS;
+  const [backfill, embeddings] = await Promise.all([runHashBackfill(deadline), runEmbeddingDrain(deadline)]);
   return { backfill, embeddings };
 }
 
