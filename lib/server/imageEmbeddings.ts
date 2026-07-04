@@ -1,3 +1,4 @@
+import { createSign } from "node:crypto";
 import { query } from "./db.js";
 
 // Model identity stored alongside every embedding so a future model bump
@@ -50,6 +51,79 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Pro
   throw new EmbeddingProviderError("Vertex inference failed after retries", lastError);
 }
 
+const GCP_TOKEN_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+const GCP_DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token";
+
+interface ServiceAccountKey {
+  client_email?: string;
+  private_key?: string;
+  token_uri?: string;
+}
+
+let cachedGcpToken: { token: string; expiresAtMs: number } | null = null;
+
+async function mintServiceAccountToken(key: Required<Pick<ServiceAccountKey, "client_email" | "private_key">> & ServiceAccountKey): Promise<{ token: string; expiresAtMs: number }> {
+  const tokenUri = key.token_uri?.trim() || GCP_DEFAULT_TOKEN_URI;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT" })).toString("base64url");
+  const claims = Buffer.from(
+    JSON.stringify({
+      iss: key.client_email,
+      scope: GCP_TOKEN_SCOPE,
+      aud: tokenUri,
+      iat: nowSec,
+      exp: nowSec + 3600,
+    }),
+  ).toString("base64url");
+  const signer = createSign("RSA-SHA256");
+  signer.update(`${header}.${claims}`);
+  const signature = signer.sign(key.private_key).toString("base64url");
+
+  const response = await fetch(tokenUri, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: `${header}.${claims}.${signature}`,
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new EmbeddingProviderError(`GCP token exchange failed (${response.status}): ${text.slice(0, 200)}`);
+  }
+  const payload = (await response.json()) as { access_token?: string; expires_in?: number };
+  if (!payload.access_token) {
+    throw new EmbeddingProviderError("GCP token exchange returned no access_token");
+  }
+  // Refresh a minute before expiry so an in-flight batch never straddles it.
+  return { token: payload.access_token, expiresAtMs: Date.now() + Math.max(0, (payload.expires_in ?? 3600) - 60) * 1000 };
+}
+
+async function resolveGcpAccessToken(): Promise<string> {
+  // Static token override for local development only: these expire after
+  // ~1h, so production must use GCP_SERVICE_ACCOUNT_KEY.
+  const staticToken = process.env.GCP_ACCESS_TOKEN?.trim();
+  if (staticToken) return staticToken;
+
+  const rawKey = process.env.GCP_SERVICE_ACCOUNT_KEY?.trim();
+  if (!rawKey) {
+    throw new EmbeddingProviderError("Set GCP_SERVICE_ACCOUNT_KEY (service-account JSON) or GCP_ACCESS_TOKEN");
+  }
+  if (cachedGcpToken && Date.now() < cachedGcpToken.expiresAtMs) return cachedGcpToken.token;
+
+  let key: ServiceAccountKey;
+  try {
+    key = JSON.parse(rawKey) as ServiceAccountKey;
+  } catch (error) {
+    throw new EmbeddingProviderError("GCP_SERVICE_ACCOUNT_KEY is not valid JSON", error);
+  }
+  if (!key.client_email || !key.private_key) {
+    throw new EmbeddingProviderError("GCP_SERVICE_ACCOUNT_KEY is missing client_email or private_key");
+  }
+  cachedGcpToken = await mintServiceAccountToken({ ...key, client_email: key.client_email, private_key: key.private_key });
+  return cachedGcpToken.token;
+}
+
 class VertexMultimodalEmbeddingProvider implements EmbeddingProvider {
   readonly modelVersion = EMBEDDING_MODEL_VERSION;
 
@@ -58,14 +132,6 @@ class VertexMultimodalEmbeddingProvider implements EmbeddingProvider {
     const location = process.env.GCP_LOCATION?.trim() || "us-central1";
     if (!project) throw new EmbeddingProviderError("GCP_PROJECT_ID is not configured");
     return `https://${location}-aiplatform.googleapis.com/v1/projects/${project}/locations/${location}/publishers/google/models/${this.modelVersion}:predict`;
-  }
-
-  private accessToken(): string {
-    // Service-account access token, refreshed out-of-band by the deploy.
-    // ADC integration is a follow-up; see docs/data-science/image-similarity-design.md §5.
-    const token = process.env.GCP_ACCESS_TOKEN?.trim();
-    if (!token) throw new EmbeddingProviderError("GCP_ACCESS_TOKEN is not configured");
-    return token;
   }
 
   async embedImage(imageBuffer: Buffer): Promise<number[]> {
@@ -80,7 +146,7 @@ class VertexMultimodalEmbeddingProvider implements EmbeddingProvider {
     const response = await fetchWithRetry(this.endpoint(), {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${this.accessToken()}`,
+        Authorization: `Bearer ${await resolveGcpAccessToken()}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),

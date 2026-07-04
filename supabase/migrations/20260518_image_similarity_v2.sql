@@ -2,14 +2,27 @@
 -- See docs/data-science/image-similarity-design.md (Stages A + B).
 
 -- 1) Stage A: pHash + dHash columns and 16-bit segments for indexed lookup.
+-- hash_version is added with DEFAULT 1 so legacy rows are marked as needing
+-- backfill (the cron drain targets hash_version < 2); new inserts set 2
+-- explicitly, and the column default is bumped to 2 right after.
 ALTER TABLE public.submission_image_hashes
   ADD COLUMN IF NOT EXISTS phash text,
   ADD COLUMN IF NOT EXISTS dhash text,
-  ADD COLUMN IF NOT EXISTS hash_version smallint NOT NULL DEFAULT 2,
+  ADD COLUMN IF NOT EXISTS hash_version smallint NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS phash_seg_0 smallint,
   ADD COLUMN IF NOT EXISTS phash_seg_1 smallint,
   ADD COLUMN IF NOT EXISTS phash_seg_2 smallint,
   ADD COLUMN IF NOT EXISTS phash_seg_3 smallint;
+
+ALTER TABLE public.submission_image_hashes
+  ALTER COLUMN hash_version SET DEFAULT 2;
+
+-- Corrective for databases that ran the earlier revision of this migration,
+-- where ADD COLUMN ... DEFAULT 2 stamped legacy rows as already-hashed and
+-- made the backfill a no-op.
+UPDATE public.submission_image_hashes
+  SET hash_version = 1
+  WHERE phash IS NULL AND hash_version >= 2;
 
 -- Pigeonhole-style segment indexes: any two 64-bit hashes within Hamming <= 8
 -- share at least one identical 16-bit segment, so an OR-on-segments query

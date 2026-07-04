@@ -817,7 +817,8 @@ async function insertImageHashRecord(input: PersistSubmissionRiskInput): Promise
        ON CONFLICT (event_id) DO NOTHING`,
       [
         input.eventId, input.pointId, input.userId, input.imageHash,
-        phash, phash, dhash, 2,
+        // hash_version 1 keeps failed-hash rows eligible for the cron backfill.
+        phash, phash, dhash, phash ? 2 : 1,
         segs?.[0] ?? null, segs?.[1] ?? null, segs?.[2] ?? null, segs?.[3] ?? null,
         phash ? "pending" : "skipped",
       ],
