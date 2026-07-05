@@ -410,7 +410,7 @@ export default async function handler(request: Request): Promise<Response> {
             httpOnly: true,
             sameSite: cookieSameSite,
             path: "/",
-            secure: true,
+            secure: isSecureRequest(),
           },
         },
         csrfToken: {
