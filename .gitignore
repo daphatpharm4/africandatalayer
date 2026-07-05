@@ -51,3 +51,6 @@ keystore.properties
 *.db
 .beads-credential-key
 .env*
+
+# Claude session context files (local briefings, not project docs)
+session-*.md
