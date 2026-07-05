@@ -54,6 +54,7 @@ interface CronDispatchSummary {
     dailyTrustDecay: CronJobSummary;
     dailyGpsAnomaly: CronJobSummary;
     dailyPurge: CronJobSummary;
+    imageSimilarityDrain: CronJobSummary;
   };
 }
 
@@ -126,6 +127,11 @@ async function runDailyPurgeCron(): Promise<unknown> {
   return purgeExpiredMaintenanceRecords();
 }
 
+async function runImageSimilarityDrainCron(): Promise<unknown> {
+  const { runImageSimilarityDrain } = await import("../../lib/server/imageSimilarityCron.js");
+  return runImageSimilarityDrain();
+}
+
 async function handleCronDispatch(url: URL): Promise<Response> {
   const now = resolveCronDispatchInstant(url.searchParams.get("at"));
   if (!now) {
@@ -141,6 +147,7 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     dailyTrustDecay: { due: schedule.dailyTrustDecay, status: "skipped", message: "Not scheduled for this run" },
     dailyGpsAnomaly: { due: schedule.dailyGpsAnomaly, status: "skipped", message: "Not scheduled for this run" },
     dailyPurge: { due: schedule.dailyPurge, status: "skipped", message: "Not scheduled for this run" },
+    imageSimilarityDrain: { due: true, status: "skipped", message: "Not yet executed" },
   };
 
   let hasFailures = false;
@@ -257,6 +264,25 @@ async function handleCronDispatch(url: URL): Promise<Response> {
       };
       console.error("Cron dispatch daily maintenance purge failed:", error);
     }
+  }
+
+  // Image-similarity drain runs every dispatch tick (no schedule gating).
+  // Batch sizes and wall-clock budget are env-tunable (IMAGE_* vars).
+  try {
+    jobs.imageSimilarityDrain = {
+      due: true,
+      status: "ok",
+      message: "Image similarity drain executed",
+      result: await runImageSimilarityDrainCron(),
+    };
+  } catch (error) {
+    hasFailures = true;
+    jobs.imageSimilarityDrain = {
+      due: true,
+      status: "error",
+      message: asErrorMessage(error),
+    };
+    console.error("Cron dispatch image similarity drain failed:", error);
   }
 
   const summary: CronDispatchSummary = {
