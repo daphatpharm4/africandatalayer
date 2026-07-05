@@ -38,7 +38,19 @@ function resolveDatabaseUrl() {
  * sslrootcert can override that and make pg verify against a CA the Supabase
  * self-signed cert doesn't chain to. Force sslmode=no-verify and drop
  * sslrootcert so the no-verify intent actually takes effect.
+ *
+ * Exception: sslmode=disable is honored as-is. Local Postgres containers
+ * don't speak SSL, and forcing the ssl option there makes pg fail with
+ * "The server does not support SSL connections".
  */
+function isSslDisabled(connectionString) {
+  try {
+    return new URL(connectionString).searchParams.get("sslmode")?.trim().toLowerCase() === "disable";
+  } catch {
+    return false;
+  }
+}
+
 function applyNoVerifySslMode(connectionString) {
   try {
     const parsed = new URL(connectionString);
@@ -114,10 +126,12 @@ async function main() {
     process.exit(1);
   }
 
-  const pool = new Pool({
-    connectionString: applyNoVerifySslMode(connectionString),
-    ssl: { rejectUnauthorized: false },
-  });
+  const pool = isSslDisabled(connectionString)
+    ? new Pool({ connectionString, ssl: false })
+    : new Pool({
+        connectionString: applyNoVerifySslMode(connectionString),
+        ssl: { rejectUnauthorized: false },
+      });
   try {
     await ensureMigrationsTable(pool);
     const applied = await getAppliedMigrations(pool);
