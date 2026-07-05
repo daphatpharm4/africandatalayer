@@ -137,6 +137,8 @@ export function createGeminiAiModelClient(options: {
 
   return async (input) => {
     if (!apiKey?.trim()) return deterministicAiModelClient(input);
+    const { getAiMode } = await import("../../edgeConfig.js");
+    if ((await getAiMode()) === "deterministic") return deterministicAiModelClient(input);
 
     try {
       const { GoogleGenAI } = await import("@google/genai");

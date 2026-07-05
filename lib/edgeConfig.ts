@@ -96,6 +96,29 @@ function encodeKey(input: string): string {
   return Buffer.from(normalized).toString("base64url");
 }
 
+export type AiMode = "gemini" | "deterministic";
+
+// Runtime kill switch for LLM usage. "deterministic" forces the template
+// fallback even when GEMINI_API_KEY is set; unset/anything else means the
+// provider is used when configured. Toggled via scripts/ai-mode.mjs or the
+// Edge Config dashboard — no redeploy needed.
+export async function getAiMode(): Promise<AiMode | null> {
+  const envOverride = process.env.AI_MODE?.trim().toLowerCase();
+  if (envOverride === "deterministic" || envOverride === "gemini") return envOverride;
+  try {
+    const value = await readKey<string>("ai_mode");
+    const normalized = value?.trim().toLowerCase();
+    return normalized === "deterministic" || normalized === "gemini" ? normalized : null;
+  } catch {
+    // Edge Config unreachable must never take AI down with it.
+    return null;
+  }
+}
+
+export async function setAiMode(mode: AiMode): Promise<void> {
+  await writeKey("ai_mode", mode);
+}
+
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const key = `user_${encodeKey(userId)}`;
   return await readKey<UserProfile>(key);

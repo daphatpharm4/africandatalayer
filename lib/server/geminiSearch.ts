@@ -40,6 +40,12 @@ async function getGeminiClient(): Promise<GoogleGenAIClient> {
 }
 
 export async function searchLocationsServer(query: string, lat?: number, lng?: number): Promise<GeminiSearchResult> {
+  const { getAiMode } = await import("../edgeConfig.js");
+  if ((await getAiMode()) === "deterministic") {
+    // Same failure surface as a missing key: the search view has no
+    // template fallback, so callers get the existing 503 gemini_unconfigured.
+    throw new GeminiConfigError("AI is switched to deterministic mode");
+  }
   const ai = await getGeminiClient();
   const hasCoordinates = Number.isFinite(lat) && Number.isFinite(lng);
 
