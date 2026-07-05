@@ -32,6 +32,18 @@ function resolveDatabaseUrl() {
   );
 }
 
+function resolveSslConfig(connectionString) {
+  try {
+    const sslMode = new URL(connectionString).searchParams.get("sslmode")?.trim().toLowerCase();
+    // Local Postgres containers don't speak SSL; forcing the ssl option
+    // makes pg fail with "The server does not support SSL connections".
+    if (sslMode === "disable") return false;
+  } catch {
+    // Let pg surface connection string issues.
+  }
+  return { rejectUnauthorized: false };
+}
+
 function parseArgs(argv) {
   const args = {
     dryRun: false,
@@ -96,7 +108,7 @@ async function main() {
     process.exit(1);
   }
 
-  const pool = new Pool({ connectionString, ssl: { rejectUnauthorized: false } });
+  const pool = new Pool({ connectionString, ssl: resolveSslConfig(connectionString) });
   try {
     await ensureMigrationsTable(pool);
     const applied = await getAppliedMigrations(pool);
