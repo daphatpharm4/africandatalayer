@@ -1,5 +1,7 @@
+import type * as SentryBrowser from "@sentry/browser";
+
 let initialized = false;
-let initPromise: Promise<typeof import("@sentry/browser") | null> | null = null;
+let initPromise: Promise<typeof SentryBrowser | null> | null = null;
 
 function scrubString(value: string): string {
   return value
@@ -34,7 +36,7 @@ export function initClientSentry(): void {
   void loadSentry();
 }
 
-async function loadSentry(): Promise<typeof import("@sentry/browser") | null> {
+async function loadSentry(): Promise<typeof SentryBrowser | null> {
   if (initPromise) return initPromise;
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn) return null;

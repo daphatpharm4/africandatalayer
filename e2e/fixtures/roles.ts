@@ -1,4 +1,4 @@
-export type AdlRole = "agent" | "admin" | "client";
+export type AdlRole = "agent" | "admin" | "client" | "point_operator";
 
 type SessionUser = {
   id: string;
@@ -7,6 +7,7 @@ type SessionUser = {
   image?: string | null;
   isAdmin?: boolean;
   role: AdlRole;
+  mustChangePassword?: boolean;
 };
 
 export type MockAuthSession = {
@@ -58,11 +59,24 @@ const ROLE_SESSIONS: Record<AdlRole, MockAuthSession> = {
     },
     expires: SESSION_EXPIRY,
   },
+  point_operator: {
+    user: {
+      id: "operator.pharmacie@adl.test",
+      name: "Franck Point Operator",
+      email: "operator.pharmacie@adl.test",
+      image: "baobab",
+      role: "point_operator",
+      isAdmin: false,
+      mustChangePassword: false,
+    },
+    expires: SESSION_EXPIRY,
+  },
 };
 
 export function roleFromProjectName(projectName: string): AdlRole {
   if (projectName.startsWith("admin")) return "admin";
   if (projectName.startsWith("client")) return "client";
+  if (projectName.startsWith("point-operator")) return "point_operator";
   return "agent";
 }
 
