@@ -1,3 +1,5 @@
+import type { PointOperatorSignalState } from './shared/types';
+
 export enum Screen {
   SPLASH = 'SPLASH',
   HOME = 'HOME',
@@ -75,6 +77,7 @@ export interface DataPoint {
   details?: Record<string, unknown>;
   gaps?: string[];
   verified?: boolean;
+  operatorSignals?: Record<string, PointOperatorSignalState>;
 }
 
 export interface User {
