@@ -32,7 +32,8 @@
     "cap:sync:ios": "npm run build && npx cap sync ios",
     "cap:sync:android": "npm run build && npx cap sync android",
     "cap:open:ios": "npx cap open ios",
-    "cap:open:android": "npx cap open android"
+    "cap:open:android": "npx cap open android",
+    "ai:mode": "node scripts/ai-mode.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.33.0",
