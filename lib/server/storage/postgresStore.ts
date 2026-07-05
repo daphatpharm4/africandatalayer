@@ -153,7 +153,6 @@ function isMissingPhoneColumnError(error: unknown): boolean {
 }
 
 async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
-  const email = normalizeEmail(id);
   const result = await query<Record<string, unknown>>(
     `
       select id, email, name, image, occupation, xp, password_hash, is_admin, role, map_scope,
@@ -161,11 +160,9 @@ async function getUserProfileLegacy(id: string): Promise<UserProfile | null> {
              must_change_password, session_version
       from user_profiles
       where id = $1
-         or ($2::text is not null and lower(email) = $2)
-      order by case when id = $1 then 0 else 1 end
       limit 1
     `,
-    [id, email],
+    [id],
   );
 
   const row = result.rows[0];
@@ -202,8 +199,6 @@ function rowToPointEvent(row: Record<string, unknown>): PointEvent {
 
 async function getUserProfile(userId: string): Promise<UserProfile | null> {
   const id = normalizeUserId(userId);
-  const email = normalizeEmail(id);
-  const phone = normalizePhone(id);
   if (phoneColumnState === "missing") {
     return await getUserProfileLegacy(id);
   }
@@ -216,12 +211,9 @@ async function getUserProfile(userId: string): Promise<UserProfile | null> {
                , must_change_password, session_version
         from user_profiles
         where id = $1
-           or ($2::text is not null and lower(email) = $2)
-           or ($3::text is not null and phone = $3)
-        order by case when id = $1 then 0 else 1 end
         limit 1
       `,
-      [id, email, phone],
+      [id],
     );
 
     const row = result.rows[0];
