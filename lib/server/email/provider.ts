@@ -18,6 +18,7 @@ export interface SendTransactionalParams {
   campaignId?: string | null;
   emailClass?: EmailClass;
   unsubscribeUrl?: string | null;
+  cc?: string[];
   headers?: Record<string, string>;
 }
 
@@ -30,6 +31,7 @@ export interface SendResult {
 interface ResendSendBody {
   from: string;
   to: string[];
+  cc?: string[];
   subject: string;
   html: string;
   text: string;
@@ -189,6 +191,7 @@ export async function sendTransactional(params: SendTransactionalParams): Promis
   const body: ResendSendBody = {
     from,
     to: [recipient],
+    cc: params.cc && params.cc.length > 0 ? params.cc : undefined,
     subject: params.subject,
     html: params.html,
     text: params.text,

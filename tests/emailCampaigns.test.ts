@@ -80,3 +80,44 @@ test("campaignCreateSchema accepts dryRun flag", () => {
   });
   assert.equal(result.dryRun, true);
 });
+
+test("campaignCreateSchema accepts manual recipients and cc", () => {
+  const result = campaignCreateSchema.parse({
+    subject: "Hi",
+    htmlBody: "<p>Hi</p>",
+    textBody: "Hi",
+    recipientMode: "manual",
+    manualRecipients: ["Agent@Example.com", "agent@example.com", "client@example.com"],
+    cc: ["Ops@Example.com"],
+    dryRun: true,
+  });
+
+  assert.equal(result.recipientMode, "manual");
+  assert.deepEqual(result.manualRecipients, ["agent@example.com", "client@example.com"]);
+  assert.deepEqual(result.cc, ["ops@example.com"]);
+});
+
+test("campaignCreateSchema rejects manual mode without recipients", () => {
+  const result = campaignCreateSchema.safeParse({
+    subject: "Hi",
+    htmlBody: "<p>Hi</p>",
+    textBody: "Hi",
+    recipientMode: "manual",
+    manualRecipients: [],
+  });
+
+  assert.equal(result.success, false);
+});
+
+test("campaignCreateSchema rejects invalid cc emails", () => {
+  const result = campaignCreateSchema.safeParse({
+    subject: "Hi",
+    htmlBody: "<p>Hi</p>",
+    textBody: "Hi",
+    recipientMode: "manual",
+    manualRecipients: ["agent@example.com"],
+    cc: ["not-an-email"],
+  });
+
+  assert.equal(result.success, false);
+});

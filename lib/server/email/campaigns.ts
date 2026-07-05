@@ -18,14 +18,28 @@ export const audienceSchema = z.object({
 
 export type AudienceFilter = z.infer<typeof audienceSchema>;
 
+export const MAX_CAMPAIGN_RECIPIENTS = Number(process.env.EMAIL_CAMPAIGN_MAX_RECIPIENTS ?? "5000") || 5000;
+
+const emailListSchema = z
+  .array(z.string().trim().toLowerCase().email())
+  .max(MAX_CAMPAIGN_RECIPIENTS)
+  .default([])
+  .transform((items) => Array.from(new Set(items)));
+
 export const campaignCreateSchema = z.object({
   subject: z.string().min(1).max(255),
   htmlBody: z.string().min(1),
   textBody: z.string().min(1),
   language: z.enum(["en", "fr"]).default("en"),
+  recipientMode: z.enum(["audience", "manual"]).default("audience"),
   audience: audienceSchema.default({}),
+  manualRecipients: emailListSchema,
+  cc: emailListSchema,
   scheduledAt: z.string().datetime().nullable().optional(),
   dryRun: z.boolean().optional(),
+}).refine((value) => value.recipientMode !== "manual" || value.manualRecipients.length > 0, {
+  message: "Manual recipient mode requires at least one recipient",
+  path: ["manualRecipients"],
 });
 
 export type CampaignCreateInput = z.infer<typeof campaignCreateSchema>;
@@ -42,7 +56,12 @@ export interface AudienceResolution {
   suppressedCount: number;
 }
 
-export const MAX_CAMPAIGN_RECIPIENTS = Number(process.env.EMAIL_CAMPAIGN_MAX_RECIPIENTS ?? "5000") || 5000;
+interface CampaignRecipient {
+  recipientKey: string;
+  userId: string | null;
+  email: string;
+  unsubscribeToken: string | null;
+}
 
 export async function resolveAudience(filter: AudienceFilter): Promise<AudienceResolution> {
   const conditions: string[] = ["up.email IS NOT NULL"];
@@ -127,17 +146,32 @@ export function isFutureScheduledAt(scheduledAt: string | null | undefined): boo
 }
 
 export async function createCampaign(params: CreateCampaignParams): Promise<CreatedCampaign> {
-  const audience = await resolveAudience(params.audience);
-  const capped = audience.totalCount > MAX_CAMPAIGN_RECIPIENTS;
-  const recipients = audience.recipients;
+  const manualMode = params.recipientMode === "manual";
+  const audience = manualMode ? null : await resolveAudience(params.audience);
+  const recipients: CampaignRecipient[] = manualMode
+    ? params.manualRecipients.map((email): CampaignRecipient => ({
+        recipientKey: `manual:${email}`,
+        userId: null,
+        email,
+        unsubscribeToken: null,
+      }))
+    : (audience?.recipients ?? []).map((recipient): CampaignRecipient => ({
+        recipientKey: recipient.userId,
+        userId: recipient.userId,
+        email: recipient.email,
+        unsubscribeToken: recipient.unsubscribeToken,
+      }));
+  const totalCount = manualMode ? params.manualRecipients.length : audience?.totalCount ?? 0;
+  const suppressedCount = manualMode ? 0 : audience?.suppressedCount ?? 0;
+  const capped = totalCount > MAX_CAMPAIGN_RECIPIENTS;
   const isScheduled = !params.dryRun && isFutureScheduledAt(params.scheduledAt ?? null);
   const initialStatus = params.dryRun ? "draft" : isScheduled ? "scheduled" : "sending";
 
   const sanitizedHtml = sanitizeEmailHtml(params.htmlBody).html;
   const insert = await query<{ id: string; status: string }>(
     `INSERT INTO public.email_campaigns
-       (subject, html_body, text_body, audience, language, status, recipient_count, suppressed_count, created_by, scheduled_at)
-     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10)
+       (subject, html_body, text_body, audience, language, status, recipient_count, suppressed_count, created_by, scheduled_at, recipient_mode, cc_emails)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12)
      RETURNING id, status`,
     [
       params.subject,
@@ -147,9 +181,11 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
       params.language,
       initialStatus,
       recipients.length,
-      audience.suppressedCount,
+      suppressedCount,
       params.createdBy,
       params.scheduledAt ?? null,
+      params.recipientMode,
+      params.cc,
     ],
   );
   const campaign = insert.rows[0];
@@ -157,10 +193,10 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
 
   for (const recipient of recipients) {
     await query(
-      `INSERT INTO public.email_campaign_recipients (campaign_id, user_id, email, status)
-       VALUES ($1, $2, $3, 'pending')
-       ON CONFLICT (campaign_id, user_id) DO NOTHING`,
-      [campaign.id, recipient.userId, recipient.email],
+      `INSERT INTO public.email_campaign_recipients (campaign_id, recipient_key, user_id, email, status)
+       VALUES ($1, $2, $3, $4, 'pending')
+       ON CONFLICT (campaign_id, recipient_key) DO NOTHING`,
+      [campaign.id, recipient.recipientKey, recipient.userId, recipient.email],
     );
   }
 
@@ -169,7 +205,7 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
       id: campaign.id,
       status: campaign.status,
       recipientCount: recipients.length,
-      suppressedCount: audience.suppressedCount,
+      suppressedCount,
       capped,
     };
   }
@@ -179,7 +215,7 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
       id: campaign.id,
       status: "scheduled",
       recipientCount: recipients.length,
-      suppressedCount: audience.suppressedCount,
+      suppressedCount,
       capped,
     };
   }
@@ -195,7 +231,7 @@ export async function createCampaign(params: CreateCampaignParams): Promise<Crea
     id: campaign.id,
     status: "sending",
     recipientCount: recipients.length,
-    suppressedCount: audience.suppressedCount,
+    suppressedCount,
     capped,
   };
 }
@@ -219,8 +255,9 @@ export async function dispatchCampaignSendBatch(params: {
     text_body: string;
     language: string;
     status: string;
+    cc_emails: string[] | null;
   }>(
-    `SELECT subject, html_body, text_body, language, status
+    `SELECT subject, html_body, text_body, language, status, cc_emails
      FROM public.email_campaigns
      WHERE id = $1
      LIMIT 1`,
@@ -233,20 +270,21 @@ export async function dispatchCampaignSendBatch(params: {
   }
 
   const pending = await query<{
-    user_id: string;
+    recipient_key: string;
+    user_id: string | null;
     email: string;
-    unsubscribe_token: string;
+    unsubscribe_token: string | null;
     name: string | null;
     map_scope: string | null;
     role: string | null;
     trust_tier: string | null;
   }>(
-    `SELECT cr.user_id, cr.email, up.unsubscribe_token,
+    `SELECT cr.recipient_key, cr.user_id, cr.email, up.unsubscribe_token,
             up.name, up.map_scope, up.role, up.trust_tier
      FROM public.email_campaign_recipients cr
-     JOIN public.user_profiles up ON up.id = cr.user_id
+     LEFT JOIN public.user_profiles up ON up.id = cr.user_id
      WHERE cr.campaign_id = $1 AND cr.status = 'pending'
-     ORDER BY cr.user_id
+     ORDER BY cr.recipient_key
      LIMIT $2::int`,
     [params.campaignId, batchSize],
   );
@@ -266,8 +304,8 @@ export async function dispatchCampaignSendBatch(params: {
       await new Promise((resolve) => setTimeout(resolve, minGapMs - elapsed));
     }
     lastSendStart = Date.now();
-    const unsubscribeUrl = buildUnsubscribeUrl(params.baseUrl, row.unsubscribe_token);
-    const idempotencyKey = `email_campaign:${params.campaignId}:${row.user_id}`;
+    const unsubscribeUrl = row.unsubscribe_token ? buildUnsubscribeUrl(params.baseUrl, row.unsubscribe_token) : null;
+    const idempotencyKey = `email_campaign:${params.campaignId}:${row.recipient_key}`;
     const firstName = row.name ? row.name.split(/\s+/)[0] : "";
     const rendered = renderEmailWithVariables(
       { subject: campaign.subject, html: campaign.html_body, text: campaign.text_body },
@@ -293,6 +331,7 @@ export async function dispatchCampaignSendBatch(params: {
         campaignId: params.campaignId,
         emailClass: "marketing",
         unsubscribeUrl,
+        cc: campaign.cc_emails ?? [],
       });
 
       const nextStatus =
@@ -310,10 +349,10 @@ export async function dispatchCampaignSendBatch(params: {
              provider_message_id = COALESCE($4, provider_message_id),
              error = $5,
              sent_at = CASE WHEN $3 = 'sent' THEN NOW() ELSE sent_at END
-         WHERE campaign_id = $1 AND user_id = $2`,
+         WHERE campaign_id = $1 AND recipient_key = $2`,
         [
           params.campaignId,
-          row.user_id,
+          row.recipient_key,
           nextStatus,
           result.providerMessageId,
           result.status === "failed" ? result.reason ?? "send_failed" : null,
@@ -326,12 +365,12 @@ export async function dispatchCampaignSendBatch(params: {
       else failed += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown";
-      logWarn("campaign.send_error", { campaignId: params.campaignId, userId: row.user_id, error: message });
+      logWarn("campaign.send_error", { campaignId: params.campaignId, recipientKey: row.recipient_key, error: message });
       await query(
         `UPDATE public.email_campaign_recipients
          SET status = 'failed', error = $3
-         WHERE campaign_id = $1 AND user_id = $2`,
-        [params.campaignId, row.user_id, message],
+         WHERE campaign_id = $1 AND recipient_key = $2`,
+        [params.campaignId, row.recipient_key, message],
       );
       failed += 1;
     }

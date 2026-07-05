@@ -3,6 +3,7 @@ import { Bold, Code, Eye, FileText, Heading2, Italic, Link2, List, Loader2, Mail
 import { apiJson } from '../../lib/client/api';
 
 type Channel = 'email' | 'sms' | 'templates' | 'history';
+type EmailRecipientMode = 'audience' | 'manual';
 
 interface TemplateRow {
   id: string;
@@ -121,6 +122,27 @@ function gsmSegmentCount(message: string): number {
   return Math.max(1, Math.ceil(message.length / limit));
 }
 
+function parseEmailList(value: string): { emails: string[]; invalid: string[] } {
+  const parts = value
+    .split(/[\s,;]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+  const seen = new Set<string>();
+  const emails: string[] = [];
+  const invalid: string[] = [];
+  for (const part of parts) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(part)) {
+      if (!invalid.includes(part)) invalid.push(part);
+      continue;
+    }
+    if (!seen.has(part)) {
+      seen.add(part);
+      emails.push(part);
+    }
+  }
+  return { emails, invalid };
+}
+
 const CommunicationsPanel: React.FC<Props> = ({ language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
@@ -134,6 +156,9 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
   const [emailHtml, setEmailHtml] = useState('');
   const [emailText, setEmailText] = useState('');
   const [emailLanguage, setEmailLanguage] = useState<'en' | 'fr'>(language);
+  const [emailRecipientMode, setEmailRecipientMode] = useState<EmailRecipientMode>('audience');
+  const [manualTo, setManualTo] = useState('');
+  const [manualCc, setManualCc] = useState('');
 
   const [smsMessage, setSmsMessage] = useState('');
   const [smsLanguage, setSmsLanguage] = useState<'en' | 'fr'>(language);
@@ -331,13 +356,21 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
 
   const segmentCount = useMemo(() => gsmSegmentCount(smsMessage), [smsMessage]);
   const totalSmsSegments = segmentCount * (preview?.recipientCount ?? 0);
+  const manualToList = useMemo(() => parseEmailList(manualTo), [manualTo]);
+  const manualCcList = useMemo(() => parseEmailList(manualCc), [manualCc]);
+  const emailRecipientCount =
+    emailRecipientMode === 'manual' ? manualToList.emails.length : (preview?.recipientCount ?? 0);
+  const emailRecipientsValid =
+    emailRecipientMode === 'manual'
+      ? manualToList.emails.length > 0 && manualToList.invalid.length === 0 && manualCcList.invalid.length === 0
+      : (preview?.recipientCount ?? 0) > 0;
 
   const canSendEmail =
     !submitting &&
     emailSubject.trim().length > 0 &&
     emailHtml.trim().length > 0 &&
     emailText.trim().length > 0 &&
-    (preview?.recipientCount ?? 0) > 0;
+    emailRecipientsValid;
 
   const canSendSms =
     !submitting &&
@@ -362,7 +395,10 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
         htmlBody: emailHtml,
         textBody: emailText,
         language: emailLanguage,
+        recipientMode: emailRecipientMode,
         audience,
+        manualRecipients: emailRecipientMode === 'manual' ? manualToList.emails : [],
+        cc: manualCcList.emails,
         dryRun,
         ...(scheduledAtIso ? { scheduledAt: scheduledAtIso } : {}),
       };
@@ -373,7 +409,7 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
       });
       setActionMessage(
         dryRun
-          ? t(`Dry-run created (${result.recipientCount} recipients)`, `Test créé (${result.recipientCount} destinataires)`)
+          ? t(`Dry-run created (${result.recipientCount} recipients, ${manualCcList.emails.length} cc)`, `Test créé (${result.recipientCount} destinataires, ${manualCcList.emails.length} cc)`)
           : t(`Campaign sent to ${result.recipientCount} recipients.`, `Campagne envoyée à ${result.recipientCount} destinataires.`),
       );
       await refreshHistory();
@@ -474,88 +510,139 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
 
       {channel !== 'history' && channel !== 'templates' && (
         <div className="rounded-2xl border border-gray-100 bg-page p-3 space-y-3">
-          <div className="micro-label text-gray-500">{t('Audience', 'Audience')}</div>
-
-          <div>
-            <div className="micro-label text-gray-400 mb-1">{t('Roles', 'Rôles')}</div>
-            <div className="flex flex-wrap gap-1.5">
-              {ROLE_OPTIONS.map((role) => {
-                const active = (audience.roles ?? []).includes(role);
-                return (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => toggleRole(role)}
-                    className={`h-8 rounded-full px-3 text-[11px] font-semibold ${
-                      active ? 'bg-navy text-white' : 'border border-gray-200 bg-white text-gray-600'
-                    }`}
-                  >
-                    {role}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <div className="micro-label text-gray-400 mb-1">{t('Trust tier', 'Niveau de confiance')}</div>
-            <div className="flex flex-wrap gap-1.5">
-              {TRUST_TIER_OPTIONS.map((tier) => {
-                const active = (audience.trustTiers ?? []).includes(tier);
-                return (
-                  <button
-                    key={tier}
-                    type="button"
-                    onClick={() => toggleTier(tier)}
-                    className={`h-8 rounded-full px-3 text-[11px] font-semibold ${
-                      active ? 'bg-forest text-white' : 'border border-gray-200 bg-white text-gray-600'
-                    }`}
-                  >
-                    {tier}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-xs text-gray-600">
-              <span>{t('Active in last (days)', 'Actif dans les (jours)')}</span>
-              <input
-                type="number"
-                min={1}
-                value={audience.lastActiveDays ?? ''}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setAudience((prev) => ({
-                    ...prev,
-                    lastActiveDays: value ? Math.max(1, Math.floor(Number(value))) : undefined,
-                  }));
-                }}
-                className="h-9 w-20 rounded-xl border border-gray-200 bg-white px-2 text-sm"
-              />
-            </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="micro-label text-gray-500">{t('Recipients', 'Destinataires')}</div>
             {channel === 'email' && (
-              <label className="flex items-center gap-2 text-xs text-gray-600">
-                <input
-                  type="checkbox"
-                  checked={audience.requireEmailOptIn !== false}
-                  onChange={(e) =>
-                    setAudience((prev) => ({ ...prev, requireEmailOptIn: e.target.checked }))
-                  }
-                />
-                {t('Require email opt-in', "Exiger l'opt-in e-mail")}
-              </label>
+              <div className="ml-auto inline-flex rounded-full border border-gray-200 bg-white p-0.5">
+                {(['audience', 'manual'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setEmailRecipientMode(mode)}
+                    className={`h-8 rounded-full px-3 text-[11px] font-bold uppercase tracking-wider ${
+                      emailRecipientMode === mode ? 'bg-navy text-white' : 'text-gray-600'
+                    }`}
+                  >
+                    {mode === 'audience' ? t('Audience', 'Audience') : t('Manual', 'Manuel')}
+                  </button>
+                ))}
+              </div>
             )}
-            <button
-              type="button"
-              onClick={refreshPreview}
-              disabled={previewLoading}
-              className="ml-auto h-9 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-700"
-            >
-              {previewLoading ? t('Refreshing…', 'Actualisation…') : t('Refresh preview', 'Actualiser')}
-            </button>
           </div>
+
+          {channel === 'email' && emailRecipientMode === 'manual' ? (
+            <div className="space-y-2">
+              <label className="block">
+                <span className="micro-label text-gray-400 mb-1 block">{t('To', 'À')}</span>
+                <textarea
+                  value={manualTo}
+                  onChange={(e) => setManualTo(e.target.value)}
+                  placeholder="agent@example.com, client@example.com"
+                  rows={3}
+                  className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm"
+                />
+              </label>
+              <label className="block">
+                <span className="micro-label text-gray-400 mb-1 block">CC</span>
+                <textarea
+                  value={manualCc}
+                  onChange={(e) => setManualCc(e.target.value)}
+                  placeholder="ops@example.com"
+                  rows={2}
+                  className="w-full rounded-xl border border-gray-200 bg-white p-3 text-sm"
+                />
+              </label>
+              {(manualToList.invalid.length > 0 || manualCcList.invalid.length > 0) && (
+                <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {t('Invalid email:', 'E-mail invalide :')}{' '}
+                  {[...manualToList.invalid, ...manualCcList.invalid].join(', ')}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div>
+                <div className="micro-label text-gray-400 mb-1">{t('Roles', 'Rôles')}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ROLE_OPTIONS.map((role) => {
+                    const active = (audience.roles ?? []).includes(role);
+                    return (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => toggleRole(role)}
+                        className={`h-8 rounded-full px-3 text-[11px] font-semibold ${
+                          active ? 'bg-navy text-white' : 'border border-gray-200 bg-white text-gray-600'
+                        }`}
+                      >
+                        {role}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div className="micro-label text-gray-400 mb-1">{t('Trust tier', 'Niveau de confiance')}</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {TRUST_TIER_OPTIONS.map((tier) => {
+                    const active = (audience.trustTiers ?? []).includes(tier);
+                    return (
+                      <button
+                        key={tier}
+                        type="button"
+                        onClick={() => toggleTier(tier)}
+                        className={`h-8 rounded-full px-3 text-[11px] font-semibold ${
+                          active ? 'bg-forest text-white' : 'border border-gray-200 bg-white text-gray-600'
+                        }`}
+                      >
+                        {tier}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-xs text-gray-600">
+                  <span>{t('Active in last (days)', 'Actif dans les (jours)')}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={audience.lastActiveDays ?? ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAudience((prev) => ({
+                        ...prev,
+                        lastActiveDays: value ? Math.max(1, Math.floor(Number(value))) : undefined,
+                      }));
+                    }}
+                    className="h-9 w-20 rounded-xl border border-gray-200 bg-white px-2 text-sm"
+                  />
+                </label>
+                {channel === 'email' && (
+                  <label className="flex items-center gap-2 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={audience.requireEmailOptIn !== false}
+                      onChange={(e) =>
+                        setAudience((prev) => ({ ...prev, requireEmailOptIn: e.target.checked }))
+                      }
+                    />
+                    {t('Require email opt-in', "Exiger l'opt-in e-mail")}
+                  </label>
+                )}
+                <button
+                  type="button"
+                  onClick={refreshPreview}
+                  disabled={previewLoading}
+                  className="ml-auto h-9 rounded-full border border-gray-200 bg-white px-3 text-[11px] font-semibold text-gray-700"
+                >
+                  {previewLoading ? t('Refreshing...', 'Actualisation...') : t('Refresh preview', 'Actualiser')}
+                </button>
+              </div>
+            </>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-gray-100 bg-white px-3 py-2 text-xs text-gray-600">
             <span className="micro-label text-gray-400">{t('Schedule send', 'Planifier')}</span>
@@ -582,7 +669,15 @@ const CommunicationsPanel: React.FC<Props> = ({ language }) => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 rounded-xl bg-white border border-gray-100 px-3 py-2 text-xs text-gray-600">
-            {previewError ? (
+            {channel === 'email' && emailRecipientMode === 'manual' ? (
+              <>
+                <span>
+                  <strong className="text-navy">{emailRecipientCount}</strong>
+                  {' '}{t('manual recipients', 'destinataires manuels')}
+                </span>
+                <span>· {manualCcList.emails.length} CC</span>
+              </>
+            ) : previewError ? (
               <span className="text-red-600">{previewError}</span>
             ) : preview ? (
               <>
