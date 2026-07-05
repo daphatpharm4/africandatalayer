@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { SESSION_CONFIG, getAuthBaseUrl, getSessionCookieName } from "../lib/auth.ts";
+import { SESSION_CONFIG, getAuthBaseUrl, getSessionCookieName, isSecureRequest } from "../lib/auth.ts";
 import { resolveAuthRequestBaseUrl } from "../lib/server/auth/requestUrl.ts";
 
 test("session configuration matches pilot security defaults", () => {
@@ -52,6 +52,24 @@ test("secure auth cookie name is derived from AUTH_URL", () => {
 
   process.env.AUTH_URL = "http://localhost:3000";
   assert.equal(getSessionCookieName(), "authjs.session-token");
+
+  if (previousAuthUrl === undefined) delete process.env.AUTH_URL;
+  else process.env.AUTH_URL = previousAuthUrl;
+
+  if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+  else process.env.NODE_ENV = previousNodeEnv;
+});
+
+test("secure auth cookie flag is disabled for local http auth URLs", () => {
+  const previousAuthUrl = process.env.AUTH_URL;
+  const previousNodeEnv = process.env.NODE_ENV;
+
+  process.env.NODE_ENV = "development";
+  process.env.AUTH_URL = "http://localhost:3000";
+  assert.equal(isSecureRequest(), false);
+
+  process.env.AUTH_URL = "https://pilot.africandatalayer.com";
+  assert.equal(isSecureRequest(), true);
 
   if (previousAuthUrl === undefined) delete process.env.AUTH_URL;
   else process.env.AUTH_URL = previousAuthUrl;
