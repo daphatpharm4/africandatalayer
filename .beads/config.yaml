@@ -1,4 +1,6 @@
 repos:
-  primary: "."
-  additional:
-    - "/Users/charlesvictormahouve/.beads-planning"
+    primary: "."
+    additional:
+        - "/Users/charlesvictormahouve/.beads-planning"
+sync:
+    remote: "git+ssh://git@github.com/daphatpharm4/africandatalayer.git"
