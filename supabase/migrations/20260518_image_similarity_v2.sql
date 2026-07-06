@@ -49,14 +49,17 @@ DROP INDEX IF EXISTS public.idx_submission_image_hashes_perceptual;
 
 -- Embedding queue state, drained by cron_dispatch.
 ALTER TABLE public.submission_image_hashes
-  ADD COLUMN IF NOT EXISTS embedding_status text NOT NULL DEFAULT 'pending';
+  ADD COLUMN IF NOT EXISTS embedding_status text NOT NULL DEFAULT 'pending',
+  ADD COLUMN IF NOT EXISTS embedding_attempts smallint NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS embedding_last_error text,
+  ADD COLUMN IF NOT EXISTS embedding_updated_at timestamptz NOT NULL DEFAULT now();
 
 ALTER TABLE public.submission_image_hashes
   DROP CONSTRAINT IF EXISTS submission_image_hashes_embedding_status_check;
 
 ALTER TABLE public.submission_image_hashes
   ADD CONSTRAINT submission_image_hashes_embedding_status_check
-  CHECK (embedding_status IN ('pending', 'done', 'failed', 'skipped'));
+  CHECK (embedding_status IN ('pending', 'processing', 'done', 'failed', 'skipped'));
 
 CREATE INDEX IF NOT EXISTS idx_submission_image_hashes_embedding_status
   ON public.submission_image_hashes(embedding_status)
@@ -76,3 +79,18 @@ CREATE INDEX IF NOT EXISTS idx_sie_embedding_hnsw
   ON public.submission_image_embeddings
   USING hnsw (embedding vector_cosine_ops)
   WITH (m = 16, ef_construction = 64);
+
+CREATE TABLE IF NOT EXISTS public.submission_image_similarity_matches (
+  id               bigserial PRIMARY KEY,
+  event_id         uuid NOT NULL REFERENCES public.point_events(id) ON DELETE CASCADE,
+  matched_event_id uuid NOT NULL REFERENCES public.point_events(id) ON DELETE CASCADE,
+  similarity       double precision NOT NULL,
+  model_version    text NOT NULL,
+  rule_triggered   text NOT NULL,
+  decision         text NOT NULL CHECK (decision IN ('logged', 'pending_review')),
+  created_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (event_id, matched_event_id, model_version, rule_triggered)
+);
+
+CREATE INDEX IF NOT EXISTS idx_sism_event_id
+  ON public.submission_image_similarity_matches(event_id);
