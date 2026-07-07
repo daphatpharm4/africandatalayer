@@ -3,6 +3,7 @@ import { getUserProfilesBatch, isStorageUnavailableError } from "../../lib/serve
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import type { LeaderboardEntry, PointEvent, SubmissionCategory } from "../../shared/types.js";
 import { getEffectiveEventXp } from "../../shared/xp.js";
+import { inferDefaultDisplayName } from "../../lib/shared/identifier.js";
 
 type AggregateRow = {
   userId: string;
@@ -37,15 +38,6 @@ function getQualityScore(submission: PointEvent): number {
   return FALLBACK_QUALITY_SCORE;
 }
 
-function getDisplayName(userId: string, profileName?: string, profileEmail?: string | null, profilePhone?: string | null): string {
-  if (profileName && profileName.trim()) return profileName.trim();
-  const source =
-    profileEmail && profileEmail.trim() ? profileEmail.trim() : profilePhone && profilePhone.trim() ? profilePhone.trim() : userId.trim();
-  const atIndex = source.indexOf("@");
-  if (atIndex > 0) return source.slice(0, atIndex);
-  return source || "Contributor";
-}
-
 function redactUserId(userId: string): string {
   if (!userId) return "contributor";
   if (userId.includes("@")) {
@@ -54,6 +46,34 @@ function redactUserId(userId: string): string {
     return `${prefix}***`;
   }
   return `${userId.slice(0, 3)}***`;
+}
+
+// A stored profile name that merely echoes the identifier — the email local part
+// ("emmatiatep" for emmatiatep@gmail.com) or the phone-derived "Contributor 1234"
+// default — is not a user-chosen display name. Emitting the email local part on
+// this fully public endpoint reconstructs the full address next to the (already
+// masked) userId, so treat identifier-derived names as auto-generated.
+function isIdentifierDerivedName(name: string, userId: string): boolean {
+  const trimmed = name.trim().toLowerCase();
+  if (!trimmed) return true;
+  if (trimmed === inferDefaultDisplayName(userId).trim().toLowerCase()) return true;
+  const atIndex = userId.indexOf("@");
+  if (atIndex > 0 && trimmed === userId.slice(0, atIndex).trim().toLowerCase()) return true;
+  return false;
+}
+
+// Public-safe display name for the leaderboard. Only genuinely user-chosen names
+// are shown verbatim; anything derived from the login identifier is reduced to a
+// non-reconstructable label. Email/phone are never used as a fallback here.
+export function getPublicDisplayName(userId: string, profileName?: string | null): string {
+  const chosen = profileName?.trim();
+  if (chosen && !isIdentifierDerivedName(chosen, userId)) return chosen;
+
+  // No user-chosen name: the phone default ("Contributor 1234") is already
+  // non-reconstructable and safe to surface; an email identifier is redacted.
+  const autoDerived = inferDefaultDisplayName(userId);
+  if (autoDerived.startsWith("Contributor")) return autoDerived;
+  return redactUserId(userId);
 }
 
 export async function GET(): Promise<Response> {
@@ -122,7 +142,7 @@ export async function GET(): Promise<Response> {
       return {
         rank: index + 1,
         userId: redactUserId(row.userId),
-        name: getDisplayName(row.userId, profile?.name, profile?.email, profile?.phone),
+        name: getPublicDisplayName(row.userId, profile?.name),
         xp: row.xp,
         contributions: row.contributions,
         lastContributionAt: row.lastContributionAt,
