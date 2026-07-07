@@ -124,7 +124,7 @@ export async function PATCH(request: Request): Promise<Response> {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
     const message = error instanceof Error ? error.message : "Unable to apply review decision";
-    captureServerException(error, { route: "submission_review_patch", eventId: id });
+    await captureServerException(error, { route: "submission_review_patch", eventId: id });
     const status = message.includes("not found") ? 404 : 400;
     return errorResponse(message, status);
   }

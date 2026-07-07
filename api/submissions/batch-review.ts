@@ -97,7 +97,7 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       const message = error instanceof Error ? error.message : "Unknown error";
-      captureServerException(error, { route: "batch_review_post", eventId });
+      await captureServerException(error, { route: "batch_review_post", eventId });
       results.push({ eventId, decision, status: "error", error: message });
     }
   }

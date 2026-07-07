@@ -22,7 +22,50 @@ async function resolveLatestTimestamp(sql: string): Promise<string | null> {
   }
 }
 
-export async function GET(): Promise<Response> {
+// Secret-gated trigger to confirm server-side Sentry delivery end-to-end. Requires
+// the CRON_SECRET bearer (same gate as the cron routes) so it is not publicly
+// invocable. Captures a uniquely-marked error through the real capture+flush path
+// and reports whether it flushed, so an operator can confirm the marker landed in
+// the Sentry dashboard.
+async function handleSentryTest(request: Request): Promise<Response> {
+  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = request.headers.get("authorization");
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
+  const marker = `sentry-test-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const dsnConfigured = Boolean(process.env.SENTRY_DSN);
+  const captured = await captureServerException(new Error(`Sentry server capture test — ${marker}`), {
+    route: "sentry_test",
+    marker,
+    triggeredAt: new Date().toISOString(),
+  });
+
+  return new Response(
+    JSON.stringify({
+      ok: true,
+      dsnConfigured,
+      captured,
+      marker,
+      note: captured
+        ? "Event captured and flushed to Sentry. Search the Sentry project for the marker."
+        : dsnConfigured
+          ? "SENTRY_DSN is set but the event was not confirmed flushed — check DSN validity / transport."
+          : "SENTRY_DSN is not configured on the server; nothing was sent.",
+    }),
+    { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } },
+  );
+}
+
+export async function GET(request: Request): Promise<Response> {
+  if (new URL(request.url).searchParams.get("view") === "sentry-test") {
+    return handleSentryTest(request);
+  }
+
   let dbStatus: HealthStatus = "error";
   let storageStatus: HealthStatus = "error";
   let httpStatus = 503;
@@ -60,7 +103,7 @@ export async function GET(): Promise<Response> {
       headers: { "Content-Type": "application/json" },
     });
   } catch (error) {
-    captureServerException(error, { route: "health" });
+    await captureServerException(error, { route: "health" });
   }
 
   const body = JSON.stringify({
