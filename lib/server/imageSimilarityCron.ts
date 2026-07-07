@@ -152,13 +152,21 @@ export async function runEmbeddingDrain(deadline: number): Promise<ImageSimilari
 
   let result;
   try {
+    // Recover rows stuck in 'processing' (the function died between claim and the
+    // failure handler). Count the lost attempt so a row that reliably wedges the
+    // drain still hits MAX_EMBED_ATTEMPTS instead of resetting to 'pending' forever.
     await query(
       `UPDATE submission_image_hashes
-       SET embedding_status = 'pending',
+       SET embedding_attempts = embedding_attempts + 1,
+           embedding_status = CASE
+             WHEN embedding_attempts + 1 >= $2 THEN 'failed'
+             ELSE 'pending'
+           END,
+           embedding_last_error = COALESCE(embedding_last_error, 'stale processing reset'),
            embedding_updated_at = NOW()
        WHERE embedding_status = 'processing'
          AND embedding_updated_at < NOW() - make_interval(mins => $1::int)`,
-      [STALE_PROCESSING_MINUTES],
+      [STALE_PROCESSING_MINUTES, MAX_EMBED_ATTEMPTS],
     );
 
     result = await query<{

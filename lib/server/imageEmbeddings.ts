@@ -281,7 +281,7 @@ export async function recordEmbeddingMatch(input: {
      DO UPDATE SET
        similarity = GREATEST(submission_image_similarity_matches.similarity, EXCLUDED.similarity),
        decision = EXCLUDED.decision,
-       created_at = NOW()`,
+       last_seen_at = NOW()`,
     [
       input.eventId,
       input.matchedEventId,
