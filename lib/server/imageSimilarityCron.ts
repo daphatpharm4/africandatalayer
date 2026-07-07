@@ -1,12 +1,18 @@
-import { query } from "./db.js";
+import { query as dbQuery } from "./db.js";
 import { computeDhash, computePhash, encodeSegments, isMissingDbObjectError } from "./imageSimilarity.js";
 import {
   EMBEDDING_SOFT_DUP_SIM,
   findSimilarEmbeddings,
   getEmbeddingProvider,
+  markEmbeddingFailure,
   markEmbeddingStatus,
   persistEmbedding,
+  recordEmbeddingMatch,
 } from "./imageEmbeddings.js";
+
+type QueryFn = typeof dbQuery;
+
+let query: QueryFn = dbQuery;
 
 // Each item costs a Blob fetch + two sharp passes + a couple of queries
 // (~1-2s), and both drains share one 30s cron function with five other
@@ -16,6 +22,8 @@ const EMBED_BATCH_SIZE = Number(process.env.IMAGE_EMBEDDING_BATCH ?? "10") || 10
 const BACKFILL_BATCH_SIZE = Number(process.env.IMAGE_HASH_BACKFILL_BATCH ?? "25") || 25;
 const TIME_BUDGET_MS = Number(process.env.IMAGE_CRON_BUDGET_MS ?? "20000") || 20000;
 const STATUS_UPGRADE_WINDOW_HOURS = Number(process.env.IMAGE_EMBEDDING_UPGRADE_WINDOW_HOURS ?? "24") || 24;
+const MAX_EMBED_ATTEMPTS = Number(process.env.IMAGE_EMBEDDING_MAX_ATTEMPTS ?? "3") || 3;
+const STALE_PROCESSING_MINUTES = Number(process.env.IMAGE_EMBEDDING_PROCESSING_STALE_MINUTES ?? "15") || 15;
 const MAX_EDGE_PX = 1024;
 
 export interface ImageSimilarityDrainResult {
@@ -28,6 +36,15 @@ export interface ImageSimilarityDrainResult {
     statusUpgrades: number;
     outOfBudget: boolean;
   };
+}
+
+export function setImageSimilarityCronQueryForTesting(queryFn: QueryFn | null): void {
+  query = queryFn ?? dbQuery;
+}
+
+function isReviewUpgradeEnabled(): boolean {
+  const raw = process.env.IMAGE_EMBEDDING_REVIEW_UPGRADE_ENABLED?.trim().toLowerCase();
+  return raw === "1" || raw === "true";
 }
 
 async function resizedJpeg(imageBuffer: Buffer): Promise<Buffer> {
@@ -135,19 +152,39 @@ export async function runEmbeddingDrain(deadline: number): Promise<ImageSimilari
 
   let result;
   try {
+    await query(
+      `UPDATE submission_image_hashes
+       SET embedding_status = 'pending',
+           embedding_updated_at = NOW()
+       WHERE embedding_status = 'processing'
+         AND embedding_updated_at < NOW() - make_interval(mins => $1::int)`,
+      [STALE_PROCESSING_MINUTES],
+    );
+
     result = await query<{
       event_id: string;
       photo_url: string | null;
       phash: string | null;
     }>(
-      `SELECT sih.event_id::text, pe.photo_url, sih.phash
-       FROM submission_image_hashes sih
-       JOIN point_events pe ON pe.id = sih.event_id
-       WHERE sih.embedding_status = 'pending'
-         AND pe.photo_url IS NOT NULL
-       ORDER BY sih.created_at ASC
-       LIMIT $1`,
-      [EMBED_BATCH_SIZE],
+      `WITH next AS (
+         SELECT sih.event_id
+         FROM submission_image_hashes sih
+         JOIN point_events pe ON pe.id = sih.event_id
+         WHERE sih.embedding_status = 'pending'
+           AND sih.embedding_attempts < $2
+           AND pe.photo_url IS NOT NULL
+         ORDER BY sih.created_at ASC
+         LIMIT $1
+         FOR UPDATE OF sih SKIP LOCKED
+       )
+       UPDATE submission_image_hashes sih
+       SET embedding_status = 'processing',
+           embedding_updated_at = NOW()
+       FROM next
+       JOIN point_events pe ON pe.id = next.event_id
+       WHERE sih.event_id = next.event_id
+       RETURNING sih.event_id::text, pe.photo_url, sih.phash`,
+      [EMBED_BATCH_SIZE, MAX_EMBED_ATTEMPTS],
     );
   } catch (error) {
     if (isMissingDbObjectError(error)) {
@@ -180,11 +217,25 @@ export async function runEmbeddingDrain(deadline: number): Promise<ImageSimilari
       // pHash-misses-but-embedding-hits → use the higher (soft) threshold.
       // The Stage-A-already-fired path is handled inline at submission time;
       // here we only catch the cases Stage A missed.
-      const upgraded = await upgradeReviewStatusIfDuplicate(
-        row.event_id,
-        similar,
-        EMBEDDING_SOFT_DUP_SIM,
-      );
+      const topMatch = similar.find((s) => s.similarity >= EMBEDDING_SOFT_DUP_SIM);
+      let upgraded = false;
+      if (topMatch) {
+        upgraded = isReviewUpgradeEnabled()
+          ? await upgradeReviewStatusIfDuplicate(row.event_id, similar, EMBEDDING_SOFT_DUP_SIM)
+          : false;
+        try {
+          await recordEmbeddingMatch({
+            eventId: row.event_id,
+            matchedEventId: topMatch.eventId,
+            similarity: topMatch.similarity,
+            modelVersion: provider.modelVersion,
+            ruleTriggered: "semantic_duplicate_soft",
+            decision: upgraded ? "pending_review" : "logged",
+          });
+        } catch (error) {
+          if (!isMissingDbObjectError(error)) throw error;
+        }
+      }
       if (upgraded) statusUpgrades += 1;
 
       await markEmbeddingStatus(row.event_id, "done");
@@ -193,7 +244,11 @@ export async function runEmbeddingDrain(deadline: number): Promise<ImageSimilari
       failed += 1;
       console.error("[imageSimilarityCron] embed failed", row.event_id, error);
       try {
-        await markEmbeddingStatus(row.event_id, "failed");
+        await markEmbeddingFailure(
+          row.event_id,
+          error instanceof Error ? error.message : String(error),
+          MAX_EMBED_ATTEMPTS,
+        );
       } catch {
         // best-effort
       }
@@ -215,4 +270,3 @@ export async function runImageSimilarityDrain(): Promise<ImageSimilarityDrainRes
   const [backfill, embeddings] = await Promise.all([runHashBackfill(deadline), runEmbeddingDrain(deadline)]);
   return { backfill, embeddings };
 }
-

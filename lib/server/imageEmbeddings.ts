@@ -1,5 +1,9 @@
 import { createSign } from "node:crypto";
-import { query } from "./db.js";
+import { query as dbQuery } from "./db.js";
+
+type QueryFn = typeof dbQuery;
+
+let query: QueryFn = dbQuery;
 
 // Model identity stored alongside every embedding so a future model bump
 // can be detected and back-filled without losing the old vectors.
@@ -180,6 +184,10 @@ export function setEmbeddingProviderForTesting(provider: EmbeddingProvider | nul
   cachedProvider = provider;
 }
 
+export function setEmbeddingQueryForTesting(queryFn: QueryFn | null): void {
+  query = queryFn ?? dbQuery;
+}
+
 function formatVectorLiteral(vector: number[]): string {
   return `[${vector.join(",")}]`;
 }
@@ -223,11 +231,64 @@ export async function findSimilarEmbeddings(
 export async function markEmbeddingStatus(
   eventId: string,
   status: "pending" | "done" | "failed" | "skipped",
+  errorMessage: string | null = null,
 ): Promise<void> {
   await query(
     `UPDATE submission_image_hashes
-     SET embedding_status = $2
+     SET embedding_status = $2,
+         embedding_last_error = $3,
+         embedding_updated_at = NOW()
      WHERE event_id = $1::uuid`,
-    [eventId, status],
+    [eventId, status, errorMessage],
+  );
+}
+
+export async function markEmbeddingFailure(
+  eventId: string,
+  errorMessage: string,
+  maxAttempts: number,
+): Promise<"pending" | "failed"> {
+  const result = await query<{ embedding_status: "pending" | "failed" }>(
+    `UPDATE submission_image_hashes
+     SET embedding_attempts = embedding_attempts + 1,
+         embedding_status = CASE
+           WHEN embedding_attempts + 1 >= $3 THEN 'failed'
+           ELSE 'pending'
+         END,
+         embedding_last_error = LEFT($2, 500),
+         embedding_updated_at = NOW()
+     WHERE event_id = $1::uuid
+     RETURNING embedding_status`,
+    [eventId, errorMessage, maxAttempts],
+  );
+  return result.rows[0]?.embedding_status ?? "failed";
+}
+
+export async function recordEmbeddingMatch(input: {
+  eventId: string;
+  matchedEventId: string;
+  similarity: number;
+  modelVersion: string;
+  ruleTriggered: string;
+  decision: "logged" | "pending_review";
+}): Promise<void> {
+  await query(
+    `INSERT INTO submission_image_similarity_matches (
+       event_id, matched_event_id, similarity, model_version, rule_triggered, decision
+     )
+     VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)
+     ON CONFLICT (event_id, matched_event_id, model_version, rule_triggered)
+     DO UPDATE SET
+       similarity = GREATEST(submission_image_similarity_matches.similarity, EXCLUDED.similarity),
+       decision = EXCLUDED.decision,
+       created_at = NOW()`,
+    [
+      input.eventId,
+      input.matchedEventId,
+      input.similarity,
+      input.modelVersion,
+      input.ruleTriggered,
+      input.decision,
+    ],
   );
 }
