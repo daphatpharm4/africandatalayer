@@ -73,6 +73,22 @@ function hashIp(ip: string | null): string | null {
   return createHash("sha256").update(ip).digest("hex");
 }
 
+// SMS inbound / delivery-report webhooks mutate opt-in/opt-out state and delivery
+// status, so they must never run unauthenticated. Fail closed: if AT_INBOUND_SECRET
+// is not configured we reject rather than silently accepting forged callbacks (the
+// previous `if (expectedSecret)` guard skipped the check entirely when unset).
+export function requireSmsWebhookSecret(request: Request): Response | null {
+  const expectedSecret = process.env.AT_INBOUND_SECRET?.trim();
+  if (!expectedSecret) {
+    return errorResponse("SMS webhook secret is not configured", 503, {
+      code: "sms_webhook_unconfigured",
+    });
+  }
+  const provided = request.headers.get("x-at-secret") ?? "";
+  if (provided !== expectedSecret) return errorResponse("Forbidden", 403);
+  return null;
+}
+
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const view = url.searchParams.get("view") ?? "requests";
@@ -243,11 +259,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (view === "sms-inbound") {
-    const expectedSecret = process.env.AT_INBOUND_SECRET;
-    if (expectedSecret) {
-      const provided = request.headers.get("x-at-secret") ?? "";
-      if (provided !== expectedSecret) return errorResponse("Forbidden", 403);
-    }
+    const unauthorized = requireSmsWebhookSecret(request);
+    if (unauthorized) return unauthorized;
     const body = (rawBody as Record<string, unknown> | null) ?? {};
     const from = typeof body.from === "string" ? body.from : "";
     const text = typeof body.text === "string" ? body.text : "";
@@ -257,11 +270,8 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (view === "sms-dlr") {
-    const expectedSecret = process.env.AT_INBOUND_SECRET;
-    if (expectedSecret) {
-      const provided = request.headers.get("x-at-secret") ?? "";
-      if (provided !== expectedSecret) return errorResponse("Forbidden", 403);
-    }
+    const unauthorized = requireSmsWebhookSecret(request);
+    if (unauthorized) return unauthorized;
     const body = (rawBody as Record<string, unknown> | null) ?? {};
     const id = typeof body.id === "string" ? body.id : "";
     const status = typeof body.status === "string" ? body.status : "";
