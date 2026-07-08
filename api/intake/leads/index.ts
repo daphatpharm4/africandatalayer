@@ -1,3 +1,4 @@
+import "../../../lib/server/sentry.js";
 import { errorResponse, jsonResponse } from "../../../lib/server/http.js";
 import { isStorageUnavailableError } from "../../../lib/server/db.js";
 import { requireAutomationOrAdmin, requireAutomationSecret } from "../../../lib/server/automationAuth.js";

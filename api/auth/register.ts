@@ -1,3 +1,4 @@
+import "../../lib/server/sentry.js";
 import bcrypt from "bcryptjs";
 import { createHash } from "node:crypto";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
