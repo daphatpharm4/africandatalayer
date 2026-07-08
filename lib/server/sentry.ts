@@ -81,16 +81,30 @@ function ensureSentryInitialized(Sentry: SentryNodeModule): boolean {
   return true;
 }
 
-export function captureServerException(error: unknown, context?: Record<string, unknown>): void {
-  if (!process.env.SENTRY_DSN) return;
-  void loadSentryModule()
-    .then((Sentry) => {
-      if (!ensureSentryInitialized(Sentry)) return;
-      Sentry.captureException(error, {
-        extra: scrubValue(context ?? {}) as Record<string, unknown>,
-      });
-    })
-    .catch((loadError) => {
-      console.error("[sentry] failed to capture exception", loadError);
+const SENTRY_FLUSH_TIMEOUT_MS = Number(process.env.SENTRY_FLUSH_TIMEOUT_MS ?? "2000") || 2000;
+
+/**
+ * Capture an exception and flush it before resolving. On Vercel the serverless
+ * instance freezes once the response is sent, so the SDK's async transport send
+ * must be awaited or the event is silently dropped. Callers MUST `await` this
+ * before returning or rethrowing. Never throws, and the flush is bounded by
+ * SENTRY_FLUSH_TIMEOUT_MS so a slow or unreachable Sentry cannot stall the
+ * response. Returns true only when an event was captured and flushed.
+ */
+export async function captureServerException(
+  error: unknown,
+  context?: Record<string, unknown>,
+): Promise<boolean> {
+  if (!process.env.SENTRY_DSN) return false;
+  try {
+    const Sentry = await loadSentryModule();
+    if (!ensureSentryInitialized(Sentry)) return false;
+    Sentry.captureException(error, {
+      extra: scrubValue(context ?? {}) as Record<string, unknown>,
     });
+    return await Sentry.flush(SENTRY_FLUSH_TIMEOUT_MS);
+  } catch (captureError) {
+    console.error("[sentry] failed to capture exception", captureError);
+    return false;
+  }
 }

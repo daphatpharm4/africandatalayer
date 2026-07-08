@@ -1523,7 +1523,7 @@ export async function POST(request: Request): Promise<Response> {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
-    captureServerException(error, { route: "submissions_post", userId: auth.id });
+    await captureServerException(error, { route: "submissions_post", userId: auth.id });
     throw error;
   }
 }

@@ -575,7 +575,7 @@ export default async function handler(request: Request): Promise<Response> {
     if (isStorageUnavailableError(error)) {
       return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
     }
-    captureServerException(error, { route: "auth_handler" });
+    await captureServerException(error, { route: "auth_handler" });
     throw error;
   }
 }

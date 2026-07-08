@@ -203,7 +203,7 @@ export async function GET(request: Request): Promise<Response> {
     return errorResponse("Invalid view", 400);
   } catch (error) {
     if (isMissingDbObjectError(error)) return jsonResponse([], { status: 200 });
-    captureServerException(error, { route: "privacy_get", view });
+    await captureServerException(error, { route: "privacy_get", view });
     throw error;
   }
 }
@@ -599,7 +599,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return errorResponse("Invalid view", 400);
   } catch (error) {
-    captureServerException(error, { route: "privacy_post", view });
+    await captureServerException(error, { route: "privacy_post", view });
     throw error;
   }
 }
@@ -686,7 +686,7 @@ export async function PATCH(request: Request): Promise<Response> {
 
     return errorResponse("Invalid view", 400);
   } catch (error) {
-    captureServerException(error, { route: "privacy_patch", view });
+    await captureServerException(error, { route: "privacy_patch", view });
     throw error;
   }
 }
