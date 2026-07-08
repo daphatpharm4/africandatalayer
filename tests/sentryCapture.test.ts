@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { afterEach } from "node:test";
-import { captureServerException } from "../lib/server/sentry.ts";
+import { captureServerException, initServerSentry } from "../lib/server/sentry.ts";
 import { GET as healthGet } from "../api/health/index.ts";
 
 const ORIGINAL_DSN = process.env.SENTRY_DSN;
@@ -17,6 +17,13 @@ test("captureServerException is a resolved no-op returning false when SENTRY_DSN
   delete process.env.SENTRY_DSN;
   const result = await captureServerException(new Error("boom"), { route: "unit" });
   assert.equal(result, false);
+});
+
+test("initServerSentry (cold-start hook) is a safe no-op when SENTRY_DSN is unset", () => {
+  delete process.env.SENTRY_DSN;
+  // Runs at module load in every serverless function; must never throw or load the
+  // SDK when the DSN is absent.
+  assert.doesNotThrow(() => initServerSentry());
 });
 
 function sentryTestRequest(bearer?: string): Request {

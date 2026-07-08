@@ -1,3 +1,4 @@
+import "../../lib/server/sentry.js";
 import { ZodError } from "zod";
 import { requireUser } from "../../lib/auth.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";

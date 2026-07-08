@@ -1,3 +1,4 @@
+import "../../lib/server/sentry.js";
 import bcrypt from "bcryptjs";
 import { requireUser } from "../../lib/auth.js";
 import { createPointOperatorHandler } from "../../lib/server/pointOperatorApi.js";

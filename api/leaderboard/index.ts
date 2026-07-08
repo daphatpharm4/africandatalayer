@@ -1,3 +1,4 @@
+import "../../lib/server/sentry.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { getUserProfilesBatch, isStorageUnavailableError } from "../../lib/server/storage/index.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";

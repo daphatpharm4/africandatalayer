@@ -1,3 +1,4 @@
+import "../../lib/server/sentry.js";
 import { requireUser } from "../../lib/auth.js";
 import { query } from "../../lib/server/db.js";
 import { cachedJsonResponse, computeWeakEtag, errorResponse, jsonResponse } from "../../lib/server/http.js";

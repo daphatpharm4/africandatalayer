@@ -36,22 +36,15 @@ function scrubValue(value: unknown): unknown {
 }
 
 export function initServerSentry(): void {
-  if (initialized) return;
-  const dsn = process.env.SENTRY_DSN;
-  if (!dsn) return;
-
+  if (initialized || !process.env.SENTRY_DSN) return;
+  // Kick off the async load+init at cold start so Sentry's uncaughtException and
+  // unhandledRejection handlers (registered by Sentry.init) are in place before the
+  // first request — not only lazily on the first captured error. Delegates to the
+  // same init path as captureServerException so the config and the `initialized`
+  // guard stay single-sourced.
   void loadSentryModule()
     .then((Sentry) => {
-      if (initialized) return;
-      Sentry.init({
-        dsn,
-        environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV ?? "development",
-        sendDefaultPii: false,
-        beforeSend(event) {
-          return scrubValue(event) as typeof event;
-        },
-      });
-      initialized = true;
+      ensureSentryInitialized(Sentry);
     })
     .catch((error) => {
       console.error("[sentry] failed to initialize", error);
@@ -108,3 +101,9 @@ export async function captureServerException(
     return false;
   }
 }
+
+// Cold-start instrumentation: importing this module — directly, or transitively via
+// captureServerException — proactively initializes Sentry on a fresh serverless
+// instance so uncaught exceptions and unhandled rejections are reported, not just
+// errors routed through captureServerException. No-op when SENTRY_DSN is unset.
+initServerSentry();
