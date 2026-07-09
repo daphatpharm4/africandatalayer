@@ -345,6 +345,25 @@ export interface ExternalPoiCandidate {
 
 export type Submission = PointEvent;
 
+// Stage B (image-similarity v2) semantic near-duplicate, surfaced to admins. One
+// row per (event, matched event) that the embedding drain flagged. Populated only
+// when Stage B is active; otherwise the source table is empty and this is omitted.
+export interface SemanticDuplicateMatch {
+  matchedEventId: string;
+  /** Cosine similarity in [0, 1]. */
+  similarity: number;
+  modelVersion: string;
+  ruleTriggered: string;
+  /** `logged` = evidence only; `pending_review` = it also upgraded review status. */
+  decision: "logged" | "pending_review";
+  createdAt: string;
+  lastSeenAt: string;
+  matchedPointId: string | null;
+  matchedCategory: SubmissionCategory | null;
+  matchedUserId: string | null;
+  matchedCreatedAt: string | null;
+}
+
 export interface AdminSubmissionEvent {
   event: PointEvent;
   user: {
@@ -357,6 +376,8 @@ export interface AdminSubmissionEvent {
     suspendedUntil?: string | null;
   };
   fraudCheck: SubmissionFraudCheck | null;
+  /** Present only when Stage B recorded semantic near-duplicates for this event. */
+  semanticDuplicates?: SemanticDuplicateMatch[];
 }
 
 export interface LegacySubmission {
