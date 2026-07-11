@@ -45,6 +45,7 @@ keystore.properties
 # Added by code-review-graph
 .code-review-graph/
 .worktrees/
+.superpowers/
 
 # Beads / Dolt files (added by bd init)
 .dolt/
