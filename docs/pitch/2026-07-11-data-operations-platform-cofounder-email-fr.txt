@@ -1,0 +1,79 @@
+Objet : Proposition : transformer l'infrastructure ADL en plateforme configurable de données terrain
+
+Bonjour à tous,
+
+Je souhaite que nous étudiions une deuxième orientation produit qui valorise ce que nous avons déjà construit pour African Data Layer, sans modifier la mission initiale d'ADL.
+
+ADL dispose déjà d'une grande partie de l'infrastructure nécessaire pour mener des opérations terrain fiables : collecte mobile hors ligne, preuves GPS et photographiques, missions, contrôles de fraude et de qualité, validation humaine, cartes, tableaux de bord et exports.
+
+L'opportunité consiste à rendre cette infrastructure configurable afin que d'autres organisations puissent l'utiliser pour collecter et exploiter leurs propres données.
+
+PROMESSE PROPOSÉE
+
+Dites-nous ce que vous devez savoir sur le terrain. Définissez les preuves nécessaires. Collectez les données avec vos équipes, les nôtres, ou les deux.
+
+DEUX PRODUITS, UNE MÊME FONDATION
+
+African Data Layer continue de définir ses programmes de collecte, d'animer son réseau de contributeurs, de posséder ses jeux de données et de commercialiser des données et analyses fiables sur les marchés africains.
+
+La nouvelle plateforme permet à un client de définir son propre projet de collecte et de posséder les données produites. ADL fournit le logiciel et, selon le contrat, la configuration, la formation, le contrôle qualité ou les opérations terrain.
+
+Les données clients restent séparées des données détenues par ADL, sauf autorisation contractuelle explicite.
+
+TROIS MODES D'UTILISATION
+
+- Autonome : le client fournit et encadre ses agents de collecte.
+- Assisté : ADL configure le projet, forme l'équipe du client ou contrôle la qualité.
+- Géré par ADL : ADL fournit la plateforme, les agents et le contrôle qualité.
+
+MARCHÉS POTENTIELS
+
+Les prospects les plus pertinents gèrent des actifs, des sites, des réseaux, des programmes ou des équipes terrain répartis sur plusieurs zones :
+
+- Opérateurs de gestion des déchets et de l'environnement
+- FMCG, boissons, distribution, télécoms et mobile money
+- ONG, programmes de développement et collectivités
+- Agriculture, infrastructures, santé, eau et assainissement
+
+HYSACAM ILLUSTRE LE MODÈLE
+
+Un opérateur de propreté pourrait utiliser la plateforme pour cartographier les bacs officiels, les points de dépôt informels et les décharges sauvages ; documenter leur état, leur accessibilité, leur débordement et leur contexte d'utilisation ; puis analyser les zones insuffisamment couvertes et répéter l'opération dans le temps.
+
+Il s'agit d'un exemple, pas de notre MVP. Nous n'avons aucun contrat avec HYSACAM. Nous ne devons donc ni développer de fonctionnalités propres à HYSACAM ni laisser entendre qu'un partenariat existe. Une démonstration neutre de cartographie des déchets, fondée sur des données synthétiques, peut servir à valider avec eux le véritable besoin opérationnel.
+
+VALIDER AVANT DE DÉVELOPPER
+
+Nous ne devons pas construire une plateforme SaaS horizontale sur la seule base de notre enthousiasme. Commençons par utiliser les capacités actuelles d'ADL, des données synthétiques et des démonstrations ciblées pour valider la demande.
+
+Seuil de validation proposé :
+
+- 10 échanges avec des prospects pertinents
+- 3 organisations qualifiées prêtes à devenir partenaires de conception
+- 1 pilote payant, lettre d'intention signée ou engagement écrit équivalent
+- Des besoins communs confirmés par au moins 2 organisations
+
+CE QUE NOUS CONSTRUIRIONS APRÈS VALIDATION
+
+Le MVP serait un espace de travail configurable et initialement vide. Le client définit les types d'enregistrements, les champs, les preuves, la zone géographique, les agents et les validateurs. Les équipes collectent hors ligne ; les données approuvées apparaissent sur la carte et dans le jeu de données du client ; le client exporte en CSV ou GeoJSON.
+
+Le premier cas d'usage contractualisé pourra devenir le premier modèle réutilisable. Nous devons éviter l'optimisation des tournées, le suivi de flotte en temps réel, les applications spécifiques par client, les automatisations complexes et la facturation automatisée tant que la demande ne les justifie pas.
+
+DÉMARCHE COMMERCIALE
+
+Vendre d'abord un résultat, puis la plateforme :
+
+1. Diagnostiquer le problème de données terrain du client.
+2. Démontrer un flux de travail pertinent avec des données synthétiques.
+3. Vendre un pilote payant au périmètre clairement défini.
+4. Livrer un jeu de données vérifié, une carte, un dossier de preuves et une présentation de synthèse.
+5. Transformer le pilote en contrat récurrent autonome, assisté ou géré par ADL.
+
+DÉCISION ATTENDUE
+
+Sommes-nous d'accord pour tester cette idée comme deuxième moteur de croissance d'ADL, en commençant par la validation commerciale ?
+
+Si oui, le travail immédiat consiste à préparer un support de découverte, une démonstration neutre et des échanges structurés avec HYSACAM ainsi qu'avec des prospects d'autres secteurs — pas à développer une nouvelle plateforme.
+
+Charles
+
+Discussion stratégique interne · African Data Layer · Juillet 2026
