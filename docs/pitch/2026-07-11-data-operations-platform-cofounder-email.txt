@@ -1,0 +1,79 @@
+Subject: Proposal: turn ADL infrastructure into a configurable data operations platform
+
+Hi team,
+
+I want us to consider a second product direction that capitalizes on what we have already built for African Data Layer without changing ADL's original mission.
+
+ADL already has much of the infrastructure needed to run trustworthy field-data operations: offline mobile collection, GPS and photo evidence, assignments, fraud and quality controls, human review, maps, dashboards, and exports.
+
+The opportunity is to make that infrastructure configurable so other organizations can use it to collect and own their own data.
+
+PROPOSED PROMISE
+
+Tell us what you need to know on the ground. Configure the evidence required. Collect it with your team, ours, or both.
+
+TWO PRODUCTS, ONE FOUNDATION
+
+African Data Layer continues defining collection programs, operating its contributor network, owning its datasets, and selling trusted African data and insights.
+
+The new platform lets a client define its own collection project and own the resulting data. ADL provides the software and, when contracted, setup, training, quality review, or field operations.
+
+Client data stays separate from ADL-owned data unless a contract explicitly permits reuse.
+
+HOW CUSTOMERS COULD USE IT
+
+- Self-operated: the client supplies and manages collectors.
+- Assisted: ADL configures the project, trains the client team, or reviews quality.
+- Managed: ADL supplies the platform, collectors, and quality operation.
+
+POTENTIAL MARKETS
+
+The strongest prospects manage distributed assets, locations, networks, programs, or field teams:
+
+- Waste and environmental operators
+- FMCG, beverage, retail, telecom, and mobile-money networks
+- NGOs, development programs, and municipalities
+- Agriculture, infrastructure, health, water, and sanitation programs
+
+HYSACAM ILLUSTRATES THE MODEL
+
+A waste operator could use the platform to map official bins, informal collection points, and illegal dumps; record condition, access, overflow, and usage context; then analyze coverage gaps and repeat the exercise over time.
+
+This is an example, not our MVP. We have no contract with HYSACAM, so we should not build HYSACAM-specific functionality or imply a partnership. We can use a neutral urban-waste demonstration with synthetic data to validate the real workflow with them.
+
+VALIDATION BEFORE IMPLEMENTATION
+
+We should not start building a horizontal SaaS platform based only on internal enthusiasm. First, use current ADL capabilities, synthetic data, and focused demonstrations to validate demand.
+
+Proposed gate:
+
+- 10 relevant customer conversations
+- 3 qualified design partners
+- 1 paid pilot, signed letter of intent, or equivalent written commitment
+- Repeated core requirements across at least 2 organizations
+
+WHAT WE WOULD BUILD AFTER VALIDATION
+
+The MVP would be an empty configurable workspace. A client defines record types, fields, evidence, geography, collectors, and reviewers. Field teams collect offline; approved records appear in the client's map and dataset; the client exports CSV or GeoJSON.
+
+The first contracted use case can become the first reusable solution pack. We should avoid route optimization, live fleet tracking, custom client apps, complex automation, and automated billing until demand proves them necessary.
+
+COMMERCIAL PATH
+
+Sell an outcome first, then the platform:
+
+1. Diagnose the customer's field-data problem.
+2. Demonstrate a relevant workflow with synthetic data.
+3. Sell a fixed-scope paid pilot.
+4. Deliver a verified dataset, map, evidence package, and management presentation.
+5. Convert the pilot into a recurring platform, assisted, or managed agreement.
+
+DECISION REQUESTED
+
+Do we agree to test this as a validation-first second growth engine for ADL?
+
+If yes, the immediate work is a discovery deck, a neutral demonstration, and structured conversations with HYSACAM plus prospects in other sectors—not new platform development.
+
+Charles
+
+Internal strategy discussion · African Data Layer · July 2026
