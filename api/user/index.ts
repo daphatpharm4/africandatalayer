@@ -305,20 +305,21 @@ export function createAdminAccountAccessHandler(deps: AdminAccountAccessDeps = {
 const handleAdminAccountAccess = createAdminAccountAccessHandler();
 
 export async function GET(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const view = url.searchParams.get("view");
+
+  // Delegate all platform_* views to the platform handler (before auth check, as platform handler has its own auth)
+  if (isPlatformView(view)) {
+    return handlePlatform(request);
+  }
+
   const auth = await requireUser(request);
   if (!auth) return errorResponse("Unauthorized", 401);
   const authIsAdmin = isAdminToken(auth.token, auth.role);
-  const url = new URL(request.url);
-  const view = url.searchParams.get("view");
 
   // Delegate all po_* views to the point-operator handler
   if (view?.startsWith("po_")) {
     return handlePointOperator(request);
-  }
-
-  // Delegate all platform_* views to the platform handler
-  if (isPlatformView(view)) {
-    return handlePlatform(request);
   }
 
   if (view === "status") {
@@ -555,20 +556,20 @@ export async function PUT(request: Request): Promise<Response> {
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const auth = await requireUser(request);
-  if (!auth) return errorResponse("Unauthorized", 401);
-
   const url = new URL(request.url);
   const view = url.searchParams.get("view");
+
+  // Delegate all platform_* views to the platform handler (before auth check, as platform handler has its own auth)
+  if (isPlatformView(view)) {
+    return handlePlatform(request);
+  }
+
+  const auth = await requireUser(request);
+  if (!auth) return errorResponse("Unauthorized", 401);
 
   // Delegate all po_* views to the point-operator handler (handles its own auth)
   if (view?.startsWith("po_")) {
     return handlePointOperator(request);
-  }
-
-  // Delegate all platform_* views to the platform handler
-  if (isPlatformView(view)) {
-    return handlePlatform(request);
   }
 
   const authIsAdmin = isAdminToken(auth.token, auth.role);
