@@ -4,7 +4,7 @@
 
 **Goal:** Multi-tenant foundation for the Configurable Data Operations Platform: organizations, memberships, invites, projects, versioned configurable schemas, tenancy guard, and a new desktop console (onboarding wizard, schema builder, members, branding) — inside the existing ADL repo.
 
-**Architecture:** New `platform_*` Postgres tables with strict `organization_id` scoping. One new serverless route `api/platform/index.ts` (Vercel function budget: 12 → 13, limit 13) dispatching `view` query-param requests to a router in `lib/server/platform/` — same pattern as `pointOperatorApi.ts`. New Vite entry `console.html` renders a desktop SPA using the existing design system, screen-enum navigation (no router), and `t(en, fr)` bilingual pattern.
+**Architecture:** New `platform_*` Postgres tables with strict `organization_id` scoping. NO new serverless route — platform views fold into the existing `api/user/index.ts` via `view=platform_*` query params delegating to a router in `lib/server/platform/` (exact same pattern as the `po_*` point-operator views; Vercel Hobby cap is 12 functions and the repo is AT the cap). New Vite entry `console.html` renders a desktop SPA using the existing design system, screen-enum navigation (no router), and `t(en, fr)` bilingual pattern.
 
 **Tech Stack:** TypeScript 5.8, React 19, Vite 6, Tailwind 3.4, Zod 4, pg (raw SQL), @auth/core (`requireUser`), Resend via `lib/server/email/provider.ts`, node:test + tsx.
 
@@ -12,7 +12,8 @@
 
 ## Global Constraints
 
-- Vercel function budget: `api/` route files must not exceed 13 (`npm run check:function-budget` enforces; currently 12). Stage 1 adds exactly ONE file: `api/platform/index.ts`.
+- Vercel Hobby cap: 12 deployment functions; repo is AT the cap (12 route files). DO NOT create any file under `api/`. Platform endpoints ride `api/user/index.ts` via `view=platform_*` delegation to `createPlatformHandler` — identical to the proven `po_*` pattern. `npm run check:function-budget` must stay green at 12.
+- Every platform view name carries the `platform_` prefix (e.g. `platform_org_create`); clients call `/api/user?view=platform_<name>`.
 - Every `platform_*` table row carries `organization_id`; no query without explicit organization scope.
 - Every `/api/platform` view handler calls `requireOrgRole` / `requireProjectOrgRole` before any data access — single chokepoint.
 - Table names prefixed `platform_` (deviation from spec's bare names — avoids collision with existing tables, marks the product boundary).
@@ -1843,7 +1844,7 @@ export interface PlatformApiDeps {
 export function createPlatformHandler(deps?: PlatformApiDeps): (request: Request) => Promise<Response>;
 ```
 
-**Views** (all under `GET|POST /api/platform?view=<name>`; body is JSON on POST; org/project ids in query on GET):
+**Views** (all under `GET|POST /api/user?view=platform_<name>`; body is JSON on POST; org/project ids in query on GET). The table below omits the `platform_` prefix for readability, but every view is implemented, dispatched, and requested WITH the prefix — `org_list` means `platform_org_list`:
 
 | View | Method | Min role | Behavior |
 |------|--------|----------|----------|
@@ -1879,7 +1880,7 @@ const ORG = { id: "5a2f8f18-0000-4000-8000-000000000001", name: "Acme", slug: "a
 const PROJECT_ID = "5a2f8f18-0000-4000-8000-000000000002";
 
 function jsonPost(view: string, body: unknown): Request {
-  return new Request(`https://x.test/api/platform?view=${view}`, {
+  return new Request(`https://x.test/api/user?view=platform_${view}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -1897,7 +1898,7 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
 
 test("unknown view returns 404", async () => {
   const handler = createPlatformHandler(baseDeps());
-  const response = await handler(new Request("https://x.test/api/platform?view=nope"));
+  const response = await handler(new Request("https://x.test/api/user?view=platform_nope"));
   assert.equal(response.status, 404);
 });
 
@@ -1928,7 +1929,7 @@ test("org_update requires owner: manager gets 403", async () => {
 
 test("cross-tenant org_get denied for non-member", async () => {
   const handler = createPlatformHandler(baseDeps({ getMembershipFn: async () => null }));
-  const response = await handler(new Request(`https://x.test/api/platform?view=org_get&organizationId=${ORG.id}`));
+  const response = await handler(new Request(`https://x.test/api/user?view=platform_org_get&organizationId=${ORG.id}`));
   assert.equal(response.status, 403);
 });
 
@@ -2044,7 +2045,7 @@ import {
 Key mechanics the engineer must implement exactly:
 
 1. `createPlatformHandler(deps)` resolves every dep with a default (e.g. `const createOrganizationFn = deps.createOrganizationFn ?? orgStore.createOrganization;`), returns `async (request) => Response`.
-2. Dispatch: `const view = new URL(request.url).searchParams.get("view")`; a `Record<string, { method: "GET" | "POST"; handler: (request: Request) => Promise<Response> }>` map; unknown view → 404 `errorResponse("Unknown view", 404)`; method mismatch → 405.
+2. Dispatch: `const view = new URL(request.url).searchParams.get("view")`; a `Record<string, { method: "GET" | "POST"; handler: (request: Request) => Promise<Response> }>` map whose keys are the FULL prefixed names (`platform_org_create`, `platform_invite_accept`, …); unknown view → 404 `errorResponse("Unknown view", 404)`; method mismatch → 405.
 3. Wrap dispatch in try/catch: `isStorageUnavailableError(error)` → 503, else rethrow.
 4. JSON body helper: `async function readJson(request) { try { return await request.json(); } catch { return null; } }` — null body → 400.
 5. Zod helper: `parse(schema, body)` → `{ data }` or 400 Response with `result.error.issues[0].message`.
@@ -2071,46 +2072,76 @@ git commit -m "feat(platform): view-dispatch API router with tenant guard on eve
 
 ---
 
-### Task 9: Serverless route + function budget
+### Task 9: Wire platform views into `api/user/index.ts` (NO new route file)
 
 **Files:**
-- Create: `api/platform/index.ts`
-- Modify: `tests/functionBudget.test.ts` (only if it pins the exact route count — read it first; update expected count 12 → 13)
+- Modify: `api/user/index.ts` (early delegation, ~5 lines — same hook the `po_*` views use)
+- Test: `tests/platformRouteDelegation.test.ts`
 
 **Interfaces:**
 - Consumes: `createPlatformHandler` from Task 8.
 
-- [ ] **Step 1: Read `tests/functionBudget.test.ts`** — if it asserts a specific count, update to 13 in the same change as the new route (test-first: change assertion, watch it fail, then add the route).
+Vercel Hobby cap is 12 deployment functions and the repo is AT the cap. Do NOT create any file under `api/`.
 
-- [ ] **Step 2: Create the route**
+- [ ] **Step 1: Read `api/user/index.ts`** — find where the `po_` view prefix is detected and delegated to `createPointOperatorHandler` (near the top of the GET/POST handlers). The platform delegation goes in the same place with the same shape.
+
+- [ ] **Step 2: Write the failing test**
 
 ```typescript
-// api/platform/index.ts
-import "../../lib/server/sentry.js";
-import { createPlatformHandler } from "../../lib/server/platform/api.js";
+// tests/platformRouteDelegation.test.ts
+import assert from "node:assert/strict";
+import test from "node:test";
+import { isPlatformView } from "../lib/server/platform/api.js";
 
-const handler = createPlatformHandler();
+test("platform_ prefixed views are recognized", () => {
+  assert.equal(isPlatformView("platform_org_create"), true);
+  assert.equal(isPlatformView("platform_org_list"), true);
+  assert.equal(isPlatformView("po_me"), false);
+  assert.equal(isPlatformView(null), false);
+  assert.equal(isPlatformView("status"), false);
+});
+```
 
-export async function GET(request: Request): Promise<Response> {
-  return handler(request);
-}
+- [ ] **Step 3: Run test to verify it fails**
 
-export async function POST(request: Request): Promise<Response> {
-  return handler(request);
+Run: `node --import tsx --test tests/platformRouteDelegation.test.ts`
+Expected: FAIL — `isPlatformView` not exported.
+
+- [ ] **Step 4: Add `isPlatformView` to `lib/server/platform/api.ts`**
+
+```typescript
+export function isPlatformView(view: string | null): boolean {
+  return typeof view === "string" && view.startsWith("platform_");
 }
 ```
 
-- [ ] **Step 3: Verify function budget**
+- [ ] **Step 5: Delegate in `api/user/index.ts`** — in BOTH the GET and POST entry points, mirroring the existing `po_` delegation:
 
-Run: `npm run check:function-budget`
-Expected: `route files: 13`, `projected deployment functions: 13`, `budget limit: 13` — passes. If it fails at 14+, stray duplicate files (`"* 2.ts"`) under `api/` are the cause — do NOT delete them without asking the user; report instead.
+```typescript
+import { createPlatformHandler, isPlatformView } from "../../lib/server/platform/api.js";
 
-- [ ] **Step 4: Full suite + commit**
+const platformHandler = createPlatformHandler();
+
+// inside GET and POST, before other view handling, next to the po_ delegation:
+const view = url.searchParams.get("view");
+if (isPlatformView(view)) {
+  return platformHandler(request);
+}
+```
+
+Match the file's existing structure exactly — if the `po_` delegation reads the view from an already-parsed URL, reuse that variable rather than re-parsing.
+
+- [ ] **Step 6: Run tests + budget**
+
+Run: `node --import tsx --test tests/platformRouteDelegation.test.ts && npm run check:function-budget`
+Expected: test PASS; budget unchanged at `route files: 12` — green.
+
+- [ ] **Step 7: Full suite + commit**
 
 ```bash
 npm run typecheck && npm test && npm run check:function-budget
-git add api/platform/index.ts tests/functionBudget.test.ts
-git commit -m "feat(platform): /api/platform serverless route (13/13 function budget)"
+git add api/user/index.ts lib/server/platform/api.ts tests/platformRouteDelegation.test.ts
+git commit -m "feat(platform): fold platform_* views into /api/user (Hobby 12-function cap)"
 ```
 
 ---
@@ -2146,7 +2177,7 @@ export class PlatformApiError extends Error { status: number; issues?: SchemaVal
 
 Error handling: non-2xx → throw `PlatformApiError` with `status`, message from body `error`, and `issues` when the body carries them (422 from schema_draft_save/schema_publish). UI tasks rely on `error.issues`.
 
-- [ ] **Step 1: Write failing tests** — stub `fetchFn`; assert: correct URL `\`/api/platform?view=org_create\``, method POST, `credentials: "include"`, JSON body; 422 response → thrown `PlatformApiError` with `issues` array; 403 → thrown with status 403. Model the test file on `tests/apiClient.test.ts` (read it first).
+- [ ] **Step 1: Write failing tests** — stub `fetchFn`; assert: correct URL `\`/api/user?view=platform_org_create\``, method POST, `credentials: "include"`, JSON body; 422 response → thrown `PlatformApiError` with `issues` array; 403 → thrown with status 403. Model the test file on `tests/apiClient.test.ts` (read it first).
 
 - [ ] **Step 2: Run to verify failure** — `node --import tsx --test tests/platformClientApi.test.ts` → module not found.
 
@@ -2155,8 +2186,8 @@ Error handling: non-2xx → throw `PlatformApiError` with `status`, message from
 ```typescript
 async function callPlatform<T>(view: string, options: { method: "GET" | "POST"; body?: unknown; params?: Record<string, string> }, deps: PlatformApiDeps = {}): Promise<T> {
   const fetchFn = deps.fetchFn ?? fetch;
-  const search = new URLSearchParams({ view, ...(options.params ?? {}) });
-  const response = await fetchFn(`/api/platform?${search.toString()}`, {
+  const search = new URLSearchParams({ view: `platform_${view}`, ...(options.params ?? {}) });
+  const response = await fetchFn(`/api/user?${search.toString()}`, {
     method: options.method,
     credentials: "include",
     headers: options.body !== undefined ? { "content-type": "application/json" } : undefined,
@@ -2463,4 +2494,4 @@ Expected: `up to date with origin`.
 - Spec coverage: Stage 1 items (migrations, guard, console entry, wizard, schema builder, branding, invites/members) each map to Tasks 1–16; audit log → Task 6; EN/FR → Tasks 7, 13–16; audit events wired in Task 8 view table. Zones/assignments, dynamic forms, review queue, exports, dashboard, demo seed = Stages 2–3 (tracked in bd, Task 17).
 - Type consistency: `PlatformRole`, `StoreDeps`, `QueryFn`, `OrgContext`, store function names identical across Tasks 3–10.
 - Deviation from spec recorded: `platform_` table prefix (Global Constraints).
-- Known risk: function budget at exactly 13/13 — Stage 2's submission endpoint must reuse `/api/platform` views, not a new route file.
+- Known risk: Vercel Hobby 12-function cap — platform rides `/api/user?view=platform_*`; Stage 2's submission endpoint must reuse the same delegation, never a new route file.
