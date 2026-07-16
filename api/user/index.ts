@@ -2,6 +2,7 @@ import "../../lib/server/sentry.js";
 import bcrypt from "bcryptjs";
 import { requireUser } from "../../lib/auth.js";
 import { createPointOperatorHandler } from "../../lib/server/pointOperatorApi.js";
+import { createPlatformHandler, isPlatformView } from "../../lib/server/platform/api.js";
 import { inferDefaultDisplayName, normalizeIdentifier } from "../../lib/shared/identifier.js";
 import { getUserProfile, isStorageUnavailableError, upsertUserProfile } from "../../lib/server/storage/index.js";
 import { resolveOrProvisionProfile } from "../../lib/server/adminProfileProvisioning.js";
@@ -224,6 +225,7 @@ export function createAdminAccountCreateHandler(deps: AdminAccountCreateDeps = {
 
 const handleAdminAccountCreate = createAdminAccountCreateHandler();
 const handlePointOperator = createPointOperatorHandler();
+const handlePlatform = createPlatformHandler();
 
 export function createAdminAccountAccessHandler(deps: AdminAccountAccessDeps = {}) {
   const getUserProfileFn = deps.getUserProfileFn ?? getUserProfile;
@@ -312,6 +314,11 @@ export async function GET(request: Request): Promise<Response> {
   // Delegate all po_* views to the point-operator handler
   if (view?.startsWith("po_")) {
     return handlePointOperator(request);
+  }
+
+  // Delegate all platform_* views to the platform handler
+  if (isPlatformView(view)) {
+    return handlePlatform(request);
   }
 
   if (view === "status") {
@@ -557,6 +564,11 @@ export async function POST(request: Request): Promise<Response> {
   // Delegate all po_* views to the point-operator handler (handles its own auth)
   if (view?.startsWith("po_")) {
     return handlePointOperator(request);
+  }
+
+  // Delegate all platform_* views to the platform handler
+  if (isPlatformView(view)) {
+    return handlePlatform(request);
   }
 
   const authIsAdmin = isAdminToken(auth.token, auth.role);

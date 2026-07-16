@@ -103,6 +103,12 @@ function parse<T>(
   return { data: result.data as T };
 }
 
+// ─── Platform view detection ───────────────────────────────────────────────
+
+export function isPlatformView(view: string | null): boolean {
+  return typeof view === "string" && view.startsWith("platform_");
+}
+
 // ─── Handler factory ────────────────────────────────────────────────────────
 
 export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Request) => Promise<Response> {
