@@ -37,11 +37,11 @@ export function buildInviteEmail(input: InviteEmailInput): { subject: string; ht
       <h2 style="color: #0f2b46;">${escapeHtml(input.orgName)}</h2>
       <p>${escapeHtml(input.invitedBy)} invited you to join <strong>${escapeHtml(input.orgName)}</strong>
         as <strong>${escapeHtml(input.role)}</strong> on the ADL Data Operations Platform.</p>
-      <p><a href="${input.joinUrl}" style="display:inline-block;padding:12px 24px;background:#0f2b46;color:#ffffff;border-radius:12px;text-decoration:none;">Accept invitation</a></p>
+      <p><a href="${escapeHtml(input.joinUrl)}" style="display:inline-block;padding:12px 24px;background:#0f2b46;color:#ffffff;border-radius:12px;text-decoration:none;">Accept invitation</a></p>
       <hr style="border:none;border-top:1px solid #e3ebf2;margin:24px 0;" />
       <p>${escapeHtml(input.invitedBy)} vous a invité à rejoindre <strong>${escapeHtml(input.orgName)}</strong>
         en tant que <strong>${escapeHtml(input.role)}</strong>.</p>
-      <p><a href="${input.joinUrl}" style="display:inline-block;padding:12px 24px;background:#c86b4a;color:#ffffff;border-radius:12px;text-decoration:none;">Accepter l'invitation</a></p>
+      <p><a href="${escapeHtml(input.joinUrl)}" style="display:inline-block;padding:12px 24px;background:#c86b4a;color:#ffffff;border-radius:12px;text-decoration:none;">Accepter l'invitation</a></p>
       <p style="color:#5a708a;font-size:13px;">This link expires in ${INVITE_TTL_DAYS} days. / Ce lien expire dans ${INVITE_TTL_DAYS} jours.</p>
     </div>`;
   return { subject, html, text };
@@ -52,7 +52,8 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export interface SendInviteDeps {

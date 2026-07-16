@@ -40,4 +40,20 @@ test("sendInviteEmail delegates to transactional provider with idempotency key",
   assert.equal(sent[0].recipient.email, "new@example.com");
   assert.equal(sent[0].idempotencyKey, "invite-inv-1");
   assert.equal(sent[0].emailClass, "transactional");
+  assert.equal(sent[0].templateId, "platform_org_invite");
+  assert.equal(sent[0].recipient.userId, null);
+  assert.match(sent[0].subject, /Acme/);
+  assert.match(sent[0].html, /https:\/\/x\.test\/join\?token=t/);
+  assert.match(sent[0].text, /https:\/\/x\.test\/join\?token=t/);
+});
+
+test("html escapes user strings and attribute values", () => {
+  const email = buildInviteEmail({
+    orgName: `Acme <img src=x onerror=alert(1)>`, role: `"><script>`,
+    joinUrl: "https://x.test/join?token=a&b='c'", invitedBy: "a<b>@x.com",
+  });
+  assert.doesNotMatch(email.html, /<img src=x/);
+  assert.doesNotMatch(email.html, /<script>/);
+  assert.match(email.html, /token=a&amp;b=/);
+  assert.doesNotMatch(email.html, /'c'/);
 });
