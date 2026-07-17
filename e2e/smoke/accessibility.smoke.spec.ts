@@ -2,11 +2,21 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 function expectNoAxeViolations(
-  violations: Array<{ id: string; impact?: string | null; help: string; nodes: unknown[] }>,
+  violations: Array<{
+    id: string;
+    impact?: string | null;
+    help: string;
+    nodes: Array<{ target?: unknown; html?: string; failureSummary?: string }>;
+  }>,
 ): void {
   if (process.env.CI && violations.length > 0) {
     const summary = violations
-      .map((violation) => `${violation.id} (${violation.impact ?? 'unknown'}): ${violation.help}; nodes=${violation.nodes.length}`)
+      .map((violation) => {
+        const nodes = violation.nodes
+          .map((node) => `${JSON.stringify(node.target)} ${node.failureSummary ?? node.html ?? ''}`)
+          .join('; ');
+        return `${violation.id} (${violation.impact ?? 'unknown'}): ${violation.help}; ${nodes}`;
+      })
       .join(' | ')
       .replace(/[\r\n]/g, ' ');
     console.error(`::error file=e2e/smoke/accessibility.smoke.spec.ts::axe violations: ${summary}`);

@@ -19,7 +19,7 @@ const config = {
         },
         terra: {
           DEFAULT: '#c86b4a',
-          dark: '#b85f3f',
+          dark: '#b45b3c',
           wash: '#fff8f4',
         },
         forest: {

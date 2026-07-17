@@ -61,4 +61,16 @@ jobs:
 
       - name: Test and assemble Android
         working-directory: android
-        run: ./gradlew testDebugUnitTest assembleDebug
+        run: |
+          set -o pipefail
+          set +e
+          log_file="$RUNNER_TEMP/android-gradle.log"
+          ./gradlew testDebugUnitTest assembleDebug --stacktrace --console=plain 2>&1 | tee "$log_file"
+          status="${PIPESTATUS[0]}"
+          set -e
+          if (( status != 0 )); then
+            detail="$(grep -E '(^e: |^FAILURE:|^\* What went wrong:|Execution failed|error:|Could not resolve|Could not find)' "$log_file" | tail -n 20 | tr '\n' ' ')"
+            detail="${detail//'%'/'%25'}"
+            echo "::error file=android/app/build.gradle.kts::Android Gradle failure: ${detail:-see full job log}"
+          fi
+          exit "$status"
