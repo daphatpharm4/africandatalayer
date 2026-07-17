@@ -9,6 +9,8 @@ import {
 } from '../../lib/client/consoleState';
 import ConsoleShell from './ConsoleShell';
 import OnboardingWizard from './OnboardingWizard';
+import ProjectsScreen from './ProjectsScreen';
+import SchemaBuilder from './SchemaBuilder';
 
 const LANGUAGE_STORAGE_KEY = 'adl_language';
 const ORG_STORAGE_KEY = 'adl_console_org';
@@ -221,10 +223,18 @@ const ConsoleApp: React.FC = () => {
       screenContent = <OnboardingWizard language={language} onDone={handleOnboardingDone} />;
       break;
     case 'PROJECTS':
-      screenContent = <div>{t('Projects coming soon.', 'Projets à venir.')}</div>;
+      screenContent = selectedOrganization ? (
+        <ProjectsScreen organizationId={selectedOrganization.id} language={language} onNavigate={handleNavigate} />
+      ) : (
+        <div>{t('Select an organization to see its projects.', 'Sélectionnez une organisation pour voir ses projets.')}</div>
+      );
       break;
     case 'SCHEMA_BUILDER':
-      screenContent = <div>{t('Schema builder coming soon.', 'Générateur de schéma à venir.')}</div>;
+      screenContent = effectiveRoute.projectId ? (
+        <SchemaBuilder projectId={effectiveRoute.projectId} language={language} onNavigate={handleNavigate} />
+      ) : (
+        <div>{t('No project selected.', 'Aucun projet sélectionné.')}</div>
+      );
       break;
     case 'MEMBERS':
       screenContent = <div>{t('Members coming soon.', 'Membres à venir.')}</div>;
