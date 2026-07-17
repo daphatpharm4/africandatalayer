@@ -94,6 +94,8 @@ test("invite_accept: valid invite adds membership and marks accepted", async () 
   const roleUpserts: any[] = []; const accepted: any[] = [];
   const future = new Date(Date.now() + 86_400_000).toISOString();
   const handler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ({ id: "new@x.com", token: { email: "new@x.com" }, role: "agent" as const }),
+    getMembershipFn: async () => null,
     findInviteByTokenHashFn: async () => ({
       id: "inv-1", organizationId: ORG.id, email: "new@x.com", role: "collector",
       expiresAt: future, acceptedAt: null, createdAt: "", tokenHash: "h",
@@ -105,6 +107,43 @@ test("invite_accept: valid invite adds membership and marks accepted", async () 
   assert.equal(response.status, 200);
   assert.equal(roleUpserts[0].role, "collector");
   assert.equal(accepted[0].inviteId, "inv-1");
+});
+
+test("invite_accept: rejects a different signed-in email before membership mutation", async () => {
+  let upserted = false;
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  const handler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ({ id: "owner@acme.com", token: { email: "owner@acme.com" }, role: "agent" as const }),
+    findInviteByTokenHashFn: async () => ({
+      id: "inv-1", organizationId: ORG.id, email: "new@x.com", role: "collector",
+      expiresAt: future, acceptedAt: null, createdAt: "", tokenHash: "h",
+    }),
+    upsertMemberRoleFn: async () => { upserted = true; },
+  }));
+
+  const response = await handler(jsonPost("invite_accept", { token: "a".repeat(64) }));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "platform_invite_email_mismatch");
+  assert.equal(upserted, false);
+});
+
+test("invite_accept: never overwrites an existing membership role", async () => {
+  let upserted = false;
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  const handler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ({ id: "owner@acme.com", token: { email: "OWNER@acme.com" }, role: "agent" as const }),
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: "owner@acme.com", role: "owner" as const, createdAt: "" }),
+    findInviteByTokenHashFn: async () => ({
+      id: "inv-1", organizationId: ORG.id, email: "owner@acme.com", role: "collector",
+      expiresAt: future, acceptedAt: null, createdAt: "", tokenHash: "h",
+    }),
+    upsertMemberRoleFn: async () => { upserted = true; },
+  }));
+
+  const response = await handler(jsonPost("invite_accept", { token: "a".repeat(64) }));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).code, "platform_invite_already_member");
+  assert.equal(upserted, false);
 });
 
 test("member_remove blocks removing the last owner", async () => {

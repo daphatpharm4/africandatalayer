@@ -10,6 +10,9 @@ export interface ConsoleShellProps {
   onNavigate: (route: ConsoleRoute) => void;
   language: 'en' | 'fr';
   onToggleLanguage: () => void;
+  onSignOut: () => void;
+  signOutPending: boolean;
+  signOutError: string | null;
   children: React.ReactNode;
 }
 
@@ -27,6 +30,9 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
   onNavigate,
   language,
   onToggleLanguage,
+  onSignOut,
+  signOutPending,
+  signOutError,
   children,
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -35,10 +41,10 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
 
   return (
     <div
-      className="flex min-h-screen bg-page text-ink"
+      className="flex min-h-screen flex-col bg-page text-ink lg:flex-row"
       style={{ ['--org-accent' as string]: accentColor }}
     >
-      <aside className="flex w-64 shrink-0 flex-col border-r border-navy-border bg-white px-4 py-6">
+      <aside className="flex w-full shrink-0 flex-col border-b border-navy-border bg-white px-4 py-4 lg:min-h-screen lg:w-64 lg:border-b-0 lg:border-r lg:py-6">
         <div className="flex items-center gap-3 px-1">
           {organization?.logoUrl ? (
             <img
@@ -67,7 +73,7 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
               {t('Organization', 'Organisation')}
             </span>
             <select
-              className="h-10 w-full rounded-xl border border-navy-border bg-white px-3 text-sm text-ink"
+              className="h-12 w-full rounded-xl border border-navy-border bg-white px-3 text-base text-ink lg:text-sm"
               value={organization?.id ?? ''}
               onChange={(event) => onSelectOrganization(event.target.value)}
             >
@@ -80,7 +86,10 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
           </label>
         )}
 
-        <nav className="mt-6 flex flex-col gap-1">
+        <nav
+          className="mt-4 flex gap-1 overflow-x-auto pb-1 lg:mt-6 lg:flex-col lg:overflow-visible lg:pb-0"
+          aria-label={t('Console sections', 'Sections de la console')}
+        >
           {NAV_ITEMS.map((item) => {
             const isActive = route.screen === item.screen;
             return (
@@ -88,7 +97,7 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
                 key={item.screen}
                 type="button"
                 onClick={() => onNavigate({ screen: item.screen })}
-                className={`micro-label rounded-xl px-3 py-2.5 text-left transition-colors ${
+                className={`micro-label min-h-12 shrink-0 whitespace-nowrap rounded-xl px-4 py-3 text-left transition-colors ${
                   isActive ? 'bg-navy-wash text-navy' : 'text-ink-muted hover:bg-navy-wash/60 hover:text-navy'
                 }`}
               >
@@ -98,19 +107,32 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
           })}
         </nav>
 
-        <div className="mt-auto pt-6">
+        <div className="mt-3 grid grid-cols-2 gap-2 lg:mt-auto lg:grid-cols-1 lg:pt-6">
           <button
             type="button"
             onClick={onToggleLanguage}
-            className="micro-label w-full rounded-xl border border-navy-border px-3 py-2.5 text-center text-ink-muted hover:text-navy"
+            className="micro-label min-h-12 w-full rounded-xl border border-navy-border px-3 py-3 text-center text-ink-muted hover:text-navy"
           >
             {language === 'fr' ? 'FR' : 'EN'} · {t('Switch to French', 'Passer en anglais')}
           </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            disabled={signOutPending}
+            className="micro-label min-h-12 w-full rounded-xl border border-red-200 px-3 py-3 text-center text-red-700 transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-60"
+          >
+            {signOutPending ? t('Signing out…', 'Déconnexion…') : t('Sign out', 'Se déconnecter')}
+          </button>
+          {signOutError && (
+            <p role="alert" className="col-span-2 text-sm leading-5 text-red-700 lg:col-span-1">
+              {signOutError}
+            </p>
+          )}
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl p-6">{children}</div>
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-5xl p-4 sm:p-6">{children}</div>
       </main>
     </div>
   );

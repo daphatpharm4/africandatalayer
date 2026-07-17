@@ -144,6 +144,23 @@ test("acceptInviteRequest posts platform_invite_accept and passes through organi
   assert.deepEqual(result, { organizationId: "org-1" });
 });
 
+test("platform client preserves stable API error codes", async () => {
+  const { fetchFn } = stubFetch(() =>
+    jsonResponse(
+      { error: "This invitation belongs to another account", code: "platform_invite_email_mismatch" },
+      403,
+    ),
+  );
+
+  await assert.rejects(
+    () => acceptInviteRequest("abcd1234", { fetchFn }),
+    (error: unknown) =>
+      error instanceof PlatformApiError &&
+      error.status === 403 &&
+      error.code === "platform_invite_email_mismatch",
+  );
+});
+
 test("updateMemberRequest posts platform_member_update and resolves void", async () => {
   const { fetchFn, calls } = stubFetch(() => jsonResponse({ updated: true }));
 

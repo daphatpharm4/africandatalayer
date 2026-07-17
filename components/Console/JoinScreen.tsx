@@ -6,11 +6,22 @@ export interface JoinScreenProps {
   hasSession: boolean;
   language: 'en' | 'fr';
   onJoined: (organizationId: string) => void;
+  onSignOut: () => void;
+  signOutPending: boolean;
+  signOutError: string | null;
 }
 
-type AcceptStatus = 'loading' | 'expired' | 'invalid' | 'error';
+type AcceptStatus = 'loading' | 'expired' | 'invalid' | 'mismatch' | 'already-member' | 'error';
 
-const JoinScreen: React.FC<JoinScreenProps> = ({ token, hasSession, language, onJoined }) => {
+const JoinScreen: React.FC<JoinScreenProps> = ({
+  token,
+  hasSession,
+  language,
+  onJoined,
+  onSignOut,
+  signOutPending,
+  signOutError,
+}) => {
   const t = useCallback((en: string, fr: string) => (language === 'fr' ? fr : en), [language]);
 
   const [status, setStatus] = useState<AcceptStatus>('loading');
@@ -35,6 +46,14 @@ const JoinScreen: React.FC<JoinScreenProps> = ({ token, hasSession, language, on
             }
             if (error.status === 404) {
               setStatus('invalid');
+              return;
+            }
+            if (error.code === 'platform_invite_email_mismatch') {
+              setStatus('mismatch');
+              return;
+            }
+            if (error.code === 'platform_invite_already_member') {
+              setStatus('already-member');
               return;
             }
           }
@@ -128,6 +147,54 @@ const JoinScreen: React.FC<JoinScreenProps> = ({ token, hasSession, language, on
               "Ce lien d'invitation n'est plus valide. Demandez à l'administrateur de votre organisation d'en envoyer un nouveau.",
             )}
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'mismatch') {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="card w-full max-w-sm p-6 text-center">
+          <h1 className="text-lg font-semibold text-ink">
+            {t('Use the invited account', 'Utilisez le compte invité')}
+          </h1>
+          <p className="mt-2 text-sm text-ink-muted">
+            {t(
+              'This invitation was sent to another email address. Sign out, sign in with the invited email, then reopen this link.',
+              "Cette invitation a été envoyée à une autre adresse e-mail. Déconnectez-vous, connectez-vous avec l'adresse invitée, puis rouvrez ce lien.",
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={onSignOut}
+            disabled={signOutPending}
+            className="btn-primary mt-5 flex w-full items-center justify-center disabled:cursor-wait disabled:opacity-60"
+          >
+            {signOutPending ? t('Signing out…', 'Déconnexion…') : t('Sign out', 'Se déconnecter')}
+          </button>
+          {signOutError && <p role="alert" className="mt-3 text-sm text-red-700">{signOutError}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  if (status === 'already-member') {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="card w-full max-w-sm p-6 text-center">
+          <h1 className="text-lg font-semibold text-ink">
+            {t('Already a member', 'Déjà membre')}
+          </h1>
+          <p className="mt-2 text-sm text-ink-muted">
+            {t(
+              'This account already belongs to the organization. Its existing role was not changed.',
+              "Ce compte appartient déjà à l'organisation. Son rôle actuel n'a pas été modifié.",
+            )}
+          </p>
+          <a href="#/projects" className="btn-primary mt-5 flex items-center justify-center">
+            {t('Go to projects', 'Voir les projets')}
+          </a>
         </div>
       </div>
     );

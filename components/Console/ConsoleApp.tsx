@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getSession } from '../../lib/client/auth';
+import { getSession, signOut } from '../../lib/client/auth';
 import { listMyOrganizations, PlatformApiError } from '../../lib/client/platformApi';
 import type { PlatformOrganization, PlatformRole } from '../../shared/platformTypes';
 import {
@@ -53,6 +53,8 @@ const ConsoleApp: React.FC = () => {
   const [route, setRoute] = useState<ConsoleRoute>(() => readInitialRoute());
   const [language, setLanguage] = useState<'en' | 'fr'>(() => readStoredLanguage());
   const [joinBanner, setJoinBanner] = useState<string | null>(null);
+  const [signOutPending, setSignOutPending] = useState(false);
+  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const t = useCallback(
     (en: string, fr: string) => (language === 'fr' ? fr : en),
@@ -136,6 +138,24 @@ const ConsoleApp: React.FC = () => {
   const handleToggleLanguage = useCallback(() => {
     setLanguage((current) => (current === 'fr' ? 'en' : 'fr'));
   }, []);
+
+  const handleSignOut = useCallback(async () => {
+    if (signOutPending) return;
+    setSignOutPending(true);
+    setSignOutError(null);
+    try {
+      await signOut();
+      try {
+        localStorage.removeItem(ORG_STORAGE_KEY);
+      } catch {
+        /* private browsing */
+      }
+      window.location.assign('/');
+    } catch {
+      setSignOutError(t('Could not sign out. Please try again.', 'Impossible de vous déconnecter. Veuillez réessayer.'));
+      setSignOutPending(false);
+    }
+  }, [signOutPending, t]);
 
   // Event handler, not an effect — the wizard's own step-4 busy state covers
   // the fetch window, so a simple try/catch (no cancelled-flag) is enough.
@@ -298,6 +318,9 @@ const ConsoleApp: React.FC = () => {
           hasSession={sessionState === 'authenticated'}
           language={language}
           onJoined={handleJoined}
+          onSignOut={handleSignOut}
+          signOutPending={signOutPending}
+          signOutError={signOutError}
         />
       );
       break;
@@ -330,6 +353,9 @@ const ConsoleApp: React.FC = () => {
         onNavigate={handleNavigate}
         language={language}
         onToggleLanguage={handleToggleLanguage}
+        onSignOut={handleSignOut}
+        signOutPending={signOutPending}
+        signOutError={signOutError}
       >
         {screenContent}
       </ConsoleShell>

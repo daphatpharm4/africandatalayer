@@ -25,6 +25,7 @@
 // BEFORE touching data; failures (401/403/404) are tenancy Responses returned as-is.
 
 import { requireUser } from "../../auth.js";
+import { normalizeEmail } from "../../shared/identifier.js";
 import { isStorageUnavailableError } from "../db.js";
 import { errorResponse, jsonResponse } from "../http.js";
 import { validateSchemaDefinition } from "../../../shared/platformSchema.js";
@@ -348,7 +349,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     // Join URL built ONLY from the server-derived request origin + the server-
     // generated token — never from client-supplied strings.
     const origin = new URL(request.url).origin;
-    const joinUrl = `${origin}/console.html#/join?token=${token}`;
+    const joinUrl = `${origin}/console#/join?token=${token}`;
 
     await sendInviteEmailFn({
       email: body.email,
@@ -388,6 +389,21 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     const expired = new Date(invite.expiresAt).getTime() <= Date.now();
     if (expired || invite.acceptedAt) {
       return errorResponse("Invite is no longer valid", 410, { code: "platform_invite_expired" });
+    }
+
+    const sessionEmail = normalizeEmail(user.token.email);
+    const inviteEmail = normalizeEmail(invite.email);
+    if (!sessionEmail || !inviteEmail || sessionEmail !== inviteEmail) {
+      return errorResponse("This invitation belongs to another account", 403, {
+        code: "platform_invite_email_mismatch",
+      });
+    }
+
+    const existingMembership = await getMembershipFn(invite.organizationId, user.id);
+    if (existingMembership) {
+      return errorResponse("This account is already a member of the organization", 409, {
+        code: "platform_invite_already_member",
+      });
     }
 
     await upsertMemberRoleFn({ organizationId: invite.organizationId, userId: user.id, role: invite.role });

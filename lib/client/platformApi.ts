@@ -22,12 +22,14 @@ export interface PlatformApiDeps {
 
 export class PlatformApiError extends Error {
   status: number;
+  code?: string;
   issues?: SchemaValidationIssue[];
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "PlatformApiError";
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -46,7 +48,11 @@ async function callPlatform<T>(
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new PlatformApiError(payload.error ?? `Request failed (${response.status})`, response.status);
+    const error = new PlatformApiError(
+      payload.error ?? `Request failed (${response.status})`,
+      response.status,
+      typeof payload.code === "string" ? payload.code : undefined,
+    );
     if (Array.isArray(payload.issues)) error.issues = payload.issues;
     throw error;
   }
