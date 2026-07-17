@@ -86,4 +86,15 @@ test('invited collector sees company profile and submits the company form on mob
   await page.getByTestId('main-navigation').getByRole('button', { name: 'Profile' }).click();
   await expect(page.getByTestId('profile-company-workspace')).toContainText('Usiku Research');
   await expect(page.getByTestId('profile-company-workspace')).toContainText('collector');
+  await expect(page.getByRole('button', { name: 'Redeem XP' })).toHaveCount(0);
+  await expect(page.getByText('Convert to Rewards', { exact: true })).toHaveCount(0);
+});
+
+test('public contributors retain access to rewards', async ({ page, gotoApp }) => {
+  await gotoApp('/');
+  await page.getByTestId('main-navigation').getByRole('button', { name: 'Profile' }).click();
+
+  await expect(page.getByTestId('screen-profile')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Redeem XP' })).toBeVisible();
+  await expect(page.getByText('Convert to Rewards', { exact: true })).toBeVisible();
 });

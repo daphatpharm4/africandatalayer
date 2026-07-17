@@ -13,6 +13,7 @@ export interface ConsoleShellProps {
   onSignOut: () => void;
   signOutPending: boolean;
   signOutError: string | null;
+  isAdlAdmin?: boolean;
   children: React.ReactNode;
 }
 
@@ -36,6 +37,7 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
   onSignOut,
   signOutPending,
   signOutError,
+  isAdlAdmin = false,
   children,
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -87,6 +89,16 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
               ))}
             </select>
           </label>
+        )}
+
+        {isAdlAdmin && organization && (
+          <button
+            type="button"
+            onClick={() => onNavigate({ screen: 'ONBOARDING' })}
+            className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-navy-border px-4 text-sm font-semibold text-navy transition-colors hover:bg-navy-wash"
+          >
+            {t('Create company', 'Créer une entreprise')}
+          </button>
         )}
 
         <nav

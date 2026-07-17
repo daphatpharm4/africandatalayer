@@ -411,6 +411,7 @@ const ConsoleApp: React.FC = () => {
         onSignOut={handleSignOut}
         signOutPending={signOutPending}
         signOutError={signOutError}
+        isAdlAdmin={isAdlAdmin}
       >
         <Suspense fallback={<p className="micro-label text-ink-muted" role="status">{t('Loading view…', 'Chargement de la vue…')}</p>}>
           {screenContent}

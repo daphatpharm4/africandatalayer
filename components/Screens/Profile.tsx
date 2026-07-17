@@ -40,6 +40,7 @@ interface Props {
   onSettings: () => void;
   onOpenDocs: () => void;
   onRedeem: () => void;
+  rewardsEnabled: boolean;
   onSubmissionQueue: () => void;
   language: 'en' | 'fr';
   platformFieldContext: PlatformFieldContext | null;
@@ -548,6 +549,7 @@ const Profile: React.FC<Props> = ({
   onSettings,
   onOpenDocs,
   onRedeem,
+  rewardsEnabled,
   onSubmissionQueue,
   language,
   platformFieldContext,
@@ -1651,7 +1653,7 @@ const Profile: React.FC<Props> = ({
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {rewardsEnabled && <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <button
             onClick={onRedeem}
             className="flex h-14 items-center justify-center gap-2 rounded-2xl border border-navy-border bg-white px-4 text-sm font-semibold text-navy shadow-sm transition-all hover:bg-gray-100"
@@ -1663,7 +1665,7 @@ const Profile: React.FC<Props> = ({
             <Wallet size={16} />
             <span>{t('Convert to Rewards', 'Convertir en recompenses')}</span>
           </button>
-        </div>
+        </div>}
 
         {(() => {
           const WEEKLY_TARGET = 50;

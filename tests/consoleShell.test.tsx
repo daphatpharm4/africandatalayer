@@ -27,6 +27,7 @@ test('console shell exposes responsive navigation and a visible sign-out action'
       onSignOut={() => {}}
       signOutPending={false}
       signOutError={null}
+      isAdlAdmin
     >
       <p>Console content</p>
     </ConsoleShell>,
@@ -37,6 +38,7 @@ test('console shell exposes responsive navigation and a visible sign-out action'
   assert.match(html, /overflow-x-auto/);
   assert.match(html, /min-h-12/);
   assert.match(html, />Sign out<\/button>/);
+  assert.match(html, />Create company<\/button>/);
 });
 
 test('console shell navigation follows the selected company role', () => {
@@ -70,6 +72,7 @@ test('console shell navigation follows the selected company role', () => {
 
   const owner = renderFor('owner');
   assert.match(owner, />Settings<\/button>/);
+  assert.doesNotMatch(owner, />Create company<\/button>/);
 });
 
 test('each company role receives a dedicated work landing', () => {

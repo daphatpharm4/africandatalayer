@@ -214,6 +214,16 @@ const App: React.FC = () => {
     }
   }, [isAuthenticated, isClient, isPointOperator]);
 
+  const companyMode = Boolean(platformFieldContext?.organizations.length);
+  const rewardsEnabled = !isLoadingPlatformFieldContext && !companyMode;
+
+  useEffect(() => {
+    if (companyMode && currentScreen === Screen.REWARDS) {
+      setHistory((current) => current.filter((screen) => screen !== Screen.REWARDS));
+      setCurrentScreen(Screen.PROFILE);
+    }
+  }, [companyMode, currentScreen]);
+
   const goBack = useCallback(() => {
     if (history.length > 0) {
       const prev = history[history.length - 1];
@@ -659,6 +669,7 @@ const App: React.FC = () => {
             onSettings={() => navigateTo(Screen.SETTINGS)}
             onOpenDocs={() => navigatePath(docsPathForAudience(docsAudience))}
             onRedeem={() => navigateTo(Screen.REWARDS)}
+            rewardsEnabled={rewardsEnabled}
             onSubmissionQueue={() => navigateTo(Screen.SUBMISSION_QUEUE)}
             platformFieldContext={platformFieldContext}
             isLoadingPlatformFieldContext={isLoadingPlatformFieldContext}
@@ -695,6 +706,7 @@ const App: React.FC = () => {
       case Screen.QUALITY:
         return <QualityInfo language={language} onBack={goBack} />;
       case Screen.REWARDS:
+        if (!rewardsEnabled) return null;
         return <RewardsCatalog language={language} onBack={goBack} />;
       case Screen.ADMIN:
         return <AdminQueue language={language} onBack={goBack} />;
@@ -811,7 +823,7 @@ const App: React.FC = () => {
             isAdmin={isAdmin}
             userRole={userRole}
             language={language}
-            companyMode={Boolean(platformFieldContext?.organizations.length)}
+            companyMode={companyMode}
           />
         )}
       </div>
