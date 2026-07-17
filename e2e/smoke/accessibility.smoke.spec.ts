@@ -1,6 +1,19 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+function expectNoAxeViolations(
+  violations: Array<{ id: string; impact?: string | null; help: string; nodes: unknown[] }>,
+): void {
+  if (process.env.CI && violations.length > 0) {
+    const summary = violations
+      .map((violation) => `${violation.id} (${violation.impact ?? 'unknown'}): ${violation.help}; nodes=${violation.nodes.length}`)
+      .join(' | ')
+      .replace(/[\r\n]/g, ' ');
+    console.error(`::error file=e2e/smoke/accessibility.smoke.spec.ts::axe violations: ${summary}`);
+  }
+  expect(violations).toEqual([]);
+}
+
 test('field entry supports zoom, landscape, keyboard, and WCAG AA', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.setViewportSize({ width: 844, height: 390 });
@@ -16,7 +29,7 @@ test('field entry supports zoom, landscape, keyboard, and WCAG AA', async ({ pag
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
-  expect(results.violations).toEqual([]);
+  expectNoAxeViolations(results.violations);
 });
 
 test('signed-out organization console has one main landmark and WCAG AA', async ({ page }) => {
@@ -29,5 +42,5 @@ test('signed-out organization console has one main landmark and WCAG AA', async 
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
-  expect(results.violations).toEqual([]);
+  expectNoAxeViolations(results.violations);
 });
