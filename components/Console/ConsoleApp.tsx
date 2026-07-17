@@ -8,6 +8,7 @@ import {
   type ConsoleRoute,
 } from '../../lib/client/consoleState';
 import ConsoleShell from './ConsoleShell';
+import OnboardingWizard from './OnboardingWizard';
 
 const LANGUAGE_STORAGE_KEY = 'adl_language';
 const ORG_STORAGE_KEY = 'adl_console_org';
@@ -128,6 +129,15 @@ const ConsoleApp: React.FC = () => {
     setLanguage((current) => (current === 'fr' ? 'en' : 'fr'));
   }, []);
 
+  const handleOnboardingDone = useCallback(
+    (organizationId: string) => {
+      handleSelectOrganization(organizationId);
+      setOrgsReloadKey((k) => k + 1);
+      handleNavigate({ screen: 'PROJECTS' });
+    },
+    [handleSelectOrganization, handleNavigate],
+  );
+
   if (sessionState === 'loading' || (sessionState === 'authenticated' && organizations === null && !orgsError)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-page text-ink-muted">
@@ -192,7 +202,7 @@ const ConsoleApp: React.FC = () => {
   let screenContent: React.ReactNode;
   switch (effectiveRoute.screen) {
     case 'ONBOARDING':
-      screenContent = <div>{t('Onboarding coming soon.', "Intégration à venir.")}</div>;
+      screenContent = <OnboardingWizard language={language} onDone={handleOnboardingDone} />;
       break;
     case 'PROJECTS':
       screenContent = <div>{t('Projects coming soon.', 'Projets à venir.')}</div>;
