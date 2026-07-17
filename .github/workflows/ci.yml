@@ -59,6 +59,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Install Android SDK 37
+        run: sdkmanager "platform-tools" "platforms;android-37" "build-tools;37.0.0"
+
       - name: Test and assemble Android
         working-directory: android
         run: ./gradlew testDebugUnitTest assembleDebug

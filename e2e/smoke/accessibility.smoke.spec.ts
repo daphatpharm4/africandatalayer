@@ -20,7 +20,9 @@ test('field entry supports zoom, landscape, keyboard, and WCAG AA', async ({ pag
 });
 
 test('signed-out organization console has one main landmark and WCAG AA', async ({ page }) => {
-  await page.goto('/console#/members');
+  // Vite's multi-page dev server exposes the console entry as console.html;
+  // production rewrites /console to the same file in vercel.json.
+  await page.goto('/console.html#/members');
   await expect(page.getByRole('heading', { name: /sign in required|connexion requise/i })).toBeVisible();
   await expect(page.getByRole('main')).toHaveCount(1);
 
