@@ -296,7 +296,11 @@ const SchemaBuilderEditor: React.FC<EditorProps> = ({
       setDraft(null);
       setVersions((current) => mergeVersion(current, publishedVersion));
     } catch (error) {
-      setPublishError(describeError(error, t));
+      if (error instanceof PlatformApiError && error.status === 422) {
+        setPublishError(t("Fix the issues listed below before saving.", "Corrigez les problèmes ci-dessous avant d'enregistrer."));
+      } else {
+        setPublishError(describeError(error, t));
+      }
     } finally {
       setIsBusy(false);
     }
@@ -307,7 +311,18 @@ const SchemaBuilderEditor: React.FC<EditorProps> = ({
       <div>
         <button
           type="button"
-          onClick={() => onNavigate({ screen: 'PROJECTS' })}
+          onClick={() => {
+            if (isDirty) {
+              const confirmed = window.confirm(
+                t(
+                  'You have unsaved changes. Leave without saving?',
+                  'Vous avez des modifications non enregistrées. Quitter sans enregistrer ?',
+                ),
+              );
+              if (!confirmed) return;
+            }
+            onNavigate({ screen: 'PROJECTS' });
+          }}
           className="micro-label flex items-center gap-1 text-ink-muted hover:text-navy"
         >
           <ChevronLeft size={14} /> {t('Projects', 'Projets')}
