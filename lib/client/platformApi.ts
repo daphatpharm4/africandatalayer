@@ -6,9 +6,11 @@
 // that convention so screen components never hand-build platform URLs.
 
 import type {
+  PlatformAdminOrganizationSummary,
   PlatformInvite,
   PlatformMembership,
   PlatformOrganization,
+  PlatformOrganizationAccessStatus,
   PlatformProject,
   PlatformRecord,
   PlatformRecordEvidence,
@@ -112,6 +114,43 @@ export async function updateOrganizationRequest(
     { method: "POST", body: input },
     deps,
   );
+  return payload.organization;
+}
+
+export async function listAdminOrganizationsRequest(
+  deps?: PlatformApiDeps,
+): Promise<PlatformAdminOrganizationSummary[]> {
+  const payload = await callPlatform<{ organizations: PlatformAdminOrganizationSummary[] }>(
+    "admin_org_list",
+    { method: "GET" },
+    deps,
+  );
+  return payload.organizations;
+}
+
+export async function updateAdminOrganizationAccessRequest(
+  input: {
+    organizationId: string;
+    accessStatus: PlatformOrganizationAccessStatus;
+    reason?: string;
+  },
+  deps?: PlatformApiDeps,
+): Promise<{
+  id: string;
+  accessStatus: PlatformOrganizationAccessStatus;
+  suspensionReason: string | null;
+  suspendedAt: string | null;
+  suspendedBy: string | null;
+}> {
+  const payload = await callPlatform<{
+    organization: {
+      id: string;
+      accessStatus: PlatformOrganizationAccessStatus;
+      suspensionReason: string | null;
+      suspendedAt: string | null;
+      suspendedBy: string | null;
+    };
+  }>("admin_org_access", { method: "POST", body: input }, deps);
   return payload.organization;
 }
 

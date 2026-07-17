@@ -34,9 +34,38 @@ test("member at or above minimum role gets context", async () => {
   const result = await requireOrgRole(request, "org-1", "manager", {
     requireUserFn: authedUser as any,
     getMembershipFn: async () => ({ organizationId: "org-1", userId: "u1", role: "owner", createdAt: "" }),
+    getOrganizationAccessStateFn: async () => "active",
   });
   assert.ok(!isTenancyFailure(result));
   assert.deepEqual(result, { userId: "u1", organizationId: "org-1", role: "owner", isAdlAdmin: false });
+});
+
+test("suspended organization blocks members with a stable error code", async () => {
+  const result = await requireOrgRole(request, "org-1", "viewer", {
+    requireUserFn: authedUser as any,
+    getMembershipFn: async () => ({ organizationId: "org-1", userId: "u1", role: "owner", createdAt: "" }),
+    getOrganizationAccessStateFn: async () => "suspended",
+  });
+  assert.ok(isTenancyFailure(result));
+  assert.equal((result as Response).status, 403);
+  assert.equal((await (result as Response).json()).code, "platform_org_suspended");
+});
+
+test("ADL admins retain oversight access without tenant membership while suspended", async () => {
+  let membershipLookedUp = false;
+  const result = await requireOrgRole(request, "org-1", "owner", {
+    requireUserFn: async () => ({ id: "admin@adl.test", token: {}, role: "admin" as const }) as any,
+    getMembershipFn: async () => { membershipLookedUp = true; return null; },
+    getOrganizationAccessStateFn: async () => "suspended",
+  });
+  assert.ok(!isTenancyFailure(result));
+  assert.deepEqual(result, {
+    userId: "admin@adl.test",
+    organizationId: "org-1",
+    role: "owner",
+    isAdlAdmin: true,
+  });
+  assert.equal(membershipLookedUp, false);
 });
 
 test("cross-tenant: membership lookup is scoped to the requested org, not any org", async () => {
@@ -85,6 +114,7 @@ test("requireProjectOrgRole: member gets context with projectId", async () => {
       coverageScope: "worldwide", coverageLabel: null, createdAt: "",
     }),
     getMembershipFn: async () => ({ organizationId: "org-1", userId: "u1", role: "manager", createdAt: "" }),
+    getOrganizationAccessStateFn: async () => "active",
   });
   assert.ok(!isTenancyFailure(result));
   assert.equal((result as { projectId: string }).projectId, "proj-1");

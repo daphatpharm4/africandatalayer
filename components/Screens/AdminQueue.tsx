@@ -16,6 +16,7 @@ import TrustBadge, { type TrustTier as TrustBadgeTier } from '../shared/TrustBad
 import VerticalIcon from '../shared/VerticalIcon';
 import FilterChipRow from '../shared/FilterChipRow';
 import CommunicationsPanel from './CommunicationsPanel';
+import CompaniesAdminPanel from './CompaniesAdminPanel';
 import {
   ADMIN_REVIEW_PAGE_LIMIT,
   buildAdminQueueBatchApproveRequest,
@@ -61,7 +62,7 @@ type ReviewDecision = 'approved' | 'rejected' | 'flagged';
 type ReviewResult = Extract<ReviewDecision, 'approved' | 'rejected'>;
 type AutomationStatusFilter = '' | AutomationLeadStatus;
 type AutomationPriorityFilter = '' | AutomationLeadPriority;
-type AdminMode = 'review' | 'assignments' | 'automation' | 'ip-reports' | 'communications';
+type AdminMode = 'review' | 'assignments' | 'automation' | 'companies' | 'ip-reports' | 'communications';
 type MatchState = 'match' | 'mismatch' | 'unavailable';
 type AiReviewSummaryDisplay = Pick<
   AiReviewSummaryResponse,
@@ -1259,11 +1260,12 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
 
       <div className="p-4 pb-24 space-y-4">
         <div className="card p-2">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2" role="tablist" aria-label={t('Admin workspace modes', 'Modes de travail admin')}>
             {([
               ['review', t('Review cockpit', 'Cockpit revue')],
               ['assignments', t('Assignments', 'Affectations')],
               ['automation', t('Automation', 'Automatisation')],
+              ['companies', t('Companies', 'Entreprises')],
               ['ip-reports', t('IP Reports', 'Signalements PI')],
               ['communications', t('Communications', 'Communications')],
             ] as Array<[AdminMode, string]>).map(([mode, label]) => (
@@ -2544,6 +2546,8 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
             )}
           </div>
         )}
+
+        {activeMode === 'companies' && <CompaniesAdminPanel language={language} />}
 
         {activeMode === 'ip-reports' && (
           <div className="card p-4 space-y-4" data-testid="admin-ip-reports">

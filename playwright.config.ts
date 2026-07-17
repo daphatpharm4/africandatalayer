@@ -50,6 +50,7 @@ export default defineConfig({
         'e2e/smoke/admin.smoke.spec.ts',
         'e2e/smoke/admin-access-controls.smoke.spec.ts',
         'e2e/smoke/console-roles.smoke.spec.ts',
+        'e2e/smoke/console-auth.smoke.spec.ts',
         'e2e/smoke/profile-help-entry.smoke.spec.ts',
         'e2e/docs/admin-roadmap.spec.ts',
       ],

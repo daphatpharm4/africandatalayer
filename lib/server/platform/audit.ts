@@ -5,6 +5,8 @@ import type { StoreDeps } from "./orgStore.js";
 export type PlatformAuditEventType =
   | "org_created"
   | "org_branding_updated"
+  | "org_access_suspended"
+  | "org_access_reactivated"
   | "member_invited"
   | "invite_revoked"
   | "invite_accepted"

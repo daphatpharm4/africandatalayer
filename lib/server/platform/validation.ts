@@ -19,6 +19,20 @@ export const orgUpdateSchema = z.object({
   clearLogo: z.boolean().optional(),
 });
 
+export const adminOrgAccessUpdateSchema = z.object({
+  organizationId: uuid,
+  accessStatus: z.enum(["active", "suspended"]),
+  reason: z.string().trim().min(3).max(500).optional(),
+}).superRefine((value, context) => {
+  if (value.accessStatus === "suspended" && !value.reason) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["reason"],
+      message: "A suspension reason is required",
+    });
+  }
+});
+
 export const inviteCreateSchema = z.object({
   organizationId: uuid,
   email: z.string().trim().toLowerCase().email(),

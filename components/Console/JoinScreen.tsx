@@ -1,13 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { acceptInviteRequest, PlatformApiError } from '../../lib/client/platformApi';
-import {
-  clearConsoleInviteReturn,
-  saveConsoleInviteReturn,
-} from '../../lib/client/inviteReturn';
+import { clearConsoleInviteReturn } from '../../lib/client/inviteReturn';
 
 export interface JoinScreenProps {
   token: string | undefined;
-  hasSession: boolean;
   language: 'en' | 'fr';
   onJoined: (organizationId: string) => void;
   onSignOut: () => void;
@@ -19,7 +15,6 @@ type AcceptStatus = 'loading' | 'expired' | 'invalid' | 'mismatch' | 'already-me
 
 const JoinScreen: React.FC<JoinScreenProps> = ({
   token,
-  hasSession,
   language,
   onJoined,
   onSignOut,
@@ -74,46 +69,16 @@ const JoinScreen: React.FC<JoinScreenProps> = ({
   );
 
   useEffect(() => {
-    if (!hasSession || !token) return;
+    if (!token) return;
     if (acceptCalledRef.current) return;
     acceptCalledRef.current = true;
     runAccept(token);
-  }, [hasSession, token, runAccept]);
+  }, [token, runAccept]);
 
   const handleRetry = () => {
     if (!token) return;
     runAccept(token);
   };
-
-  const handleAuthenticate = () => {
-    if (!token || !saveConsoleInviteReturn(token)) return;
-    try {
-      const hasAuthenticated = localStorage.getItem('adl_has_authenticated') === 'true';
-      sessionStorage.setItem('adl_auth_initial_mode', hasAuthenticated ? 'signin' : 'signup');
-    } catch {
-      // The invite return itself was saved; use the default auth mode.
-    }
-    window.location.assign('/');
-  };
-
-  if (!hasSession) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="card w-full max-w-sm p-6 text-center">
-          <h1 className="text-lg font-semibold text-ink">{t('Sign in required', 'Connexion requise')}</h1>
-          <p className="mt-2 text-sm text-ink-muted">
-            {t(
-              'Sign in or create the invited account. We will return you here automatically and connect you to the organization.',
-              "Connectez-vous ou créez le compte invité. Vous reviendrez ici automatiquement pour rejoindre l'organisation.",
-            )}
-          </p>
-          <button type="button" onClick={handleAuthenticate} className="btn-primary mt-5 flex w-full items-center justify-center">
-            {t('Continue with invited account', 'Continuer avec le compte invité')}
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (!token) {
     return (

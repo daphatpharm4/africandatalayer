@@ -4,11 +4,13 @@ import test from "node:test";
 import {
   createOrganization,
   getMembership,
+  getOrganizationAccessState,
   listMembers,
   listOrganizationsForUser,
   markInviteAccepted,
   removeMember,
   updateOrganizationBranding,
+  setOrganizationAccessState,
   upsertMemberRole,
   createInvite,
   findInviteByTokenHash,
@@ -56,6 +58,30 @@ test("getMembership scopes by organization and user", async () => {
 test("getMembership returns null when absent", async () => {
   const { queryFn } = fakeQuery([{ rows: [] }]);
   assert.equal(await getMembership("org-1", "ghost", { queryFn }), null);
+});
+
+test("organization access state reads and updates without deleting tenant data", async () => {
+  const { queryFn, calls } = fakeQuery([
+    { rows: [{ access_status: "active" }] },
+    { rows: [{
+      id: "org-1",
+      access_status: "suspended",
+      suspension_reason: "Subscription overdue",
+      suspended_at: "2026-07-18T00:00:00.000Z",
+      suspended_by: "admin@adl.test",
+    }] },
+  ]);
+  assert.equal(await getOrganizationAccessState("org-1", { queryFn }), "active");
+  const updated = await setOrganizationAccessState({
+    organizationId: "org-1",
+    accessStatus: "suspended",
+    reason: "Subscription overdue",
+    actorUserId: "admin@adl.test",
+  }, { queryFn });
+  assert.equal(updated?.accessStatus, "suspended");
+  assert.equal(updated?.suspensionReason, "Subscription overdue");
+  assert.match(calls[1].text, /update public\.platform_organizations/i);
+  assert.doesNotMatch(calls[1].text, /delete/i);
 });
 
 test("listOrganizationsForUser joins memberships", async () => {

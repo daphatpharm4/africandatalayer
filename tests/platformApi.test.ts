@@ -20,6 +20,7 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
   return {
     requireUserFn: async () => OWNER,
     getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "owner" as const, createdAt: "" }),
+    getOrganizationAccessStateFn: async () => "active" as const,
     writeAuditFn: async () => {},
     ...overrides,
   };
@@ -58,6 +59,61 @@ test("org_create rejects a normal account before creating an owner", async () =>
   assert.equal(response.status, 403);
   assert.equal((await response.json()).code, "platform_admin_required");
   assert.equal(created, false);
+});
+
+test("admin_org_list is visible only to ADL admins", async () => {
+  let listed = false;
+  const ownerHandler = createPlatformHandler(baseDeps({
+    listAdminOrganizationSummariesFn: async () => { listed = true; return []; },
+  }));
+  const denied = await ownerHandler(new Request("https://x.test/api/user?view=platform_admin_org_list"));
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.json()).code, "platform_admin_required");
+  assert.equal(listed, false);
+
+  const adminHandler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ADL_ADMIN,
+    listAdminOrganizationSummariesFn: async () => { listed = true; return []; },
+  }));
+  const allowed = await adminHandler(new Request("https://x.test/api/user?view=platform_admin_org_list"));
+  assert.equal(allowed.status, 200);
+  assert.equal(listed, true);
+});
+
+test("admin_org_access requires a reason, updates access, and audits suspension", async () => {
+  const updates: any[] = [];
+  const audits: any[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ADL_ADMIN,
+    setOrganizationAccessStateFn: async (input: any) => {
+      updates.push(input);
+      return {
+        id: ORG.id,
+        accessStatus: input.accessStatus,
+        suspensionReason: input.reason ?? null,
+        suspendedAt: "2026-07-18T00:00:00.000Z",
+        suspendedBy: ADL_ADMIN.id,
+      };
+    },
+    writeAuditFn: async (event: any) => { audits.push(event); },
+  }));
+
+  const invalid = await handler(jsonPost("admin_org_access", {
+    organizationId: ORG.id,
+    accessStatus: "suspended",
+  }));
+  assert.equal(invalid.status, 400);
+  assert.equal(updates.length, 0);
+
+  const response = await handler(jsonPost("admin_org_access", {
+    organizationId: ORG.id,
+    accessStatus: "suspended",
+    reason: "Subscription payment overdue",
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(updates[0].actorUserId, ADL_ADMIN.id);
+  assert.equal(updates[0].accessStatus, "suspended");
+  assert.equal(audits[0].eventType, "org_access_suspended");
 });
 
 test("org_update requires owner: manager gets 403", async () => {
@@ -145,6 +201,24 @@ test("invite_accept: valid invite adds membership and marks accepted", async () 
   assert.equal(response.status, 200);
   assert.equal(roleUpserts[0].role, "collector");
   assert.equal(accepted[0].inviteId, "inv-1");
+});
+
+test("invite_accept blocks joining a suspended company", async () => {
+  let upserted = false;
+  const future = new Date(Date.now() + 86_400_000).toISOString();
+  const handler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ({ id: "new@x.com", token: { email: "new@x.com" }, role: "agent" as const }),
+    getOrganizationAccessStateFn: async () => "suspended" as const,
+    findInviteByTokenHashFn: async () => ({
+      id: "inv-1", organizationId: ORG.id, email: "new@x.com", role: "collector",
+      expiresAt: future, acceptedAt: null, createdAt: "", tokenHash: "h",
+    }),
+    upsertMemberRoleFn: async () => { upserted = true; },
+  }));
+  const response = await handler(jsonPost("invite_accept", { token: "a".repeat(64) }));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "platform_org_suspended");
+  assert.equal(upserted, false);
 });
 
 test("invite_accept: rejects a different signed-in email before membership mutation", async () => {

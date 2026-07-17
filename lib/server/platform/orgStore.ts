@@ -2,7 +2,13 @@
 // Persistence for platform organizations, memberships, and invites.
 // Isolation contract: every read/write is scoped by organization_id (or user_id for cross-org listing).
 import { query } from "../db.js";
-import type { PlatformInvite, PlatformMembership, PlatformOrganization, PlatformRole } from "../../../shared/platformTypes.js";
+import type {
+  PlatformInvite,
+  PlatformMembership,
+  PlatformOrganization,
+  PlatformOrganizationAccessStatus,
+  PlatformRole,
+} from "../../../shared/platformTypes.js";
 
 export type QueryFn = (text: string, values?: unknown[]) => Promise<{ rows: any[]; rowCount: number | null }>;
 export interface StoreDeps {
@@ -23,6 +29,9 @@ interface OrgRow {
   slug: string;
   logo_url: string | null;
   accent_color: string | null;
+  access_status?: PlatformOrganizationAccessStatus;
+  suspension_reason?: string | null;
+  suspended_at?: unknown | null;
   created_at: unknown;
 }
 
@@ -33,6 +42,9 @@ function rowToOrg(row: OrgRow): PlatformOrganization {
     slug: row.slug,
     logoUrl: row.logo_url,
     accentColor: row.accent_color,
+    accessStatus: row.access_status ?? "active",
+    suspensionReason: row.suspension_reason ?? null,
+    suspendedAt: row.suspended_at == null ? null : toIso(row.suspended_at),
     createdAt: toIso(row.created_at),
   };
 }
@@ -69,7 +81,8 @@ export async function createOrganization(
   const orgResult = await run(
     `INSERT INTO public.platform_organizations (name, slug, created_by)
      VALUES ($1, $2, $3)
-     RETURNING id, name, slug, logo_url, accent_color, created_at`,
+     RETURNING id, name, slug, logo_url, accent_color, access_status,
+       suspension_reason, suspended_at, created_at`,
     [input.name, input.slug, input.createdBy],
   );
   const org = rowToOrg(orgResult.rows[0]);
@@ -83,7 +96,8 @@ export async function createOrganization(
 
 export async function getOrganization(organizationId: string, deps: StoreDeps = {}): Promise<PlatformOrganization | null> {
   const result = await db(deps)(
-    `SELECT id, name, slug, logo_url, accent_color, created_at
+    `SELECT id, name, slug, logo_url, accent_color, access_status,
+       suspension_reason, suspended_at, created_at
      FROM public.platform_organizations WHERE id = $1`,
     [organizationId],
   );
@@ -95,7 +109,8 @@ export async function listOrganizationsForUser(
   deps: StoreDeps = {},
 ): Promise<Array<PlatformOrganization & { role: PlatformRole }>> {
   const result = await db(deps)(
-    `SELECT o.id, o.name, o.slug, o.logo_url, o.accent_color, o.created_at, m.role
+    `SELECT o.id, o.name, o.slug, o.logo_url, o.accent_color, o.access_status,
+       o.suspension_reason, o.suspended_at, o.created_at, m.role
      FROM public.platform_organizations o
      JOIN public.platform_organization_members m ON m.organization_id = o.id
      WHERE m.user_id = $1
@@ -128,10 +143,61 @@ export async function updateOrganizationBranding(
   const result = await db(deps)(
     `UPDATE public.platform_organizations SET ${sets.join(", ")}
      WHERE id = $${values.length}
-     RETURNING id, name, slug, logo_url, accent_color, created_at`,
+     RETURNING id, name, slug, logo_url, accent_color, access_status,
+       suspension_reason, suspended_at, created_at`,
     values,
   );
   return result.rows[0] ? rowToOrg(result.rows[0]) : null;
+}
+
+export async function getOrganizationAccessState(
+  organizationId: string,
+  deps: StoreDeps = {},
+): Promise<PlatformOrganizationAccessStatus | null> {
+  const result = await db(deps)(
+    `SELECT access_status
+     FROM public.platform_organizations
+     WHERE id = $1`,
+    [organizationId],
+  );
+  return (result.rows[0]?.access_status as PlatformOrganizationAccessStatus | undefined) ?? null;
+}
+
+export async function setOrganizationAccessState(
+  input: {
+    organizationId: string;
+    accessStatus: PlatformOrganizationAccessStatus;
+    reason?: string;
+    actorUserId: string;
+  },
+  deps: StoreDeps = {},
+): Promise<{
+  id: string;
+  accessStatus: PlatformOrganizationAccessStatus;
+  suspensionReason: string | null;
+  suspendedAt: string | null;
+  suspendedBy: string | null;
+} | null> {
+  const suspending = input.accessStatus === "suspended";
+  const result = await db(deps)(
+    `UPDATE public.platform_organizations
+     SET access_status = $2,
+         suspension_reason = CASE WHEN $2 = 'suspended' THEN $3 ELSE NULL END,
+         suspended_at = CASE WHEN $2 = 'suspended' THEN now() ELSE NULL END,
+         suspended_by = CASE WHEN $2 = 'suspended' THEN $4 ELSE NULL END
+     WHERE id = $1
+     RETURNING id, access_status, suspension_reason, suspended_at, suspended_by`,
+    [input.organizationId, input.accessStatus, suspending ? input.reason?.trim() : null, input.actorUserId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    accessStatus: row.access_status,
+    suspensionReason: row.suspension_reason ?? null,
+    suspendedAt: row.suspended_at == null ? null : toIso(row.suspended_at),
+    suspendedBy: row.suspended_by ?? null,
+  };
 }
 
 export async function getMembership(

@@ -21,6 +21,8 @@
 //   schema_get          GET   — draft + published schema + version history (viewer+)
 //   schema_draft_save   POST  — save/validate the draft schema (manager+)
 //   schema_publish      POST  — publish the current draft (manager+)
+//   admin_org_list      GET   — all company access/data summaries (ADL admin)
+//   admin_org_access    POST  — suspend/reactivate a company (ADL admin)
 //
 // Every org/project view resolves tenancy via requireOrgRole/requireProjectOrgRole
 // BEFORE touching data; failures (401/403/404) are tenancy Responses returned as-is.
@@ -34,12 +36,14 @@ import { validatePlatformRecord } from "../../../shared/platformRecord.js";
 import { readIdempotencyKey } from "../idempotencyCore.js";
 import { hashRequestPayload } from "../idempotencyGeneric.js";
 import * as orgStore from "./orgStore.js";
+import * as adminStore from "./adminStore.js";
 import * as projectStore from "./projectStore.js";
 import * as recordStore from "./recordStore.js";
 import { writePlatformAudit, type PlatformAuditEventType } from "./audit.js";
 import { createInviteToken, hashInviteToken, INVITE_TTL_DAYS, sendInviteEmail } from "./invites.js";
 import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenancy.js";
 import {
+  adminOrgAccessUpdateSchema,
   inviteAcceptSchema,
   inviteCreateSchema,
   inviteRevokeSchema,
@@ -62,6 +66,9 @@ export interface PlatformApiDeps {
   getOrganizationFn?: typeof orgStore.getOrganization;
   listOrganizationsForUserFn?: typeof orgStore.listOrganizationsForUser;
   updateOrganizationBrandingFn?: typeof orgStore.updateOrganizationBranding;
+  getOrganizationAccessStateFn?: typeof orgStore.getOrganizationAccessState;
+  setOrganizationAccessStateFn?: typeof orgStore.setOrganizationAccessState;
+  listAdminOrganizationSummariesFn?: typeof adminStore.listAdminOrganizationSummaries;
   getMembershipFn?: typeof orgStore.getMembership;
   listMembersFn?: typeof orgStore.listMembers;
   upsertMemberRoleFn?: typeof orgStore.upsertMemberRole;
@@ -128,6 +135,9 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const getOrganizationFn = deps.getOrganizationFn ?? orgStore.getOrganization;
   const listOrganizationsForUserFn = deps.listOrganizationsForUserFn ?? orgStore.listOrganizationsForUser;
   const updateOrganizationBrandingFn = deps.updateOrganizationBrandingFn ?? orgStore.updateOrganizationBranding;
+  const getOrganizationAccessStateFn = deps.getOrganizationAccessStateFn ?? orgStore.getOrganizationAccessState;
+  const setOrganizationAccessStateFn = deps.setOrganizationAccessStateFn ?? orgStore.setOrganizationAccessState;
+  const listAdminOrganizationSummariesFn = deps.listAdminOrganizationSummariesFn ?? adminStore.listAdminOrganizationSummaries;
   const getMembershipFn = deps.getMembershipFn ?? orgStore.getMembership;
   const listMembersFn = deps.listMembersFn ?? orgStore.listMembers;
   const upsertMemberRoleFn = deps.upsertMemberRoleFn ?? orgStore.upsertMemberRole;
@@ -168,7 +178,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
 
   // Tenancy deps passthrough — lets tests stub requireUserFn/getMembershipFn/getProjectFn
   // without touching the real database.
-  const tenancyDeps = { requireUserFn, getMembershipFn, getProjectFn };
+  const tenancyDeps = { requireUserFn, getMembershipFn, getOrganizationAccessStateFn, getProjectFn };
 
   async function audit(input: {
     organizationId: string;
@@ -178,6 +188,56 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     payload?: Record<string, unknown>;
   }): Promise<void> {
     await writeAuditFn(input);
+  }
+
+  async function requireAdlAdmin(request: Request): Promise<Awaited<ReturnType<typeof requireUserFn>> | Response> {
+    const user = await requireUserFn(request);
+    if (!user) return errorResponse("Authentication required", 401, { code: "unauthorized" });
+    if (user.role !== "admin") {
+      return errorResponse("Only an ADL administrator can manage company access", 403, {
+        code: "platform_admin_required",
+      });
+    }
+    return user;
+  }
+
+  // ── admin_org_list ───────────────────────────────────────────────────────
+  async function handleAdminOrgList(request: Request): Promise<Response> {
+    const user = await requireAdlAdmin(request);
+    if (user instanceof Response) return user;
+    const organizations = await listAdminOrganizationSummariesFn();
+    return jsonResponse({ organizations }, { status: 200 });
+  }
+
+  // ── admin_org_access ─────────────────────────────────────────────────────
+  async function handleAdminOrgAccess(request: Request): Promise<Response> {
+    const user = await requireAdlAdmin(request);
+    if (user instanceof Response) return user;
+
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(adminOrgAccessUpdateSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const organization = await setOrganizationAccessStateFn({
+      organizationId: body.organizationId,
+      accessStatus: body.accessStatus,
+      reason: body.reason,
+      actorUserId: user.id,
+    });
+    if (!organization) {
+      return errorResponse("Organization not found", 404, { code: "platform_org_not_found" });
+    }
+
+    await audit({
+      organizationId: body.organizationId,
+      actorUserId: user.id,
+      eventType: body.accessStatus === "suspended" ? "org_access_suspended" : "org_access_reactivated",
+      payload: body.accessStatus === "suspended" ? { reason: body.reason } : {},
+    });
+
+    return jsonResponse({ organization }, { status: 200 });
   }
 
   // ── org_list ──────────────────────────────────────────────────────────────
@@ -414,6 +474,12 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
 
     const invite = await findInviteByTokenHashFn(hashInviteToken(body.token));
     if (!invite) return errorResponse("Invite not found", 404, { code: "platform_invite_not_found" });
+
+    if (await getOrganizationAccessStateFn(invite.organizationId) === "suspended") {
+      return errorResponse("This company workspace is suspended. Contact ADL support.", 403, {
+        code: "platform_org_suspended",
+      });
+    }
 
     const expired = new Date(invite.expiresAt).getTime() <= Date.now();
     if (expired || invite.acceptedAt) {
@@ -707,6 +773,8 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
 
   // ── Dispatch map ──────────────────────────────────────────────────────────
   const routes: Record<string, { method: "GET" | "POST"; handler: (request: Request) => Promise<Response> }> = {
+    platform_admin_org_list: { method: "GET", handler: handleAdminOrgList },
+    platform_admin_org_access: { method: "POST", handler: handleAdminOrgAccess },
     platform_org_list: { method: "GET", handler: handleOrgList },
     platform_org_create: { method: "POST", handler: handleOrgCreate },
     platform_org_get: { method: "GET", handler: (request) => handleOrgGet(request, new URL(request.url)) },

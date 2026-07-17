@@ -30,6 +30,9 @@ export interface PlatformFieldContext {
 export async function loadPlatformFieldContext(deps?: PlatformApiDeps): Promise<PlatformFieldContext> {
   const organizations = await listMyOrganizations(deps);
   const contexts = await Promise.all(organizations.map(async ({ role, ...organization }) => {
+    if (organization.accessStatus === "suspended") {
+      return { organization, role, projects: [] };
+    }
     const projects = await listProjectsRequest(organization.id, deps);
     const projectContexts = await Promise.all(projects.map(async (project) => {
       const schema = await getSchemaRequest(project.id, deps);

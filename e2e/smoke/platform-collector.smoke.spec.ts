@@ -98,3 +98,37 @@ test('public contributors retain access to rewards', async ({ page, gotoApp }) =
   await expect(page.getByRole('button', { name: 'Redeem XP' })).toBeVisible();
   await expect(page.getByText('Convert to Rewards', { exact: true })).toBeVisible();
 });
+
+test('suspended company users stay out of public collection and see the access reason', async ({ page, gotoApp }) => {
+  await page.route('**/api/user?view=platform_*', async (route) => {
+    const view = new URL(route.request().url()).searchParams.get('view');
+    if (view === 'platform_org_list') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{
+        id: ORG_ID,
+        name: 'Usiku Research',
+        slug: 'usiku-research',
+        logoUrl: null,
+        accentColor: '#0f3d5e',
+        accessStatus: 'suspended',
+        suspensionReason: 'Subscription payment overdue',
+        suspendedAt: '2026-07-18T00:00:00.000Z',
+        createdAt: '2026-07-17T00:00:00.000Z',
+        role: 'collector',
+      }] }) });
+      return;
+    }
+    await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({
+      error: 'This company workspace is suspended. Contact ADL support.',
+      code: 'platform_org_suspended',
+    }) });
+  });
+
+  await gotoApp('/');
+  await expect(page.getByTestId('company-explore-name')).toHaveText('Usiku Research');
+  await expect(page.getByText('Company access suspended')).toBeVisible();
+  await expect(page.getByText('Subscription payment overdue')).toBeVisible();
+  await expect(page.getByText('Next high-value capture')).toHaveCount(0);
+  await page.getByTestId('main-navigation').getByRole('button', { name: 'Contribute' }).click();
+  await expect(page.getByTestId('screen-platform-collection')).toContainText('Company access suspended');
+  await expect(page.getByRole('button', { name: 'Submit to company' })).toHaveCount(0);
+});

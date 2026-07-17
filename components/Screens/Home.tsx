@@ -10,6 +10,7 @@ import {
   isWithinBonamoussadi
 } from '../../shared/geofence';
 import {
+  AlertTriangle,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -165,6 +166,7 @@ const Home: React.FC<Props> = ({
   const primaryCompany = companyOrganizations.find((entry) => entry.organization.id === activeCompanyVertical?.organizationId)
     ?? companyOrganizations[0]
     ?? null;
+  const isPrimaryCompanySuspended = primaryCompany?.organization.accessStatus === 'suspended';
   const companyCoverageLabel = activeCompanyVertical?.coverageScope === 'worldwide'
     ? t('Worldwide', 'Monde entier')
     : activeCompanyVertical?.coverageLabel ?? t('Coverage not set', 'Zone non définie');
@@ -804,7 +806,17 @@ const Home: React.FC<Props> = ({
           </div>
 
           <div ref={verticalPickerRef} className="relative">
-            {isCompanyExplore ? (
+            {isPrimaryCompanySuspended ? (
+              <div className="flex min-h-14 items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3" role="alert">
+                <AlertTriangle size={19} className="mt-0.5 shrink-0 text-amber-800" aria-hidden="true" />
+                <span className="min-w-0">
+                  <span className="micro-label block text-amber-900">{t('Company access suspended', 'Accès entreprise suspendu')}</span>
+                  <span className="mt-0.5 block text-xs font-medium leading-5 text-amber-900">
+                    {primaryCompany?.organization.suspensionReason ?? t('Contact ADL support.', 'Contactez le support ADL.')}
+                  </span>
+                </span>
+              </div>
+            ) : isCompanyExplore ? (
               <button
                 type="button"
                 data-testid="company-vertical-picker"

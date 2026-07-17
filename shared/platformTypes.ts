@@ -15,7 +15,11 @@ export interface PlatformRecordType {
 export interface PlatformSchemaDefinition { recordTypes: PlatformRecordType[] }
 export interface PlatformOrganization {
   id: string; name: string; slug: string; logoUrl: string | null; accentColor: string | null; createdAt: string;
+  accessStatus?: PlatformOrganizationAccessStatus;
+  suspensionReason?: string | null;
+  suspendedAt?: string | null;
 }
+export type PlatformOrganizationAccessStatus = "active" | "suspended";
 export interface PlatformMembership { organizationId: string; userId: string; role: PlatformRole; createdAt: string }
 export type PlatformProjectStatus = "draft" | "active" | "archived";
 export type PlatformProjectCoverageScope = "town" | "country" | "worldwide";
@@ -57,4 +61,45 @@ export interface PlatformRecord {
 export interface PlatformInvite {
   id: string; organizationId: string; email: string; role: Exclude<PlatformRole, "owner">;
   expiresAt: string; acceptedAt: string | null; createdAt: string;
+}
+
+export interface PlatformAdminMemberSummary {
+  userId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role: PlatformRole;
+  joinedAt: string;
+  suspendedUntil: string | null;
+}
+
+export interface PlatformAdminProjectSummary {
+  id: string;
+  name: string;
+  status: PlatformProjectStatus;
+  coverageScope: PlatformProjectCoverageScope;
+  coverageLabel: string | null;
+  recordCount: number;
+  pendingReviewCount: number;
+  approvedCount: number;
+  rejectedCount: number;
+}
+
+export interface PlatformAdminOrganizationSummary {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  accentColor: string | null;
+  accessStatus: PlatformOrganizationAccessStatus;
+  suspensionReason: string | null;
+  suspendedAt: string | null;
+  suspendedBy: string | null;
+  createdAt: string;
+  memberCount: number;
+  projectCount: number;
+  recordCount: number;
+  pendingReviewCount: number;
+  members: PlatformAdminMemberSummary[];
+  projects: PlatformAdminProjectSummary[];
 }

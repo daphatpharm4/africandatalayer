@@ -28,3 +28,21 @@ test("collectablePlatformProjects excludes archived and unpublished projects", (
   ] }] };
   assert.deepEqual(collectablePlatformProjects(context), []);
 });
+
+test("suspended company context stays company-scoped without loading forms", async () => {
+  const calls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    calls.push(url);
+    return response({ organizations: [{
+      id: "org-1", name: "Usiku", slug: "usiku", logoUrl: null, accentColor: null,
+      accessStatus: "suspended", suspensionReason: "Subscription overdue", suspendedAt: "2026-07-18T00:00:00.000Z",
+      createdAt: "", role: "collector",
+    }] });
+  }) as typeof fetch;
+
+  const context = await loadPlatformFieldContext({ fetchFn });
+  assert.equal(calls.length, 1, "suspended workspaces never request project forms");
+  assert.equal(context.organizations[0].organization.accessStatus, "suspended");
+  assert.deepEqual(context.organizations[0].projects, []);
+  assert.deepEqual(collectablePlatformProjects(context), []);
+});

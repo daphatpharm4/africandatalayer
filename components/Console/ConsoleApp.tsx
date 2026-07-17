@@ -11,6 +11,7 @@ import {
   type ConsoleRoute,
 } from '../../lib/client/consoleState';
 import ConsoleShell from './ConsoleShell';
+import ConsoleAuthScreen from './ConsoleAuthScreen';
 
 const JoinScreen = lazy(() => import('./JoinScreen'));
 const MembersScreen = lazy(() => import('./MembersScreen'));
@@ -67,6 +68,13 @@ const ConsoleApp: React.FC = () => {
     (en: string, fr: string) => (language === 'fr' ? fr : en),
     [language],
   );
+
+  const refreshConsoleSession = useCallback(async () => {
+    const session = await getSession();
+    setSessionState(session?.user ? 'authenticated' : 'unauthenticated');
+    setUserId(session?.user?.id ?? null);
+    setIsAdlAdmin(session?.user?.role === 'admin' || session?.user?.isAdmin === true);
+  }, []);
 
   // Session check on mount.
   useEffect(() => {
@@ -158,7 +166,7 @@ const ConsoleApp: React.FC = () => {
       } catch {
         /* private browsing */
       }
-      window.location.assign('/');
+      window.location.assign('/console');
     } catch {
       setSignOutError(t('Could not sign out. Please try again.', 'Impossible de vous déconnecter. Veuillez réessayer.'));
       setSignOutPending(false);
@@ -242,34 +250,21 @@ const ConsoleApp: React.FC = () => {
     );
   }
 
-  // JOIN is reachable without a session — JoinScreen itself renders the
-  // sign-in prompt (with copy specific to invite links) so we don't lose the
-  // joinToken by bouncing through this generic gate first.
-  if (sessionState === 'unauthenticated' && route.screen !== 'JOIN') {
+  if (sessionState === 'unauthenticated') {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-page px-6">
-        <div className="card w-full max-w-sm p-6 text-center">
-          <h1 className="text-lg font-semibold text-ink">
-            {t('Sign in required', 'Connexion requise')}
-          </h1>
-          <p className="mt-2 text-sm text-ink-muted">
-            {t(
-              'Sign in to the African Data Layer app to access the console.',
-              "Connectez-vous à l'application African Data Layer pour accéder à la console.",
-            )}
-          </p>
-          <a href="/" className="btn-primary mt-5 flex items-center justify-center">
-            {t('Go to sign in', 'Aller à la connexion')}
-          </a>
-        </div>
-      </main>
+      <ConsoleAuthScreen
+        language={language}
+        inviteMode={route.screen === 'JOIN'}
+        onAuthenticated={refreshConsoleSession}
+      />
     );
   }
 
   const orgs = organizations ?? [];
   const hasOrgs = orgs.length > 0;
+  const accessibleOrgs = isAdlAdmin ? orgs : orgs.filter((org) => org.accessStatus !== 'suspended');
   const selectedOrganization =
-    orgs.find((org) => org.id === selectedOrgId) ?? orgs[0] ?? null;
+    accessibleOrgs.find((org) => org.id === selectedOrgId) ?? accessibleOrgs[0] ?? orgs[0] ?? null;
 
   if (sessionState === 'authenticated' && shouldRequireCompanyInvitation(hasOrgs, route.screen, isAdlAdmin)) {
     return (
@@ -286,6 +281,28 @@ const ConsoleApp: React.FC = () => {
           </p>
           <button type="button" onClick={() => void handleSignOut()} disabled={signOutPending} className="btn-primary mt-6 flex w-full items-center justify-center disabled:opacity-60">
             {signOutPending ? t('Signing out…', 'Déconnexion…') : t('Sign out', 'Se déconnecter')}
+          </button>
+          {signOutError && <p role="alert" className="mt-3 text-sm text-red-700">{signOutError}</p>}
+        </div>
+      </main>
+    );
+  }
+
+  if (selectedOrganization?.accessStatus === 'suspended' && !isAdlAdmin) {
+    return (
+      <main className="route-grid flex min-h-screen items-center justify-center bg-page px-6">
+        <div className="card w-full max-w-md border border-amber-300 p-6 text-center sm:p-8">
+          <h1 className="text-xl font-semibold text-amber-950">
+            {t('Company access suspended', 'Accès entreprise suspendu')}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-amber-900">
+            {selectedOrganization.suspensionReason ?? t('Contact your company administrator or ADL support.', 'Contactez votre administrateur ou le support ADL.')}
+          </p>
+          <p className="mt-3 text-xs leading-5 text-ink-muted">
+            {t('Your projects and data remain stored, but company operations are currently disabled.', 'Vos projets et données restent conservés, mais les opérations de l’entreprise sont actuellement désactivées.')}
+          </p>
+          <button type="button" onClick={() => void handleSignOut()} disabled={signOutPending} className="btn-primary mt-6 flex w-full items-center justify-center disabled:opacity-60">
+            {signOutPending ? t('Signing out…', 'Déconnexion…') : t('Return to company sign in', 'Retour à la connexion entreprise')}
           </button>
           {signOutError && <p role="alert" className="mt-3 text-sm text-red-700">{signOutError}</p>}
         </div>
@@ -370,7 +387,6 @@ const ConsoleApp: React.FC = () => {
       screenContent = (
         <JoinScreen
           token={effectiveRoute.joinToken}
-          hasSession={sessionState === 'authenticated'}
           language={language}
           onJoined={handleJoined}
           onSignOut={handleSignOut}
@@ -402,7 +418,7 @@ const ConsoleApp: React.FC = () => {
       )}
       <ConsoleShell
         organization={selectedOrganization}
-        organizations={orgs}
+        organizations={accessibleOrgs}
         onSelectOrganization={handleSelectOrganization}
         route={effectiveRoute}
         onNavigate={handleNavigate}

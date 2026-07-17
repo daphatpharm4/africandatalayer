@@ -1,5 +1,6 @@
 import type { AdminReviewQueueResponse } from "../../lib/shared/adminReviewQueue";
 import type { AdminSubmissionEvent, AssignmentPlannerContext, LeadCandidate } from "../../shared/types";
+import type { PlatformAdminOrganizationSummary } from "../../shared/platformTypes";
 import {
   adminFraudCheckByPointId,
   agentAssignments,
@@ -149,6 +150,43 @@ const automationLeads: LeadCandidate[] = [
   },
 ];
 
+const adminOrganizations: PlatformAdminOrganizationSummary[] = [{
+  id: "5a2f8f18-0000-4000-8000-000000000001",
+  name: "Usiku Research",
+  slug: "usiku-research",
+  logoUrl: null,
+  accentColor: "#0f3d5e",
+  accessStatus: "active",
+  suspensionReason: null,
+  suspendedAt: null,
+  suspendedBy: null,
+  createdAt: "2026-07-17T00:00:00.000Z",
+  memberCount: 2,
+  projectCount: 1,
+  recordCount: 19,
+  pendingReviewCount: 4,
+  members: [{
+    userId: "owner@usiku.co.ke",
+    name: "Usiku Owner",
+    email: "owner@usiku.co.ke",
+    phone: null,
+    role: "owner",
+    joinedAt: "2026-07-17T00:00:00.000Z",
+    suspendedUntil: null,
+  }],
+  projects: [{
+    id: "5a2f8f18-0000-4000-8000-000000000002",
+    name: "Retail Census",
+    status: "active",
+    coverageScope: "country",
+    coverageLabel: "Kenya",
+    recordCount: 19,
+    pendingReviewCount: 4,
+    approvedCount: 14,
+    rejectedCount: 1,
+  }],
+}];
+
 export const resolveAdminApi: MockApiResolver = (url, method) => {
   if (method === "PATCH" && url.pathname === "/api/user" && url.searchParams.get("view") === "account_access") {
     return {
@@ -157,6 +195,20 @@ export const resolveAdminApi: MockApiResolver = (url, method) => {
         role: "admin",
         isAdmin: true,
         mapScope: "global",
+      },
+    };
+  }
+
+  if (method === "POST" && url.pathname === "/api/user" && url.searchParams.get("view") === "platform_admin_org_access") {
+    return {
+      body: {
+        organization: {
+          id: adminOrganizations[0].id,
+          accessStatus: "suspended",
+          suspensionReason: "Subscription payment overdue",
+          suspendedAt: "2026-07-18T00:00:00.000Z",
+          suspendedBy: "admin@adl.test",
+        },
       },
     };
   }
@@ -186,6 +238,10 @@ export const resolveAdminApi: MockApiResolver = (url, method) => {
         assignments: agentAssignments,
       },
     };
+  }
+
+  if (url.pathname === "/api/user" && url.searchParams.get("view") === "platform_admin_org_list") {
+    return { body: { organizations: adminOrganizations } };
   }
 
   if (url.pathname === "/api/user" && url.searchParams.get("view") === "lookup") {

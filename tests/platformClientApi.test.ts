@@ -6,6 +6,8 @@ import {
   createOrganizationRequest,
   getOrganizationRequest,
   updateOrganizationRequest,
+  listAdminOrganizationsRequest,
+  updateAdminOrganizationAccessRequest,
   listOrgMembersRequest,
   createInviteRequest,
   acceptInviteRequest,
@@ -58,6 +60,26 @@ test("createOrganizationRequest posts to platform_org_create with credentials an
   assert.equal(calls[0].init?.credentials, "include");
   assert.equal(calls[0].init?.body, JSON.stringify({ name: "Acme", slug: "acme" }));
   assert.deepEqual(result, organization);
+});
+
+test("admin company access clients use protected platform admin views", async () => {
+  const summary = { id: "org-1", name: "Acme", accessStatus: "active" };
+  const listStub = stubFetch(() => jsonResponse({ organizations: [summary] }));
+  assert.deepEqual(await listAdminOrganizationsRequest({ fetchFn: listStub.fetchFn }), [summary]);
+  assert.equal(listStub.calls[0].url, "/api/user?view=platform_admin_org_list");
+
+  const updateStub = stubFetch(() => jsonResponse({ organization: {
+    id: "org-1", accessStatus: "suspended", suspensionReason: "Subscription overdue",
+    suspendedAt: "2026-07-18T00:00:00.000Z", suspendedBy: "admin@adl.test",
+  } }));
+  const updated = await updateAdminOrganizationAccessRequest({
+    organizationId: "org-1",
+    accessStatus: "suspended",
+    reason: "Subscription overdue",
+  }, { fetchFn: updateStub.fetchFn });
+  assert.equal(updateStub.calls[0].url, "/api/user?view=platform_admin_org_access");
+  assert.match(String(updateStub.calls[0].init?.body), /Subscription overdue/);
+  assert.equal(updated.accessStatus, "suspended");
 });
 
 test("listMyOrganizations gets platform_org_list and unwraps organizations array", async () => {

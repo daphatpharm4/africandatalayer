@@ -73,6 +73,7 @@ const PlatformCollectionFlow: React.FC<Props> = ({
   onRetry,
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const suspendedOrganization = context?.organizations.find((entry) => entry.organization.accessStatus === 'suspended') ?? null;
   const collectable = useMemo(() => collectablePlatformProjects(context), [context]);
   const recordChoices = useMemo(() => collectable.flatMap((entry) => entry.publishedSchema.definition.recordTypes.map((recordType) => ({
     ...entry,
@@ -307,7 +308,18 @@ const PlatformCollectionFlow: React.FC<Props> = ({
           </div>
         )}
 
-        {!loadError && recordChoices.length === 0 && (
+        {!loadError && suspendedOrganization && recordChoices.length === 0 && (
+          <section className="rounded-2xl border border-amber-300 bg-amber-50 p-5 text-center" role="alert">
+            <Building2 className="mx-auto text-amber-800" size={30} />
+            <h2 className="mt-3 text-lg font-bold text-amber-950">{t('Company access suspended', 'Accès entreprise suspendu')}</h2>
+            <p className="mt-2 text-sm leading-6 text-amber-900">
+              {suspendedOrganization.organization.suspensionReason
+                ?? t('Contact your company administrator or ADL support.', 'Contactez votre administrateur ou le support ADL.')}
+            </p>
+          </section>
+        )}
+
+        {!loadError && !suspendedOrganization && recordChoices.length === 0 && (
           <section className="card p-5 text-center">
             <Building2 className="mx-auto text-navy" size={30} />
             <h2 className="mt-3 text-lg font-bold text-gray-900">{t('No company form is ready yet', 'Aucun formulaire entreprise n’est encore prêt')}</h2>

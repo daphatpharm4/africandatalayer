@@ -1203,6 +1203,11 @@ const Profile: React.FC<Props> = ({
                     {t('Role', 'Rôle')}: {platformFieldContext.organizations[0].role} · {companyProjects.length} {t('published form(s)', 'formulaire(s) publié(s)')}
                   </p>
                 )}
+                {platformFieldContext?.organizations[0]?.organization.accessStatus === 'suspended' && (
+                  <p role="alert" className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-semibold leading-5 text-amber-900">
+                    {t('Company access suspended', 'Accès entreprise suspendu')}: {platformFieldContext.organizations[0].organization.suspensionReason ?? t('Contact ADL support.', 'Contactez le support ADL.')}
+                  </p>
+                )}
                 {platformFieldContext && platformFieldContext.organizations.length > 1 && (
                   <p className="mt-1 text-xs text-gray-500">+{platformFieldContext.organizations.length - 1} {t('other organization(s)', 'autre(s) organisation(s)')}</p>
                 )}
