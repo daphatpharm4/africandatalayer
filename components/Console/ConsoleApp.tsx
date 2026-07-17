@@ -13,6 +13,7 @@ import MembersScreen from './MembersScreen';
 import OnboardingWizard from './OnboardingWizard';
 import ProjectsScreen from './ProjectsScreen';
 import SchemaBuilder from './SchemaBuilder';
+import SettingsScreen from './SettingsScreen';
 
 const LANGUAGE_STORAGE_KEY = 'adl_language';
 const ORG_STORAGE_KEY = 'adl_console_org';
@@ -173,6 +174,16 @@ const ConsoleApp: React.FC = () => {
     [handleOnboardingDone, t],
   );
 
+  // SettingsScreen saves land here with the server's updated organization
+  // record — merge it into the org already in state (preserving the viewer's
+  // role, which updateOrganizationRequest's response doesn't carry) so the
+  // sidebar name/logo/accent reflect the save immediately without a refetch.
+  const handleOrganizationUpdated = useCallback((updated: PlatformOrganization) => {
+    setOrganizations((current) =>
+      current ? current.map((org) => (org.id === updated.id ? { ...org, ...updated } : org)) : current,
+    );
+  }, []);
+
   if (sessionState === 'loading' || (sessionState === 'authenticated' && organizations === null && !orgsError)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-page text-ink-muted">
@@ -269,7 +280,16 @@ const ConsoleApp: React.FC = () => {
       );
       break;
     case 'SETTINGS':
-      screenContent = <div>{t('Settings coming soon.', 'Paramètres à venir.')}</div>;
+      screenContent = selectedOrganization ? (
+        <SettingsScreen
+          organizationId={selectedOrganization.id}
+          organization={selectedOrganization}
+          language={language}
+          onOrganizationUpdated={handleOrganizationUpdated}
+        />
+      ) : (
+        <div>{t('Select an organization to see its settings.', 'Sélectionnez une organisation pour voir ses paramètres.')}</div>
+      );
       break;
     case 'JOIN':
       screenContent = (
