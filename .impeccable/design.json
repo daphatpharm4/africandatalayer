@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-17T17:35:00.000Z",
+  "title": "Design System: African Data Layer",
+  "extensions": {
+    "colorMeta": {
+      "operational-navy": {
+        "role": "primary",
+        "displayName": "Operational Navy",
+        "canonical": "#0f2b46",
+        "tonalRamp": ["#071522", "#0b2236", "#0f2b46", "#1d4565", "#4d6d87", "#88a0b4", "#d5e1eb", "#f2f6fa"]
+      },
+      "signal-terracotta": {
+        "role": "secondary",
+        "displayName": "Signal Terracotta",
+        "canonical": "#c86b4a",
+        "tonalRamp": ["#33170f", "#6a3020", "#9a4c33", "#c86b4a", "#dc947b", "#ecc0af", "#f7ddd3", "#fff8f4"]
+      },
+      "verification-forest": {
+        "role": "secondary",
+        "displayName": "Verification Forest",
+        "canonical": "#4c7c59",
+        "tonalRamp": ["#132117", "#294331", "#3a6145", "#4c7c59", "#76a181", "#a8c5af", "#d2e2d6", "#eaf3ee"]
+      },
+      "progress-gold": {
+        "role": "tertiary",
+        "displayName": "Progress Gold",
+        "canonical": "#f4c317",
+        "tonalRamp": ["#302500", "#665000", "#9b7a00", "#c99e00", "#f4c317", "#f8d858", "#fbe99c", "#fef9e7"]
+      },
+      "field-paper": {
+        "role": "neutral",
+        "displayName": "Field Paper",
+        "canonical": "#f9fafb",
+        "tonalRamp": ["#111827", "#1f2933", "#4b5563", "#7b8490", "#aeb5bd", "#d5d9de", "#eceff2", "#f9fafb"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Screen-defining titles and major milestones only." },
+      "title": { "displayName": "Title", "purpose": "Section and card titles." },
+      "body": { "displayName": "Body", "purpose": "Operational copy and instructions." },
+      "label": { "displayName": "Label", "purpose": "Short navigation and state labels only." }
+    },
+    "shadows": [
+      { "name": "surface", "value": "0 1px 2px rgba(0,0,0,0.05)", "purpose": "Standard cards and menus." },
+      { "name": "lift", "value": "0 24px 60px -34px rgba(15,43,70,0.36)", "purpose": "Floating operational controls." },
+      { "name": "contribution-lift", "value": "0 24px 48px -28px rgba(200,107,74,0.42)", "purpose": "Singular contribution action." }
+    ],
+    "motion": [
+      { "name": "instant", "value": "140ms cubic-bezier(0.25,1,0.5,1)", "purpose": "Press and color feedback." },
+      { "name": "fast", "value": "220ms cubic-bezier(0.25,1,0.5,1)", "purpose": "Product state transitions." },
+      { "name": "base", "value": "320ms cubic-bezier(0.16,1,0.3,1)", "purpose": "Sheets and structural reveals." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single dominant action on an operational state.",
+      "html": "<button class=\"ds-btn-primary\">Continue</button>",
+      "css": ".ds-btn-primary{min-height:56px;padding:0 16px;border:0;border-radius:16px;background:#0f2b46;color:#fff;font:600 14px/1 Inter,system-ui,sans-serif;transition:background 220ms cubic-bezier(.25,1,.5,1),transform 140ms cubic-bezier(.25,1,.5,1)}.ds-btn-primary:hover{background:#0b2236}.ds-btn-primary:active{transform:scale(.98)}.ds-btn-primary:focus-visible{outline:2px solid #0f2b46;outline-offset:3px}"
+    },
+    {
+      "name": "Contribution Button",
+      "kind": "button",
+      "refersTo": "button-contribute",
+      "description": "Field contribution action; never a decorative secondary accent.",
+      "html": "<button class=\"ds-btn-contribute\">Contribute</button>",
+      "css": ".ds-btn-contribute{min-height:56px;padding:0 16px;border:0;border-radius:16px;background:#c86b4a;color:#fff;font:600 14px/1 Inter,system-ui,sans-serif;box-shadow:0 24px 48px -28px rgba(200,107,74,.42);transition:background 220ms cubic-bezier(.25,1,.5,1),transform 140ms cubic-bezier(.25,1,.5,1)}.ds-btn-contribute:hover{background:#b85f3f}.ds-btn-contribute:active{transform:scale(.98)}.ds-btn-contribute:focus-visible{outline:2px solid #0f2b46;outline-offset:3px}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "description": "Secondary action with a visible boundary and full touch target.",
+      "html": "<button class=\"ds-btn-ghost\">View details</button>",
+      "css": ".ds-btn-ghost{min-height:48px;padding:0 16px;border:1px solid #d5e1eb;border-radius:16px;background:#fff;color:#0f2b46;font:600 14px/1 Inter,system-ui,sans-serif}.ds-btn-ghost:hover{background:#f2f6fa}.ds-btn-ghost:focus-visible{outline:2px solid #0f2b46;outline-offset:3px}"
+    },
+    {
+      "name": "Operational Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A distinct actionable surface on Field Paper.",
+      "html": "<article class=\"ds-card\"><h3>Collection area</h3><p>Verified points and next captures.</p></article>",
+      "css": ".ds-card{max-width:360px;padding:16px;border:1px solid #f3f4f6;border-radius:16px;background:#fff;color:#1f2933;box-shadow:0 1px 2px rgba(0,0,0,.05);font-family:Inter,system-ui,sans-serif}.ds-card h3{margin:0 0 6px;font-size:20px;line-height:1.25}.ds-card p{margin:0;color:#4b5563;font-size:15px;line-height:1.5}"
+    },
+    {
+      "name": "Active Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip-active",
+      "description": "Selected filter with text and color-independent active semantics.",
+      "html": "<button class=\"ds-chip\" aria-pressed=\"true\">All categories</button>",
+      "css": ".ds-chip{min-height:32px;padding:0 12px;border:1px solid #0f2b46;border-radius:999px;background:#0f2b46;color:#fff;font:600 12px/1 Inter,system-ui,sans-serif}.ds-chip:focus-visible{outline:2px solid #0f2b46;outline-offset:3px}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "description": "Visible label, 48px minimum control, and resilient bilingual measure.",
+      "html": "<label class=\"ds-field\"><span>Email address</span><input type=\"email\" autocomplete=\"email\"></label>",
+      "css": ".ds-field{display:grid;gap:6px;color:#1f2933;font:600 13px/1.4 Inter,system-ui,sans-serif}.ds-field input{min-height:48px;padding:0 14px;border:1px solid #d5e1eb;border-radius:14px;background:#fff;color:#1f2933;font:400 16px/1.5 Inter,system-ui,sans-serif}.ds-field input:focus-visible{outline:2px solid #0f2b46;outline-offset:2px;border-color:#0f2b46}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Field Operations Compass",
+    "overview": "African Data Layer feels like a dependable instrument used in motion: decisive enough for one-handed field capture, calm enough for review, and specific enough to make trustworthy provenance visible. The system is light-mode-first, map-native, and operational.",
+    "keyCharacteristics": [
+      "Daylight-readable surfaces with Operational Navy as the primary action and navigation color.",
+      "Signal Terracotta reserved for contribution momentum and the most important field action.",
+      "Verification Forest and Progress Gold communicate trusted state and earned progress.",
+      "Familiar map and platform patterns, 48px minimum touch targets, bilingual resilience, and purposeful motion."
+    ],
+    "rules": [
+      { "name": "The Operational First Rule", "body": "Every visual flourish must improve clarity, motivation, or trust.", "section": "overview" },
+      { "name": "The Restrained Signal Rule", "body": "On product screens, accent color marks primary action, current selection, status, or progress.", "section": "colors" },
+      { "name": "The Flat-by-Default Rule", "body": "Shadow never substitutes for hierarchy; it only clarifies physical stacking or a floating control.", "section": "elevation" },
+      { "name": "The One Primary Action Rule", "body": "Each operational state exposes one unmistakable next action; secondary actions recede.", "section": "components" }
+    ],
+    "dos": [
+      "Do design for bright sunlight, one-handed use, intermittent connectivity, and limited battery as default conditions.",
+      "Do keep primary mobile touch targets at least 48px.",
+      "Do preserve English/French parity and allow at least 30% text expansion."
+    ],
+    "donts": [
+      "Don't use neon, crypto-style, or glossy dark-dashboard aesthetics.",
+      "Don't add decorative game effects that compete with field tasks.",
+      "Don't use low-contrast premium minimalism that fails outdoors.",
+      "Don't force dense desktop controls onto narrow mobile screens.",
+      "Don't block the interface with a portrait-only orientation demand."
+    ]
+  }
+}
