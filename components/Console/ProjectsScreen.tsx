@@ -7,6 +7,7 @@ import ProjectCoverageFields from './ProjectCoverageFields';
 
 export interface ProjectsScreenProps {
   organizationId: string;
+  canManage: boolean;
   language: 'en' | 'fr';
   onNavigate: (route: ConsoleRoute) => void;
 }
@@ -57,7 +58,7 @@ function formatDate(iso: string, language: 'en' | 'fr'): string {
   return parsed.toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium' });
 }
 
-const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, language, onNavigate }) => {
+const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, canManage, language, onNavigate }) => {
   const t = useCallback((en: string, fr: string) => (language === 'fr' ? fr : en), [language]);
 
   const [projects, setProjects] = useState<PlatformProject[] | null>(null);
@@ -134,7 +135,7 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
             )}
           </p>
         </div>
-        {!isCreating && (
+        {canManage && !isCreating && (
           <button
             type="button"
             onClick={() => setIsCreating(true)}
@@ -230,13 +231,9 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
 
       {projects !== null && projects.length > 0 && (
         <div className="flex flex-col gap-3">
-          {projects.map((project) => (
-            <button
-              key={project.id}
-              type="button"
-              onClick={() => onNavigate({ screen: 'SCHEMA_BUILDER', projectId: project.id })}
-              className="card flex items-center justify-between gap-4 p-4 text-left transition-colors hover:border-navy"
-            >
+          {projects.map((project) => {
+            const content = (
+              <>
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold text-ink">{project.name}</p>
                 <p className="micro-label mt-1 text-ink-muted">
@@ -252,10 +249,16 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
                 <span className={`micro-label rounded-full px-2.5 py-1 text-[10px] ${statusPillClass(project.status)}`}>
                   {statusLabel(project.status, t)}
                 </span>
-                <ChevronRight size={18} className="text-ink-muted" />
+                {canManage && <ChevronRight size={18} className="text-ink-muted" />}
               </div>
-            </button>
-          ))}
+              </>
+            );
+            return canManage ? (
+              <button key={project.id} type="button" onClick={() => onNavigate({ screen: 'SCHEMA_BUILDER', projectId: project.id })} className="card flex items-center justify-between gap-4 p-4 text-left transition-colors hover:border-navy">{content}</button>
+            ) : (
+              <article key={project.id} className="card flex items-center justify-between gap-4 p-4">{content}</article>
+            );
+          })}
         </div>
       )}
     </div>

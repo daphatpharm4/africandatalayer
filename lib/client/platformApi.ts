@@ -270,3 +270,43 @@ export async function createPlatformRecordRequest(
   );
   return payload.record;
 }
+
+export async function listPlatformRecordsRequest(
+  organizationId: string,
+  status?: PlatformRecord["status"],
+  deps?: PlatformApiDeps,
+): Promise<PlatformRecord[]> {
+  const payload = await callPlatform<{ records: PlatformRecord[] }>(
+    "record_list",
+    {
+      method: "GET",
+      params: { organizationId, ...(status ? { status } : {}) },
+    },
+    deps,
+  );
+  return payload.records;
+}
+
+export async function listApprovedPlatformRecordsRequest(
+  organizationId: string,
+  deps?: PlatformApiDeps,
+): Promise<PlatformRecord[]> {
+  const payload = await callPlatform<{ records: PlatformRecord[] }>(
+    "record_browse",
+    { method: "GET", params: { organizationId } },
+    deps,
+  );
+  return payload.records;
+}
+
+export async function reviewPlatformRecordRequest(
+  input: { organizationId: string; recordId: string; status: "approved" | "rejected" },
+  deps?: PlatformApiDeps,
+): Promise<PlatformRecord> {
+  const payload = await callPlatform<{ record: PlatformRecord }>(
+    "record_review",
+    { method: "POST", body: input },
+    deps,
+  );
+  return payload.record;
+}

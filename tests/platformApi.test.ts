@@ -3,6 +3,7 @@ import test from "node:test";
 import { createPlatformHandler } from "../lib/server/platform/api.js";
 
 const OWNER = { id: "owner@acme.com", token: {}, role: "agent" as const };
+const ADL_ADMIN = { id: "admin@africandatalayer.com", token: {}, role: "admin" as const };
 const ORG = { id: "5a2f8f18-0000-4000-8000-000000000001", name: "Acme", slug: "acme", logoUrl: null, accentColor: null, createdAt: "" };
 const PROJECT_ID = "5a2f8f18-0000-4000-8000-000000000002";
 const SCHEMA_ID = "5a2f8f18-0000-4000-8000-000000000004";
@@ -33,6 +34,7 @@ test("unknown view returns 404", async () => {
 test("org_create validates, creates, audits, returns 201", async () => {
   const audits: string[] = [];
   const handler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ADL_ADMIN,
     createOrganizationFn: async () => ORG,
     writeAuditFn: async (event: { eventType: string }) => { audits.push(event.eventType); },
   }));
@@ -42,9 +44,20 @@ test("org_create validates, creates, audits, returns 201", async () => {
 });
 
 test("org_create rejects invalid slug with 400", async () => {
-  const handler = createPlatformHandler(baseDeps());
+  const handler = createPlatformHandler(baseDeps({ requireUserFn: async () => ADL_ADMIN }));
   const response = await handler(jsonPost("org_create", { name: "Acme", slug: "BAD SLUG" }));
   assert.equal(response.status, 400);
+});
+
+test("org_create rejects a normal account before creating an owner", async () => {
+  let created = false;
+  const handler = createPlatformHandler(baseDeps({
+    createOrganizationFn: async () => { created = true; return ORG; },
+  }));
+  const response = await handler(jsonPost("org_create", { name: "Acme", slug: "acme" }));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "platform_admin_required");
+  assert.equal(created, false);
 });
 
 test("org_update requires owner: manager gets 403", async () => {
@@ -179,6 +192,26 @@ test("member_remove blocks removing the last owner", async () => {
   assert.equal(response.status, 409);
 });
 
+test("member_update allows only ADL admins to promote another owner", async () => {
+  const promoted: any[] = [];
+  const body = { organizationId: ORG.id, userId: "manager@acme.com", role: "owner" };
+  const ownerHandler = createPlatformHandler(baseDeps({
+    upsertMemberRoleFn: async (input: any) => { promoted.push(input); },
+  }));
+  const denied = await ownerHandler(jsonPost("member_update", body));
+  assert.equal(denied.status, 403);
+  assert.equal((await denied.json()).code, "platform_admin_required");
+  assert.equal(promoted.length, 0);
+
+  const adminHandler = createPlatformHandler(baseDeps({
+    requireUserFn: async () => ADL_ADMIN,
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: ADL_ADMIN.id, role: "owner" as const, createdAt: "" }),
+    upsertMemberRoleFn: async (input: any) => { promoted.push(input); },
+  }));
+  assert.equal((await adminHandler(jsonPost("member_update", body))).status, 200);
+  assert.equal(promoted[0].role, "owner");
+});
+
 test("schema_draft_save returns 422 with issues for invalid definition", async () => {
   const handler = createPlatformHandler(baseDeps({
     getProjectFn: async () => ({ id: PROJECT_ID, organizationId: ORG.id, name: "p", status: "draft" as const, createdAt: "" }),
@@ -257,6 +290,71 @@ test("record_create rejects viewers, missing idempotency, and stale schema versi
   const staleResponse = await stale(staleRequest);
   assert.equal(staleResponse.status, 409);
   assert.equal((await staleResponse.json()).code, "platform_schema_stale");
+});
+
+test("record review queue is tenant-scoped and requires reviewer access", async () => {
+  const record = {
+    id: "5a2f8f18-0000-4000-8000-000000000005",
+    organizationId: ORG.id,
+    projectId: PROJECT_ID,
+    schemaVersionId: SCHEMA_ID,
+    recordTypeKey: "retail_outlet",
+    data: { name: "Kiosk" },
+    evidence: { photos: [] },
+    status: "pending_review" as const,
+    capturedBy: "collector@acme.com",
+    createdAt: "",
+  };
+  const listed: any[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "reviewer" as const, createdAt: "" }),
+    listRecordsFn: async (input: any) => { listed.push(input); return [record]; },
+  }));
+  const response = await handler(new Request(`https://x.test/api/user?view=platform_record_list&organizationId=${ORG.id}&status=pending_review`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(listed[0], { organizationId: ORG.id, status: "pending_review" });
+  assert.equal((await response.json()).records[0].id, record.id);
+
+  const viewer = createPlatformHandler(baseDeps({
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "viewer" as const, createdAt: "" }),
+  }));
+  assert.equal((await viewer(new Request(`https://x.test/api/user?view=platform_record_list&organizationId=${ORG.id}`))).status, 403);
+});
+
+test("viewers can browse only approved tenant records", async () => {
+  const listed: any[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "viewer" as const, createdAt: "" }),
+    listRecordsFn: async (input: any) => { listed.push(input); return []; },
+  }));
+  const response = await handler(new Request(`https://x.test/api/user?view=platform_record_browse&organizationId=${ORG.id}`));
+  assert.equal(response.status, 200);
+  assert.deepEqual(listed[0], { organizationId: ORG.id, status: "approved" });
+});
+
+test("record_review updates a tenant record and audits the decision", async () => {
+  const audits: string[] = [];
+  const reviewed: any[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "reviewer" as const, createdAt: "" }),
+    reviewRecordFn: async (input: any) => {
+      reviewed.push(input);
+      return {
+        id: input.recordId, organizationId: ORG.id, projectId: PROJECT_ID, schemaVersionId: SCHEMA_ID,
+        recordTypeKey: "retail_outlet", data: {}, evidence: { photos: [] }, status: input.status,
+        capturedBy: "collector@acme.com", createdAt: "",
+      };
+    },
+    writeAuditFn: async (event: { eventType: string }) => { audits.push(event.eventType); },
+  }));
+  const response = await handler(jsonPost("record_review", {
+    organizationId: ORG.id,
+    recordId: "5a2f8f18-0000-4000-8000-000000000005",
+    status: "approved",
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(reviewed[0].status, "approved");
+  assert.deepEqual(audits, ["record_reviewed"]);
 });
 
 test("unauthenticated request gets 401 on every view", async () => {

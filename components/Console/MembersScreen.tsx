@@ -15,10 +15,11 @@ export interface MembersScreenProps {
   organizationId: string;
   viewerRole: PlatformRole;
   viewerUserId: string | null;
+  viewerIsAdlAdmin: boolean;
   language: 'en' | 'fr';
 }
 
-const ALL_ROLES: PlatformRole[] = ['owner', 'manager', 'reviewer', 'collector', 'viewer'];
+const MEMBER_ROLES: Array<Exclude<PlatformRole, 'owner'>> = ['manager', 'reviewer', 'collector', 'viewer'];
 const INVITE_ROLES: Array<Exclude<PlatformRole, 'owner'>> = ['manager', 'reviewer', 'collector', 'viewer'];
 
 function roleLabel(role: PlatformRole, t: (en: string, fr: string) => string): string {
@@ -72,7 +73,7 @@ function formatDate(iso: string, language: 'en' | 'fr'): string {
   return parsed.toLocaleDateString(language === 'fr' ? 'fr-FR' : 'en-GB', { dateStyle: 'medium' });
 }
 
-const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRole, viewerUserId, language }) => {
+const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRole, viewerUserId, viewerIsAdlAdmin, language }) => {
   const t = useCallback((en: string, fr: string) => (language === 'fr' ? fr : en), [language]);
   const isOwner = viewerRole === 'owner';
 
@@ -228,8 +229,8 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
                       onChange={(event) => void handleRoleChange(member.userId, event.target.value as PlatformRole)}
                       className="h-10 rounded-xl border border-navy-border bg-white px-3 text-sm text-ink disabled:opacity-50"
                     >
-                      {ALL_ROLES.map((role) => (
-                        <option key={role} value={role}>
+                      {([...(viewerIsAdlAdmin || member.role === 'owner' ? ['owner' as const] : []), ...MEMBER_ROLES]).map((role) => (
+                        <option key={role} value={role} disabled={role === 'owner' && !viewerIsAdlAdmin}>
                           {roleLabel(role, t)}
                         </option>
                       ))}

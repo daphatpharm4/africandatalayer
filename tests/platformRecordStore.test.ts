@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createRecord } from "../lib/server/platform/recordStore.ts";
+import { createRecord, listRecords, reviewRecord } from "../lib/server/platform/recordStore.ts";
 
 test("createRecord inserts with all tenant scopes and idempotent conflict handling", async () => {
   const calls: Array<{ text: string; values: unknown[] }> = [];
@@ -21,4 +21,26 @@ test("createRecord inserts with all tenant scopes and idempotent conflict handli
   assert.match(calls[0].text, /on conflict \(project_id, captured_by, idempotency_key\)/i);
   assert.match(calls[0].text, /platform_records\.request_hash = excluded\.request_hash/i);
   assert.deepEqual(calls[0].values.slice(0, 4), ["org-1", "project-1", "schema-1", "retail_outlet"]);
+});
+
+test("listRecords and reviewRecord keep every query tenant-scoped", async () => {
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  const row = {
+    id: "r1", organization_id: "org-1", project_id: "project-1", schema_version_id: "schema-1",
+    record_type_key: "retail_outlet", data: {}, evidence: { photos: [] }, status: "pending_review",
+    captured_by: "u1", created_at: "2026-07-17T00:00:00.000Z",
+  };
+  const queryFn = async (text: string, values: unknown[] = []) => {
+    calls.push({ text, values });
+    return { rows: [text.startsWith("UPDATE") ? { ...row, status: values[2] } : row], rowCount: 1 };
+  };
+  assert.equal((await listRecords({ organizationId: "org-1", status: "pending_review" }, { queryFn })).length, 1);
+  assert.match(calls[0].text, /where organization_id = \$1/i);
+  assert.deepEqual(calls[0].values.slice(0, 2), ["org-1", "pending_review"]);
+
+  const reviewed = await reviewRecord({ organizationId: "org-1", recordId: "r1", status: "approved" }, { queryFn });
+  assert.equal(reviewed?.status, "approved");
+  assert.match(calls[1].text, /where organization_id = \$1 and id = \$2/i);
+  assert.match(calls[1].text, /status = 'pending_review'/i);
+  assert.deepEqual(calls[1].values, ["org-1", "r1", "approved"]);
 });

@@ -5,6 +5,7 @@ import type {
   PlatformRecordType,
   PlatformSchemaDefinition,
   PlatformProjectCoverageScope,
+  PlatformRole,
 } from "../../shared/platformTypes.js";
 
 // ---------------------------------------------------------------------------
@@ -14,6 +15,9 @@ import type {
 export type ConsoleScreen =
   | "LOADING"
   | "AUTH_REQUIRED"
+  | "OVERVIEW"
+  | "DATA"
+  | "REVIEW"
   | "ONBOARDING"
   | "PROJECTS"
   | "SCHEMA_BUILDER"
@@ -41,12 +45,12 @@ export function parseConsoleHash(hash: string): ConsoleRoute {
   else if (path.startsWith("#")) path = path.slice(1);
   else if (path.startsWith("/")) path = path.slice(1);
 
-  if (path.length === 0) return { screen: "PROJECTS" };
+  if (path.length === 0) return { screen: "OVERVIEW" };
 
   const [pathPart, queryPart] = path.split("?");
   const segments = pathPart.split("/").filter((segment) => segment.length > 0);
 
-  if (segments.length === 0) return { screen: "PROJECTS" };
+  if (segments.length === 0) return { screen: "OVERVIEW" };
 
   const [first, second, third] = segments;
 
@@ -55,6 +59,10 @@ export function parseConsoleHash(hash: string): ConsoleRoute {
     const token = params.get("token") ?? undefined;
     return token ? { screen: "JOIN", joinToken: token } : { screen: "JOIN" };
   }
+
+  if (first === "overview") return { screen: "OVERVIEW" };
+  if (first === "data") return { screen: "DATA" };
+  if (first === "review") return { screen: "REVIEW" };
 
   if (first === "projects") {
     if (second && third === "schema") {
@@ -67,7 +75,7 @@ export function parseConsoleHash(hash: string): ConsoleRoute {
   if (first === "settings") return { screen: "SETTINGS" };
   if (first === "onboarding") return { screen: "ONBOARDING" };
 
-  return { screen: "PROJECTS" };
+  return { screen: "OVERVIEW" };
 }
 
 /** Inverse of parseConsoleHash for every screen shape it can produce. */
@@ -79,6 +87,12 @@ export function consoleRouteToHash(route: ConsoleRoute): string {
       return route.projectId ? `#/projects/${route.projectId}/schema` : "#/projects";
     case "PROJECTS":
       return "#/projects";
+    case "OVERVIEW":
+      return "#/overview";
+    case "DATA":
+      return "#/data";
+    case "REVIEW":
+      return "#/review";
     case "MEMBERS":
       return "#/members";
     case "SETTINGS":
@@ -90,6 +104,46 @@ export function consoleRouteToHash(route: ConsoleRoute): string {
     default:
       return "";
   }
+}
+
+export function consoleLandingRoute(role: PlatformRole): ConsoleRoute {
+  return role === "reviewer" ? { screen: "REVIEW" } : { screen: "OVERVIEW" };
+}
+
+export function canAccessConsoleScreen(
+  role: PlatformRole,
+  screen: ConsoleScreen,
+  isAdlAdmin = false,
+): boolean {
+  switch (screen) {
+    case "JOIN":
+    case "OVERVIEW":
+    case "PROJECTS":
+      return true;
+    case "DATA":
+      return role !== "collector";
+    case "REVIEW":
+      return role === "reviewer" || role === "manager" || role === "owner";
+    case "SCHEMA_BUILDER":
+    case "MEMBERS":
+      return role === "manager" || role === "owner";
+    case "SETTINGS":
+      return role === "owner";
+    case "ONBOARDING":
+      return isAdlAdmin;
+    case "LOADING":
+    case "AUTH_REQUIRED":
+    default:
+      return false;
+  }
+}
+
+export function shouldRequireCompanyInvitation(
+  hasOrganizations: boolean,
+  screen: ConsoleScreen,
+  isAdlAdmin: boolean,
+): boolean {
+  return !hasOrganizations && screen !== "JOIN" && !isAdlAdmin;
 }
 
 // ---------------------------------------------------------------------------

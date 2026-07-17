@@ -1,6 +1,6 @@
 import React from 'react';
 import type { PlatformOrganization, PlatformRole } from '../../shared/platformTypes';
-import type { ConsoleRoute, ConsoleScreen } from '../../lib/client/consoleState';
+import { canAccessConsoleScreen, type ConsoleRoute, type ConsoleScreen } from '../../lib/client/consoleState';
 
 export interface ConsoleShellProps {
   organization: (PlatformOrganization & { role: PlatformRole }) | null;
@@ -17,6 +17,9 @@ export interface ConsoleShellProps {
 }
 
 const NAV_ITEMS: Array<{ screen: ConsoleScreen; en: string; fr: string }> = [
+  { screen: 'OVERVIEW', en: 'Workspace', fr: 'Espace de travail' },
+  { screen: 'DATA', en: 'Company data', fr: 'Données entreprise' },
+  { screen: 'REVIEW', en: 'Review queue', fr: 'File de révision' },
   { screen: 'PROJECTS', en: 'Projects', fr: 'Projets' },
   { screen: 'MEMBERS', en: 'Members', fr: 'Membres' },
   { screen: 'SETTINGS', en: 'Settings', fr: 'Paramètres' },
@@ -90,7 +93,7 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
           className="mt-4 flex gap-1 overflow-x-auto pb-1 lg:mt-6 lg:flex-col lg:overflow-visible lg:pb-0"
           aria-label={t('Console sections', 'Sections de la console')}
         >
-          {NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.filter((item) => organization && canAccessConsoleScreen(organization.role, item.screen)).map((item) => {
             const isActive = route.screen === item.screen;
             return (
               <button

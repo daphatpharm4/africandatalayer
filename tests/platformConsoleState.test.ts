@@ -3,12 +3,15 @@ import test from "node:test";
 import { validateSchemaDefinition } from "../shared/platformSchema.js";
 import {
   builderReducer,
+  canAccessConsoleScreen,
+  consoleLandingRoute,
   consoleRouteToHash,
   emptyField,
   emptyRecordType,
   initialWizardState,
   parseConsoleHash,
   slugFromName,
+  shouldRequireCompanyInvitation,
   wizardReducer,
   wizardRecordTypeDefinition,
   wizardStepValid,
@@ -19,8 +22,8 @@ import type { PlatformSchemaDefinition } from "../shared/platformTypes.js";
 // parseConsoleHash / consoleRouteToHash
 // ---------------------------------------------------------------------------
 
-test("parseConsoleHash: empty hash resolves to PROJECTS", () => {
-  assert.deepEqual(parseConsoleHash(""), { screen: "PROJECTS" });
+test("parseConsoleHash: empty hash resolves to OVERVIEW", () => {
+  assert.deepEqual(parseConsoleHash(""), { screen: "OVERVIEW" });
 });
 
 test("parseConsoleHash: join route with token", () => {
@@ -54,10 +57,10 @@ test("parseConsoleHash: onboarding route", () => {
   assert.deepEqual(parseConsoleHash("#/onboarding"), { screen: "ONBOARDING" });
 });
 
-test("parseConsoleHash: garbage/unknown path falls back to PROJECTS", () => {
-  assert.deepEqual(parseConsoleHash("#/nonsense/xyz"), { screen: "PROJECTS" });
-  assert.deepEqual(parseConsoleHash("#totally-unknown"), { screen: "PROJECTS" });
-  assert.deepEqual(parseConsoleHash("garbage"), { screen: "PROJECTS" });
+test("parseConsoleHash: garbage/unknown path falls back to OVERVIEW", () => {
+  assert.deepEqual(parseConsoleHash("#/nonsense/xyz"), { screen: "OVERVIEW" });
+  assert.deepEqual(parseConsoleHash("#totally-unknown"), { screen: "OVERVIEW" });
+  assert.deepEqual(parseConsoleHash("garbage"), { screen: "OVERVIEW" });
 });
 
 test("parseConsoleHash: is total — never throws on odd input", () => {
@@ -78,6 +81,9 @@ test("parseConsoleHash: tolerates a missing '#/' prefix", () => {
 
 test("consoleRouteToHash: inverse of parseConsoleHash for every screen", () => {
   const routes: Array<Parameters<typeof consoleRouteToHash>[0]> = [
+    { screen: "OVERVIEW" },
+    { screen: "DATA" },
+    { screen: "REVIEW" },
     { screen: "PROJECTS" },
     { screen: "MEMBERS" },
     { screen: "SETTINGS" },
@@ -89,6 +95,29 @@ test("consoleRouteToHash: inverse of parseConsoleHash for every screen", () => {
     const hash = consoleRouteToHash(route);
     assert.deepEqual(parseConsoleHash(hash), route);
   }
+});
+
+test("console role routing gives each role only its work surfaces", () => {
+  assert.deepEqual(consoleLandingRoute("reviewer"), { screen: "REVIEW" });
+  assert.deepEqual(consoleLandingRoute("viewer"), { screen: "OVERVIEW" });
+  assert.equal(canAccessConsoleScreen("viewer", "PROJECTS"), true);
+  assert.equal(canAccessConsoleScreen("viewer", "DATA"), true);
+  assert.equal(canAccessConsoleScreen("viewer", "REVIEW"), false);
+  assert.equal(canAccessConsoleScreen("reviewer", "REVIEW"), true);
+  assert.equal(canAccessConsoleScreen("collector", "DATA"), false);
+  assert.equal(canAccessConsoleScreen("reviewer", "MEMBERS"), false);
+  assert.equal(canAccessConsoleScreen("manager", "MEMBERS"), true);
+  assert.equal(canAccessConsoleScreen("manager", "SETTINGS"), false);
+  assert.equal(canAccessConsoleScreen("owner", "SETTINGS"), true);
+  assert.equal(canAccessConsoleScreen("owner", "ONBOARDING"), false);
+  assert.equal(canAccessConsoleScreen("owner", "ONBOARDING", true), true);
+});
+
+test("normal accounts without a company must use an invitation", () => {
+  assert.equal(shouldRequireCompanyInvitation(false, "OVERVIEW", false), true);
+  assert.equal(shouldRequireCompanyInvitation(false, "JOIN", false), false);
+  assert.equal(shouldRequireCompanyInvitation(false, "ONBOARDING", true), false);
+  assert.equal(shouldRequireCompanyInvitation(true, "OVERVIEW", false), false);
 });
 
 test("consoleRouteToHash: LOADING and AUTH_REQUIRED have no addressable hash", () => {

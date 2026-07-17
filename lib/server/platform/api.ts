@@ -49,6 +49,7 @@ import {
   orgUpdateSchema,
   projectCreateSchema,
   recordCreateSchema,
+  recordReviewSchema,
   schemaDraftSaveSchema,
   schemaPublishSchema,
 } from "./validation.js";
@@ -80,6 +81,8 @@ export interface PlatformApiDeps {
   getPublishedSchemaFn?: typeof projectStore.getPublishedSchema;
   listSchemaVersionsFn?: typeof projectStore.listSchemaVersions;
   createRecordFn?: typeof recordStore.createRecord;
+  listRecordsFn?: typeof recordStore.listRecords;
+  reviewRecordFn?: typeof recordStore.reviewRecord;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -144,6 +147,8 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const getPublishedSchemaFn = deps.getPublishedSchemaFn ?? projectStore.getPublishedSchema;
   const listSchemaVersionsFn = deps.listSchemaVersionsFn ?? projectStore.listSchemaVersions;
   const createRecordFn = deps.createRecordFn ?? recordStore.createRecord;
+  const listRecordsFn = deps.listRecordsFn ?? recordStore.listRecords;
+  const reviewRecordFn = deps.reviewRecordFn ?? recordStore.reviewRecord;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -187,6 +192,11 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   async function handleOrgCreate(request: Request): Promise<Response> {
     const user = await requireUserFn(request);
     if (!user) return errorResponse("Authentication required", 401, { code: "unauthorized" });
+    if (user.role !== "admin") {
+      return errorResponse("Only an ADL administrator can create an organization", 403, {
+        code: "platform_admin_required",
+      });
+    }
 
     const rawBody = await readJson(request);
     if (rawBody === null) return errorResponse("Invalid JSON body", 400);
@@ -281,6 +291,12 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
 
     const context = await requireOrgRole(request, body.organizationId, "owner", tenancyDeps);
     if (isTenancyFailure(context)) return context;
+
+    if (body.role === "owner" && !context.isAdlAdmin) {
+      return errorResponse("Only an ADL administrator can assign the owner role", 403, {
+        code: "platform_admin_required",
+      });
+    }
 
     if (body.role !== "owner") {
       const members = await listMembersFn(body.organizationId);
@@ -648,6 +664,47 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ record }, { status: 201 });
   }
 
+  // ── record_list / record_review ──────────────────────────────────────────
+  async function handleRecordList(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const rawStatus = url.searchParams.get("status");
+    const status = rawStatus === "pending_review" || rawStatus === "approved" || rawStatus === "rejected"
+      ? rawStatus
+      : undefined;
+    const context = await requireOrgRole(request, organizationId, "reviewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+    const records = await listRecordsFn({ organizationId, status });
+    return jsonResponse({ records }, { status: 200 });
+  }
+
+  async function handleRecordBrowse(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+    const records = await listRecordsFn({ organizationId, status: "approved" });
+    return jsonResponse({ records }, { status: 200 });
+  }
+
+  async function handleRecordReview(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(recordReviewSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+    const context = await requireOrgRole(request, body.organizationId, "reviewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+    const record = await reviewRecordFn(body);
+    if (!record) return errorResponse("Record not found", 404, { code: "platform_record_not_found" });
+    await audit({
+      organizationId: body.organizationId,
+      projectId: record.projectId,
+      actorUserId: context.userId,
+      eventType: "record_reviewed",
+      payload: { recordId: record.id, status: record.status },
+    });
+    return jsonResponse({ record }, { status: 200 });
+  }
+
   // ── Dispatch map ──────────────────────────────────────────────────────────
   const routes: Record<string, { method: "GET" | "POST"; handler: (request: Request) => Promise<Response> }> = {
     platform_org_list: { method: "GET", handler: handleOrgList },
@@ -666,6 +723,9 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_schema_draft_save: { method: "POST", handler: handleSchemaDraftSave },
     platform_schema_publish: { method: "POST", handler: handleSchemaPublish },
     platform_record_create: { method: "POST", handler: handleRecordCreate },
+    platform_record_list: { method: "GET", handler: (request) => handleRecordList(request, new URL(request.url)) },
+    platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
+    platform_record_review: { method: "POST", handler: handleRecordReview },
   };
 
   return async function handlePlatform(request: Request): Promise<Response> {

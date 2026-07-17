@@ -3,8 +3,11 @@ import { getSession, signOut } from '../../lib/client/auth';
 import { listMyOrganizations, PlatformApiError } from '../../lib/client/platformApi';
 import type { PlatformOrganization, PlatformRole } from '../../shared/platformTypes';
 import {
+  canAccessConsoleScreen,
+  consoleLandingRoute,
   consoleRouteToHash,
   parseConsoleHash,
+  shouldRequireCompanyInvitation,
   type ConsoleRoute,
 } from '../../lib/client/consoleState';
 import ConsoleShell from './ConsoleShell';
@@ -13,6 +16,8 @@ const JoinScreen = lazy(() => import('./JoinScreen'));
 const MembersScreen = lazy(() => import('./MembersScreen'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
 const ProjectsScreen = lazy(() => import('./ProjectsScreen'));
+const ReviewQueueScreen = lazy(() => import('./ReviewQueueScreen'));
+const RoleWorkspaceScreen = lazy(() => import('./RoleWorkspaceScreen'));
 const SchemaBuilder = lazy(() => import('./SchemaBuilder'));
 const SettingsScreen = lazy(() => import('./SettingsScreen'));
 
@@ -47,6 +52,7 @@ function readInitialRoute(): ConsoleRoute {
 const ConsoleApp: React.FC = () => {
   const [sessionState, setSessionState] = useState<SessionState>('loading');
   const [userId, setUserId] = useState<string | null>(null);
+  const [isAdlAdmin, setIsAdlAdmin] = useState(false);
   const [organizations, setOrganizations] = useState<OrgWithRole[] | null>(null);
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [orgsReloadKey, setOrgsReloadKey] = useState(0);
@@ -69,6 +75,7 @@ const ConsoleApp: React.FC = () => {
       if (cancelled) return;
       setSessionState(session?.user ? 'authenticated' : 'unauthenticated');
       setUserId(session?.user?.id ?? null);
+      setIsAdlAdmin(session?.user?.role === 'admin' || session?.user?.isAdmin === true);
     });
     return () => {
       cancelled = true;
@@ -170,7 +177,8 @@ const ConsoleApp: React.FC = () => {
         setOrganizations(orgs);
         setOrgsError(null);
         handleSelectOrganization(organizationId);
-        handleNavigate({ screen: 'PROJECTS' });
+        const selected = orgs.find((org) => org.id === organizationId);
+        handleNavigate(selected ? consoleLandingRoute(selected.role) : { screen: 'OVERVIEW' });
       } catch (error) {
         if (error instanceof PlatformApiError && (error.status === 401 || error.status === 403)) {
           setSessionState('unauthenticated');
@@ -260,23 +268,68 @@ const ConsoleApp: React.FC = () => {
 
   const orgs = organizations ?? [];
   const hasOrgs = orgs.length > 0;
-  // A brand-new invitee with zero organizations still needs to reach the JOIN
-  // screen to accept an invite; every other screen requires an org, so force
-  // ONBOARDING until one exists.
-  const effectiveRoute: ConsoleRoute =
-    !hasOrgs && route.screen !== 'JOIN' ? { screen: 'ONBOARDING' } : route;
-
   const selectedOrganization =
     orgs.find((org) => org.id === selectedOrgId) ?? orgs[0] ?? null;
+
+  if (sessionState === 'authenticated' && shouldRequireCompanyInvitation(hasOrgs, route.screen, isAdlAdmin)) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-page px-6">
+        <div className="card w-full max-w-md p-6 text-center sm:p-8">
+          <h1 className="text-xl font-semibold text-ink">
+            {t('A company invitation is required', 'Une invitation d’entreprise est requise')}
+          </h1>
+          <p className="mt-3 text-sm leading-6 text-ink-muted">
+            {t(
+              'Company workspaces and owners are created by African Data Layer administrators. Ask your company manager for an invitation, then open the link from that email while signed in with the invited address.',
+              'Les espaces d’entreprise et leurs propriétaires sont créés par les administrateurs African Data Layer. Demandez une invitation au gestionnaire de votre entreprise, puis ouvrez le lien de cet e-mail avec l’adresse invitée.',
+            )}
+          </p>
+          <button type="button" onClick={() => void handleSignOut()} disabled={signOutPending} className="btn-primary mt-6 flex w-full items-center justify-center disabled:opacity-60">
+            {signOutPending ? t('Signing out…', 'Déconnexion…') : t('Sign out', 'Se déconnecter')}
+          </button>
+          {signOutError && <p role="alert" className="mt-3 text-sm text-red-700">{signOutError}</p>}
+        </div>
+      </main>
+    );
+  }
+
+  // A brand-new invitee with zero organizations still needs to reach the JOIN
+  // screen to accept an invite. Only an ADL admin may reach onboarding.
+  const effectiveRoute: ConsoleRoute =
+    !hasOrgs && route.screen !== 'JOIN'
+      ? { screen: 'ONBOARDING' }
+      : selectedOrganization && !canAccessConsoleScreen(selectedOrganization.role, route.screen, isAdlAdmin)
+        ? consoleLandingRoute(selectedOrganization.role)
+        : route;
 
   let screenContent: React.ReactNode;
   switch (effectiveRoute.screen) {
     case 'ONBOARDING':
       screenContent = <OnboardingWizard language={language} onDone={handleOnboardingDone} />;
       break;
+    case 'OVERVIEW':
+      screenContent = selectedOrganization ? (
+        <RoleWorkspaceScreen organization={selectedOrganization} language={language} onNavigate={handleNavigate} />
+      ) : null;
+      break;
+    case 'REVIEW':
+      screenContent = selectedOrganization ? (
+        <ReviewQueueScreen organizationId={selectedOrganization.id} language={language} />
+      ) : null;
+      break;
+    case 'DATA':
+      screenContent = selectedOrganization ? (
+        <ReviewQueueScreen organizationId={selectedOrganization.id} language={language} readOnly />
+      ) : null;
+      break;
     case 'PROJECTS':
       screenContent = selectedOrganization ? (
-        <ProjectsScreen organizationId={selectedOrganization.id} language={language} onNavigate={handleNavigate} />
+        <ProjectsScreen
+          organizationId={selectedOrganization.id}
+          canManage={selectedOrganization.role === 'manager' || selectedOrganization.role === 'owner'}
+          language={language}
+          onNavigate={handleNavigate}
+        />
       ) : (
         <div>{t('Select an organization to see its projects.', 'Sélectionnez une organisation pour voir ses projets.')}</div>
       );
@@ -294,6 +347,7 @@ const ConsoleApp: React.FC = () => {
           organizationId={selectedOrganization.id}
           viewerRole={selectedOrganization.role}
           viewerUserId={userId}
+          viewerIsAdlAdmin={isAdlAdmin}
           language={language}
         />
       ) : (

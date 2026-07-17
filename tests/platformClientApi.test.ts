@@ -18,6 +18,9 @@ import {
   saveSchemaDraftRequest,
   publishSchemaRequest,
   createPlatformRecordRequest,
+  listPlatformRecordsRequest,
+  listApprovedPlatformRecordsRequest,
+  reviewPlatformRecordRequest,
 } from "../lib/client/platformApi.ts";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -275,6 +278,22 @@ test("publishSchemaRequest posts platform_schema_publish and unwraps schemaVersi
   assert.equal(calls[0].init?.method, "POST");
   assert.deepEqual(JSON.parse(calls[0].init?.body as string), { projectId: "proj-1" });
   assert.deepEqual(result, schemaVersion);
+});
+
+test("record review client lists and decides company records", async () => {
+  const record = { id: "r1", organizationId: "org-1", projectId: "p1", schemaVersionId: "s1", recordTypeKey: "shop", data: {}, evidence: { photos: [] }, status: "pending_review", capturedBy: "u1", createdAt: "x" };
+  const list = stubFetch(() => jsonResponse({ records: [record] }));
+  assert.deepEqual(await listPlatformRecordsRequest("org-1", "pending_review", { fetchFn: list.fetchFn }), [record]);
+  assert.equal(list.calls[0].url, "/api/user?view=platform_record_list&organizationId=org-1&status=pending_review");
+
+  const browse = stubFetch(() => jsonResponse({ records: [{ ...record, status: "approved" }] }));
+  assert.equal((await listApprovedPlatformRecordsRequest("org-1", { fetchFn: browse.fetchFn }))[0].status, "approved");
+  assert.equal(browse.calls[0].url, "/api/user?view=platform_record_browse&organizationId=org-1");
+
+  const review = stubFetch(() => jsonResponse({ record: { ...record, status: "approved" } }));
+  const result = await reviewPlatformRecordRequest({ organizationId: "org-1", recordId: "r1", status: "approved" }, { fetchFn: review.fetchFn });
+  assert.equal(result.status, "approved");
+  assert.equal(review.calls[0].url, "/api/user?view=platform_record_review");
 });
 
 test("saveSchemaDraftRequest throws PlatformApiError with issues on 422", async () => {

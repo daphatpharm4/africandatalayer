@@ -70,3 +70,36 @@ export async function createRecord(
   if (!result.rows[0]) throw new PlatformRecordIdempotencyConflictError();
   return rowToRecord(result.rows[0]);
 }
+
+export async function listRecords(
+  input: { organizationId: string; status?: PlatformRecord["status"]; limit?: number },
+  deps: StoreDeps = {},
+): Promise<PlatformRecord[]> {
+  const limit = Math.min(200, Math.max(1, input.limit ?? 100));
+  const result = await db(deps)(
+    `SELECT id, organization_id, project_id, schema_version_id, record_type_key,
+       data, evidence, status, captured_by, created_at
+     FROM public.platform_records
+     WHERE organization_id = $1
+       AND ($2::text IS NULL OR status = $2)
+     ORDER BY created_at DESC
+     LIMIT $3`,
+    [input.organizationId, input.status ?? null, limit],
+  );
+  return result.rows.map(rowToRecord);
+}
+
+export async function reviewRecord(
+  input: { organizationId: string; recordId: string; status: "approved" | "rejected" },
+  deps: StoreDeps = {},
+): Promise<PlatformRecord | null> {
+  const result = await db(deps)(
+    `UPDATE public.platform_records
+     SET status = $3
+     WHERE organization_id = $1 AND id = $2 AND status = 'pending_review'
+     RETURNING id, organization_id, project_id, schema_version_id, record_type_key,
+       data, evidence, status, captured_by, created_at`,
+    [input.organizationId, input.recordId, input.status],
+  );
+  return result.rows[0] ? rowToRecord(result.rows[0]) : null;
+}

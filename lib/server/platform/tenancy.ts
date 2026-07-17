@@ -13,6 +13,7 @@ export interface OrgContext {
   userId: string;
   organizationId: string;
   role: PlatformRole;
+  isAdlAdmin: boolean;
 }
 
 export interface TenancyDeps {
@@ -49,7 +50,7 @@ export async function requireOrgRole(
   if (!membership) return forbidden();
   if (!roleAtLeast(membership.role, minimumRole)) return forbidden();
 
-  return { userId: user.id, organizationId, role: membership.role };
+  return { userId: user.id, organizationId, role: membership.role, isAdlAdmin: user.role === "admin" };
 }
 
 export async function requireProjectOrgRole(

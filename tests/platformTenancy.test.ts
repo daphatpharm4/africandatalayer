@@ -36,7 +36,7 @@ test("member at or above minimum role gets context", async () => {
     getMembershipFn: async () => ({ organizationId: "org-1", userId: "u1", role: "owner", createdAt: "" }),
   });
   assert.ok(!isTenancyFailure(result));
-  assert.deepEqual(result, { userId: "u1", organizationId: "org-1", role: "owner" });
+  assert.deepEqual(result, { userId: "u1", organizationId: "org-1", role: "owner", isAdlAdmin: false });
 });
 
 test("cross-tenant: membership lookup is scoped to the requested org, not any org", async () => {

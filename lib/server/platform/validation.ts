@@ -84,3 +84,9 @@ export const recordCreateSchema = z.object({
     notes: z.string().trim().max(2_000).optional(),
   }),
 });
+
+export const recordReviewSchema = z.object({
+  organizationId: uuid,
+  recordId: uuid,
+  status: z.enum(["approved", "rejected"]),
+});
