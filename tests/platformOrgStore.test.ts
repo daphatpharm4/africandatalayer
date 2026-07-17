@@ -12,6 +12,7 @@ import {
   upsertMemberRole,
   createInvite,
   findInviteByTokenHash,
+  revokeInvite,
 } from "../lib/server/platform/orgStore.js";
 
 const ORG_ROW = {
@@ -101,6 +102,17 @@ test("invite lifecycle stores hash, finds by hash, marks accepted", async () => 
   await markInviteAccepted({ inviteId: "inv-1", userId: "u9" }, { queryFn });
   assert.match(calls[2].text, /accepted_at = now\(\)/i);
   assert.match(calls[2].text, /accepted_at is null/i); // cannot double-accept
+});
+
+test("revokeInvite deletes only a pending invite in the requested organization", async () => {
+  const { queryFn, calls } = fakeQuery([{ rows: [{ id: "inv-1" }] }]);
+  const revoked = await revokeInvite({ organizationId: "org-1", inviteId: "inv-1" }, { queryFn });
+  assert.equal(revoked, true);
+  assert.match(calls[0].text, /delete from public\.platform_organization_invites/i);
+  assert.match(calls[0].text, /organization_id = \$1/i);
+  assert.match(calls[0].text, /id = \$2/i);
+  assert.match(calls[0].text, /accepted_at is null/i);
+  assert.deepEqual(calls[0].values, ["org-1", "inv-1"]);
 });
 
 test("listMembers scopes by organization", async () => {

@@ -31,6 +31,7 @@ import SyncStatusBar from './components/SyncStatusBar';
 import HelpCenter from './components/docs/HelpCenter';
 import { docsPathForAudience } from './lib/docs/helpCenter';
 import { defaultScreenForRole, routesForRole } from './lib/client/pointOperatorUi';
+import { readConsoleInviteReturn } from './lib/client/inviteReturn';
 import {
   flushPointOperatorQueue,
   type PointOperatorMutation,
@@ -93,6 +94,9 @@ const App: React.FC = () => {
   const [currentScreen, setCurrentScreen] = useState<Screen>(() => {
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/reset')) {
       return Screen.FORGOT_PASSWORD;
+    }
+    if (typeof window !== 'undefined' && readConsoleInviteReturn()) {
+      return Screen.AUTH;
     }
     return Screen.SPLASH;
   });
@@ -407,6 +411,11 @@ const App: React.FC = () => {
     const bootstrap = async () => {
       const session = await refreshSession();
       const hasUser = !!session?.user;
+      const inviteReturn = readConsoleInviteReturn();
+      if (hasUser && inviteReturn) {
+        window.location.replace(inviteReturn);
+        return;
+      }
       const hasSeenSplash = (() => { try { return localStorage.getItem('adl_splash_seen') === 'true'; } catch { return false; } })();
       if (currentScreen === Screen.SPLASH && (hasUser || hasSeenSplash)) {
         setHistory([]);
@@ -430,14 +439,6 @@ const App: React.FC = () => {
     if (getPlatform() === 'android') {
       void StatusBar.setBackgroundColor({ color: '#0f2b46' });
     }
-
-    // Lock to portrait — field agents use the app one-handed
-    try {
-      const lockOrientation = (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> })?.lock;
-      if (lockOrientation) {
-        void lockOrientation.call(screen.orientation, 'portrait-primary').catch(() => {});
-      }
-    } catch { /* orientation lock unsupported */ }
 
     const listener = CapApp.addListener('backButton', () => {
       if (history.length > 0) {
@@ -513,6 +514,11 @@ const App: React.FC = () => {
             navigateTo={(screen) => navigateTo(screen)}
             onComplete={async () => {
               const session = await refreshSession();
+              const inviteReturn = readConsoleInviteReturn();
+              if (session?.user && inviteReturn) {
+                window.location.replace(inviteReturn);
+                return;
+              }
               const role = (session?.user?.role as UserRole) ?? 'agent';
               if (session?.user?.mustChangePassword && role === 'point_operator') {
                 setHistory([]);

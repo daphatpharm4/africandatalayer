@@ -222,10 +222,25 @@ export async function listInvites(organizationId: string, deps: StoreDeps = {}):
     `SELECT id, organization_id, email, role, token_hash, expires_at, accepted_at, created_at
      FROM public.platform_organization_invites
      WHERE organization_id = $1
+       AND accepted_at IS NULL
+       AND expires_at > now()
      ORDER BY created_at DESC`,
     [organizationId],
   );
   return result.rows.map(rowToInvite);
+}
+
+export async function revokeInvite(
+  input: { organizationId: string; inviteId: string },
+  deps: StoreDeps = {},
+): Promise<boolean> {
+  const result = await db(deps)(
+    `DELETE FROM public.platform_organization_invites
+     WHERE organization_id = $1 AND id = $2 AND accepted_at IS NULL
+     RETURNING id`,
+    [input.organizationId, input.inviteId],
+  );
+  return (result.rowCount ?? result.rows.length) > 0;
 }
 
 export async function markInviteAccepted(

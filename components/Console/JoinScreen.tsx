@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { acceptInviteRequest, PlatformApiError } from '../../lib/client/platformApi';
+import {
+  clearConsoleInviteReturn,
+  saveConsoleInviteReturn,
+} from '../../lib/client/inviteReturn';
 
 export interface JoinScreenProps {
   token: string | undefined;
@@ -36,6 +40,7 @@ const JoinScreen: React.FC<JoinScreenProps> = ({
       setErrorMessage(null);
       void acceptInviteRequest(inviteToken)
         .then(({ organizationId }) => {
+          clearConsoleInviteReturn();
           onJoined(organizationId);
         })
         .catch((error) => {
@@ -80,6 +85,17 @@ const JoinScreen: React.FC<JoinScreenProps> = ({
     runAccept(token);
   };
 
+  const handleAuthenticate = () => {
+    if (!token || !saveConsoleInviteReturn(token)) return;
+    try {
+      const hasAuthenticated = localStorage.getItem('adl_has_authenticated') === 'true';
+      sessionStorage.setItem('adl_auth_initial_mode', hasAuthenticated ? 'signin' : 'signup');
+    } catch {
+      // The invite return itself was saved; use the default auth mode.
+    }
+    window.location.assign('/');
+  };
+
   if (!hasSession) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -87,13 +103,13 @@ const JoinScreen: React.FC<JoinScreenProps> = ({
           <h1 className="text-lg font-semibold text-ink">{t('Sign in required', 'Connexion requise')}</h1>
           <p className="mt-2 text-sm text-ink-muted">
             {t(
-              'Sign in first, then reopen your invite link',
-              "Connectez-vous d'abord, puis rouvrez votre lien d'invitation",
+              'Sign in or create the invited account. We will return you here automatically and connect you to the organization.',
+              "Connectez-vous ou créez le compte invité. Vous reviendrez ici automatiquement pour rejoindre l'organisation.",
             )}
           </p>
-          <a href="/" className="btn-primary mt-5 flex items-center justify-center">
-            {t('Go to sign in', 'Aller à la connexion')}
-          </a>
+          <button type="button" onClick={handleAuthenticate} className="btn-primary mt-5 flex w-full items-center justify-center">
+            {t('Continue with invited account', 'Continuer avec le compte invité')}
+          </button>
         </div>
       </div>
     );

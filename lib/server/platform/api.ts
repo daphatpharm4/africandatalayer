@@ -14,6 +14,7 @@
 //   member_update       POST  — change a member's role (owner)
 //   member_remove       POST  — remove a member (owner)
 //   invite_create       POST  — create + email an invite (manager+)
+//   invite_revoke       POST  — revoke a pending invite (manager+)
 //   invite_accept       POST  — accept an invite by token (any authed user)
 //   project_create      POST  — create a project (manager+)
 //   project_list        GET   — list projects for an org (viewer+)
@@ -37,6 +38,7 @@ import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenan
 import {
   inviteAcceptSchema,
   inviteCreateSchema,
+  inviteRevokeSchema,
   memberRemoveSchema,
   memberUpdateSchema,
   orgCreateSchema,
@@ -61,6 +63,7 @@ export interface PlatformApiDeps {
   createInviteFn?: typeof orgStore.createInvite;
   findInviteByTokenHashFn?: typeof orgStore.findInviteByTokenHash;
   listInvitesFn?: typeof orgStore.listInvites;
+  revokeInviteFn?: typeof orgStore.revokeInvite;
   markInviteAcceptedFn?: typeof orgStore.markInviteAccepted;
   createProjectFn?: typeof projectStore.createProject;
   listProjectsFn?: typeof projectStore.listProjects;
@@ -122,6 +125,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const createInviteFn = deps.createInviteFn ?? orgStore.createInvite;
   const findInviteByTokenHashFn = deps.findInviteByTokenHashFn ?? orgStore.findInviteByTokenHash;
   const listInvitesFn = deps.listInvitesFn ?? orgStore.listInvites;
+  const revokeInviteFn = deps.revokeInviteFn ?? orgStore.revokeInvite;
   const markInviteAcceptedFn = deps.markInviteAcceptedFn ?? orgStore.markInviteAccepted;
   const createProjectFn = deps.createProjectFn ?? projectStore.createProject;
   const listProjectsFn = deps.listProjectsFn ?? projectStore.listProjects;
@@ -420,6 +424,33 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ organizationId: invite.organizationId }, { status: 200 });
   }
 
+  // ── invite_revoke ─────────────────────────────────────────────────────────
+  async function handleInviteRevoke(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+
+    const parsed = parse(inviteRevokeSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const context = await requireOrgRole(request, body.organizationId, "manager", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const revoked = await revokeInviteFn(body);
+    if (!revoked) {
+      return errorResponse("Pending invite not found", 404, { code: "platform_invite_not_found" });
+    }
+
+    await audit({
+      organizationId: body.organizationId,
+      actorUserId: context.userId,
+      eventType: "invite_revoked",
+      payload: { inviteId: body.inviteId },
+    });
+
+    return jsonResponse({ revoked: true }, { status: 200 });
+  }
+
   // ── project_create ────────────────────────────────────────────────────────
   async function handleProjectCreate(request: Request): Promise<Response> {
     const rawBody = await readJson(request);
@@ -556,6 +587,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_member_update: { method: "POST", handler: handleMemberUpdate },
     platform_member_remove: { method: "POST", handler: handleMemberRemove },
     platform_invite_create: { method: "POST", handler: handleInviteCreate },
+    platform_invite_revoke: { method: "POST", handler: handleInviteRevoke },
     platform_invite_accept: { method: "POST", handler: handleInviteAccept },
     platform_project_create: { method: "POST", handler: handleProjectCreate },
     platform_project_list: { method: "GET", handler: (request) => handleProjectList(request, new URL(request.url)) },

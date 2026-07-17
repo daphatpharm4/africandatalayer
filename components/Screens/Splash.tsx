@@ -214,7 +214,7 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
       {/* White sheet */}
       <div className="relative z-10 -mt-6 flex flex-1 flex-col rounded-t-[28px] bg-white px-6 pt-7 pb-6 shadow-[0_-12px_30px_-22px_rgba(15,43,70,0.18)]">
         <div key={`sheet-${slide.id}`} className="surface-reveal flex flex-1 flex-col">
-          <div className="micro-label-wide text-terra">{slide.eyebrow}</div>
+          <div className="micro-label-wide text-terra-dark">{slide.eyebrow}</div>
           <h1 className="mt-2 whitespace-pre-line text-[28px] font-extrabold leading-[1.12] tracking-tight text-ink">
             {slide.title}
           </h1>

@@ -6,6 +6,26 @@ import com.africandatalayer.app.model.UserRole
 import com.africandatalayer.app.model.canShow
 import com.africandatalayer.app.model.defaultTabFor
 
+enum class SyncStatus {
+    Ready,
+    Offline,
+    Online;
+
+    fun title(language: Language): String = when (this) {
+        Ready -> if (language == Language.Fr) "Prêt" else "Ready"
+        Offline -> if (language == Language.Fr) {
+            "Hors ligne — le travail en attente est conservé"
+        } else {
+            "Offline — queued work is preserved"
+        }
+        Online -> if (language == Language.Fr) {
+            "En ligne — prêt à synchroniser"
+        } else {
+            "Online — ready to sync"
+        }
+    }
+}
+
 data class AppState(
     val selectedRole: UserRole,
     val selectedRoute: AppRoute,
@@ -13,7 +33,7 @@ data class AppState(
     val isAuthenticated: Boolean,
     val isGuest: Boolean,
     val isOffline: Boolean,
-    val syncMessage: String
+    val syncStatus: SyncStatus
 ) {
     fun selectRole(role: UserRole): AppState =
         copy(selectedRole = role, selectedRoute = defaultTabFor(role))
@@ -30,11 +50,7 @@ data class AppState(
     fun setNetworkState(offline: Boolean): AppState =
         copy(
             isOffline = offline,
-            syncMessage = if (offline) {
-                "Offline - queued work is preserved"
-            } else {
-                "Online - ready to sync"
-            }
+            syncStatus = if (offline) SyncStatus.Offline else SyncStatus.Online
         )
 
     companion object {
@@ -45,7 +61,7 @@ data class AppState(
             isAuthenticated = false,
             isGuest = true,
             isOffline = false,
-            syncMessage = "Ready"
+            syncStatus = SyncStatus.Ready
         )
     }
 }

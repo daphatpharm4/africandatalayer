@@ -290,7 +290,7 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
                   type="button"
                   onClick={() => handleDeleteItem(item.id)}
                   disabled={activeItemId === item.id}
-                  className="min-h-[44px] rounded-2xl border border-red-100 bg-red-50 micro-label text-red-600 disabled:bg-gray-100 disabled:text-gray-400"
+                  className="min-h-[44px] rounded-2xl border border-red-200 bg-red-50 micro-label text-red-700 disabled:bg-gray-100 disabled:text-gray-500"
                 >
                   <span className="inline-flex items-center gap-1">
                     <Trash2 size={12} />

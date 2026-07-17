@@ -29,6 +29,11 @@ export const inviteAcceptSchema = z.object({
   token: z.string().regex(INVITE_TOKEN_PATTERN, "Invalid invite token"),
 });
 
+export const inviteRevokeSchema = z.object({
+  organizationId: uuid,
+  inviteId: uuid,
+});
+
 export const memberUpdateSchema = z.object({
   organizationId: uuid,
   userId: z.string().min(1),

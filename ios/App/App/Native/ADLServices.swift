@@ -51,7 +51,10 @@ final class AppState: ObservableObject {
     @Published var isLoadingProfile = false
     @Published var profileError: String?
     @Published var language: String = UserDefaults.standard.string(forKey: "adl_language") ?? "fr" {
-        didSet { UserDefaults.standard.set(language, forKey: "adl_language") }
+        didSet {
+            UserDefaults.standard.set(language, forKey: "adl_language")
+            refreshGamification()
+        }
     }
 
     // MARK: - Admin Review Queue (africandatalayer-ot4)
@@ -241,9 +244,9 @@ final class AppState: ObservableObject {
             $0.syncState == .synced && calendar.isDate($0.createdAt, equalTo: Date(), toGranularity: .weekOfYear)
         }.count
         return [
-            Mission(id: "daily-capture", title: "Capture 3 points", detail: "Add three field submissions today.", period: .daily, goal: 3, current: today, rewardXP: 150),
-            Mission(id: "weekly-sync", title: "Sync 10 submissions", detail: "Get ten captures synced this week.", period: .weekly, goal: 10, current: syncedWeek, rewardXP: 500),
-            Mission(id: "weekly-capture", title: "Field 15 points", detail: "Capture fifteen points this week.", period: .weekly, goal: 15, current: weekCount, rewardXP: 700)
+            Mission(id: "daily-capture", title: ADLModelText.t("Capture 3 points", "Capturez 3 points"), detail: ADLModelText.t("Add three field submissions today.", "Ajoutez trois contributions terrain aujourd’hui."), period: .daily, goal: 3, current: today, rewardXP: 150),
+            Mission(id: "weekly-sync", title: ADLModelText.t("Sync 10 submissions", "Synchronisez 10 contributions"), detail: ADLModelText.t("Get ten captures synced this week.", "Synchronisez dix captures cette semaine."), period: .weekly, goal: 10, current: syncedWeek, rewardXP: 500),
+            Mission(id: "weekly-capture", title: ADLModelText.t("Field 15 points", "Collectez 15 points"), detail: ADLModelText.t("Capture fifteen points this week.", "Capturez quinze points cette semaine."), period: .weekly, goal: 15, current: weekCount, rewardXP: 700)
         ]
     }
 
@@ -252,12 +255,12 @@ final class AppState: ObservableObject {
         let trustTier = (profile?.trustTier ?? "").lowercased()
         let isTrusted = ["trusted", "elite"].contains(trustTier)
         return [
-            Badge(id: "first-capture", title: "First Capture", detail: "Submit your first point.", systemImage: "mappin.and.ellipse", tint: ADLColor.forest, unlocked: xp > 0 || syncedCount > 0, progress: (xp > 0 || syncedCount > 0) ? 1 : 0),
-            Badge(id: "streak-5", title: "5-Day Streak", detail: "Capture five days running.", systemImage: "flame.fill", tint: ADLColor.terracotta, unlocked: streakDays >= 5, progress: min(1, Double(streakDays) / 5)),
-            Badge(id: "trusted", title: "Trusted Agent", detail: "Reach the trusted tier.", systemImage: "checkmark.seal.fill", tint: ADLColor.navy, unlocked: isTrusted, progress: isTrusted ? 1 : 0.5),
-            Badge(id: "xp-2500", title: "Field Veteran", detail: "Earn 2,500 XP.", systemImage: "star.circle.fill", tint: ADLColor.gold, unlocked: xp >= 2_500, progress: min(1, Double(xp) / 2_500)),
-            Badge(id: "synced-25", title: "Quarter Century", detail: "Sync 25 submissions.", systemImage: "tray.full.fill", tint: ADLColor.navySoft, unlocked: syncedCount >= 25, progress: min(1, Double(syncedCount) / 25)),
-            Badge(id: "elite", title: "Elite Mapper", detail: "Earn 8,000 XP.", systemImage: "trophy.fill", tint: ADLColor.gold, unlocked: xp >= 8_000, progress: min(1, Double(xp) / 8_000))
+            Badge(id: "first-capture", title: ADLModelText.t("First Capture", "Première capture"), detail: ADLModelText.t("Submit your first point.", "Envoyez votre premier point."), systemImage: "mappin.and.ellipse", tint: ADLColor.forest, unlocked: xp > 0 || syncedCount > 0, progress: (xp > 0 || syncedCount > 0) ? 1 : 0),
+            Badge(id: "streak-5", title: ADLModelText.t("5-Day Streak", "Série de 5 jours"), detail: ADLModelText.t("Capture five days running.", "Capturez pendant cinq jours consécutifs."), systemImage: "flame.fill", tint: ADLColor.terracotta, unlocked: streakDays >= 5, progress: min(1, Double(streakDays) / 5)),
+            Badge(id: "trusted", title: ADLModelText.t("Trusted Agent", "Agent de confiance"), detail: ADLModelText.t("Reach the trusted tier.", "Atteignez le niveau confiance."), systemImage: "checkmark.seal.fill", tint: ADLColor.navy, unlocked: isTrusted, progress: isTrusted ? 1 : 0.5),
+            Badge(id: "xp-2500", title: ADLModelText.t("Field Veteran", "Vétéran du terrain"), detail: ADLModelText.t("Earn 2,500 XP.", "Gagnez 2 500 XP."), systemImage: "star.circle.fill", tint: ADLColor.gold, unlocked: xp >= 2_500, progress: min(1, Double(xp) / 2_500)),
+            Badge(id: "synced-25", title: ADLModelText.t("Quarter Century", "Cap des 25"), detail: ADLModelText.t("Sync 25 submissions.", "Synchronisez 25 contributions."), systemImage: "tray.full.fill", tint: ADLColor.navySoft, unlocked: syncedCount >= 25, progress: min(1, Double(syncedCount) / 25)),
+            Badge(id: "elite", title: ADLModelText.t("Elite Mapper", "Cartographe élite"), detail: ADLModelText.t("Earn 8,000 XP.", "Gagnez 8 000 XP."), systemImage: "trophy.fill", tint: ADLColor.gold, unlocked: xp >= 8_000, progress: min(1, Double(xp) / 8_000))
         ]
     }
 
@@ -1723,9 +1726,30 @@ final class LocalRewardsService: RewardsService {
     }
 }
 
+enum LocationStatus: Equatable {
+    case notCaptured
+    case requesting
+    case permissionNeeded
+    case unavailable
+    case locked(accuracyMeters: Int)
+    case mapSelected
+
+    func localized(language: String) -> String {
+        let french = language == "fr"
+        switch self {
+        case .notCaptured: return french ? "Position non capturée" : "Location not captured"
+        case .requesting: return french ? "Recherche de la position" : "Requesting location"
+        case .permissionNeeded: return french ? "Autorisation de localisation requise" : "Location permission needed"
+        case .unavailable: return french ? "Position indisponible" : "Location unavailable"
+        case .locked(let accuracy): return french ? "GPS verrouillé à \(accuracy) m" : "GPS locked to \(accuracy) m"
+        case .mapSelected: return french ? "Position sélectionnée sur la carte" : "Map location selected"
+        }
+    }
+}
+
 final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDelegate {
     @Published var lastLocation: SubmissionLocation?
-    @Published var statusText = UserDefaults.standard.string(forKey: "adl_language") == "fr" ? "Position non capturée" : "Location not captured"
+    @Published var status: LocationStatus = .notCaptured
 
     private let manager = CLLocationManager()
     private var pendingLocationRequest = false
@@ -1737,7 +1761,7 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
     }
 
     func requestCurrentLocation() {
-        statusText = "Requesting location"
+        status = .requesting
         switch manager.authorizationStatus {
         case .notDetermined:
             pendingLocationRequest = true
@@ -1747,16 +1771,16 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
             manager.requestLocation()
         case .denied, .restricted:
             pendingLocationRequest = false
-            statusText = "Location permission needed"
+            status = .permissionNeeded
         @unknown default:
             pendingLocationRequest = false
-            statusText = "Location unavailable"
+            status = .unavailable
         }
     }
 
-    func setLocation(_ location: SubmissionLocation, status: String) {
+    func setLocation(_ location: SubmissionLocation, status: LocationStatus) {
         lastLocation = location
-        statusText = status
+        self.status = status
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -1767,13 +1791,13 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
                 longitude: location.coordinate.longitude,
                 accuracyMeters: location.horizontalAccuracy
             )
-            self.statusText = "GPS locked to \(Int(location.horizontalAccuracy)) m"
+            self.status = .locked(accuracyMeters: Int(location.horizontalAccuracy))
         }
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         DispatchQueue.main.async {
-            self.statusText = "Location unavailable"
+            self.status = .unavailable
         }
     }
 
@@ -1794,12 +1818,12 @@ final class LocationProvider: NSObject, ObservableObject, CLLocationManagerDeleg
             manager.requestLocation()
         case .denied, .restricted:
             pendingLocationRequest = false
-            statusText = "Location permission needed"
+            self.status = .permissionNeeded
         case .notDetermined:
             break
         @unknown default:
             pendingLocationRequest = false
-            statusText = "Location unavailable"
+            self.status = .unavailable
         }
     }
 }

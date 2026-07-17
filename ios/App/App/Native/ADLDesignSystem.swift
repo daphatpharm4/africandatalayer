@@ -8,7 +8,17 @@ enum ADLFont {
     static let family = "Inter"
 
     static func inter(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
-        .custom(family, size: size).weight(weight)
+        let textStyle: Font.TextStyle
+        switch size {
+        case 28...: textStyle = .largeTitle
+        case 22...: textStyle = .title
+        case 18...: textStyle = .title2
+        case 15...: textStyle = .body
+        case 13...: textStyle = .footnote
+        case 12...: textStyle = .caption
+        default: textStyle = .caption2
+        }
+        return .custom(family, size: size, relativeTo: textStyle).weight(weight)
     }
 
     // Scale roughly matching the web (Tailwind) type ramp.
@@ -352,6 +362,7 @@ struct RewardCard: View {
 /// Square badge tile with locked/unlocked treatment.
 struct BadgeTile: View {
     let badge: Badge
+    let earnedTitle: String
 
     var body: some View {
         VStack(spacing: 10) {
@@ -369,7 +380,7 @@ struct BadgeTile: View {
                 .lineLimit(2)
 
             if badge.unlocked {
-                Text("Earned")
+                Text(earnedTitle)
                     .font(ADLFont.inter(11, .bold))
                     .foregroundColor(ADLColor.forest)
             } else {

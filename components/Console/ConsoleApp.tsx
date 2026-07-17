@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { getSession, signOut } from '../../lib/client/auth';
 import { listMyOrganizations, PlatformApiError } from '../../lib/client/platformApi';
 import type { PlatformOrganization, PlatformRole } from '../../shared/platformTypes';
@@ -8,12 +8,13 @@ import {
   type ConsoleRoute,
 } from '../../lib/client/consoleState';
 import ConsoleShell from './ConsoleShell';
-import JoinScreen from './JoinScreen';
-import MembersScreen from './MembersScreen';
-import OnboardingWizard from './OnboardingWizard';
-import ProjectsScreen from './ProjectsScreen';
-import SchemaBuilder from './SchemaBuilder';
-import SettingsScreen from './SettingsScreen';
+
+const JoinScreen = lazy(() => import('./JoinScreen'));
+const MembersScreen = lazy(() => import('./MembersScreen'));
+const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
+const ProjectsScreen = lazy(() => import('./ProjectsScreen'));
+const SchemaBuilder = lazy(() => import('./SchemaBuilder'));
+const SettingsScreen = lazy(() => import('./SettingsScreen'));
 
 const LANGUAGE_STORAGE_KEY = 'adl_language';
 const ORG_STORAGE_KEY = 'adl_console_org';
@@ -206,15 +207,15 @@ const ConsoleApp: React.FC = () => {
 
   if (sessionState === 'loading' || (sessionState === 'authenticated' && organizations === null && !orgsError)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-page text-ink-muted">
+      <main className="flex min-h-screen items-center justify-center bg-page text-ink-muted">
         <p className="micro-label">{t('Loading console', 'Chargement de la console')}</p>
-      </div>
+      </main>
     );
   }
 
   if (sessionState === 'authenticated' && orgsError) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-page px-6">
+      <main className="flex min-h-screen items-center justify-center bg-page px-6">
         <div className="card w-full max-w-sm p-6 text-center">
           <h1 className="text-lg font-semibold text-ink">
             {t('Could not load your workspaces', 'Impossible de charger vos espaces de travail')}
@@ -229,7 +230,7 @@ const ConsoleApp: React.FC = () => {
             {t('Try again', 'Réessayer')}
           </button>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -238,7 +239,7 @@ const ConsoleApp: React.FC = () => {
   // joinToken by bouncing through this generic gate first.
   if (sessionState === 'unauthenticated' && route.screen !== 'JOIN') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-page px-6">
+      <main className="flex min-h-screen items-center justify-center bg-page px-6">
         <div className="card w-full max-w-sm p-6 text-center">
           <h1 className="text-lg font-semibold text-ink">
             {t('Sign in required', 'Connexion requise')}
@@ -253,7 +254,7 @@ const ConsoleApp: React.FC = () => {
             {t('Go to sign in', 'Aller à la connexion')}
           </a>
         </div>
-      </div>
+      </main>
     );
   }
 
@@ -357,7 +358,9 @@ const ConsoleApp: React.FC = () => {
         signOutPending={signOutPending}
         signOutError={signOutError}
       >
-        {screenContent}
+        <Suspense fallback={<p className="micro-label text-ink-muted" role="status">{t('Loading view…', 'Chargement de la vue…')}</p>}>
+          {screenContent}
+        </Suspense>
       </ConsoleShell>
     </>
   );

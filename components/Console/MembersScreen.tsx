@@ -4,6 +4,7 @@ import {
   createInviteRequest,
   listOrgMembersRequest,
   removeMemberRequest,
+  revokeInviteRequest,
   updateMemberRequest,
   PlatformApiError,
 } from '../../lib/client/platformApi';
@@ -87,6 +88,7 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
   const [inviteRole, setInviteRole] = useState<Exclude<PlatformRole, 'owner'>>('collector');
   const [isInviting, setIsInviting] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [revokingInviteId, setRevokingInviteId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +155,23 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
       setInviteError(describeError(error, t));
     } finally {
       setIsInviting(false);
+    }
+  };
+
+  const handleRevokeInvite = async (invite: PlatformInvite) => {
+    const confirmed = window.confirm(
+      t(`Revoke the invitation for ${invite.email}?`, `Révoquer l’invitation de ${invite.email} ?`),
+    );
+    if (!confirmed) return;
+    setInviteError(null);
+    setRevokingInviteId(invite.id);
+    try {
+      await revokeInviteRequest({ organizationId, inviteId: invite.id });
+      setInvites((current) => current?.filter((item) => item.id !== invite.id) ?? current);
+    } catch (error) {
+      setInviteError(describeError(error, t));
+    } finally {
+      setRevokingInviteId(null);
     }
   };
 
@@ -268,13 +287,22 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
                       : `${t('Expires', 'Expire le')} ${formatDate(invite.expiresAt, language)}`}
                   </p>
                 </div>
-                <span
-                  className={`micro-label shrink-0 rounded-full px-2.5 py-1 text-[10px] ${
-                    accepted ? 'bg-forest-wash text-forest-dark' : 'bg-navy-wash text-navy'
-                  }`}
-                >
-                  {accepted ? t('Accepted', 'Acceptée') : t('Pending', 'En attente')}
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className={`micro-label rounded-full px-2.5 py-1 text-[10px] ${accepted ? 'bg-forest-wash text-forest-dark' : 'bg-navy-wash text-navy'}`}>
+                    {accepted ? t('Accepted', 'Acceptée') : t('Pending', 'En attente')}
+                  </span>
+                  {!accepted && roleAtLeast(viewerRole, 'manager') && (
+                    <button
+                      type="button"
+                      onClick={() => void handleRevokeInvite(invite)}
+                      disabled={revokingInviteId === invite.id}
+                      aria-label={t(`Revoke invitation for ${invite.email}`, `Révoquer l’invitation de ${invite.email}`)}
+                      className="flex h-11 w-11 items-center justify-center rounded-xl border border-red-200 text-danger transition-colors hover:bg-red-50 disabled:cursor-wait disabled:opacity-50"
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

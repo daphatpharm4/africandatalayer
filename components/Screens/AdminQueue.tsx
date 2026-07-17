@@ -270,9 +270,9 @@ function addDaysDateOnly(days: number): string {
 }
 
 function queueAccentClass(group: AdminSubmissionGroup): string {
-  if (group.summary.riskBucket === 'flagged') return 'border-l-terra';
-  if (group.summary.riskBucket === 'pending') return 'border-l-gold';
-  return 'border-l-forest';
+  if (group.summary.riskBucket === 'flagged') return 'border-terra';
+  if (group.summary.riskBucket === 'pending') return 'border-gold';
+  return 'border-forest';
 }
 
 function formatFraudFlag(flag: string, language: 'en' | 'fr'): string {
@@ -1561,7 +1561,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                         key={group.pointId}
                         role="option"
                         aria-selected={isSelected}
-                        className={`card border-l-4 ${queueAccentClass(group)} ${isSelected ? 'ring-2 ring-navy ring-offset-2 ring-offset-page' : ''}`}
+                        className={`card border ${queueAccentClass(group)} ${isSelected ? 'ring-2 ring-navy ring-offset-2 ring-offset-page' : ''}`}
                       >
                         <div className="flex gap-3 p-3">
                           <div className="flex items-start">
@@ -2380,7 +2380,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                 onClick={handleRejectAutomationLeads}
                 disabled={isApplyingAutomationAction}
                 className={`h-10 rounded-xl px-4 micro-label ${focusRingClass} ${
-                  isApplyingAutomationAction ? 'bg-gray-100 text-gray-400' : 'bg-red-50 text-red-600 border border-red-100'
+                  isApplyingAutomationAction ? 'bg-gray-100 text-gray-500' : 'bg-red-50 text-red-700 border border-red-200'
                 }`}
               >
                 {t('Reject selection', 'Rejeter la sélection')}

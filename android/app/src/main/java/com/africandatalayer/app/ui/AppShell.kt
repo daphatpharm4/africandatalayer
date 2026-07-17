@@ -150,7 +150,7 @@ private fun AppTopBar(
                 Text("EN")
             }
             StatusPill(
-                text = state.syncMessage,
+                text = state.syncStatus.title(state.language),
                 modifier = Modifier.padding(top = 6.dp)
             )
         }

@@ -1311,7 +1311,7 @@ struct AgentHomeView: View {
                 FieldMapHeader(
                     pointCount: filteredPoints.count,
                     refreshCount: filteredPoints.filter(\.requiresRefresh).count,
-                    locationStatus: locationProvider.statusText,
+                    locationStatus: locationProvider.status.localized(language: appState.language),
                     activeCategory: activeCategory,
                     onSelectCategory: { category in
                         activeCategory = category
@@ -3034,7 +3034,7 @@ struct ContributionView: View {
                                  : appState.t("GPS pending", "GPS en attente"))
                                 .font(ADLFont.inter(14, .bold))
                                 .foregroundColor(ADLColor.ink)
-                            Text(locationProvider.statusText)
+                            Text(locationProvider.status.localized(language: appState.language))
                                 .font(ADLFont.inter(12))
                                 .foregroundColor(ADLColor.inkMuted)
                         }
@@ -3657,7 +3657,7 @@ struct ContributionView: View {
             }
         }
 
-        locationProvider.setLocation(context.location, status: "Map location selected")
+        locationProvider.setLocation(context.location, status: .mapSelected)
         validationMessage = nil
     }
 
@@ -8697,7 +8697,7 @@ struct BadgesView: View {
                         .foregroundColor(.secondary)
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(appState.badges) { badge in
-                            BadgeTile(badge: badge)
+                            BadgeTile(badge: badge, earnedTitle: appState.t("Earned", "Obtenu"))
                         }
                     }
                 }

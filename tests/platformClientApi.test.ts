@@ -9,6 +9,7 @@ import {
   listOrgMembersRequest,
   createInviteRequest,
   acceptInviteRequest,
+  revokeInviteRequest,
   updateMemberRequest,
   removeMemberRequest,
   createProjectRequest,
@@ -142,6 +143,17 @@ test("acceptInviteRequest posts platform_invite_accept and passes through organi
   assert.equal(calls[0].init?.method, "POST");
   assert.deepEqual(JSON.parse(calls[0].init?.body as string), { token: "abcd1234" });
   assert.deepEqual(result, { organizationId: "org-1" });
+});
+
+test("revokeInviteRequest posts the scoped invite identifier", async () => {
+  const { fetchFn, calls } = stubFetch(() => jsonResponse({ revoked: true }));
+  await revokeInviteRequest({ organizationId: "org-1", inviteId: "inv-1" }, { fetchFn });
+  assert.equal(calls[0].url, "/api/user?view=platform_invite_revoke");
+  assert.equal(calls[0].init?.method, "POST");
+  assert.deepEqual(JSON.parse(calls[0].init?.body as string), {
+    organizationId: "org-1",
+    inviteId: "inv-1",
+  });
 });
 
 test("platform client preserves stable API error codes", async () => {

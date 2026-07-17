@@ -6,6 +6,7 @@ export type PlatformAuditEventType =
   | "org_created"
   | "org_branding_updated"
   | "member_invited"
+  | "invite_revoked"
   | "invite_accepted"
   | "member_role_changed"
   | "member_removed"

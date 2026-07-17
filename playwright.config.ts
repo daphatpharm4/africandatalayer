@@ -71,5 +71,14 @@ export default defineConfig({
         timezoneId: 'Africa/Douala',
       },
     },
+    {
+      name: 'accessibility',
+      testMatch: ['e2e/smoke/accessibility.smoke.spec.ts'],
+      use: {
+        ...devices['Desktop Chrome'],
+        locale: 'en-US',
+        timezoneId: 'Africa/Douala',
+      },
+    },
   ],
 });

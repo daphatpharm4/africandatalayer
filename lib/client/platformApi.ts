@@ -144,6 +144,13 @@ export async function acceptInviteRequest(
   );
 }
 
+export async function revokeInviteRequest(
+  input: { organizationId: string; inviteId: string },
+  deps?: PlatformApiDeps,
+): Promise<void> {
+  await callPlatform<{ revoked: true }>("invite_revoke", { method: "POST", body: input }, deps);
+}
+
 export async function updateMemberRequest(
   input: { organizationId: string; userId: string; role: PlatformRole },
   deps?: PlatformApiDeps,

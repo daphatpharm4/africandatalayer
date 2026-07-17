@@ -90,6 +90,30 @@ test("invite_accept: expired invite gets 410", async () => {
   assert.equal(response.status, 410);
 });
 
+test("invite_revoke invalidates a pending invite and audits the action", async () => {
+  const revoked: any[] = [];
+  const audits: string[] = [];
+  const inviteId = "5a2f8f18-0000-4000-8000-000000000003";
+  const handler = createPlatformHandler(baseDeps({
+    revokeInviteFn: async (input: any) => { revoked.push(input); return true; },
+    writeAuditFn: async (event: { eventType: string }) => { audits.push(event.eventType); },
+  }));
+  const response = await handler(jsonPost("invite_revoke", { organizationId: ORG.id, inviteId }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(revoked, [{ organizationId: ORG.id, inviteId }]);
+  assert.deepEqual(audits, ["invite_revoked"]);
+});
+
+test("invite_revoke returns 404 when the invite is accepted, revoked, or belongs elsewhere", async () => {
+  const handler = createPlatformHandler(baseDeps({ revokeInviteFn: async () => false }));
+  const response = await handler(jsonPost("invite_revoke", {
+    organizationId: ORG.id,
+    inviteId: "5a2f8f18-0000-4000-8000-000000000003",
+  }));
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).code, "platform_invite_not_found");
+});
+
 test("invite_accept: valid invite adds membership and marks accepted", async () => {
   const roleUpserts: any[] = []; const accepted: any[] = [];
   const future = new Date(Date.now() + 86_400_000).toISOString();
