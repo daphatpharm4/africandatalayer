@@ -43,3 +43,30 @@ test("vercel auth rewrites route Auth.js endpoints to the catch-all auth handler
     );
   }
 });
+
+test("vercel serves the console entry before the field app fallback", () => {
+  const vercelConfig = JSON.parse(
+    readFileSync(resolve(process.cwd(), "vercel.json"), "utf8"),
+  ) as { rewrites?: RewriteRule[] };
+
+  const rewrites = vercelConfig.rewrites ?? [];
+  const consoleRewriteIndex = rewrites.findIndex(
+    (rule) =>
+      rule.source === "/console" && rule.destination === "/console.html",
+  );
+  const fallbackIndex = rewrites.findIndex(
+    (rule) =>
+      rule.source === "/(.*)" && rule.destination === "/index.html",
+  );
+
+  assert.notEqual(
+    consoleRewriteIndex,
+    -1,
+    "Missing /console rewrite to the built console entry",
+  );
+  assert.notEqual(fallbackIndex, -1, "Missing field app fallback rewrite");
+  assert.ok(
+    consoleRewriteIndex < fallbackIndex,
+    "Console rewrite must run before the field app fallback",
+  );
+});

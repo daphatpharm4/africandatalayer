@@ -161,6 +161,7 @@
     { "source": "/api/comms/email/webhook", "destination": "/api/privacy?view=email-webhook" },
     { "source": "/api/comms/sms/inbound", "destination": "/api/privacy?view=sms-inbound" },
     { "source": "/api/comms/sms/dlr", "destination": "/api/privacy?view=sms-dlr" },
+    { "source": "/console", "destination": "/console.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
