@@ -8,6 +8,8 @@ import {
   type ConsoleRoute,
 } from '../../lib/client/consoleState';
 import ConsoleShell from './ConsoleShell';
+import JoinScreen from './JoinScreen';
+import MembersScreen from './MembersScreen';
 import OnboardingWizard from './OnboardingWizard';
 import ProjectsScreen from './ProjectsScreen';
 import SchemaBuilder from './SchemaBuilder';
@@ -42,12 +44,14 @@ function readInitialRoute(): ConsoleRoute {
 
 const ConsoleApp: React.FC = () => {
   const [sessionState, setSessionState] = useState<SessionState>('loading');
+  const [userId, setUserId] = useState<string | null>(null);
   const [organizations, setOrganizations] = useState<OrgWithRole[] | null>(null);
   const [orgsError, setOrgsError] = useState<string | null>(null);
   const [orgsReloadKey, setOrgsReloadKey] = useState(0);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(() => readStoredOrgId());
   const [route, setRoute] = useState<ConsoleRoute>(() => readInitialRoute());
   const [language, setLanguage] = useState<'en' | 'fr'>(() => readStoredLanguage());
+  const [joinBanner, setJoinBanner] = useState<string | null>(null);
 
   const t = useCallback(
     (en: string, fr: string) => (language === 'fr' ? fr : en),
@@ -60,6 +64,7 @@ const ConsoleApp: React.FC = () => {
     void getSession().then((session) => {
       if (cancelled) return;
       setSessionState(session?.user ? 'authenticated' : 'unauthenticated');
+      setUserId(session?.user?.id ?? null);
     });
     return () => {
       cancelled = true;
@@ -156,6 +161,18 @@ const ConsoleApp: React.FC = () => {
     [handleSelectOrganization, handleNavigate],
   );
 
+  // Invite acceptance reuses the exact same race-free sequence as onboarding
+  // completion (fetch orgs -> select -> navigate), then layers a dismissible
+  // success banner on top — JoinScreen unmounts as soon as this resolves, so
+  // the banner has to live here rather than in JoinScreen itself.
+  const handleJoined = useCallback(
+    (organizationId: string) => {
+      setJoinBanner(t('You have joined the organization.', "Vous avez rejoint l'organisation."));
+      void handleOnboardingDone(organizationId);
+    },
+    [handleOnboardingDone, t],
+  );
+
   if (sessionState === 'loading' || (sessionState === 'authenticated' && organizations === null && !orgsError)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-page text-ink-muted">
@@ -185,7 +202,10 @@ const ConsoleApp: React.FC = () => {
     );
   }
 
-  if (sessionState === 'unauthenticated') {
+  // JOIN is reachable without a session — JoinScreen itself renders the
+  // sign-in prompt (with copy specific to invite links) so we don't lose the
+  // joinToken by bouncing through this generic gate first.
+  if (sessionState === 'unauthenticated' && route.screen !== 'JOIN') {
     return (
       <div className="flex min-h-screen items-center justify-center bg-page px-6">
         <div className="card w-full max-w-sm p-6 text-center">
@@ -237,30 +257,63 @@ const ConsoleApp: React.FC = () => {
       );
       break;
     case 'MEMBERS':
-      screenContent = <div>{t('Members coming soon.', 'Membres à venir.')}</div>;
+      screenContent = selectedOrganization ? (
+        <MembersScreen
+          organizationId={selectedOrganization.id}
+          viewerRole={selectedOrganization.role}
+          viewerUserId={userId}
+          language={language}
+        />
+      ) : (
+        <div>{t('Select an organization to see its members.', 'Sélectionnez une organisation pour voir ses membres.')}</div>
+      );
       break;
     case 'SETTINGS':
       screenContent = <div>{t('Settings coming soon.', 'Paramètres à venir.')}</div>;
       break;
     case 'JOIN':
-      screenContent = <div>{t('Join organization coming soon.', "Rejoindre l'organisation à venir.")}</div>;
+      screenContent = (
+        <JoinScreen
+          token={effectiveRoute.joinToken}
+          hasSession={sessionState === 'authenticated'}
+          language={language}
+          onJoined={handleJoined}
+        />
+      );
       break;
     default:
       screenContent = <div>{t('Projects coming soon.', 'Projets à venir.')}</div>;
   }
 
   return (
-    <ConsoleShell
-      organization={selectedOrganization}
-      organizations={orgs}
-      onSelectOrganization={handleSelectOrganization}
-      route={effectiveRoute}
-      onNavigate={handleNavigate}
-      language={language}
-      onToggleLanguage={handleToggleLanguage}
-    >
-      {screenContent}
-    </ConsoleShell>
+    <>
+      {joinBanner && (
+        <div className="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
+          <div className="flex items-center gap-3 rounded-2xl bg-forest px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+            <span>{joinBanner}</span>
+            <button
+              type="button"
+              onClick={() => setJoinBanner(null)}
+              aria-label={t('Dismiss', 'Fermer')}
+              className="text-white/80 transition-colors hover:text-white"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+      <ConsoleShell
+        organization={selectedOrganization}
+        organizations={orgs}
+        onSelectOrganization={handleSelectOrganization}
+        route={effectiveRoute}
+        onNavigate={handleNavigate}
+        language={language}
+        onToggleLanguage={handleToggleLanguage}
+      >
+        {screenContent}
+      </ConsoleShell>
+    </>
   );
 };
 
