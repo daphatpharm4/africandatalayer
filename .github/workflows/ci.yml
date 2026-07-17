@@ -69,7 +69,10 @@ jobs:
           status="${PIPESTATUS[0]}"
           set -e
           if (( status != 0 )); then
-            detail="$(grep -E '(^e: |^FAILURE:|^\* What went wrong:|Execution failed|error:|Could not resolve|Could not find)' "$log_file" | tail -n 20 | tr '\n' ' ')"
+            detail="$(grep -A 16 -E '^\* What went wrong:' "$log_file" | head -n 18 | tr '\n' ' ')"
+            if [[ -z "$detail" ]]; then
+              detail="$(tail -n 40 "$log_file" | tr '\n' ' ')"
+            fi
             detail="${detail//'%'/'%25'}"
             echo "::error file=android/app/build.gradle.kts::Android Gradle failure: ${detail:-see full job log}"
           fi
