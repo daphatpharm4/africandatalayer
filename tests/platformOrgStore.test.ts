@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   createOrganization,
   getMembership,
-  getOrganization,
   listMembers,
   listOrganizationsForUser,
   markInviteAccepted,

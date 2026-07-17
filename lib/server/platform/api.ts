@@ -77,8 +77,6 @@ export interface PlatformApiDeps {
   uploadLogoFn?: (dataUrl: string, organizationId: string) => Promise<string>;
 }
 
-type AuthUser = { id: string; token: unknown; role: string };
-
 async function readJson(request: Request): Promise<unknown> {
   try {
     return await request.json();
