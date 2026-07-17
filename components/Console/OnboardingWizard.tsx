@@ -16,7 +16,8 @@ import {
   saveSchemaDraftRequest,
   PlatformApiError,
 } from '../../lib/client/platformApi';
-import type { PlatformRole } from '../../shared/platformTypes';
+import type { PlatformProjectCoverageScope, PlatformRole } from '../../shared/platformTypes';
+import ProjectCoverageFields from './ProjectCoverageFields';
 
 export interface OnboardingWizardProps {
   language: 'en' | 'fr';
@@ -93,7 +94,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
   const stepIndex = STEP_ORDER.indexOf(state.step);
   const isValid = wizardStepValid(state);
 
-  const setField = (field: 'orgName' | 'orgSlug' | 'projectName' | 'recordTypeLabelEn' | 'recordTypeLabelFr' | 'inviteEmail' | 'inviteRole', value: string) => {
+  const setField = (field: 'orgName' | 'orgSlug' | 'projectName' | 'projectCoverageScope' | 'projectCoverageLabel' | 'recordTypeLabelEn' | 'recordTypeLabelFr' | 'inviteEmail' | 'inviteRole', value: string) => {
     dispatch({ type: 'SET_FIELD', field, value });
   };
 
@@ -118,6 +119,8 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
       const project = await createProjectRequest({
         organizationId: state.organizationId,
         name: state.projectName.trim(),
+        coverageScope: state.projectCoverageScope,
+        coverageLabel: state.projectCoverageScope === 'worldwide' ? undefined : state.projectCoverageLabel.trim(),
       });
       dispatch({ type: 'PROJECT_CREATED', projectId: project.id });
     } catch (err) {
@@ -294,6 +297,20 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
               disabled={isBusy}
               placeholder={t('e.g. Douala Pilot', 'p. ex. Pilote Douala')}
               className="h-14 w-full rounded-2xl border border-gray-100 bg-white px-4 text-base text-gray-900 shadow-sm transition-all placeholder:text-gray-400 focus:border-navy focus:outline-none disabled:bg-gray-50"
+            />
+          </div>
+          <div className="mt-5">
+            <ProjectCoverageFields
+              scope={state.projectCoverageScope}
+              label={state.projectCoverageLabel}
+              onScopeChange={(scope: PlatformProjectCoverageScope) => {
+                setField('projectCoverageScope', scope);
+                if (scope === 'worldwide') setField('projectCoverageLabel', '');
+              }}
+              onLabelChange={(label) => setField('projectCoverageLabel', label)}
+              language={language}
+              disabled={isBusy}
+              idPrefix="wizard-project"
             />
           </div>
           {error && (

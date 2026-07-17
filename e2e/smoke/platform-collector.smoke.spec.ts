@@ -6,19 +6,26 @@ const SCHEMA_ID = '5a2f8f18-0000-4000-8000-000000000003';
 
 test('invited collector sees company profile and submits the company form on mobile', async ({ page, gotoApp }) => {
   let submittedBody: Record<string, unknown> | null = null;
+  const publicExploreRequests: string[] = [];
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === '/api/submissions') {
+      publicExploreRequests.push(request.url());
+    }
+  });
   await page.route('**/api/user?view=platform_*', async (route) => {
     const request = route.request();
     const view = new URL(request.url()).searchParams.get('view');
     if (view === 'platform_org_list') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ organizations: [{
-        id: ORG_ID, name: 'Usiku Research', slug: 'usiku-research', logoUrl: null,
+        id: ORG_ID, name: 'Usiku Research', slug: 'usiku-research', logoUrl: '/company-logo.png',
         accentColor: '#0f3d5e', createdAt: '2026-07-17T00:00:00.000Z', role: 'collector',
       }] }) });
       return;
     }
     if (view === 'platform_project_list') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projects: [{
-        id: PROJECT_ID, organizationId: ORG_ID, name: 'Retail Census', status: 'active', createdAt: '2026-07-17T00:00:00.000Z',
+        id: PROJECT_ID, organizationId: ORG_ID, name: 'Retail Census', status: 'active',
+        coverageScope: 'country', coverageLabel: 'Kenya', createdAt: '2026-07-17T00:00:00.000Z',
       }] }) });
       return;
     }
@@ -52,6 +59,18 @@ test('invited collector sees company profile and submits the company form on mob
 
   await gotoApp('/');
   await expect(page.getByTestId('screen-home')).toBeVisible();
+  await expect(page.getByTestId('company-explore-name')).toHaveText('Usiku Research');
+  await expect(page.getByTestId('company-explore-logo')).toHaveAttribute('src', '/company-logo.png');
+  await expect(page.getByTestId('company-vertical-picker')).toContainText('Retail outlet');
+  await expect(page.getByTestId('screen-home')).toContainText('Company workspace · Kenya');
+  await expect(page.getByText('Next high-value capture')).toHaveCount(0);
+  await expect(page.getByText('+25 XP')).toHaveCount(0);
+  await expect(page.getByText('Nearby opportunities')).toHaveCount(0);
+  await expect(page.getByText('Browse as list')).toHaveCount(0);
+  await expect(page.getByText('19 points in view')).toHaveCount(0);
+  await expect(page.getByText('Category: Pharmacy')).toHaveCount(0);
+  await expect(page.getByTestId('main-navigation').getByRole('button', { name: 'Leaderboard' })).toHaveCount(0);
+  expect(publicExploreRequests).toEqual([]);
   await page.getByTestId('main-navigation').getByRole('button', { name: 'Contribute' }).click();
 
   await expect(page.getByTestId('screen-platform-collection')).toBeVisible();

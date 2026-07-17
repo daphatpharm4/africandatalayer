@@ -519,6 +519,8 @@ const App: React.FC = () => {
             activeCategory={activeCategory}
             onCategoryChange={setActiveCategory}
             language={language}
+            platformFieldContext={platformFieldContext}
+            platformFieldContextError={platformFieldContextError}
           />
         );
       case Screen.DETAILS:
@@ -603,7 +605,6 @@ const App: React.FC = () => {
                 switchTab(Screen.HOME);
               }}
               onRetry={() => void refreshPlatformFieldContext()}
-              onUseGeneric={() => setUseGenericContribution(true)}
             />
           );
         }
@@ -810,6 +811,7 @@ const App: React.FC = () => {
             isAdmin={isAdmin}
             userRole={userRole}
             language={language}
+            companyMode={Boolean(platformFieldContext?.organizations.length)}
           />
         )}
       </div>

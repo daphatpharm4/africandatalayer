@@ -11,7 +11,7 @@ test("authenticated company collectors are routed to company collection before g
   assert.match(source, /loadPlatformFieldContext/);
   assert.match(source, /<PlatformCollectionFlow/);
   assert.match(source, /Boolean\(platformFieldContext\?\.organizations\.length\)/);
-  assert.match(source, /onUseGeneric=\{\(\) => setUseGenericContribution\(true\)\}/);
+  assert.doesNotMatch(source, /onUseGeneric/);
 });
 
 test("company collection renders published record types and all supported dynamic field controls", async () => {
@@ -23,6 +23,7 @@ test("company collection renders published record types and all supported dynami
   assert.match(source, /createPlatformRecordRequest/);
   assert.match(source, /Company submissions need a connection for now/);
   assert.match(source, /min-h-12/);
+  assert.doesNotMatch(source, /Use ADL public collection/);
 });
 
 test("profile exposes organization branding, role, projects, and refresh state", async () => {

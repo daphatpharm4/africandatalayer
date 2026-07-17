@@ -138,6 +138,7 @@ test("wizard happy path: org -> project -> record_type -> invite -> done", () =>
   assert.equal(state.organizationId, "org-1");
 
   state = wizardReducer(state, { type: "SET_FIELD", field: "projectName", value: "Douala Pilot" });
+  state = wizardReducer(state, { type: "SET_FIELD", field: "projectCoverageLabel", value: "Douala" });
   assert.equal(wizardStepValid(state), true);
 
   state = wizardReducer(state, { type: "PROJECT_CREATED", projectId: "proj-1" });
@@ -200,6 +201,18 @@ test("wizardStepValid: false on empty required inputs per step", () => {
 
   const inviteStep = { ...initialWizardState, step: "invite" as const };
   assert.equal(wizardStepValid(inviteStep), true);
+});
+
+test("wizard project coverage accepts town, country, or worldwide", () => {
+  const projectState = {
+    ...initialWizardState,
+    step: "project" as const,
+    projectName: "Market census",
+  };
+  assert.equal(wizardStepValid(projectState), false, "town needs a name");
+  assert.equal(wizardStepValid({ ...projectState, projectCoverageLabel: "Nairobi" }), true);
+  assert.equal(wizardStepValid({ ...projectState, projectCoverageScope: "country", projectCoverageLabel: "Kenya" }), true);
+  assert.equal(wizardStepValid({ ...projectState, projectCoverageScope: "worldwide", projectCoverageLabel: "" }), true);
 });
 
 // ---------------------------------------------------------------------------

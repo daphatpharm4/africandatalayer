@@ -175,7 +175,12 @@ export async function removeMemberRequest(
 // ─── Projects ───────────────────────────────────────────────────────────────
 
 export async function createProjectRequest(
-  input: { organizationId: string; name: string },
+  input: {
+    organizationId: string;
+    name: string;
+    coverageScope: PlatformProject["coverageScope"];
+    coverageLabel?: string;
+  },
   deps?: PlatformApiDeps,
 ): Promise<PlatformProject> {
   const payload = await callPlatform<{ project: PlatformProject }>(

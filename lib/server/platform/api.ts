@@ -475,6 +475,8 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     const project = await createProjectFn({
       organizationId: body.organizationId,
       name: body.name,
+      coverageScope: body.coverageScope,
+      coverageLabel: body.coverageScope === "worldwide" ? null : (body.coverageLabel ?? null),
       createdBy: context.userId,
     });
 
@@ -483,7 +485,11 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
       projectId: project.id,
       actorUserId: context.userId,
       eventType: "project_created",
-      payload: { name: project.name },
+      payload: {
+        name: project.name,
+        coverageScope: project.coverageScope,
+        coverageLabel: project.coverageLabel,
+      },
     });
 
     return jsonResponse({ project }, { status: 201 });

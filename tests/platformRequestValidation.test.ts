@@ -45,6 +45,9 @@ test("project create bounds name length", () => {
   const base = { organizationId: "5a2f8f18-0000-4000-8000-000000000000" };
   assert.equal(projectCreateSchema.safeParse({ ...base, name: "x" }).success, false);
   assert.equal(projectCreateSchema.safeParse({ ...base, name: "Bin census" }).success, true);
+  assert.equal(projectCreateSchema.safeParse({ ...base, name: "Bin census", coverageScope: "town" }).success, false);
+  assert.equal(projectCreateSchema.safeParse({ ...base, name: "Bin census", coverageScope: "town", coverageLabel: "Douala" }).success, true);
+  assert.equal(projectCreateSchema.safeParse({ ...base, name: "Bin census", coverageScope: "worldwide" }).success, true);
 });
 
 test("writePlatformAudit inserts scoped row and swallows failures", async () => {

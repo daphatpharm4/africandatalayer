@@ -21,6 +21,8 @@ function rowToProject(row: any): PlatformProject {
     organizationId: row.organization_id,
     name: row.name,
     status: row.status,
+    coverageScope: row.coverage_scope ?? "worldwide",
+    coverageLabel: row.coverage_label ?? null,
     createdAt: toIso(row.created_at),
   };
 }
@@ -40,21 +42,28 @@ function rowToSchemaVersion(row: any): PlatformSchemaVersion {
 const SCHEMA_COLUMNS = "id, project_id, organization_id, version, status, definition, published_at, created_at";
 
 export async function createProject(
-  input: { organizationId: string; name: string; createdBy: string },
+  input: {
+    organizationId: string;
+    name: string;
+    coverageScope: PlatformProject["coverageScope"];
+    coverageLabel: string | null;
+    createdBy: string;
+  },
   deps: StoreDeps = {},
 ): Promise<PlatformProject> {
   const result = await db(deps)(
-    `INSERT INTO public.platform_projects (organization_id, name, created_by)
-     VALUES ($1, $2, $3)
-     RETURNING id, organization_id, name, status, created_at`,
-    [input.organizationId, input.name, input.createdBy],
+    `INSERT INTO public.platform_projects
+       (organization_id, name, coverage_scope, coverage_label, created_by)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, organization_id, name, status, coverage_scope, coverage_label, created_at`,
+    [input.organizationId, input.name, input.coverageScope, input.coverageLabel, input.createdBy],
   );
   return rowToProject(result.rows[0]);
 }
 
 export async function listProjects(organizationId: string, deps: StoreDeps = {}): Promise<PlatformProject[]> {
   const result = await db(deps)(
-    `SELECT id, organization_id, name, status, created_at
+    `SELECT id, organization_id, name, status, coverage_scope, coverage_label, created_at
      FROM public.platform_projects
      WHERE organization_id = $1
      ORDER BY created_at DESC`,
@@ -65,7 +74,7 @@ export async function listProjects(organizationId: string, deps: StoreDeps = {})
 
 export async function getProject(projectId: string, deps: StoreDeps = {}): Promise<PlatformProject | null> {
   const result = await db(deps)(
-    `SELECT id, organization_id, name, status, created_at
+    `SELECT id, organization_id, name, status, coverage_scope, coverage_label, created_at
      FROM public.platform_projects
      WHERE id = $1`,
     [projectId],

@@ -22,6 +22,7 @@ interface Props {
   isAdmin?: boolean;
   userRole?: UserRole;
   language?: 'en' | 'fr';
+  companyMode?: boolean;
 }
 
 interface NavItem {
@@ -39,6 +40,7 @@ const Navigation: React.FC<Props> = ({
   isAdmin,
   userRole = 'agent',
   language = 'en',
+  companyMode = false,
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
@@ -98,7 +100,13 @@ const Navigation: React.FC<Props> = ({
     },
   ];
 
-  const navItems = isAdmin ? adminNav : userRole === 'client' ? clientNav : agentNav;
+  const navItems = isAdmin
+    ? adminNav
+    : userRole === 'client'
+      ? clientNav
+      : companyMode
+        ? agentNav.filter((item) => item.id !== Screen.ANALYTICS)
+        : agentNav;
 
   return (
     <nav

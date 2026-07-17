@@ -63,7 +63,10 @@ test("requireProjectOrgRole: missing project gets 404", async () => {
 test("requireProjectOrgRole: project in another org gets 403, body identical to plain 403", async () => {
   const foreign = await requireProjectOrgRole(request, "proj-9", "viewer", {
     requireUserFn: authedUser as any,
-    getProjectFn: async () => ({ id: "proj-9", organizationId: "org-9", name: "x", status: "draft", createdAt: "" }),
+    getProjectFn: async () => ({
+      id: "proj-9", organizationId: "org-9", name: "x", status: "draft",
+      coverageScope: "worldwide", coverageLabel: null, createdAt: "",
+    }),
     getMembershipFn: async () => null,
   });
   const plain = await requireOrgRole(request, "org-9", "viewer", {
@@ -77,7 +80,10 @@ test("requireProjectOrgRole: project in another org gets 403, body identical to 
 test("requireProjectOrgRole: member gets context with projectId", async () => {
   const result = await requireProjectOrgRole(request, "proj-1", "reviewer", {
     requireUserFn: authedUser as any,
-    getProjectFn: async () => ({ id: "proj-1", organizationId: "org-1", name: "x", status: "active", createdAt: "" }),
+    getProjectFn: async () => ({
+      id: "proj-1", organizationId: "org-1", name: "x", status: "active",
+      coverageScope: "worldwide", coverageLabel: null, createdAt: "",
+    }),
     getMembershipFn: async () => ({ organizationId: "org-1", userId: "u1", role: "manager", createdAt: "" }),
   });
   assert.ok(!isTenancyFailure(result));

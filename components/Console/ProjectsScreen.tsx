@@ -3,6 +3,7 @@ import { ChevronRight, Plus } from 'lucide-react';
 import { createProjectRequest, listProjectsRequest, PlatformApiError } from '../../lib/client/platformApi';
 import type { PlatformProject } from '../../shared/platformTypes';
 import type { ConsoleRoute } from '../../lib/client/consoleState';
+import ProjectCoverageFields from './ProjectCoverageFields';
 
 export interface ProjectsScreenProps {
   organizationId: string;
@@ -65,6 +66,8 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
 
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [coverageScope, setCoverageScope] = useState<PlatformProject['coverageScope']>('town');
+  const [coverageLabel, setCoverageLabel] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -88,14 +91,22 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
 
   const handleCreate = async () => {
     const name = newName.trim();
-    if (name.length === 0) return;
+    const normalizedCoverageLabel = coverageLabel.trim();
+    if (name.length === 0 || (coverageScope !== 'worldwide' && normalizedCoverageLabel.length < 2)) return;
     setCreateError(null);
     setIsBusy(true);
     try {
-      const project = await createProjectRequest({ organizationId, name });
+      const project = await createProjectRequest({
+        organizationId,
+        name,
+        coverageScope,
+        coverageLabel: coverageScope === 'worldwide' ? undefined : normalizedCoverageLabel,
+      });
       setProjects((current) => (current ? [project, ...current] : [project]));
       setIsCreating(false);
       setNewName('');
+      setCoverageScope('town');
+      setCoverageLabel('');
     } catch (error) {
       setCreateError(describeError(error, t));
     } finally {
@@ -106,6 +117,8 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
   const cancelCreate = () => {
     setIsCreating(false);
     setNewName('');
+    setCoverageScope('town');
+    setCoverageLabel('');
     setCreateError(null);
   };
 
@@ -148,6 +161,20 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
             placeholder={t('e.g. Douala Pilot', 'p. ex. Pilote Douala')}
             className="mt-2 h-14 w-full rounded-2xl border border-gray-100 bg-white px-4 text-base text-gray-900 shadow-sm transition-all placeholder:text-gray-400 focus:border-navy focus:outline-none disabled:bg-gray-50"
           />
+          <div className="mt-5">
+            <ProjectCoverageFields
+              scope={coverageScope}
+              label={coverageLabel}
+              onScopeChange={(scope) => {
+                setCoverageScope(scope);
+                if (scope === 'worldwide') setCoverageLabel('');
+              }}
+              onLabelChange={setCoverageLabel}
+              language={language}
+              disabled={isBusy}
+              idPrefix="new-project"
+            />
+          </div>
           {createError && (
             <p className="mt-3 text-xs text-danger" role="alert">
               {createError}
@@ -165,7 +192,7 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
             <button
               type="button"
               onClick={() => void handleCreate()}
-              disabled={isBusy || newName.trim().length === 0}
+              disabled={isBusy || newName.trim().length === 0 || (coverageScope !== 'worldwide' && coverageLabel.trim().length < 2)}
               className="btn-primary flex flex-1 items-center justify-center disabled:opacity-50"
             >
               {isBusy ? t('Creating…', 'Création…') : t('Create', 'Créer')}
@@ -214,6 +241,11 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, languag
                 <p className="truncate text-sm font-semibold text-ink">{project.name}</p>
                 <p className="micro-label mt-1 text-ink-muted">
                   {t('Created', 'Créé le')} {formatDate(project.createdAt, language)}
+                </p>
+                <p className="micro-label mt-1 text-navy">
+                  {(project.coverageScope ?? 'worldwide') === 'worldwide'
+                    ? t('Worldwide coverage', 'Couverture mondiale')
+                    : project.coverageLabel}
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-3">

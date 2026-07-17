@@ -13,7 +13,8 @@ import {
 
 const PROJECT_ROW = {
   id: "proj-1", organization_id: "org-1", name: "Bin census",
-  status: "draft", created_at: "2026-07-16T00:00:00.000Z",
+  status: "draft", coverage_scope: "town", coverage_label: "Douala",
+  created_at: "2026-07-16T00:00:00.000Z",
 };
 const DEFINITION = { recordTypes: [{ key: "bin", label: { en: "Bin", fr: "Bac" }, fields: [
   { key: "state", label: { en: "State", fr: "État" }, type: "text", required: true },
@@ -37,9 +38,18 @@ function fakeQuery(rowsPerCall: Array<{ rows: any[] }>) {
 
 test("createProject inserts with organization scope", async () => {
   const { queryFn, calls } = fakeQuery([{ rows: [PROJECT_ROW] }]);
-  const project = await createProject({ organizationId: "org-1", name: "Bin census", createdBy: "u1" }, { queryFn });
+  const project = await createProject({
+    organizationId: "org-1",
+    name: "Bin census",
+    coverageScope: "town",
+    coverageLabel: "Douala",
+    createdBy: "u1",
+  }, { queryFn });
   assert.equal(project.organizationId, "org-1");
+  assert.equal(project.coverageScope, "town");
+  assert.equal(project.coverageLabel, "Douala");
   assert.equal(calls[0].values[0], "org-1");
+  assert.deepEqual(calls[0].values.slice(2, 4), ["town", "Douala"]);
 });
 
 test("listProjects scopes by organization", async () => {

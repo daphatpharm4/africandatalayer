@@ -18,7 +18,16 @@ export interface PlatformOrganization {
 }
 export interface PlatformMembership { organizationId: string; userId: string; role: PlatformRole; createdAt: string }
 export type PlatformProjectStatus = "draft" | "active" | "archived";
-export interface PlatformProject { id: string; organizationId: string; name: string; status: PlatformProjectStatus; createdAt: string }
+export type PlatformProjectCoverageScope = "town" | "country" | "worldwide";
+export interface PlatformProject {
+  id: string;
+  organizationId: string;
+  name: string;
+  status: PlatformProjectStatus;
+  coverageScope: PlatformProjectCoverageScope;
+  coverageLabel: string | null;
+  createdAt: string;
+}
 export interface PlatformSchemaVersion {
   id: string; projectId: string; organizationId: string; version: number;
   status: "draft" | "published"; definition: PlatformSchemaDefinition; publishedAt: string | null;

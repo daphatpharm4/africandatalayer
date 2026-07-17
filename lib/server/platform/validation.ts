@@ -48,6 +48,16 @@ export const memberRemoveSchema = z.object({
 export const projectCreateSchema = z.object({
   organizationId: uuid,
   name: z.string().trim().min(2).max(120),
+  coverageScope: z.enum(["town", "country", "worldwide"]).default("worldwide"),
+  coverageLabel: z.string().trim().min(2).max(120).optional(),
+}).superRefine((value, context) => {
+  if (value.coverageScope !== "worldwide" && !value.coverageLabel) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["coverageLabel"],
+      message: "Town or country name is required",
+    });
+  }
 });
 
 export const schemaDraftSaveSchema = z.object({

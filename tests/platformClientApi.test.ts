@@ -197,13 +197,22 @@ test("removeMemberRequest posts platform_member_remove and resolves void", async
   assert.equal(result, undefined);
 });
 
-test("createProjectRequest posts platform_project_create and unwraps project", async () => {
-  const project = { id: "proj-1", organizationId: "org-1", name: "Census", status: "draft", createdAt: "x" };
+test("createProjectRequest posts project coverage and unwraps project", async () => {
+  const project = {
+    id: "proj-1", organizationId: "org-1", name: "Census", status: "draft",
+    coverageScope: "country", coverageLabel: "Kenya", createdAt: "x",
+  };
   const { fetchFn, calls } = stubFetch(() => jsonResponse({ project }, 201));
 
-  const result = await createProjectRequest({ organizationId: "org-1", name: "Census" }, { fetchFn });
+  const result = await createProjectRequest({
+    organizationId: "org-1",
+    name: "Census",
+    coverageScope: "country",
+    coverageLabel: "Kenya",
+  }, { fetchFn });
 
   assert.equal(calls[0].url, "/api/user?view=platform_project_create");
+  assert.match(String(calls[0].init?.body), /"coverageScope":"country"/);
   assert.deepEqual(result, project);
 });
 

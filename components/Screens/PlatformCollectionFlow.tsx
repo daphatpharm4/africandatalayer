@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Building2, Camera, CheckCircle, Crosshair, RefreshCw, Send, WifiOff } from 'lucide-react';
+import { ArrowLeft, Building2, Camera, CheckCircle, Crosshair, RefreshCw, Send } from 'lucide-react';
 import { Geolocation as CapGeolocation } from '@capacitor/geolocation';
 import { createPlatformRecordRequest, PlatformApiError } from '../../lib/client/platformApi';
 import {
@@ -23,7 +23,6 @@ interface Props {
   onBack: () => void;
   onComplete: () => void;
   onRetry: () => void;
-  onUseGeneric: () => void;
 }
 
 function createIdempotencyKey(): string {
@@ -72,7 +71,6 @@ const PlatformCollectionFlow: React.FC<Props> = ({
   onBack,
   onComplete,
   onRetry,
-  onUseGeneric,
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const collectable = useMemo(() => collectablePlatformProjects(context), [context]);
@@ -402,9 +400,6 @@ const PlatformCollectionFlow: React.FC<Props> = ({
           </>
         )}
 
-        <button type="button" onClick={onUseGeneric} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-gray-600">
-          <WifiOff size={16} />{t('Use ADL public collection instead', 'Utiliser plutôt la collecte publique ADL')}
-        </button>
       </div>
     </div>
   );

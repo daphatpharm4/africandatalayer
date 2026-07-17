@@ -10,6 +10,8 @@ import {
   isWithinBonamoussadi
 } from '../../shared/geofence';
 import {
+  Building2,
+  ChevronDown,
   ChevronRight,
   Filter,
   Plus,
@@ -38,6 +40,10 @@ import BottomSheet from '../shared/BottomSheet';
 import type { SnapPoint } from '../shared/BottomSheet';
 import MissionCards from '../MissionCards';
 import type { MissionCard } from '../MissionCards';
+import {
+  collectablePlatformProjects,
+  type PlatformFieldContext,
+} from '../../lib/client/platformFieldContext';
 
 type WindowWithIdleCallback = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -56,6 +62,8 @@ interface Props {
   activeCategory: Category;
   onCategoryChange: (category: Category) => void;
   language: 'en' | 'fr';
+  platformFieldContext?: PlatformFieldContext | null;
+  platformFieldContextError?: string;
 }
 
 type MapPointGroup = {
@@ -102,7 +110,21 @@ function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number)
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticated, isAdmin, userRole = 'agent', onAuth, onContribute, onProfile, activeCategory, onCategoryChange, language }) => {
+const Home: React.FC<Props> = ({
+  onSelectPoint,
+  onPrefetchDetails,
+  isAuthenticated,
+  isAdmin,
+  userRole = 'agent',
+  onAuth,
+  onContribute,
+  onProfile,
+  activeCategory,
+  onCategoryChange,
+  language,
+  platformFieldContext = null,
+  platformFieldContextError = '',
+}) => {
   const [deviceRuntime] = useState(() => ({ lowEnd: detectLowEndDevice() }));
   const [viewMode, setViewMode] = useState<'map' | 'list'>(() => (deviceRuntime.lowEnd ? 'list' : 'map'));
   const [isVerticalPickerOpen, setIsVerticalPickerOpen] = useState(false);
@@ -110,6 +132,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [pointsLoadError, setPointsLoadError] = useState('');
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
+  const [activeCompanyVerticalId, setActiveCompanyVerticalId] = useState('');
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? readStoredAdminMapScope() : 'bonamoussadi'));
   const [sheetSnap, setSheetSnap] = useState<SnapPoint>('peek');
   const contributePressTimer = useRef<number | null>(null);
@@ -117,14 +140,52 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
   const verticalPickerRef = useRef<HTMLDivElement>(null);
   const isLowEndDevice = deviceRuntime.lowEnd;
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const companyOrganizations = platformFieldContext?.organizations ?? [];
+  const isCompanyExplore = companyOrganizations.length > 0;
+  const isCompanyContextPending = isAuthenticated
+    && userRole !== 'client'
+    && userRole !== 'point_operator'
+    && platformFieldContext === null
+    && !platformFieldContextError;
+  const isPublicExplore = !isCompanyExplore && !isCompanyContextPending;
+  const companyVerticals = useMemo(() => collectablePlatformProjects(platformFieldContext).flatMap((entry) => (
+    entry.publishedSchema.definition.recordTypes.map((recordType) => ({
+      id: `${entry.project.id}:${recordType.key}`,
+      label: recordType.label[language],
+      organizationId: entry.organization.id,
+      organizationName: entry.organization.name,
+      projectName: entry.project.name,
+      coverageScope: entry.project.coverageScope ?? 'worldwide',
+      coverageLabel: entry.project.coverageLabel,
+    }))
+  )), [language, platformFieldContext]);
+  const activeCompanyVertical = companyVerticals.find((entry) => entry.id === activeCompanyVerticalId)
+    ?? companyVerticals[0]
+    ?? null;
+  const primaryCompany = companyOrganizations.find((entry) => entry.organization.id === activeCompanyVertical?.organizationId)
+    ?? companyOrganizations[0]
+    ?? null;
+  const companyCoverageLabel = activeCompanyVertical?.coverageScope === 'worldwide'
+    ? t('Worldwide', 'Monde entier')
+    : activeCompanyVertical?.coverageLabel ?? t('Coverage not set', 'Zone non définie');
   const showAgentWidgets = isAuthenticated && userRole !== 'client';
   const listContentTopInset = isLowEndDevice ? (isAdmin ? '18.5rem' : '15rem') : (isAdmin ? '15rem' : '11.75rem');
   const listContentTopInsetPx = isLowEndDevice ? (isAdmin ? 296 : 240) : (isAdmin ? 240 : 188);
   const bottomNavHeightPx = 80;
-  const missionPeekHeightPx = 152;
+  const missionPeekHeightPx = isPublicExplore ? 152 : 0;
   const mapBottomChromePx = bottomNavHeightPx + missionPeekHeightPx + 12;
   const floatingCtaOffsetPx = missionPeekHeightPx + 20;
   const floatingHintOffsetPx = missionPeekHeightPx + 88;
+
+  useEffect(() => {
+    if (companyVerticals.length === 0) {
+      setActiveCompanyVerticalId('');
+      return;
+    }
+    if (!companyVerticals.some((entry) => entry.id === activeCompanyVerticalId)) {
+      setActiveCompanyVerticalId(companyVerticals[0].id);
+    }
+  }, [activeCompanyVerticalId, companyVerticals]);
   const mapScopeOptions: Array<{ value: MapScope; label: string }> = [
     { value: 'bonamoussadi', label: t('Bonamoussadi', 'Bonamoussadi') },
     { value: 'cameroon', label: t('Cameroon', 'Cameroun') },
@@ -162,26 +223,32 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
     };
   }, [isVerticalPickerOpen]);
 
-  const selectedCityLabel =
-    mapScope === 'cameroon'
+  const effectiveMapScope: MapScope = isCompanyExplore ? 'global' : mapScope;
+  const selectedCityLabel = isCompanyExplore
+    ? companyCoverageLabel
+    : mapScope === 'cameroon'
       ? t('Cameroon', 'Cameroun')
       : mapScope === 'global'
         ? t('Worldwide', 'Monde entier')
         : t('Bonamoussadi, Douala, Cameroon', 'Bonamoussadi, Douala, Cameroun');
 
   const mapCenter: [number, number] =
-    mapScope === 'cameroon'
+    isCompanyExplore
+      ? [20, 0]
+      : mapScope === 'cameroon'
       ? [CAMEROON_CENTER.latitude, CAMEROON_CENTER.longitude]
       : mapScope === 'global'
         ? [20, 0]
         : [BONAMOUSSADI_CENTER.latitude, BONAMOUSSADI_CENTER.longitude];
-  const mapZoom = mapScope === 'cameroon' ? 6 : mapScope === 'global' ? 2 : 15;
-  const mapMinZoom = mapScope === 'cameroon' ? 5 : mapScope === 'global' ? 2 : 15;
-  const mapMaxZoom = mapScope === 'cameroon' ? 10 : mapScope === 'global' ? 18 : 19;
-  const mapBounds =
-    mapScope === 'bonamoussadi' ? BONAMOUSSADI_MAP_BOUNDS : mapScope === 'cameroon' ? CAMEROON_MAP_BOUNDS : undefined;
-  const mapLockLabel =
-    mapScope === 'bonamoussadi'
+  const mapZoom = isCompanyExplore ? 3 : mapScope === 'cameroon' ? 6 : mapScope === 'global' ? 2 : 15;
+  const mapMinZoom = isCompanyExplore ? 2 : mapScope === 'cameroon' ? 5 : mapScope === 'global' ? 2 : 15;
+  const mapMaxZoom = isCompanyExplore ? 19 : mapScope === 'cameroon' ? 10 : mapScope === 'global' ? 18 : 19;
+  const mapBounds = isCompanyExplore
+    ? undefined
+    : mapScope === 'bonamoussadi' ? BONAMOUSSADI_MAP_BOUNDS : mapScope === 'cameroon' ? CAMEROON_MAP_BOUNDS : undefined;
+  const mapLockLabel = isCompanyExplore
+    ? t('Company workspace', 'Espace entreprise')
+    : mapScope === 'bonamoussadi'
       ? t('Zone active', 'Zone active')
       : t('Full access', 'Accès complet');
 
@@ -366,6 +433,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
   }, [isAdmin, mapScope]);
 
   const loadPoints = async () => {
+    if (!isPublicExplore) {
+      setPoints([]);
+      setIsLoadingPoints(false);
+      setPointsLoadError('');
+      return;
+    }
     const cached = readCachedMapPoints(mapScope, { authKey: mapCacheAuthKey });
     if (cached) {
       const mapped = cached
@@ -419,12 +492,12 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
 
   useEffect(() => {
     void loadPoints();
-  }, [mapScope, mapCacheAuthKey]); // language removed: API response is language-independent
+  }, [isPublicExplore, mapScope, mapCacheAuthKey]); // language removed: API response is language-independent
 
   useEffect(() => {
     let cancelled = false;
     const loadAssignments = async () => {
-      if (!isAuthenticated || userRole === 'client') {
+      if (!isAuthenticated || userRole === 'client' || !isPublicExplore) {
         setAssignments([]);
         return;
       }
@@ -443,7 +516,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, userRole]);
+  }, [isAuthenticated, isPublicExplore, userRole]);
 
   useEffect(() => {
     return () => {
@@ -628,7 +701,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
   };
 
   const handleContributePressStart = () => {
-    if (!isAuthenticated || !onContribute) return;
+    if (!isAuthenticated || !onContribute || isCompanyExplore) return;
     longPressTriggered.current = false;
     if (contributePressTimer.current) {
       window.clearTimeout(contributePressTimer.current);
@@ -682,11 +755,31 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
           <div className="mb-2.5 flex items-start justify-between gap-3">
             <div className="min-w-0 flex flex-col">
               <div className="flex items-center gap-2">
-                <BrandLogo size={20} className="shrink-0" />
+                {isCompanyExplore ? (
+                  primaryCompany?.organization.logoUrl ? (
+                    <img
+                      data-testid="company-explore-logo"
+                      src={primaryCompany.organization.logoUrl}
+                      alt=""
+                      className="h-8 w-8 shrink-0 rounded-lg border border-gray-100 bg-white object-contain"
+                    />
+                  ) : (
+                    <span
+                      data-testid="company-logo-fallback"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white"
+                      style={{ backgroundColor: primaryCompany?.organization.accentColor ?? '#0f2b46' }}
+                      aria-hidden="true"
+                    >
+                      <Building2 size={17} />
+                    </span>
+                  )
+                ) : (
+                  <BrandLogo size={20} className="shrink-0" />
+                )}
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <div className="min-w-0 text-[15px] font-bold leading-tight text-ink-dark">
-                      {t('African Data Layer', 'African Data Layer')}
+                    <div data-testid={isCompanyExplore ? 'company-explore-name' : undefined} className="min-w-0 truncate text-[15px] font-bold leading-tight text-ink-dark">
+                      {primaryCompany?.organization.name ?? t('African Data Layer', 'African Data Layer')}
                     </div>
                     {isAdmin && (
                       <span className="micro-label rounded-full bg-navy-wash px-2 py-0.5 text-navy">
@@ -711,17 +804,63 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
           </div>
 
           <div ref={verticalPickerRef} className="relative">
-            <VerticalPickerBar
-              active={activeCategory}
-              onToggle={toggleCategoryPicker}
-              language={language}
-              ariaControls="home-vertical-picker-list"
-              ariaExpanded={isVerticalPickerOpen}
-            />
+            {isCompanyExplore ? (
+              <button
+                type="button"
+                data-testid="company-vertical-picker"
+                onClick={toggleCategoryPicker}
+                aria-controls="home-company-vertical-picker-list"
+                aria-expanded={isVerticalPickerOpen}
+                disabled={companyVerticals.length === 0}
+                className="motion-pressable flex min-h-12 w-full items-center justify-between gap-3 rounded-2xl border border-navy/10 bg-navy-wash px-4 text-left disabled:cursor-default"
+              >
+                <span className="min-w-0">
+                  <span className="micro-label block text-navy">{t('Company vertical', 'Verticale entreprise')}</span>
+                  <span className="block truncate text-sm font-semibold text-ink-dark">
+                    {activeCompanyVertical?.label ?? t('No published company verticals', 'Aucune verticale entreprise publiée')}
+                  </span>
+                </span>
+                {companyVerticals.length > 0 && <ChevronDown size={18} className="shrink-0 text-navy" aria-hidden="true" />}
+              </button>
+            ) : isCompanyContextPending ? (
+              <div data-testid="company-context-loading" className="flex min-h-12 items-center rounded-2xl border border-gray-100 bg-white px-4 text-sm font-semibold text-gray-500">
+                {t('Loading your workspace…', 'Chargement de votre espace…')}
+              </div>
+            ) : (
+              <VerticalPickerBar
+                active={activeCategory}
+                onToggle={toggleCategoryPicker}
+                language={language}
+                ariaControls="home-vertical-picker-list"
+                ariaExpanded={isVerticalPickerOpen}
+              />
+            )}
             {isVerticalPickerOpen && (
-              <div id="home-vertical-picker-list" className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg" role="listbox" aria-label={t('Category', 'Catégorie')}>
+              <div id={isCompanyExplore ? 'home-company-vertical-picker-list' : 'home-vertical-picker-list'} className="absolute left-0 right-0 z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border border-gray-100 bg-white p-2 shadow-lg" role="listbox" aria-label={t('Category', 'Catégorie')}>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {selectableCategories.map((category) => {
+                  {isCompanyExplore ? companyVerticals.map((entry) => {
+                    const isActive = activeCompanyVertical?.id === entry.id;
+                    return (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          setActiveCompanyVerticalId(entry.id);
+                          setIsVerticalPickerOpen(false);
+                        }}
+                        className={`motion-pressable min-h-12 rounded-xl border px-3 py-2 text-left ${
+                          isActive ? 'border-navy bg-navy text-white' : 'border-gray-100 bg-gray-50 text-gray-700'
+                        }`}
+                      >
+                        <span className="block text-xs font-semibold">{entry.label}</span>
+                        <span className={`micro-label mt-1 block ${isActive ? 'text-white/70' : 'text-gray-400'}`}>
+                          {entry.projectName}
+                        </span>
+                      </button>
+                    );
+                  }) : selectableCategories.map((category) => {
                     const verticalId = LEGACY_CATEGORY_MAP[category] ?? category;
                     const vertical = VERTICALS[verticalId];
                     const isActive = activeCategory === category;
@@ -755,7 +894,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
             </div>
           )}
 
-          {isAdmin && (
+          {isAdmin && !isCompanyExplore && (
             <div data-testid="home-map-scope-toggle" className="mt-3 space-y-2">
               <div className="micro-label text-gray-400">{t('Map Scope', 'Portée de la carte')}</div>
               <div className="grid grid-cols-3 gap-2">
@@ -823,7 +962,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
             }
           >
             <HomeMap
-              mapScope={mapScope}
+              mapScope={effectiveMapScope}
               mapCenter={mapCenter}
               mapZoom={mapZoom}
               mapMinZoom={mapMinZoom}
@@ -845,6 +984,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
               viewportTopInsetPx={listContentTopInsetPx}
               viewportBottomInsetPx={mapBottomChromePx}
               userRole={userRole}
+              companyMode={isCompanyExplore}
             />
           </Suspense>
         )}
@@ -902,7 +1042,9 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
           >
             <div className="flex flex-col gap-2.5 p-4 pb-24">
               <div className="text-[13px] font-semibold text-gray-700">
-                {filteredPoints.length} {categoryLabel(activeCategory).toLowerCase()} {t('points', 'points')}
+                {isCompanyExplore
+                  ? t(`${filteredPoints.length} company records`, `${filteredPoints.length} enregistrements entreprise`)
+                  : `${filteredPoints.length} ${categoryLabel(activeCategory).toLowerCase()} ${t('points', 'points')}`}
               </div>
               {isLoadingPoints && (
                 <div className="card-soft p-4 text-xs text-gray-500">
@@ -975,11 +1117,21 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
                   </button>
                 );
               })}
+              {isCompanyExplore && filteredPoints.length === 0 && (
+                <div data-testid="company-map-empty-state" className="card-soft p-5 text-center">
+                  <p className="text-sm font-semibold text-ink-dark">
+                    {t('No company records on this map yet', 'Aucun enregistrement entreprise sur cette carte')}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-gray-500">
+                    {t('Use Contribute to capture the first record.', 'Utilisez Contribuer pour capturer le premier enregistrement.')}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {viewMode === 'map' && isAuthenticated && (
+        {viewMode === 'map' && isAuthenticated && isPublicExplore && (
           <BottomSheet
             peekHeight={missionPeekHeightPx}
             onSnapChange={setSheetSnap}
@@ -1041,7 +1193,7 @@ const Home: React.FC<Props> = ({ onSelectPoint, onPrefetchDetails, isAuthenticat
           </button>
         )}
 
-        {onContribute && isAuthenticated && sheetSnap === 'peek' && (
+        {onContribute && isAuthenticated && isPublicExplore && sheetSnap === 'peek' && (
           <div
             className="surface-reveal fixed right-4 z-40"
             style={{ bottom: `calc(var(--bottom-nav-height) + var(--safe-bottom) + ${floatingHintOffsetPx}px)` }}

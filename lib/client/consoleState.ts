@@ -4,6 +4,7 @@ import type {
   PlatformFieldOption,
   PlatformRecordType,
   PlatformSchemaDefinition,
+  PlatformProjectCoverageScope,
 } from "../../shared/platformTypes.js";
 
 // ---------------------------------------------------------------------------
@@ -103,6 +104,8 @@ export interface WizardState {
   orgSlug: string;
   slugTouched: boolean;
   projectName: string;
+  projectCoverageScope: PlatformProjectCoverageScope;
+  projectCoverageLabel: string;
   recordTypeLabelEn: string;
   recordTypeLabelFr: string;
   inviteEmail: string;
@@ -117,6 +120,8 @@ export const initialWizardState: WizardState = {
   orgSlug: "",
   slugTouched: false,
   projectName: "",
+  projectCoverageScope: "town",
+  projectCoverageLabel: "",
   recordTypeLabelEn: "",
   recordTypeLabelFr: "",
   inviteEmail: "",
@@ -141,6 +146,8 @@ const WIZARD_TEXT_FIELDS: ReadonlySet<keyof WizardState> = new Set([
   "orgName",
   "orgSlug",
   "projectName",
+  "projectCoverageScope",
+  "projectCoverageLabel",
   "recordTypeLabelEn",
   "recordTypeLabelFr",
   "inviteEmail",
@@ -197,7 +204,9 @@ export function wizardStepValid(state: WizardState): boolean {
     case "org":
       return state.orgName.trim().length >= 2 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(state.orgSlug);
     case "project":
-      return state.projectName.trim().length >= 2;
+      return state.projectName.trim().length >= 2
+        && ["town", "country", "worldwide"].includes(state.projectCoverageScope)
+        && (state.projectCoverageScope === "worldwide" || state.projectCoverageLabel.trim().length >= 2);
     case "record_type":
       return state.recordTypeLabelEn.trim().length > 0 && state.recordTypeLabelFr.trim().length > 0;
     case "invite":

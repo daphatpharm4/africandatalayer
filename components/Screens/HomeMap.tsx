@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { Circle, CircleMarker, MapContainer, Marker, Popup, Rectangle, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -75,6 +75,7 @@ interface Props {
   viewportBottomInsetPx?: number;
   userRole?: 'agent' | 'admin' | 'client' | 'point_operator';
   onPrefetchDetails?: () => void;
+  companyMode?: boolean;
 }
 
 const createMarkerIcon = (color: string) =>
@@ -120,18 +121,27 @@ const agentLocationIcon = L.divIcon({
   iconAnchor: [8, 8]
 });
 
-const AgentLocationMarker: React.FC = () => {
+const AgentLocationMarker: React.FC<{ followOnFirstFix?: boolean }> = ({ followOnFirstFix = false }) => {
+  const map = useMap();
+  const didCenterRef = useRef(false);
   const [position, setPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
 
   useEffect(() => {
     if (!navigator.geolocation) return;
     const watchId = navigator.geolocation.watchPosition(
-      (pos) => setPosition({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
+      (pos) => {
+        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+        setPosition(next);
+        if (followOnFirstFix && !didCenterRef.current) {
+          didCenterRef.current = true;
+          map.setView([next.lat, next.lng], 15, { animate: false });
+        }
+      },
       () => {},
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [followOnFirstFix, map]);
 
   if (!position) return null;
 
@@ -225,6 +235,7 @@ const HomeMap: React.FC<Props> = ({
   viewportTopInsetPx = 0,
   viewportBottomInsetPx = 0,
   userRole = 'agent',
+  companyMode = false,
 }) => {
   const [showHeatmap, setShowHeatmap] = useState(false);
 
@@ -235,7 +246,7 @@ const HomeMap: React.FC<Props> = ({
   return (
     <div data-testid="home-map-view" className="flex-1 bg-navy-light relative overflow-hidden z-0 min-h-0">
       <MapContainer
-        key={`map-${mapScope}`}
+        key={`map-${companyMode ? 'company' : mapScope}`}
         center={mapCenter}
         zoom={mapZoom}
         minZoom={mapMinZoom}
@@ -262,7 +273,7 @@ const HomeMap: React.FC<Props> = ({
           bottomInsetPx={viewportBottomInsetPx}
           sheetSnap={sheetSnap}
         />
-        <AgentLocationMarker />
+        <AgentLocationMarker followOnFirstFix={companyMode} />
         {assignmentZones.map((zone) => (
           <Rectangle
             key={zone.id}
@@ -365,7 +376,7 @@ const HomeMap: React.FC<Props> = ({
           );
         })}
       </MapContainer>
-      <div className="absolute inset-x-4 top-4 z-20 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
+      {!companyMode && <div className="absolute inset-x-4 top-4 z-20 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="min-w-0 pr-3">
             <p className="micro-label text-navy">
@@ -381,8 +392,8 @@ const HomeMap: React.FC<Props> = ({
           </div>
           <div className="w-2 h-2 rounded-full bg-forest animate-pulse"></div>
         </div>
-      </div>
-      <button
+      </div>}
+      {!companyMode && <button
         type="button"
         onClick={() => setShowHeatmap((prev) => !prev)}
         className={`absolute top-20 right-4 z-20 w-11 h-11 rounded-xl border shadow-sm flex items-center justify-center transition-colors ${
@@ -393,7 +404,7 @@ const HomeMap: React.FC<Props> = ({
         aria-pressed={showHeatmap}
       >
         <Layers size={18} />
-      </button>
+      </button>}
       {nearbyEnrichCount > 0 && (
         <div className="absolute inset-x-4 bottom-4 z-20 flex items-center justify-between gap-3 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm">
           <div className="flex items-center space-x-2">
