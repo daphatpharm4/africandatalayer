@@ -129,11 +129,27 @@ const ConsoleApp: React.FC = () => {
     setLanguage((current) => (current === 'fr' ? 'en' : 'fr'));
   }, []);
 
+  // Event handler, not an effect — the wizard's own step-4 busy state covers
+  // the fetch window, so a simple try/catch (no cancelled-flag) is enough.
+  // Organizations must be set in state BEFORE navigating to PROJECTS, or
+  // effectiveRoute (which forces ONBOARDING while hasOrgs is false) would
+  // render a blank pane until a separate async reload resolved.
   const handleOnboardingDone = useCallback(
-    (organizationId: string) => {
-      handleSelectOrganization(organizationId);
-      setOrgsReloadKey((k) => k + 1);
-      handleNavigate({ screen: 'PROJECTS' });
+    async (organizationId: string) => {
+      try {
+        const orgs = await listMyOrganizations();
+        setOrganizations(orgs);
+        setOrgsError(null);
+        handleSelectOrganization(organizationId);
+        handleNavigate({ screen: 'PROJECTS' });
+      } catch (error) {
+        if (error instanceof PlatformApiError && (error.status === 401 || error.status === 403)) {
+          setSessionState('unauthenticated');
+          return;
+        }
+        setOrgsError(error instanceof Error ? error.message : 'Failed to load organizations');
+        console.error('[ConsoleApp] Failed to load organizations after onboarding:', error);
+      }
     },
     [handleSelectOrganization, handleNavigate],
   );

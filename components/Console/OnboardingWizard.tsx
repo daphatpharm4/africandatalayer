@@ -43,14 +43,26 @@ function inviteRoleLabel(role: Exclude<PlatformRole, 'owner'>, t: (en: string, f
 }
 
 /**
- * Maps a caught error to a user-facing bilingual message. Slug conflicts can
- * surface as either a 409 (clean uniqueness check) or a 500 (raw unique
- * constraint violation bubbling up) depending on where the request fails.
+ * Maps a caught error to a user-facing bilingual message.
+ *
+ * Slug conflicts can surface as either a 409 (clean uniqueness check) or a
+ * 500 (raw unique constraint violation bubbling up) depending on where the
+ * request fails — but a slug only exists on the org step, so callers must
+ * opt in via `slugConflictHint` rather than every step inheriting the copy.
+ * For non-org steps, 5xx failures get a generic bilingual fallback while
+ * 4xx failures keep the server's own `body.error` message.
  */
-function describeError(error: unknown, t: (en: string, fr: string) => string): string {
+function describeError(
+  error: unknown,
+  t: (en: string, fr: string) => string,
+  options: { slugConflictHint?: boolean } = {},
+): string {
   if (error instanceof PlatformApiError) {
-    if (error.status === 409 || error.status === 500) {
+    if (options.slugConflictHint && (error.status === 409 || error.status === 500)) {
       return t('This workspace URL is taken', "Cette URL d'espace est déjà prise");
+    }
+    if (error.status >= 500) {
+      return t('Something went wrong. Please try again.', 'Une erreur est survenue. Veuillez réessayer.');
     }
     return error.message;
   }
@@ -92,7 +104,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
       const organization = await createOrganizationRequest({ name: state.orgName.trim(), slug: state.orgSlug });
       dispatch({ type: 'ORG_CREATED', organizationId: organization.id });
     } catch (err) {
-      setError(describeError(err, t));
+      setError(describeError(err, t, { slugConflictHint: true }));
     } finally {
       setIsBusy(false);
     }
