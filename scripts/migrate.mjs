@@ -65,10 +65,15 @@ function applyNoVerifySslMode(connectionString) {
 function parseArgs(argv) {
   const args = {
     dryRun: false,
+    only: [],
   };
   for (const token of argv) {
     if (token === "--dry-run") args.dryRun = true;
     if (token === "--apply") args.dryRun = false;
+    if (token.startsWith("--only=")) {
+      const filename = token.slice("--only=".length).trim();
+      if (filename) args.only.push(filename);
+    }
   }
   return args;
 }
@@ -135,7 +140,14 @@ async function main() {
   try {
     await ensureMigrationsTable(pool);
     const applied = await getAppliedMigrations(pool);
-    const files = listMigrationFiles(migrationsDir);
+    const availableFiles = listMigrationFiles(migrationsDir);
+    const missingFiles = args.only.filter((filename) => !availableFiles.includes(filename));
+    if (missingFiles.length > 0) {
+      throw new Error(`Selected migration not found: ${missingFiles.join(", ")}`);
+    }
+    const files = args.only.length > 0
+      ? availableFiles.filter((filename) => args.only.includes(filename))
+      : availableFiles;
 
     let appliedCount = 0;
     for (const file of files) {

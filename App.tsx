@@ -40,12 +40,17 @@ import {
   submitPointOperatorPhoto,
   submitPointOperatorSignal,
 } from './lib/client/pointOperatorApi';
+import {
+  loadPlatformFieldContext,
+  type PlatformFieldContext,
+} from './lib/client/platformFieldContext';
 
 const importDetails = () => import('./components/Screens/Details');
 const Details = lazy(importDetails);
 const Home = lazy(() => import('./components/Screens/Home'));
 const Auth = lazy(() => import('./components/Screens/Auth'));
 const ContributionFlow = lazy(() => import('./components/Screens/ContributionFlow'));
+const PlatformCollectionFlow = lazy(() => import('./components/Screens/PlatformCollectionFlow'));
 const Profile = lazy(() => import('./components/Screens/Profile'));
 const Analytics = lazy(() => import('./components/Screens/Analytics'));
 const Settings = lazy(() => import('./components/Screens/Settings'));
@@ -122,6 +127,10 @@ const App: React.FC = () => {
   const [pathname, setPathname] = useState(() => (typeof window === 'undefined' ? '/' : window.location.pathname));
   const [outstandingPolicies, setOutstandingPolicies] = useState<PolicyKind[]>([]);
   const [policyAcceptPending, setPolicyAcceptPending] = useState(false);
+  const [platformFieldContext, setPlatformFieldContext] = useState<PlatformFieldContext | null>(null);
+  const [isLoadingPlatformFieldContext, setIsLoadingPlatformFieldContext] = useState(false);
+  const [platformFieldContextError, setPlatformFieldContextError] = useState('');
+  const [useGenericContribution, setUseGenericContribution] = useState(false);
 
   const isClient = userRole === 'client';
   const isPointOperator = userRole === 'point_operator';
@@ -184,7 +193,26 @@ const App: React.FC = () => {
     setContributionDraft(null);
     setContributionAssignment(null);
     setBatchCaptureMode(false);
+    setUseGenericContribution(false);
   };
+
+  const refreshPlatformFieldContext = useCallback(async () => {
+    if (!isAuthenticated || isClient || isPointOperator) {
+      setPlatformFieldContext(null);
+      setPlatformFieldContextError('');
+      setIsLoadingPlatformFieldContext(false);
+      return;
+    }
+    setIsLoadingPlatformFieldContext(true);
+    setPlatformFieldContextError('');
+    try {
+      setPlatformFieldContext(await loadPlatformFieldContext());
+    } catch (error) {
+      setPlatformFieldContextError(error instanceof Error ? error.message : 'LOAD_FAILED');
+    } finally {
+      setIsLoadingPlatformFieldContext(false);
+    }
+  }, [isAuthenticated, isClient, isPointOperator]);
 
   const goBack = useCallback(() => {
     if (history.length > 0) {
@@ -235,12 +263,17 @@ const App: React.FC = () => {
     setContributionDraft(options.draft ?? null);
     setContributionAssignment(options.assignment ?? null);
     setBatchCaptureMode(Boolean(options.batch));
+    setUseGenericContribution(mode !== 'CREATE' || Boolean(options.draft) || Boolean(options.point) || Boolean(options.assignment));
     if (isAuthenticated) {
       navigateTo(Screen.CONTRIBUTE);
       return;
     }
     navigateTo(Screen.AUTH);
   }, [isAuthenticated, navigateTo]);
+
+  useEffect(() => {
+    void refreshPlatformFieldContext();
+  }, [refreshPlatformFieldContext]);
 
   const checkSecurityStatus = useCallback(async (): Promise<{
     wipeRequested: boolean;
@@ -368,6 +401,8 @@ const App: React.FC = () => {
       }
     } else {
       setOutstandingPolicies([]);
+      setPlatformFieldContext(null);
+      setPlatformFieldContextError('');
     }
     return session;
   };
@@ -551,6 +586,27 @@ const App: React.FC = () => {
           />
         );
       case Screen.CONTRIBUTE:
+        if (!useGenericContribution && (
+          isLoadingPlatformFieldContext
+          || platformFieldContextError
+          || Boolean(platformFieldContext?.organizations.length)
+        )) {
+          return (
+            <PlatformCollectionFlow
+              context={platformFieldContext}
+              isLoading={isLoadingPlatformFieldContext}
+              loadError={platformFieldContextError}
+              language={language}
+              onBack={goBack}
+              onComplete={() => {
+                clearContributionContext();
+                switchTab(Screen.HOME);
+              }}
+              onRetry={() => void refreshPlatformFieldContext()}
+              onUseGeneric={() => setUseGenericContribution(true)}
+            />
+          );
+        }
         return (
           <ContributionFlow
             language={language}
@@ -603,6 +659,10 @@ const App: React.FC = () => {
             onOpenDocs={() => navigatePath(docsPathForAudience(docsAudience))}
             onRedeem={() => navigateTo(Screen.REWARDS)}
             onSubmissionQueue={() => navigateTo(Screen.SUBMISSION_QUEUE)}
+            platformFieldContext={platformFieldContext}
+            isLoadingPlatformFieldContext={isLoadingPlatformFieldContext}
+            platformFieldContextError={platformFieldContextError}
+            onRefreshPlatformFieldContext={() => void refreshPlatformFieldContext()}
           />
         );
       case Screen.ANALYTICS:

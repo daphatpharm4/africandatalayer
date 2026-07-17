@@ -30,8 +30,12 @@ import { normalizeEmail } from "../../shared/identifier.js";
 import { isStorageUnavailableError } from "../db.js";
 import { errorResponse, jsonResponse } from "../http.js";
 import { validateSchemaDefinition } from "../../../shared/platformSchema.js";
+import { validatePlatformRecord } from "../../../shared/platformRecord.js";
+import { readIdempotencyKey } from "../idempotencyCore.js";
+import { hashRequestPayload } from "../idempotencyGeneric.js";
 import * as orgStore from "./orgStore.js";
 import * as projectStore from "./projectStore.js";
+import * as recordStore from "./recordStore.js";
 import { writePlatformAudit, type PlatformAuditEventType } from "./audit.js";
 import { createInviteToken, hashInviteToken, INVITE_TTL_DAYS, sendInviteEmail } from "./invites.js";
 import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenancy.js";
@@ -44,6 +48,7 @@ import {
   orgCreateSchema,
   orgUpdateSchema,
   projectCreateSchema,
+  recordCreateSchema,
   schemaDraftSaveSchema,
   schemaPublishSchema,
 } from "./validation.js";
@@ -66,6 +71,7 @@ export interface PlatformApiDeps {
   revokeInviteFn?: typeof orgStore.revokeInvite;
   markInviteAcceptedFn?: typeof orgStore.markInviteAccepted;
   createProjectFn?: typeof projectStore.createProject;
+  activateProjectFn?: typeof projectStore.activateProject;
   listProjectsFn?: typeof projectStore.listProjects;
   getProjectFn?: typeof projectStore.getProject;
   getDraftSchemaFn?: typeof projectStore.getDraftSchema;
@@ -73,6 +79,7 @@ export interface PlatformApiDeps {
   publishDraftSchemaFn?: typeof projectStore.publishDraftSchema;
   getPublishedSchemaFn?: typeof projectStore.getPublishedSchema;
   listSchemaVersionsFn?: typeof projectStore.listSchemaVersions;
+  createRecordFn?: typeof recordStore.createRecord;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -128,6 +135,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const revokeInviteFn = deps.revokeInviteFn ?? orgStore.revokeInvite;
   const markInviteAcceptedFn = deps.markInviteAcceptedFn ?? orgStore.markInviteAccepted;
   const createProjectFn = deps.createProjectFn ?? projectStore.createProject;
+  const activateProjectFn = deps.activateProjectFn ?? projectStore.activateProject;
   const listProjectsFn = deps.listProjectsFn ?? projectStore.listProjects;
   const getProjectFn = deps.getProjectFn ?? projectStore.getProject;
   const getDraftSchemaFn = deps.getDraftSchemaFn ?? projectStore.getDraftSchema;
@@ -135,6 +143,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const publishDraftSchemaFn = deps.publishDraftSchemaFn ?? projectStore.publishDraftSchema;
   const getPublishedSchemaFn = deps.getPublishedSchemaFn ?? projectStore.getPublishedSchema;
   const listSchemaVersionsFn = deps.listSchemaVersionsFn ?? projectStore.listSchemaVersions;
+  const createRecordFn = deps.createRecordFn ?? recordStore.createRecord;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -565,6 +574,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
       organizationId: context.organizationId,
     });
     if (!published) return errorResponse("No draft to publish", 409, { code: "platform_no_draft" });
+    await activateProjectFn(body.projectId, context.organizationId);
 
     await audit({
       organizationId: context.organizationId,
@@ -575,6 +585,61 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     });
 
     return jsonResponse({ schemaVersion: published }, { status: 200 });
+  }
+
+  // ── record_create ─────────────────────────────────────────────────────────
+  async function handleRecordCreate(request: Request): Promise<Response> {
+    const idempotencyKey = readIdempotencyKey(request.headers);
+    if (!idempotencyKey || idempotencyKey.length < 8 || idempotencyKey.length > 160) {
+      return errorResponse("A valid Idempotency-Key header is required", 422, { code: "idempotency_key_required" });
+    }
+
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(recordCreateSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const context = await requireProjectOrgRole(request, body.projectId, "collector", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const project = await getProjectFn(body.projectId);
+    if (!project || project.status === "archived") {
+      return errorResponse("Project is not accepting records", 409, { code: "platform_project_inactive" });
+    }
+
+    const published = await getPublishedSchemaFn(body.projectId, context.organizationId);
+    if (!published || published.id !== body.schemaVersionId) {
+      return errorResponse("The published project form has changed. Reload before submitting.", 409, {
+        code: "platform_schema_stale",
+      });
+    }
+    const recordType = published.definition.recordTypes.find((candidate) => candidate.key === body.recordTypeKey);
+    if (!recordType) return errorResponse("Record type not found", 400, { code: "platform_record_type_not_found" });
+
+    const issues = validatePlatformRecord(recordType, body.data, body.evidence);
+    if (issues.length > 0) return jsonResponse({ issues }, { status: 422 });
+
+    const record = await createRecordFn({
+      organizationId: context.organizationId,
+      projectId: body.projectId,
+      schemaVersionId: published.id,
+      recordTypeKey: body.recordTypeKey,
+      data: body.data,
+      evidence: body.evidence,
+      capturedBy: context.userId,
+      idempotencyKey,
+      requestHash: hashRequestPayload(body),
+    });
+
+    await audit({
+      organizationId: context.organizationId,
+      projectId: body.projectId,
+      actorUserId: context.userId,
+      eventType: "record_created",
+      payload: { recordId: record.id, recordTypeKey: record.recordTypeKey, schemaVersionId: published.id },
+    });
+    return jsonResponse({ record }, { status: 201 });
   }
 
   // ── Dispatch map ──────────────────────────────────────────────────────────
@@ -594,6 +659,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_schema_get: { method: "GET", handler: (request) => handleSchemaGet(request, new URL(request.url)) },
     platform_schema_draft_save: { method: "POST", handler: handleSchemaDraftSave },
     platform_schema_publish: { method: "POST", handler: handleSchemaPublish },
+    platform_record_create: { method: "POST", handler: handleRecordCreate },
   };
 
   return async function handlePlatform(request: Request): Promise<Response> {
@@ -614,6 +680,9 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
 
       return await route.handler(request);
     } catch (error) {
+      if (error instanceof recordStore.PlatformRecordIdempotencyConflictError) {
+        return errorResponse("Idempotency-Key reused with a different body", 409, { code: "idempotency_conflict" });
+      }
       if (isStorageUnavailableError(error)) {
         return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
       }

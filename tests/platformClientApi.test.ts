@@ -17,6 +17,7 @@ import {
   getSchemaRequest,
   saveSchemaDraftRequest,
   publishSchemaRequest,
+  createPlatformRecordRequest,
 } from "../lib/client/platformApi.ts";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -295,4 +296,22 @@ test("listMyOrganizations throws PlatformApiError with status 403 on forbidden",
       return true;
     },
   );
+});
+
+test("createPlatformRecordRequest sends the stable idempotency key outside the JSON body", async () => {
+  const record = { id: "record-1" };
+  const { fetchFn, calls } = stubFetch(() => jsonResponse({ record }, 201));
+  const result = await createPlatformRecordRequest({
+    projectId: "project-1",
+    schemaVersionId: "schema-1",
+    recordTypeKey: "retail_outlet",
+    data: { name: "Kiosk" },
+    evidence: { photos: [] },
+    idempotencyKey: "stable-record-key",
+  }, { fetchFn });
+
+  assert.deepEqual(result, record);
+  assert.equal(calls[0].url, "/api/user?view=platform_record_create");
+  assert.equal(new Headers(calls[0].init?.headers).get("Idempotency-Key"), "stable-record-key");
+  assert.equal(JSON.parse(calls[0].init?.body as string).idempotencyKey, undefined);
 });

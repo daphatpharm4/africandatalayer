@@ -10,6 +10,8 @@ import type {
   PlatformMembership,
   PlatformOrganization,
   PlatformProject,
+  PlatformRecord,
+  PlatformRecordEvidence,
   PlatformRole,
   PlatformSchemaDefinition,
   PlatformSchemaVersion,
@@ -35,7 +37,7 @@ export class PlatformApiError extends Error {
 
 async function callPlatform<T>(
   view: string,
-  options: { method: "GET" | "POST"; body?: unknown; params?: Record<string, string> },
+  options: { method: "GET" | "POST"; body?: unknown; params?: Record<string, string>; idempotencyKey?: string },
   deps: PlatformApiDeps = {},
 ): Promise<T> {
   const fetchFn = deps.fetchFn ?? fetch;
@@ -43,7 +45,12 @@ async function callPlatform<T>(
   const response = await fetchFn(`/api/user?${search.toString()}`, {
     method: options.method,
     credentials: "include",
-    headers: options.body !== undefined ? { "content-type": "application/json" } : undefined,
+    headers: options.body !== undefined || options.idempotencyKey
+      ? {
+          ...(options.body !== undefined ? { "content-type": "application/json" } : {}),
+          ...(options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : {}),
+        }
+      : undefined,
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
   });
   const payload = await response.json().catch(() => ({}));
@@ -226,4 +233,35 @@ export async function publishSchemaRequest(
     deps,
   );
   return payload.schemaVersion;
+}
+
+// ─── Field records ─────────────────────────────────────────────────────────
+
+export async function createPlatformRecordRequest(
+  input: {
+    projectId: string;
+    schemaVersionId: string;
+    recordTypeKey: string;
+    data: Record<string, unknown>;
+    evidence: PlatformRecordEvidence;
+    idempotencyKey: string;
+  },
+  deps?: PlatformApiDeps,
+): Promise<PlatformRecord> {
+  const payload = await callPlatform<{ record: PlatformRecord }>(
+    "record_create",
+    {
+      method: "POST",
+      idempotencyKey: input.idempotencyKey,
+      body: {
+        projectId: input.projectId,
+        schemaVersionId: input.schemaVersionId,
+        recordTypeKey: input.recordTypeKey,
+        data: input.data,
+        evidence: input.evidence,
+      },
+    },
+    deps,
+  );
+  return payload.record;
 }

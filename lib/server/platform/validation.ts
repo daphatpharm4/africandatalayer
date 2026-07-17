@@ -58,3 +58,19 @@ export const schemaDraftSaveSchema = z.object({
 export const schemaPublishSchema = z.object({
   projectId: uuid,
 });
+
+export const recordCreateSchema = z.object({
+  projectId: uuid,
+  schemaVersionId: uuid,
+  recordTypeKey: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/),
+  data: z.record(z.string(), z.unknown()),
+  evidence: z.object({
+    gps: z.object({
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      accuracyMeters: z.number().nonnegative().max(100_000).optional(),
+    }).optional(),
+    photos: z.array(z.string().startsWith("data:image/").max(400_000)).max(10),
+    notes: z.string().trim().max(2_000).optional(),
+  }),
+});

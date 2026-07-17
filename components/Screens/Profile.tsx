@@ -4,8 +4,10 @@ import {
   Award,
   BookOpen,
   Calendar,
+  Building2,
   Gift,
   Search,
+  RefreshCw,
   Settings as SettingsIcon,
   ShieldCheck,
   Trash2,
@@ -31,6 +33,7 @@ import DailyProgressWidget from '../DailyProgressWidget';
 import StreakTracker from '../StreakTracker';
 import KpiTile from '../shared/KpiTile';
 import ScreenHeader from '../shared/ScreenHeader';
+import { collectablePlatformProjects, type PlatformFieldContext } from '../../lib/client/platformFieldContext';
 
 interface Props {
   onBack: () => void;
@@ -39,6 +42,10 @@ interface Props {
   onRedeem: () => void;
   onSubmissionQueue: () => void;
   language: 'en' | 'fr';
+  platformFieldContext: PlatformFieldContext | null;
+  isLoadingPlatformFieldContext: boolean;
+  platformFieldContextError: string;
+  onRefreshPlatformFieldContext: () => void;
 }
 
 type AdminPointOperatorAssignmentResponse = {
@@ -536,7 +543,18 @@ const PointOperatorAccessCard: React.FC<{ language: 'en' | 'fr' }> = ({ language
   );
 };
 
-const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, onSubmissionQueue, language }) => {
+const Profile: React.FC<Props> = ({
+  onBack,
+  onSettings,
+  onOpenDocs,
+  onRedeem,
+  onSubmissionQueue,
+  language,
+  platformFieldContext,
+  isLoadingPlatformFieldContext,
+  platformFieldContextError,
+  onRefreshPlatformFieldContext,
+}) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const historyPreviewLimit = 5;
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -884,6 +902,7 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
     : profileHero
       ? `${roleLabel(resolveRole(profileHero))} · ${heroLocation}`
       : t('Profile unavailable', 'Profil indisponible');
+  const companyProjects = collectablePlatformProjects(platformFieldContext);
 
   useEffect(() => {
     let cancelled = false;
@@ -1161,6 +1180,48 @@ const Profile: React.FC<Props> = ({ onBack, onSettings, onOpenDocs, onRedeem, on
             </div>
           )}
         </section>
+
+        {(isLoadingPlatformFieldContext || platformFieldContextError || Boolean(platformFieldContext?.organizations.length)) && (
+          <section data-testid="profile-company-workspace" className="card overflow-hidden">
+            <div className="flex items-start gap-3 p-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-navy-wash text-navy">
+                {platformFieldContext?.organizations[0]?.organization.logoUrl ? (
+                  <img src={platformFieldContext.organizations[0].organization.logoUrl} alt="" className="h-full w-full object-contain" />
+                ) : <Building2 size={22} aria-hidden="true" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="micro-label text-forest">{t('Company workspace', 'Espace entreprise')}</div>
+                <h3 className="mt-1 truncate text-base font-bold text-gray-900">
+                  {isLoadingPlatformFieldContext
+                    ? t('Loading company…', 'Chargement de l’entreprise…')
+                    : platformFieldContext?.organizations[0]?.organization.name ?? t('Company access unavailable', 'Accès entreprise indisponible')}
+                </h3>
+                {platformFieldContext?.organizations[0] && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    {t('Role', 'Rôle')}: {platformFieldContext.organizations[0].role} · {companyProjects.length} {t('published form(s)', 'formulaire(s) publié(s)')}
+                  </p>
+                )}
+                {platformFieldContext && platformFieldContext.organizations.length > 1 && (
+                  <p className="mt-1 text-xs text-gray-500">+{platformFieldContext.organizations.length - 1} {t('other organization(s)', 'autre(s) organisation(s)')}</p>
+                )}
+                {platformFieldContextError && (
+                  <p role="alert" className="mt-2 text-xs font-semibold text-red-600">{t('Company data could not be loaded.', 'Les données entreprise n’ont pas pu être chargées.')}</p>
+                )}
+              </div>
+              <button type="button" onClick={onRefreshPlatformFieldContext} disabled={isLoadingPlatformFieldContext}
+                aria-label={t('Refresh company data', 'Actualiser les données entreprise')}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-200 bg-white text-navy disabled:opacity-50">
+                <RefreshCw size={17} className={isLoadingPlatformFieldContext ? 'animate-spin' : ''} />
+              </button>
+            </div>
+            {platformFieldContext?.organizations.map((entry) => (
+              <div key={entry.organization.id} className="border-t border-gray-100 px-4 py-3 text-xs text-gray-600">
+                <span className="font-bold text-gray-900">{entry.organization.name}</span>
+                <span> · {entry.projects.length} {t('project(s)', 'projet(s)')}</span>
+              </div>
+            ))}
+          </section>
+        )}
 
         <section className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <KpiTile label={t('Points', 'Points')} value={pointsTotal} tone="navy" />

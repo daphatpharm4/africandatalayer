@@ -239,6 +239,14 @@ function resolveApiRequest(
   if (
     method === 'GET' &&
     url.pathname === '/api/user' &&
+    url.searchParams.get('view') === 'platform_org_list'
+  ) {
+    return { body: { organizations: [] } };
+  }
+
+  if (
+    method === 'GET' &&
+    url.pathname === '/api/user' &&
     !url.searchParams.get('view')
   ) {
     return { body: ROLE_PROFILES[role] };

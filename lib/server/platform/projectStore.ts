@@ -73,6 +73,15 @@ export async function getProject(projectId: string, deps: StoreDeps = {}): Promi
   return result.rows[0] ? rowToProject(result.rows[0]) : null;
 }
 
+export async function activateProject(projectId: string, organizationId: string, deps: StoreDeps = {}): Promise<void> {
+  await db(deps)(
+    `UPDATE public.platform_projects
+     SET status = 'active'
+     WHERE id = $1 AND organization_id = $2 AND status = 'draft'`,
+    [projectId, organizationId],
+  );
+}
+
 export async function getDraftSchema(
   projectId: string,
   organizationId: string,

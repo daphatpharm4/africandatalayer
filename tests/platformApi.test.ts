@@ -5,6 +5,7 @@ import { createPlatformHandler } from "../lib/server/platform/api.js";
 const OWNER = { id: "owner@acme.com", token: {}, role: "agent" as const };
 const ORG = { id: "5a2f8f18-0000-4000-8000-000000000001", name: "Acme", slug: "acme", logoUrl: null, accentColor: null, createdAt: "" };
 const PROJECT_ID = "5a2f8f18-0000-4000-8000-000000000002";
+const SCHEMA_ID = "5a2f8f18-0000-4000-8000-000000000004";
 
 function jsonPost(view: string, body: unknown): Request {
   return new Request(`https://x.test/api/user?view=platform_${view}`, {
@@ -195,6 +196,67 @@ test("schema_publish with no draft returns 409", async () => {
   }));
   const response = await handler(jsonPost("schema_publish", { projectId: PROJECT_ID }));
   assert.equal(response.status, 409);
+});
+
+test("record_create validates against the current published schema and preserves tenant scope", async () => {
+  const created: any[] = [];
+  const definition = { recordTypes: [{
+    key: "retail_outlet",
+    label: { en: "Retail outlet", fr: "Point de vente" },
+    fields: [{ key: "name", label: { en: "Name", fr: "Nom" }, type: "text", required: true }],
+    evidence: { gpsRequired: true, minPhotos: 0, notesRequired: false },
+  }] };
+  const handler = createPlatformHandler(baseDeps({
+    getProjectFn: async () => ({ id: PROJECT_ID, organizationId: ORG.id, name: "Census", status: "active" as const, createdAt: "" }),
+    getPublishedSchemaFn: async () => ({ id: SCHEMA_ID, projectId: PROJECT_ID, organizationId: ORG.id, version: 2, status: "published" as const, definition, publishedAt: "" }),
+    createRecordFn: async (input: any) => {
+      created.push(input);
+      return { id: "record-1", ...input, status: "pending_review", createdAt: "" };
+    },
+  }));
+  const response = await handler(new Request("https://x.test/api/user?view=platform_record_create", {
+    method: "POST",
+    headers: { "content-type": "application/json", "Idempotency-Key": "record-key-1" },
+    body: JSON.stringify({
+      projectId: PROJECT_ID,
+      schemaVersionId: SCHEMA_ID,
+      recordTypeKey: "retail_outlet",
+      data: { name: "Central kiosk" },
+      evidence: { gps: { latitude: 4.05, longitude: 9.7, accuracyMeters: 8 }, photos: [] },
+    }),
+  }));
+
+  assert.equal(response.status, 201);
+  assert.equal(created[0].organizationId, ORG.id);
+  assert.equal(created[0].capturedBy, OWNER.id);
+  assert.equal(created[0].idempotencyKey, "record-key-1");
+  assert.match(created[0].requestHash, /^[0-9a-f]{64}$/);
+});
+
+test("record_create rejects viewers, missing idempotency, and stale schema versions", async () => {
+  const project = { id: PROJECT_ID, organizationId: ORG.id, name: "Census", status: "active" as const, createdAt: "" };
+  const body = { projectId: PROJECT_ID, schemaVersionId: SCHEMA_ID, recordTypeKey: "retail_outlet", data: {}, evidence: { photos: [] } };
+
+  const missingKey = createPlatformHandler(baseDeps({ getProjectFn: async () => project }));
+  assert.equal((await missingKey(jsonPost("record_create", body))).status, 422);
+
+  const viewer = createPlatformHandler(baseDeps({
+    getProjectFn: async () => project,
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "viewer" as const, createdAt: "" }),
+  }));
+  const viewerRequest = jsonPost("record_create", body);
+  viewerRequest.headers.set("Idempotency-Key", "record-key-2");
+  assert.equal((await viewer(viewerRequest)).status, 403);
+
+  const stale = createPlatformHandler(baseDeps({
+    getProjectFn: async () => project,
+    getPublishedSchemaFn: async () => ({ id: "5a2f8f18-0000-4000-8000-000000000099", projectId: PROJECT_ID, organizationId: ORG.id, version: 3, status: "published" as const, definition: { recordTypes: [] }, publishedAt: "" }),
+  }));
+  const staleRequest = jsonPost("record_create", body);
+  staleRequest.headers.set("Idempotency-Key", "record-key-3");
+  const staleResponse = await stale(staleRequest);
+  assert.equal(staleResponse.status, 409);
+  assert.equal((await staleResponse.json()).code, "platform_schema_stale");
 });
 
 test("unauthenticated request gets 401 on every view", async () => {

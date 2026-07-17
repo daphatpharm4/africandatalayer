@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createProject,
+  activateProject,
   getDraftSchema,
   getProject,
   getPublishedSchema,
@@ -51,6 +52,14 @@ test("getProject returns organizationId for tenancy resolution", async () => {
   const { queryFn } = fakeQuery([{ rows: [PROJECT_ROW] }]);
   const project = await getProject("proj-1", { queryFn });
   assert.equal(project?.organizationId, "org-1");
+});
+
+test("activateProject scopes the status change to draft projects in the organization", async () => {
+  const { queryFn, calls } = fakeQuery([{ rows: [] }]);
+  await activateProject("proj-1", "org-1", { queryFn });
+  assert.match(calls[0].text, /set status = 'active'/i);
+  assert.match(calls[0].text, /organization_id = \$2/i);
+  assert.deepEqual(calls[0].values, ["proj-1", "org-1"]);
 });
 
 test("saveDraftSchema upserts against the one-draft partial index with both scopes", async () => {

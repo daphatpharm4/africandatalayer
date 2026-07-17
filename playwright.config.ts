@@ -33,6 +33,7 @@ export default defineConfig({
         'e2e/smoke/agent-auth.smoke.spec.ts',
         'e2e/smoke/profile-help-entry.smoke.spec.ts',
         'e2e/smoke/map-readability.smoke.spec.ts',
+        'e2e/smoke/platform-collector.smoke.spec.ts',
         'e2e/docs/agent-roadmap.spec.ts',
       ],
       use: {

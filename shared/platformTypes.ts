@@ -23,6 +23,28 @@ export interface PlatformSchemaVersion {
   id: string; projectId: string; organizationId: string; version: number;
   status: "draft" | "published"; definition: PlatformSchemaDefinition; publishedAt: string | null;
 }
+export interface PlatformRecordGps {
+  latitude: number;
+  longitude: number;
+  accuracyMeters?: number;
+}
+export interface PlatformRecordEvidence {
+  gps?: PlatformRecordGps;
+  photos: string[];
+  notes?: string;
+}
+export interface PlatformRecord {
+  id: string;
+  projectId: string;
+  organizationId: string;
+  schemaVersionId: string;
+  recordTypeKey: string;
+  data: Record<string, unknown>;
+  evidence: PlatformRecordEvidence;
+  status: "pending_review" | "approved" | "rejected";
+  capturedBy: string;
+  createdAt: string;
+}
 export interface PlatformInvite {
   id: string; organizationId: string; email: string; role: Exclude<PlatformRole, "owner">;
   expiresAt: string; acceptedAt: string | null; createdAt: string;
