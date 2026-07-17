@@ -8,6 +8,7 @@ import {
   PlatformApiError,
 } from '../../lib/client/platformApi';
 import type { PlatformInvite, PlatformMembership, PlatformRole } from '../../shared/platformTypes';
+import { roleAtLeast } from '../../shared/platformSchema';
 
 export interface MembersScreenProps {
   organizationId: string;
@@ -121,8 +122,10 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
   };
 
   const handleRemove = async (userId: string) => {
+    // Defensive: do not allow self-removal
+    if (viewerUserId !== null && userId === viewerUserId) return;
     const confirmed = window.confirm(
-      t('Remove this member from the organization?', 'Retirer ce membre de l’organisation ?'),
+      t("Remove this member from the organization?", "Retirer ce membre de l’organisation ?"),
     );
     if (!confirmed) return;
     setRowError(null);
@@ -221,7 +224,7 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
                     <button
                       type="button"
                       onClick={() => void handleRemove(member.userId)}
-                      disabled={isRowBusy}
+                      disabled={isSelf || isRowBusy}
                       aria-label={t('Remove member', 'Retirer le membre')}
                       className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-navy-border text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
                     >
@@ -278,11 +281,11 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
         </div>
       )}
 
-      {isOwner && (
+      {roleAtLeast(viewerRole, "manager") && (
         <div className="card p-5">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
             <UserPlus size={16} />
-            {t('Invite someone', 'Inviter quelqu’un')}
+            {t("Invite someone", "Inviter quelqu’un")}
           </h2>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
