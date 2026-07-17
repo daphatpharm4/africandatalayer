@@ -40,6 +40,8 @@ function readInitialRoute(): ConsoleRoute {
 const ConsoleApp: React.FC = () => {
   const [sessionState, setSessionState] = useState<SessionState>('loading');
   const [organizations, setOrganizations] = useState<OrgWithRole[] | null>(null);
+  const [orgsError, setOrgsError] = useState<string | null>(null);
+  const [orgsReloadKey, setOrgsReloadKey] = useState(0);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(() => readStoredOrgId());
   const [route, setRoute] = useState<ConsoleRoute>(() => readInitialRoute());
   const [language, setLanguage] = useState<'en' | 'fr'>(() => readStoredLanguage());
@@ -69,6 +71,7 @@ const ConsoleApp: React.FC = () => {
       .then((orgs) => {
         if (cancelled) return;
         setOrganizations(orgs);
+        setOrgsError(null);
       })
       .catch((error) => {
         if (cancelled) return;
@@ -76,14 +79,14 @@ const ConsoleApp: React.FC = () => {
           setSessionState('unauthenticated');
           return;
         }
-        // Non-auth failure: surface an empty org list rather than getting stuck loading.
-        setOrganizations([]);
+        // Non-auth failure: capture error state instead of treating as zero orgs.
+        setOrgsError(error instanceof Error ? error.message : 'Failed to load organizations');
         console.error('[ConsoleApp] Failed to load organizations:', error);
       });
     return () => {
       cancelled = true;
     };
-  }, [sessionState]);
+  }, [sessionState, orgsReloadKey]);
 
   // Sync route with the location hash.
   useEffect(() => {
@@ -125,10 +128,31 @@ const ConsoleApp: React.FC = () => {
     setLanguage((current) => (current === 'fr' ? 'en' : 'fr'));
   }, []);
 
-  if (sessionState === 'loading' || (sessionState === 'authenticated' && organizations === null)) {
+  if (sessionState === 'loading' || (sessionState === 'authenticated' && organizations === null && !orgsError)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-page text-ink-muted">
         <p className="micro-label">{t('Loading console', 'Chargement de la console')}</p>
+      </div>
+    );
+  }
+
+  if (sessionState === 'authenticated' && orgsError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-page px-6">
+        <div className="card w-full max-w-sm p-6 text-center">
+          <h1 className="text-lg font-semibold text-ink">
+            {t('Could not load your workspaces', 'Impossible de charger vos espaces de travail')}
+          </h1>
+          <p className="mt-2 text-sm text-ink-muted">
+            {orgsError}
+          </p>
+          <button
+            onClick={() => setOrgsReloadKey((k) => k + 1)}
+            className="btn-primary mt-5 flex w-full items-center justify-center"
+          >
+            {t('Try again', 'Réessayer')}
+          </button>
+        </div>
       </div>
     );
   }
