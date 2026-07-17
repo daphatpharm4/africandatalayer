@@ -50,23 +50,27 @@ test("vercel serves the console entry before the field app fallback", () => {
   ) as { rewrites?: RewriteRule[] };
 
   const rewrites = vercelConfig.rewrites ?? [];
-  const consoleRewriteIndex = rewrites.findIndex(
-    (rule) =>
-      rule.source === "/console" && rule.destination === "/console.html",
+  const consoleRewriteIndexes = ["/console", "/console/"].map((source) =>
+    rewrites.findIndex(
+      (rule) =>
+        rule.source === source && rule.destination === "/console.html",
+    ),
   );
   const fallbackIndex = rewrites.findIndex(
     (rule) =>
       rule.source === "/(.*)" && rule.destination === "/index.html",
   );
 
-  assert.notEqual(
-    consoleRewriteIndex,
-    -1,
-    "Missing /console rewrite to the built console entry",
-  );
   assert.notEqual(fallbackIndex, -1, "Missing field app fallback rewrite");
-  assert.ok(
-    consoleRewriteIndex < fallbackIndex,
-    "Console rewrite must run before the field app fallback",
-  );
+  for (const [pathIndex, routeIndex] of consoleRewriteIndexes.entries()) {
+    assert.notEqual(
+      routeIndex,
+      -1,
+      `Missing ${pathIndex === 0 ? "/console" : "/console/"} rewrite to the built console entry`,
+    );
+    assert.ok(
+      routeIndex < fallbackIndex,
+      "Console rewrites must run before the field app fallback",
+    );
+  }
 });
