@@ -133,6 +133,21 @@ export type WizardAction =
   | { type: "INVITE_SENT_OR_SKIPPED" };
 
 /**
+ * SET_FIELD may only write the free-text string fields. step/slugTouched/
+ * organizationId/projectId change exclusively via their dedicated actions —
+ * a stray SET_FIELD against them is ignored rather than corrupting state.
+ */
+const WIZARD_TEXT_FIELDS: ReadonlySet<keyof WizardState> = new Set([
+  "orgName",
+  "orgSlug",
+  "projectName",
+  "recordTypeLabelEn",
+  "recordTypeLabelFr",
+  "inviteEmail",
+  "inviteRole",
+]);
+
+/**
  * "Acme Waste!" -> "acme-waste"
  * lowercase -> NFD normalize -> strip diacritics -> non-alphanumeric runs to "-"
  * -> trim leading/trailing "-" -> clamp to 40 chars.
@@ -161,6 +176,7 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
       if (action.field === "orgSlug") {
         return { ...state, orgSlug: action.value, slugTouched: true };
       }
+      if (!WIZARD_TEXT_FIELDS.has(action.field)) return state;
       return { ...state, [action.field]: action.value } as WizardState;
     }
     case "ORG_CREATED":

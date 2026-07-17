@@ -173,6 +173,17 @@ test("wizard: SET_FIELD orgName auto-derives orgSlug until slugTouched", () => {
   assert.equal(state.orgSlug, "custom-slug");
 });
 
+test("SET_FIELD ignores non-text fields (step, slugTouched, organizationId)", () => {
+  const afterStep = wizardReducer(initialWizardState, { type: "SET_FIELD", field: "step", value: "bogus" } as any);
+  assert.equal(afterStep.step, initialWizardState.step);
+
+  const afterTouched = wizardReducer(initialWizardState, { type: "SET_FIELD", field: "slugTouched", value: "true" } as any);
+  assert.equal(afterTouched.slugTouched, false);
+
+  const afterOrg = wizardReducer(initialWizardState, { type: "SET_FIELD", field: "organizationId", value: "evil" } as any);
+  assert.equal(afterOrg.organizationId, null);
+});
+
 test("wizardStepValid: false on empty required inputs per step", () => {
   assert.equal(wizardStepValid(initialWizardState), false); // org: empty name/slug
 
