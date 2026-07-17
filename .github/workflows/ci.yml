@@ -69,7 +69,9 @@ jobs:
           status="${PIPESTATUS[0]}"
           set -e
           if (( status != 0 )); then
-            detail="$(grep -A 16 -E '^\* What went wrong:' "$log_file" | head -n 18 | tr '\n' ' ')"
+            compiler_detail="$(grep -E '(^e: |^error:|\.kt:[0-9]+:[0-9]+)' "$log_file" | tail -n 30 | tr '\n' ' ')"
+            failure_detail="$(grep -A 8 -E '^\* What went wrong:' "$log_file" | head -n 10 | tr '\n' ' ')"
+            detail="${compiler_detail}${compiler_detail:+ }${failure_detail}"
             if [[ -z "$detail" ]]; then
               detail="$(tail -n 40 "$log_file" | tr '\n' ' ')"
             fi
