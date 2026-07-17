@@ -1,4 +1,4 @@
-import React, { useReducer, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { Check } from 'lucide-react';
 import {
   initialWizardState,
@@ -63,8 +63,20 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const doneCalledRef = useRef(false);
 
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+
+  // Hand off to the parent exactly once, from an effect (never during
+  // render) — the parent's org list reload is async, so this component may
+  // stay mounted with step === 'done' across several re-renders while it
+  // catches up; the ref guard keeps that from re-firing onDone each time.
+  useEffect(() => {
+    if (state.step === 'done' && state.organizationId && !doneCalledRef.current) {
+      doneCalledRef.current = true;
+      onDone(state.organizationId);
+    }
+  }, [state.step, state.organizationId, onDone]);
 
   const stepIndex = STEP_ORDER.indexOf(state.step);
   const isValid = wizardStepValid(state);
@@ -144,10 +156,9 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
     dispatch({ type: 'INVITE_SENT_OR_SKIPPED' });
   };
 
-  // "done" is a transient state — as soon as it's reached, hand off to the
-  // parent and never render a "done" screen of our own.
+  // "done" is a transient state — the handoff to the parent happens in the
+  // effect above; render nothing while that plays out.
   if (state.step === 'done') {
-    if (state.organizationId) onDone(state.organizationId);
     return null;
   }
 
