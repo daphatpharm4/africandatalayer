@@ -108,6 +108,10 @@ const CompanyRecordDetails: React.FC<{
           <p className="mt-2 text-sm leading-6 text-ink-muted">
             {t('Captured', 'Capturée')} {new Date(capturedAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB')}
           </p>
+          <p className="mt-1 flex items-center gap-1.5 text-sm leading-6 text-ink-muted">
+            <Clock size={14} />
+            {t('Updated', 'Mis à jour')} {formatRelativeTime(record.reviewedAt ?? record.createdAt, language)}
+          </p>
         </section>
 
         <section className="card p-5">
@@ -138,9 +142,9 @@ const CompanyRecordDetails: React.FC<{
           )}
         </section>
 
-        {record.pointId && (
+        {record.status === 'approved' && (
           <section className="rounded-2xl border border-forest/20 bg-forest-wash p-4">
-            <p className="micro-label text-forest-dark">{t('Linked field point', 'Point terrain associé')}</p>
+            <p className="micro-label text-forest-dark">{t('Field point', 'Point terrain')}</p>
             <p className="mt-1 text-sm leading-6 text-ink-muted">
               {t(
                 'Capture fresh evidence for this point using your company form.',

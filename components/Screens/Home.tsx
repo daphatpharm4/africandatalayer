@@ -610,38 +610,30 @@ const Home: React.FC<Props> = ({
       && point.platformRecord?.recordTypeKey === activeCompanyVertical.id.slice(activeCompanyVertical.id.indexOf(':') + 1);
   }), [activeCategory, activeCompanyVertical, isCompanyExplore, points]);
 
-  const nearbyDataPoints = useMemo(() => {
-    if (!activeCompanyVertical || nearbyCompanyProjectId !== activeCompanyVertical.id.split(':', 1)[0]) return [];
-    return nearbyCompanyPoints.map((point) => ({
-      ...mapProjectedToPoint({
-        id: point.pointId,
-        pointId: point.pointId,
-        category: point.category as ProjectedPoint['category'],
-        location: point.location,
-        details: point.details,
-        photoUrl: point.photoUrl,
-        createdAt: point.createdAt,
-        updatedAt: point.updatedAt,
-        operatorSignals: point.operatorSignals,
-        gaps: point.gaps,
-        eventsCount: point.eventsCount,
-        eventIds: [],
-      }),
-      platformEnrichmentTarget: {
-        choiceKey: activeCompanyVertical.id,
-        point,
-      },
-    }));
-  }, [activeCompanyVertical, language, nearbyCompanyPoints, nearbyCompanyProjectId]);
+  // Org points are the company's own records — don't inject them as extra map
+  // pins (that duplicated each asset and mislabeled it through the public
+  // category mapper). Instead, join nearby targets onto the record pins by
+  // chain root id so tapping a record offers "update this point".
+  const nearbyTargetsByRoot = useMemo(() => {
+    if (!activeCompanyVertical || nearbyCompanyProjectId !== activeCompanyVertical.id.split(':', 1)[0]) {
+      return new Map<string, PlatformNearbyPoint>();
+    }
+    return new Map(nearbyCompanyPoints.map((point) => [point.pointId, point]));
+  }, [activeCompanyVertical, nearbyCompanyPoints, nearbyCompanyProjectId]);
 
   const displayedPoints = useMemo(() => {
-    if (!isCompanyExplore) return filteredPoints;
-    const nearbyPointIds = new Set(nearbyDataPoints.map((point) => point.id));
-    return [
-      ...nearbyDataPoints,
-      ...filteredPoints.filter((point) => !point.platformRecord?.pointId || !nearbyPointIds.has(point.platformRecord.pointId)),
-    ];
-  }, [filteredPoints, isCompanyExplore, nearbyDataPoints]);
+    if (!isCompanyExplore || !activeCompanyVertical) return filteredPoints;
+    return filteredPoints.map((point) => {
+      const record = point.platformRecord;
+      if (!record) return point;
+      const target = nearbyTargetsByRoot.get(record.pointId ?? record.id);
+      if (!target) return point;
+      return {
+        ...point,
+        platformEnrichmentTarget: { choiceKey: activeCompanyVertical.id, point: target },
+      };
+    });
+  }, [activeCompanyVertical, filteredPoints, isCompanyExplore, nearbyTargetsByRoot]);
 
   const exploreLoadError = nearbyPointsLoadError || (isCompanyExplore ? agentLocationError : '') || pointsLoadError;
   const isLoadingExplorePoints = isLoadingPoints || isLoadingNearbyPoints;

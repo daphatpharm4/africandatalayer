@@ -283,11 +283,12 @@ const App: React.FC = () => {
       ? options.point?.platformRecord
       : undefined;
     const pointCoordinates = options.point?.coordinates;
-    const linkedRecordTarget = platformRecord?.pointId && pointCoordinates
+    // A record with no pointId is a chain ROOT — it is itself the point to update.
+    const linkedRecordTarget = platformRecord && pointCoordinates
       ? {
           choiceKey: `${platformRecord.projectId}:${platformRecord.recordTypeKey}`,
           point: {
-            pointId: platformRecord.pointId,
+            pointId: platformRecord.pointId ?? platformRecord.id,
             category: platformRecord.recordTypeKey,
             name: options.point?.name ?? null,
             location: pointCoordinates,
