@@ -6,6 +6,7 @@ import {
   Clock3,
   Eye,
   FileText,
+  MapPin,
   RotateCw,
   ShieldCheck,
   Smartphone,
@@ -88,6 +89,24 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
     [filter, records],
   );
 
+  // Read-only (browse/approved) mode groups records that share a pointId under one
+  // header pill; records with no pointId stay in the existing flat list, unchanged.
+  const pointGroups = useMemo(() => {
+    if (!readOnly) return null;
+    const groups = new Map<string, PlatformRecord[]>();
+    const ungrouped: PlatformRecord[] = [];
+    for (const record of visible) {
+      if (record.pointId) {
+        const list = groups.get(record.pointId) ?? [];
+        list.push(record);
+        groups.set(record.pointId, list);
+      } else {
+        ungrouped.push(record);
+      }
+    }
+    return { groups, ungrouped };
+  }, [readOnly, visible]);
+
   const decide = async (recordId: string, status: 'approved' | 'rejected') => {
     const note = reviewNotes[recordId]?.trim() ?? '';
     if (status === 'rejected' && !note) {
@@ -155,7 +174,8 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
       )}
 
       <div className="flex flex-col gap-3">
-        {visible.map((record) => {
+        {(() => {
+          const renderRecordCard = (record: PlatformRecord) => {
           const expanded = expandedId === record.id;
           const capturedAt = record.evidence.capturedAt ?? record.createdAt;
           return (
@@ -168,6 +188,12 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
                     <span className={`micro-label rounded-full px-2.5 py-1 text-[10px] ${record.status === 'approved' ? 'bg-forest-wash text-forest-dark' : record.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-gold/20 text-ink'}`}>
                       {record.status === 'pending_review' ? t('Pending review', 'En attente') : record.status === 'approved' ? t('Approved', 'Approuvée') : t('Rejected', 'Rejetée')}
                     </span>
+                    {record.pointId && (
+                      <span className="micro-label inline-flex max-w-[9rem] items-center gap-1 rounded-full bg-navy-wash px-2.5 py-1 text-[10px] text-navy">
+                        <MapPin size={11} className="shrink-0" />
+                        <span className="truncate">{t('Linked point', 'Point associé')} {record.pointId}</span>
+                      </span>
+                    )}
                   </div>
                   <p className="mt-1 break-all text-xs leading-5 text-ink-muted">{record.capturedBy} · {new Date(record.createdAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB')}</p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
@@ -267,7 +293,28 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
               )}
             </article>
           );
-        })}
+          };
+
+          if (readOnly && pointGroups) {
+            return (
+              <>
+                {Array.from(pointGroups.groups.entries()).map(([pointId, groupRecords]) => (
+                  <div key={pointId} className="flex flex-col gap-3">
+                    <div className="flex min-h-11 items-center gap-2 rounded-xl bg-navy-wash px-4 py-2.5">
+                      <MapPin size={14} className="shrink-0 text-navy" />
+                      <span className="micro-label max-w-[60%] truncate text-navy">{t('Linked point', 'Point associé')} {pointId}</span>
+                      <span className="ml-auto shrink-0 text-xs font-semibold text-navy">{groupRecords.length} {t('records', 'données')}</span>
+                    </div>
+                    {groupRecords.map(renderRecordCard)}
+                  </div>
+                ))}
+                {pointGroups.ungrouped.map(renderRecordCard)}
+              </>
+            );
+          }
+
+          return visible.map(renderRecordCard);
+        })()}
       </div>
 
       {photoPreview && (
