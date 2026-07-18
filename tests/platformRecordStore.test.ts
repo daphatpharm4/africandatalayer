@@ -100,3 +100,14 @@ test("hasRecentRecordForPoint returns the EXISTS result", async () => {
   assert.match(calls[0].text, /point_id = \$2/);
   assert.ok(calls[0].values.includes(24));
 });
+
+test("listRecords filters by pointId when provided", async () => {
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  const queryFn = async (text: string, values: unknown[] = []) => {
+    calls.push({ text, values });
+    return { rows: [], rowCount: 0 };
+  };
+  await listRecords({ organizationId: "o1", pointId: "pt_1" }, { queryFn: queryFn as any });
+  assert.match(calls[0].text, /point_id = \$3/);
+  assert.ok(calls[0].values.includes("pt_1"));
+});
