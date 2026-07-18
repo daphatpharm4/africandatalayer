@@ -209,6 +209,8 @@ const PlatformCollectionFlow: React.FC<Props> = ({
     ],
   };
 
+  // Defensive: loadNearbyPoints always captures GPS before a point can be attached,
+  // but the server rejects pointId-without-gps, so keep the client-side guard.
   const pointNeedsGps = Boolean(attachedPoint) && !gpsEvidence;
 
   const handleSubmit = async () => {
