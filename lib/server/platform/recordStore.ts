@@ -22,6 +22,7 @@ function rowToRecord(row: any): PlatformRecord {
     status: row.status,
     capturedBy: row.captured_by,
     createdAt: toIso(row.created_at),
+    pointId: row.point_id ?? null,
     reviewedBy: row.reviewed_by ?? null,
     reviewedAt: row.reviewed_at ? toIso(row.reviewed_at) : null,
     reviewNotes: row.review_notes ?? null,
@@ -46,18 +47,21 @@ export async function createRecord(
     capturedBy: string;
     idempotencyKey: string;
     requestHash: string;
+    pointId?: string | null;
+    captureLat?: number | null;
+    captureLng?: number | null;
   },
   deps: StoreDeps = {},
 ): Promise<PlatformRecord> {
   const result = await db(deps)(
     `INSERT INTO public.platform_records
-       (organization_id, project_id, schema_version_id, record_type_key, data, evidence, captured_by, idempotency_key, request_hash)
-     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9)
+       (organization_id, project_id, schema_version_id, record_type_key, data, evidence, captured_by, idempotency_key, request_hash, point_id, capture_lat, capture_lng)
+     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (project_id, captured_by, idempotency_key)
      DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
      WHERE platform_records.request_hash = EXCLUDED.request_hash
      RETURNING id, organization_id, project_id, schema_version_id, record_type_key,
-       data, evidence, status, captured_by, created_at, reviewed_by, reviewed_at, review_notes`,
+       data, evidence, status, captured_by, created_at, point_id, reviewed_by, reviewed_at, review_notes`,
     [
       input.organizationId,
       input.projectId,
@@ -68,6 +72,9 @@ export async function createRecord(
       input.capturedBy,
       input.idempotencyKey,
       input.requestHash,
+      input.pointId ?? null,
+      input.captureLat ?? null,
+      input.captureLng ?? null,
     ],
   );
   if (!result.rows[0]) throw new PlatformRecordIdempotencyConflictError();
@@ -75,19 +82,20 @@ export async function createRecord(
 }
 
 export async function listRecords(
-  input: { organizationId: string; status?: PlatformRecord["status"]; limit?: number },
+  input: { organizationId: string; status?: PlatformRecord["status"]; pointId?: string; limit?: number },
   deps: StoreDeps = {},
 ): Promise<PlatformRecord[]> {
   const limit = Math.min(200, Math.max(1, input.limit ?? 100));
   const result = await db(deps)(
     `SELECT id, organization_id, project_id, schema_version_id, record_type_key,
-       data, evidence, status, captured_by, created_at, reviewed_by, reviewed_at, review_notes
+       data, evidence, status, captured_by, created_at, point_id, reviewed_by, reviewed_at, review_notes
      FROM public.platform_records
      WHERE organization_id = $1
        AND ($2::text IS NULL OR status = $2)
+       AND ($3::text IS NULL OR point_id = $3)
      ORDER BY created_at DESC
-     LIMIT $3`,
-    [input.organizationId, input.status ?? null, limit],
+     LIMIT $4`,
+    [input.organizationId, input.status ?? null, input.pointId ?? null, limit],
   );
   return result.rows.map(rowToRecord);
 }
@@ -107,7 +115,7 @@ export async function reviewRecord(
      SET status = $3, reviewed_by = $4, reviewed_at = now(), review_notes = NULLIF($5, '')
      WHERE organization_id = $1 AND id = $2 AND status = 'pending_review'
      RETURNING id, organization_id, project_id, schema_version_id, record_type_key,
-       data, evidence, status, captured_by, created_at, reviewed_by, reviewed_at, review_notes`,
+       data, evidence, status, captured_by, created_at, point_id, reviewed_by, reviewed_at, review_notes`,
     [input.organizationId, input.recordId, input.status, input.reviewedBy, input.reviewNotes ?? ""],
   );
   return result.rows[0] ? rowToRecord(result.rows[0]) : null;
@@ -136,4 +144,22 @@ export async function getRecordSummaryForUser(
     rejected: Number(row.rejected ?? 0),
     submittedToday: Number(row.submitted_today ?? 0),
   };
+}
+
+export async function hasRecentRecordForPoint(
+  input: { organizationId: string; pointId: string; capturedBy: string; recordTypeKey: string; withinHours: number },
+  deps: StoreDeps = {},
+): Promise<boolean> {
+  const result = await db(deps)(
+    `SELECT EXISTS(
+       SELECT 1 FROM public.platform_records
+       WHERE organization_id = $1
+         AND point_id = $2
+         AND captured_by = $3
+         AND record_type_key = $4
+         AND created_at >= now() - make_interval(hours => $5)
+     ) AS present`,
+    [input.organizationId, input.pointId, input.capturedBy, input.recordTypeKey, input.withinHours],
+  );
+  return Boolean(result.rows[0]?.present);
 }
