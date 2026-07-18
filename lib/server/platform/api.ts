@@ -23,6 +23,9 @@
 //   schema_publish      POST  — publish the current draft (manager+)
 //   admin_org_list      GET   — all company access/data summaries (ADL admin)
 //   admin_org_access    POST  — suspend/reactivate a company (ADL admin)
+//   record_create       POST  — create a record (collector+); optional pointId
+//                                gates GPS proximity + a 24h per-point cooldown
+//   point_nearby        GET   — nearby public points for the picker (collector+)
 //
 // Every org/project view resolves tenancy via requireOrgRole/requireProjectOrgRole
 // BEFORE touching data; failures (401/403/404) are tenancy Responses returned as-is.
@@ -42,6 +45,8 @@ import * as recordStore from "./recordStore.js";
 import { writePlatformAudit, type PlatformAuditEventType } from "./audit.js";
 import { createInviteToken, hashInviteToken, INVITE_TTL_DAYS, sendInviteEmail } from "./invites.js";
 import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenancy.js";
+import { findActivePoint, listNearbyPoints } from "./pointLookup.js";
+import { haversineKm } from "../submissionFraud.js";
 import {
   adminOrgAccessUpdateSchema,
   inviteAcceptSchema,
@@ -57,6 +62,14 @@ import {
   schemaDraftSaveSchema,
   schemaPublishSchema,
 } from "./validation.js";
+
+// ─── Point enrichment / nearby constants ───────────────────────────────────
+
+const ENRICH_MAX_DISTANCE_METERS = Number(process.env.PLATFORM_ENRICH_MAX_DISTANCE_M ?? 250);
+const ENRICH_COOLDOWN_HOURS = 24;
+const NEARBY_DEFAULT_RADIUS_METERS = 2000;
+const NEARBY_MAX_RADIUS_METERS = 5000;
+const NEARBY_LIMIT = 25;
 
 // ─── Deps ───────────────────────────────────────────────────────────────────
 
@@ -91,6 +104,9 @@ export interface PlatformApiDeps {
   listRecordsFn?: typeof recordStore.listRecords;
   reviewRecordFn?: typeof recordStore.reviewRecord;
   getRecordSummaryForUserFn?: typeof recordStore.getRecordSummaryForUser;
+  findActivePointFn?: typeof findActivePoint;
+  listNearbyPointsFn?: typeof listNearbyPoints;
+  hasRecentRecordForPointFn?: typeof recordStore.hasRecentRecordForPoint;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -161,6 +177,9 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const listRecordsFn = deps.listRecordsFn ?? recordStore.listRecords;
   const reviewRecordFn = deps.reviewRecordFn ?? recordStore.reviewRecord;
   const getRecordSummaryForUserFn = deps.getRecordSummaryForUserFn ?? recordStore.getRecordSummaryForUser;
+  const findActivePointFn = deps.findActivePointFn ?? findActivePoint;
+  const listNearbyPointsFn = deps.listNearbyPointsFn ?? listNearbyPoints;
+  const hasRecentRecordForPointFn = deps.hasRecentRecordForPointFn ?? recordStore.hasRecentRecordForPoint;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -710,6 +729,34 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     const issues = validatePlatformRecord(recordType, body.data, body.evidence);
     if (issues.length > 0) return jsonResponse({ issues }, { status: 422 });
 
+    let captureLat: number | null = null;
+    let captureLng: number | null = null;
+    if (body.pointId) {
+      const gps = body.evidence.gps;
+      if (!gps) return errorResponse("GPS evidence is required when attaching to an existing point", 422, { code: "platform_enrich_gps_required" });
+      const point = await findActivePointFn(body.pointId);
+      if (!point) return errorResponse("Point not found", 409, { code: "platform_point_not_found" });
+      const distanceMeters = haversineKm(
+        { latitude: gps.latitude, longitude: gps.longitude },
+        point.location,
+      ) * 1000;
+      if (distanceMeters > ENRICH_MAX_DISTANCE_METERS) {
+        return errorResponse("You are too far from this point to enrich it", 422, { code: "platform_enrich_too_far" });
+      }
+      const onCooldown = await hasRecentRecordForPointFn({
+        organizationId: context.organizationId,
+        pointId: body.pointId,
+        capturedBy: context.userId,
+        recordTypeKey: body.recordTypeKey,
+        withinHours: ENRICH_COOLDOWN_HOURS,
+      });
+      if (onCooldown) {
+        return errorResponse("You already submitted a record for this point today", 429, { code: "platform_enrich_cooldown" });
+      }
+      captureLat = gps.latitude;
+      captureLng = gps.longitude;
+    }
+
     const record = await createRecordFn({
       organizationId: context.organizationId,
       projectId: body.projectId,
@@ -720,6 +767,9 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
       capturedBy: context.userId,
       idempotencyKey,
       requestHash: hashRequestPayload(body),
+      pointId: body.pointId ?? null,
+      captureLat,
+      captureLng,
     });
 
     await audit({
@@ -727,7 +777,12 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
       projectId: body.projectId,
       actorUserId: context.userId,
       eventType: "record_created",
-      payload: { recordId: record.id, recordTypeKey: record.recordTypeKey, schemaVersionId: published.id },
+      payload: {
+        recordId: record.id,
+        recordTypeKey: record.recordTypeKey,
+        schemaVersionId: published.id,
+        pointId: body.pointId ?? null,
+      },
     });
     return jsonResponse({ record }, { status: 201 });
   }
@@ -749,8 +804,36 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     const organizationId = url.searchParams.get("organizationId") ?? "";
     const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
     if (isTenancyFailure(context)) return context;
-    const records = await listRecordsFn({ organizationId, status: "approved" });
+    const pointId = url.searchParams.get("pointId") ?? undefined;
+    const records = await listRecordsFn({
+      organizationId,
+      status: "approved",
+      ...(pointId ? { pointId } : {}),
+    });
     return jsonResponse({ records }, { status: 200 });
+  }
+
+  async function handlePointNearby(request: Request, url: URL): Promise<Response> {
+    const projectId = url.searchParams.get("projectId") ?? "";
+    // A missing query param (searchParams.get returns null) must NOT coerce to
+    // a "valid" 0 via Number(null) === 0 — treat it as NaN so it fails the
+    // finite check below rather than silently defaulting to the equator.
+    const rawLatitude = url.searchParams.get("latitude");
+    const rawLongitude = url.searchParams.get("longitude");
+    const latitude = rawLatitude === null || rawLatitude === "" ? NaN : Number(rawLatitude);
+    const longitude = rawLongitude === null || rawLongitude === "" ? NaN : Number(rawLongitude);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+        !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      return errorResponse("Valid latitude and longitude are required", 400);
+    }
+    const rawRadius = Number(url.searchParams.get("radiusMeters"));
+    const radiusMeters = Number.isFinite(rawRadius) && rawRadius > 0
+      ? Math.min(rawRadius, NEARBY_MAX_RADIUS_METERS)
+      : NEARBY_DEFAULT_RADIUS_METERS;
+    const context = await requireProjectOrgRole(request, projectId, "collector", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+    const points = await listNearbyPointsFn({ latitude, longitude, radiusMeters, limit: NEARBY_LIMIT });
+    return jsonResponse({ points }, { status: 200 });
   }
 
   async function handleMyRecordSummary(request: Request): Promise<Response> {
@@ -812,6 +895,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
     platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
     platform_record_review: { method: "POST", handler: handleRecordReview },
+    platform_point_nearby: { method: "GET", handler: (request) => handlePointNearby(request, new URL(request.url)) },
   };
 
   return async function handlePlatform(request: Request): Promise<Response> {
