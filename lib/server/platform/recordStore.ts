@@ -1,4 +1,4 @@
-import type { PlatformRecord, PlatformRecordEvidence } from "../../../shared/platformTypes.js";
+import type { PlatformRecord, PlatformRecordEvidence, PlatformRecordSummary } from "../../../shared/platformTypes.js";
 import { query } from "../db.js";
 import type { QueryFn, StoreDeps } from "./orgStore.js";
 
@@ -22,6 +22,9 @@ function rowToRecord(row: any): PlatformRecord {
     status: row.status,
     capturedBy: row.captured_by,
     createdAt: toIso(row.created_at),
+    reviewedBy: row.reviewed_by ?? null,
+    reviewedAt: row.reviewed_at ? toIso(row.reviewed_at) : null,
+    reviewNotes: row.review_notes ?? null,
   };
 }
 
@@ -54,7 +57,7 @@ export async function createRecord(
      DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
      WHERE platform_records.request_hash = EXCLUDED.request_hash
      RETURNING id, organization_id, project_id, schema_version_id, record_type_key,
-       data, evidence, status, captured_by, created_at`,
+       data, evidence, status, captured_by, created_at, reviewed_by, reviewed_at, review_notes`,
     [
       input.organizationId,
       input.projectId,
@@ -78,7 +81,7 @@ export async function listRecords(
   const limit = Math.min(200, Math.max(1, input.limit ?? 100));
   const result = await db(deps)(
     `SELECT id, organization_id, project_id, schema_version_id, record_type_key,
-       data, evidence, status, captured_by, created_at
+       data, evidence, status, captured_by, created_at, reviewed_by, reviewed_at, review_notes
      FROM public.platform_records
      WHERE organization_id = $1
        AND ($2::text IS NULL OR status = $2)
@@ -90,16 +93,47 @@ export async function listRecords(
 }
 
 export async function reviewRecord(
-  input: { organizationId: string; recordId: string; status: "approved" | "rejected" },
+  input: {
+    organizationId: string;
+    recordId: string;
+    status: "approved" | "rejected";
+    reviewedBy: string;
+    reviewNotes?: string;
+  },
   deps: StoreDeps = {},
 ): Promise<PlatformRecord | null> {
   const result = await db(deps)(
     `UPDATE public.platform_records
-     SET status = $3
+     SET status = $3, reviewed_by = $4, reviewed_at = now(), review_notes = NULLIF($5, '')
      WHERE organization_id = $1 AND id = $2 AND status = 'pending_review'
      RETURNING id, organization_id, project_id, schema_version_id, record_type_key,
-       data, evidence, status, captured_by, created_at`,
-    [input.organizationId, input.recordId, input.status],
+       data, evidence, status, captured_by, created_at, reviewed_by, reviewed_at, review_notes`,
+    [input.organizationId, input.recordId, input.status, input.reviewedBy, input.reviewNotes ?? ""],
   );
   return result.rows[0] ? rowToRecord(result.rows[0]) : null;
+}
+
+export async function getRecordSummaryForUser(
+  userId: string,
+  deps: StoreDeps = {},
+): Promise<PlatformRecordSummary> {
+  const result = await db(deps)(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE status = 'pending_review')::int AS pending_review,
+       COUNT(*) FILTER (WHERE status = 'approved')::int AS approved,
+       COUNT(*) FILTER (WHERE status = 'rejected')::int AS rejected,
+       COUNT(*) FILTER (WHERE created_at >= date_trunc('day', now()))::int AS submitted_today
+     FROM public.platform_records
+     WHERE captured_by = $1`,
+    [userId],
+  );
+  const row = result.rows[0] ?? {};
+  return {
+    total: Number(row.total ?? 0),
+    pendingReview: Number(row.pending_review ?? 0),
+    approved: Number(row.approved ?? 0),
+    rejected: Number(row.rejected ?? 0),
+    submittedToday: Number(row.submitted_today ?? 0),
+  };
 }

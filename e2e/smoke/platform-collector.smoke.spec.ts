@@ -44,6 +44,22 @@ test('invited collector sees company profile and submits the company form on mob
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ draft: null, published, versions: [published] }) });
       return;
     }
+    if (view === 'platform_record_browse') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ records: [{
+        id: 'approved-nairobi-1', organizationId: ORG_ID, projectId: PROJECT_ID, schemaVersionId: SCHEMA_ID,
+        recordTypeKey: 'retail_outlet', recordTypeLabel: 'Retail outlet',
+        data: { outlet_name: 'Approved Nairobi kiosk', formal: true },
+        evidence: { photos: [], gps: { latitude: -1.286389, longitude: 36.817223, accuracyMeters: 12 } },
+        status: 'approved', capturedBy: 'agent.bonamoussadi@adl.test', createdAt: '2026-07-17T00:00:00.000Z',
+      }] }) });
+      return;
+    }
+    if (view === 'platform_record_my_summary') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        summary: { total: 2, submittedToday: 1, approved: 1, pendingReview: 1, rejected: 0 },
+      }) });
+      return;
+    }
     if (view === 'platform_record_create' && request.method() === 'POST') {
       submittedBody = request.postDataJSON() as Record<string, unknown>;
       expect(request.headers()['idempotency-key']).toBeTruthy();
@@ -70,6 +86,9 @@ test('invited collector sees company profile and submits the company form on mob
   await expect(page.getByText('19 points in view')).toHaveCount(0);
   await expect(page.getByText('Category: Pharmacy')).toHaveCount(0);
   await expect(page.getByTestId('main-navigation').getByRole('button', { name: 'Leaderboard' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'List', exact: true }).click();
+  await expect(page.getByText('Approved Nairobi kiosk')).toBeVisible();
+  await page.getByRole('button', { name: 'Map', exact: true }).click();
   expect(publicExploreRequests).toEqual([]);
   await page.getByTestId('main-navigation').getByRole('button', { name: 'Contribute' }).click();
 
@@ -86,6 +105,8 @@ test('invited collector sees company profile and submits the company form on mob
   await page.getByTestId('main-navigation').getByRole('button', { name: 'Profile' }).click();
   await expect(page.getByTestId('profile-company-workspace')).toContainText('Usiku Research');
   await expect(page.getByTestId('profile-company-workspace')).toContainText('collector');
+  await expect(page.getByTestId('profile-company-workspace')).toContainText('My captures');
+  await expect(page.getByTestId('profile-company-workspace')).toContainText('2');
   await expect(page.getByRole('button', { name: 'Redeem XP' })).toHaveCount(0);
   await expect(page.getByText('Convert to Rewards', { exact: true })).toHaveCount(0);
 });

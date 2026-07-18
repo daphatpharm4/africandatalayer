@@ -79,3 +79,19 @@ test("requireUser fails closed when session version cannot be verified", async (
   assert.equal(profileLookups, 1);
   assert.equal(user, null);
 });
+
+test("requireUser rejects a valid token after its profile has been erased", async () => {
+  const user = await requireUser(
+    new Request("http://localhost/api/user"),
+    {
+      getAuthTokenFn: async () => ({
+        email: "deleted@example.com",
+        uid: "deleted@example.com",
+        role: "agent",
+        sessionVersion: 0,
+      }),
+      getUserProfileFn: async () => null,
+    },
+  );
+  assert.equal(user, null);
+});

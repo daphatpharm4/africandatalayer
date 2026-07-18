@@ -46,10 +46,10 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
 
   return (
     <div
-      className="flex min-h-screen flex-col bg-page text-ink lg:flex-row"
+      className="flex h-[var(--app-height)] min-h-0 flex-col overflow-hidden bg-page text-ink lg:flex-row"
       style={{ ['--org-accent' as string]: accentColor }}
     >
-      <aside className="flex w-full shrink-0 flex-col border-b border-navy-border bg-white px-4 py-4 lg:min-h-screen lg:w-64 lg:border-b-0 lg:border-r lg:py-6">
+      <aside className="flex max-h-[52vh] w-full shrink-0 flex-col overflow-y-auto border-b border-navy-border bg-white px-4 py-4 lg:h-full lg:max-h-none lg:w-64 lg:border-b-0 lg:border-r lg:py-6">
         <div className="flex items-center gap-3 px-1">
           {organization?.logoUrl ? (
             <img
@@ -146,7 +146,7 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
+      <main className="console-scroll-region min-h-0 min-w-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain">
         <div className="mx-auto max-w-5xl p-4 sm:p-6">{children}</div>
       </main>
     </div>

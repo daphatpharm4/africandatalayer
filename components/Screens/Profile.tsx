@@ -34,6 +34,8 @@ import StreakTracker from '../StreakTracker';
 import KpiTile from '../shared/KpiTile';
 import ScreenHeader from '../shared/ScreenHeader';
 import { collectablePlatformProjects, type PlatformFieldContext } from '../../lib/client/platformFieldContext';
+import { getMyPlatformRecordSummaryRequest } from '../../lib/client/platformApi';
+import type { PlatformRecordSummary } from '../../shared/platformTypes';
 
 interface Props {
   onBack: () => void;
@@ -558,8 +560,12 @@ const Profile: React.FC<Props> = ({
   onRefreshPlatformFieldContext,
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const companyMode = Boolean(platformFieldContext?.organizations.length);
+  const companyProjects = collectablePlatformProjects(platformFieldContext);
   const historyPreviewLimit = 5;
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [companySummary, setCompanySummary] = useState<PlatformRecordSummary | null>(null);
+  const [companySummaryError, setCompanySummaryError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [userLocation, setUserLocation] = useState('');
@@ -672,6 +678,13 @@ const Profile: React.FC<Props> = ({
         setProfile(data);
         setShowAllHistory(false);
 
+        if (companyMode) {
+          setOwnEvents([]);
+          setHistory([]);
+          setUserLocation('');
+          return;
+        }
+
         try {
           const userId = typeof data?.id === 'string' ? data.id.toLowerCase().trim() : '';
           const scope = normalizeMapScope(data?.mapScope, Boolean(data?.isAdmin));
@@ -714,7 +727,7 @@ const Profile: React.FC<Props> = ({
       }
     };
     loadProfile();
-  }, []); // language removed: API data is language-independent; translations handled in render
+  }, [companyMode, language]);
 
   const badges = useMemo(() => computeBadges(ownEvents), [ownEvents]);
   const earnedBadgeCount = useMemo(() => badges.filter((badge) => badge.earned).length, [badges]);
@@ -722,6 +735,10 @@ const Profile: React.FC<Props> = ({
   useEffect(() => {
     let cancelled = false;
     const loadQueuedItems = async () => {
+      if (companyMode) {
+        setQueuedItems([]);
+        return;
+      }
       try {
         const items = await listQueueItems();
         if (!cancelled) setQueuedItems(items);
@@ -739,7 +756,7 @@ const Profile: React.FC<Props> = ({
       cancelled = true;
       unsubscribe();
     };
-  }, []);
+  }, [companyMode]);
 
   const syncedActivities = useMemo(
     () => ownEvents.map((event) => ({
@@ -904,12 +921,16 @@ const Profile: React.FC<Props> = ({
     : profileHero
       ? `${roleLabel(resolveRole(profileHero))} · ${heroLocation}`
       : t('Profile unavailable', 'Profil indisponible');
-  const companyProjects = collectablePlatformProjects(platformFieldContext);
-
   useEffect(() => {
     let cancelled = false;
 
     const loadAssignments = async () => {
+      if (companyMode) {
+        setAssignments([]);
+        setAssignmentError('');
+        setIsLoadingAssignments(false);
+        return;
+      }
       try {
         setIsLoadingAssignments(true);
         setAssignmentError('');
@@ -929,12 +950,17 @@ const Profile: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, []); // language removed: API data is language-independent
+  }, [companyMode]);
 
   useEffect(() => {
     let cancelled = false;
 
     const loadSyncErrors = async () => {
+      if (companyMode) {
+        setSyncErrors([]);
+        setIsLoadingSyncErrors(false);
+        return;
+      }
       try {
         setIsLoadingSyncErrors(true);
         const records = await listSyncErrorRecords();
@@ -950,7 +976,23 @@ const Profile: React.FC<Props> = ({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [companyMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!companyMode) {
+      setCompanySummary(null);
+      setCompanySummaryError('');
+      return () => { cancelled = true; };
+    }
+    setCompanySummaryError('');
+    void getMyPlatformRecordSummaryRequest()
+      .then((summary) => { if (!cancelled) setCompanySummary(summary); })
+      .catch(() => {
+        if (!cancelled) setCompanySummaryError(t('Capture totals could not be loaded.', 'Impossible de charger les totaux de capture.'));
+      });
+    return () => { cancelled = true; };
+  }, [companyMode, platformFieldContext, language]);
 
   const handleClearSyncErrors = async () => {
     if (isClearingSyncErrors) return;
@@ -1119,6 +1161,86 @@ const Profile: React.FC<Props> = ({
       setIsSavingAccountAccess(false);
     }
   };
+
+  if (companyMode) {
+    const primaryCompany = platformFieldContext?.organizations[0];
+    return (
+      <div data-testid="profile-company-workspace" className="screen-shell">
+        <ScreenHeader
+          title={t('Company profile', 'Profil entreprise')}
+          onBack={onBack}
+          language={language}
+          trailing={
+            <button type="button" onClick={onSettings} className="flex h-11 w-11 items-center justify-center rounded-xl text-navy"
+              aria-label={t('Open account settings', 'Ouvrir les paramètres du compte')}>
+              <SettingsIcon size={20} />
+            </button>
+          }
+        />
+        <div className="space-y-5 p-4 pb-[max(6rem,env(safe-area-inset-bottom))]">
+          <section className="card overflow-hidden">
+            <div className="flex items-center gap-4 bg-navy p-5 text-white">
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/10">
+                {primaryCompany?.organization.logoUrl
+                  ? <img src={primaryCompany.organization.logoUrl} alt={primaryCompany.organization.name} className="h-full w-full object-contain" />
+                  : <Building2 size={28} aria-hidden="true" />}
+              </div>
+              <div className="min-w-0">
+                <p className="micro-label text-gold">{t('Active company', 'Entreprise active')}</p>
+                <h1 className="mt-1 truncate text-xl font-bold">{primaryCompany?.organization.name}</h1>
+                <p className="mt-1 text-sm capitalize text-white/70">{t('Access', 'Accès')}: {primaryCompany?.role}</p>
+              </div>
+            </div>
+            <div className="p-5">
+              <p className="text-sm leading-6 text-ink-muted">
+                {t('Your profile and capture totals are scoped to the companies that invited you.', 'Votre profil et vos totaux de capture sont limités aux entreprises qui vous ont invité.')}
+              </p>
+            </div>
+          </section>
+
+          {companySummaryError && <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{companySummaryError}</p>}
+          <section className="grid grid-cols-2 gap-2" aria-label={t('Company capture totals', 'Totaux des captures entreprise')}>
+            <KpiTile label={t('My captures', 'Mes captures')} value={companySummary?.total ?? '—'} tone="navy" />
+            <KpiTile label={t('Today', 'Aujourd’hui')} value={companySummary?.submittedToday ?? '—'} tone="terra" />
+            <KpiTile label={t('Approved', 'Approuvées')} value={companySummary?.approved ?? '—'} tone="forest" />
+            <KpiTile label={t('Pending review', 'En attente')} value={companySummary?.pendingReview ?? '—'} tone="amber" />
+          </section>
+
+          <section className="card p-5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="micro-label text-ink-muted">{t('Assigned work', 'Travail attribué')}</p>
+                <h2 className="mt-1 text-base font-bold text-ink">{t('Company projects and forms', 'Projets et formulaires entreprise')}</h2>
+              </div>
+              <button type="button" onClick={onRefreshPlatformFieldContext} disabled={isLoadingPlatformFieldContext}
+                aria-label={t('Refresh company projects', 'Actualiser les projets entreprise')}
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-navy-border text-navy disabled:opacity-50">
+                <RefreshCw size={17} className={isLoadingPlatformFieldContext ? 'animate-spin' : ''} />
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {platformFieldContext?.organizations.map((entry) => (
+                <div key={entry.organization.id} className="rounded-2xl bg-page p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="truncate text-sm font-bold text-ink">{entry.organization.name}</h3>
+                    <span className="micro-label shrink-0 rounded-full bg-navy-wash px-2.5 py-1 capitalize text-navy">{entry.role}</span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-ink-muted">
+                    {entry.projects.length} {t('projects', 'projets')} · {entry.projects.reduce((total, project) => total + (project.publishedSchema?.definition.recordTypes.length ?? 0), 0)} {t('published forms', 'formulaires publiés')}
+                  </p>
+                  {entry.organization.accessStatus === 'suspended' && (
+                    <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">
+                      {t('Company access is suspended. Contact your company administrator.', 'L’accès entreprise est suspendu. Contactez l’administrateur de votre entreprise.')}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid="screen-profile" className="screen-shell">

@@ -13,6 +13,7 @@ import type {
   PlatformOrganizationAccessStatus,
   PlatformProject,
   PlatformRecord,
+  PlatformRecordSummary,
   PlatformRecordEvidence,
   PlatformRole,
   PlatformSchemaDefinition,
@@ -339,7 +340,7 @@ export async function listApprovedPlatformRecordsRequest(
 }
 
 export async function reviewPlatformRecordRequest(
-  input: { organizationId: string; recordId: string; status: "approved" | "rejected" },
+  input: { organizationId: string; recordId: string; status: "approved" | "rejected"; reviewNotes?: string },
   deps?: PlatformApiDeps,
 ): Promise<PlatformRecord> {
   const payload = await callPlatform<{ record: PlatformRecord }>(
@@ -348,4 +349,15 @@ export async function reviewPlatformRecordRequest(
     deps,
   );
   return payload.record;
+}
+
+export async function getMyPlatformRecordSummaryRequest(
+  deps?: PlatformApiDeps,
+): Promise<PlatformRecordSummary> {
+  const payload = await callPlatform<{ summary: PlatformRecordSummary }>(
+    "record_my_summary",
+    { method: "GET" },
+    deps,
+  );
+  return payload.summary;
 }

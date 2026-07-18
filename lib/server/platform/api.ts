@@ -90,6 +90,7 @@ export interface PlatformApiDeps {
   createRecordFn?: typeof recordStore.createRecord;
   listRecordsFn?: typeof recordStore.listRecords;
   reviewRecordFn?: typeof recordStore.reviewRecord;
+  getRecordSummaryForUserFn?: typeof recordStore.getRecordSummaryForUser;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -159,6 +160,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const createRecordFn = deps.createRecordFn ?? recordStore.createRecord;
   const listRecordsFn = deps.listRecordsFn ?? recordStore.listRecords;
   const reviewRecordFn = deps.reviewRecordFn ?? recordStore.reviewRecord;
+  const getRecordSummaryForUserFn = deps.getRecordSummaryForUserFn ?? recordStore.getRecordSummaryForUser;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -751,6 +753,13 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ records }, { status: 200 });
   }
 
+  async function handleMyRecordSummary(request: Request): Promise<Response> {
+    const user = await requireUserFn(request);
+    if (!user) return errorResponse("Authentication required", 401, { code: "unauthorized" });
+    const summary = await getRecordSummaryForUserFn(user.id);
+    return jsonResponse({ summary }, { status: 200 });
+  }
+
   async function handleRecordReview(request: Request): Promise<Response> {
     const rawBody = await readJson(request);
     if (rawBody === null) return errorResponse("Invalid JSON body", 400);
@@ -759,14 +768,22 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     const body = parsed.data;
     const context = await requireOrgRole(request, body.organizationId, "reviewer", tenancyDeps);
     if (isTenancyFailure(context)) return context;
-    const record = await reviewRecordFn(body);
+    const record = await reviewRecordFn({
+      ...body,
+      reviewedBy: context.userId,
+      reviewNotes: body.reviewNotes,
+    });
     if (!record) return errorResponse("Record not found", 404, { code: "platform_record_not_found" });
     await audit({
       organizationId: body.organizationId,
       projectId: record.projectId,
       actorUserId: context.userId,
       eventType: "record_reviewed",
-      payload: { recordId: record.id, status: record.status },
+      payload: {
+        recordId: record.id,
+        status: record.status,
+        hasReviewNotes: Boolean(record.reviewNotes),
+      },
     });
     return jsonResponse({ record }, { status: 200 });
   }
@@ -793,6 +810,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_create: { method: "POST", handler: handleRecordCreate },
     platform_record_list: { method: "GET", handler: (request) => handleRecordList(request, new URL(request.url)) },
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
+    platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
     platform_record_review: { method: "POST", handler: handleRecordReview },
   };
 

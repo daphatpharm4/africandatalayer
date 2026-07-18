@@ -9,6 +9,54 @@ export class PlatformPhotoTooLargeError extends Error {
   }
 }
 
+export interface PlatformPhotoAsset {
+  dataUrl: string;
+  metadata: {
+    mimeType: string;
+    originalBytes: number;
+    storedBytes: number;
+    width?: number;
+    height?: number;
+    capturedAt?: string;
+  };
+}
+
+function estimateDataUrlBytes(dataUrl: string): number {
+  const encoded = dataUrl.split(",", 2)[1] ?? "";
+  return Math.max(0, Math.floor(encoded.length * 0.75));
+}
+
+async function readImageDimensions(file: File): Promise<{ width?: number; height?: number }> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(file);
+      const dimensions = { width: bitmap.width, height: bitmap.height };
+      bitmap.close();
+      return dimensions;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+export async function readPlatformPhotoAsset(file: File): Promise<PlatformPhotoAsset> {
+  const [dataUrl, dimensions] = await Promise.all([
+    readPlatformPhotoFile(file),
+    readImageDimensions(file),
+  ]);
+  return {
+    dataUrl,
+    metadata: {
+      mimeType: file.type || dataUrl.match(/^data:([^;,]+)/i)?.[1] || "image/jpeg",
+      originalBytes: file.size,
+      storedBytes: estimateDataUrlBytes(dataUrl),
+      ...dimensions,
+      capturedAt: file.lastModified > 0 ? new Date(file.lastModified).toISOString() : undefined,
+    },
+  };
+}
+
 export async function readPlatformPhotoFile(file: File): Promise<string> {
   const original = typeof FileReader === "undefined"
     ? await fileToDataUrlWithoutFileReader(file)

@@ -428,6 +428,7 @@ test("record_review updates a tenant record and audits the decision", async () =
   }));
   assert.equal(response.status, 200);
   assert.equal(reviewed[0].status, "approved");
+  assert.equal(reviewed[0].reviewedBy, OWNER.id);
   assert.deepEqual(audits, ["record_reviewed"]);
 });
 

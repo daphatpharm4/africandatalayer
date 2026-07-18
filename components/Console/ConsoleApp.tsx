@@ -223,7 +223,7 @@ const ConsoleApp: React.FC = () => {
 
   if (sessionState === 'loading' || (sessionState === 'authenticated' && organizations === null && !orgsError)) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-page text-ink-muted">
+      <main className="console-scroll-region flex h-[var(--app-height)] items-center justify-center overflow-y-auto bg-page text-ink-muted">
         <p className="micro-label">{t('Loading console', 'Chargement de la console')}</p>
       </main>
     );
@@ -231,7 +231,7 @@ const ConsoleApp: React.FC = () => {
 
   if (sessionState === 'authenticated' && orgsError) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-page px-6">
+      <main className="console-scroll-region flex h-[var(--app-height)] items-center justify-center overflow-y-auto bg-page px-6">
         <div className="card w-full max-w-sm p-6 text-center">
           <h1 className="text-lg font-semibold text-ink">
             {t('Could not load your workspaces', 'Impossible de charger vos espaces de travail')}
@@ -268,7 +268,7 @@ const ConsoleApp: React.FC = () => {
 
   if (sessionState === 'authenticated' && shouldRequireCompanyInvitation(hasOrgs, route.screen, isAdlAdmin)) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-page px-6">
+      <main className="console-scroll-region flex h-[var(--app-height)] items-center justify-center overflow-y-auto bg-page px-6">
         <div className="card w-full max-w-md p-6 text-center sm:p-8">
           <h1 className="text-xl font-semibold text-ink">
             {t('A company invitation is required', 'Une invitation d’entreprise est requise')}
@@ -290,7 +290,7 @@ const ConsoleApp: React.FC = () => {
 
   if (selectedOrganization?.accessStatus === 'suspended' && !isAdlAdmin) {
     return (
-      <main className="route-grid flex min-h-screen items-center justify-center bg-page px-6">
+      <main className="console-scroll-region route-grid flex h-[var(--app-height)] items-center justify-center overflow-y-auto bg-page px-6">
         <div className="card w-full max-w-md border border-amber-300 p-6 text-center sm:p-8">
           <h1 className="text-xl font-semibold text-amber-950">
             {t('Company access suspended', 'Accès entreprise suspendu')}

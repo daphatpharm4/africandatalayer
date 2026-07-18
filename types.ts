@@ -1,4 +1,5 @@
 import type { PointOperatorSignalState } from './shared/types';
+import type { PlatformRecord } from './shared/platformTypes';
 
 export enum Screen {
   SPLASH = 'SPLASH',
@@ -78,6 +79,9 @@ export interface DataPoint {
   gaps?: string[];
   verified?: boolean;
   operatorSignals?: Record<string, PointOperatorSignalState>;
+  platformRecord?: PlatformRecord & {
+    recordTypeLabel: string;
+  };
 }
 
 export interface User {

@@ -10,6 +10,7 @@ import BrandLogo from '../BrandLogo';
 import ScreenHeader from '../shared/ScreenHeader';
 import { Screen } from '../../types';
 import { apiJson } from '../../lib/client/api';
+import DeleteAccountPanel from '../shared/DeleteAccountPanel';
 
 interface Props {
   onBack: () => void;
@@ -291,6 +292,8 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
             </button>
           </div>
         </div>
+
+        <DeleteAccountPanel language={language} />
 
         <div className="flex flex-col items-center pt-4">
           <BrandLogo size={18} className="mb-2" />

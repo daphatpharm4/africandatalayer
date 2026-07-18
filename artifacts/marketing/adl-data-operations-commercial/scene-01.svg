@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse"><path d="M72 0H0V72" fill="none" stroke="#0f2b46" stroke-opacity="0.055" stroke-width="2"/></pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#0f2b46" flood-opacity="0.18"/></filter>
+    <linearGradient id="navyGlow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#173f63"/><stop offset="1" stop-color="#0b2035"/></linearGradient>
+  </defs>
+  <rect width="1080" height="1920" fill="#f5f7f6"/>
+
+    <rect width="1080" height="1920" fill="url(#grid)"/>
+    <circle cx="940" cy="270" r="310" fill="#c86b4a" opacity="0.10"/>
+    <circle cx="80" cy="1690" r="330" fill="#2f8f67" opacity="0.09"/>
+
+  <g transform="translate(86 110) scale(0.640625)">
+    <path d="M64 14L112 40L64 66L16 40L64 14Z" fill="#0f2b46" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M64 44L112 70L64 96L16 70L64 44Z" fill="#f4c317" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M16 76L64 102L112 76L76 114C73 117 68.9 118.5 64.8 118.5C60.7 118.5 56.6 117 53.6 114L16 76Z" fill="#0f2b46" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+    <text x="190" y="155" fill="#0f2b46" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="800" letter-spacing="1">AFRICAN DATA LAYER</text>
+    <rect x="88" y="430" width="170" height="12" rx="6" fill="#c86b4a"/>
+    <text x="88" y="610" fill="#122235" font-family="Inter,Arial,sans-serif" font-size="104" font-weight="850" letter-spacing="-3">
+      <tspan x="88" dy="0">YOUR FIELD</tspan><tspan x="88" dy="118">DATA.</tspan>
+    </text>
+    <text x="88" y="930" fill="#c86b4a" font-family="Inter,Arial,sans-serif" font-size="96" font-weight="850" letter-spacing="-3">
+      <tspan x="88" dy="0">FINALLY UNDER</tspan><tspan x="88" dy="108">CONTROL.</tspan>
+    </text>
+    <text x="92" y="1260" fill="#647084" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="500">
+      <tspan x="92" dy="0">Build the exact collection workflow</tspan><tspan x="92" dy="58">your company needs.</tspan>
+    </text>
+    <g transform="translate(88 1510)">
+      <rect width="904" height="176" rx="42" fill="#fff" filter="url(#shadow)"/>
+      <circle cx="90" cy="88" r="38" fill="#2f8f67"/><path d="M72 88l13 13 26-29" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="154" y="78" fill="#122235" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="750">Company-specific. Evidence-first.</text>
+      <text x="154" y="125" fill="#647084" font-family="Inter,Arial,sans-serif" font-size="27">Live from field capture to approved data.</text>
+    </g>
+</svg>

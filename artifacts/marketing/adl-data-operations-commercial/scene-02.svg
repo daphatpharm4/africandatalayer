@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse"><path d="M72 0H0V72" fill="none" stroke="#0f2b46" stroke-opacity="0.055" stroke-width="2"/></pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#0f2b46" flood-opacity="0.18"/></filter>
+    <linearGradient id="navyGlow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#173f63"/><stop offset="1" stop-color="#0b2035"/></linearGradient>
+  </defs>
+  <rect width="1080" height="1920" fill="#0f2b46"/>
+
+    <rect width="1080" height="1920" fill="url(#navyGlow)"/>
+    <circle cx="120" cy="250" r="310" fill="#f4c317" opacity="0.09"/>
+    <circle cx="950" cy="1650" r="400" fill="#c86b4a" opacity="0.11"/>
+    <text x="88" y="150" fill="#f4c317" font-family="Inter,Arial,sans-serif" font-size="30" font-weight="800" letter-spacing="5">YOUR WORKSPACE</text>
+    <text x="88" y="255" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="76" font-weight="850" letter-spacing="-2">
+      <tspan x="88" dy="0">YOUR BRAND.</tspan><tspan x="88" dy="88">YOUR FORMS.</tspan>
+    </text>
+    <g transform="translate(190 490)" filter="url(#shadow)">
+      <rect width="700" height="1130" rx="72" fill="#0a1725" stroke="#fff" stroke-opacity="0.24" stroke-width="5"/>
+      <rect x="26" y="26" width="648" height="1078" rx="52" fill="#fff"/>
+      <rect x="280" y="48" width="140" height="26" rx="13" fill="#0a1725"/>
+      <g transform="translate(62 105)">
+        <circle cx="42" cy="42" r="42" fill="#c86b4a"/><text x="42" y="54" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="800">M</text>
+        <text x="104" y="38" fill="#122235" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="800">Meridian</text>
+        <text x="104" y="73" fill="#647084" font-family="Inter,Arial,sans-serif" font-size="24">Field operations · Nairobi</text>
+      </g>
+      <rect x="62" y="225" width="576" height="116" rx="30" fill="#eef4f8"/>
+      <text x="94" y="268" fill="#0f2b46" font-family="Inter,Arial,sans-serif" font-size="22" font-weight="800" letter-spacing="2">COMPANY VERTICAL</text>
+      <text x="94" y="314" fill="#122235" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="750">Waste collection points</text>
+      <rect x="62" y="375" width="576" height="525" rx="32" fill="#edf1ef"/>
+      <path d="M62 500C180 440 230 590 350 520S520 410 638 485M70 730C220 630 320 790 440 690S560 610 638 680" fill="none" stroke="#c8d0cd" stroke-width="18"/>
+      <path d="M180 375v525M420 375v525M62 620h576" stroke="#d8dfdc" stroke-width="5"/>
+      <g fill="#2f8f67" stroke="#fff" stroke-width="8">
+        <circle cx="196" cy="540" r="30"/><circle cx="470" cy="485" r="30"/><circle cx="354" cy="720" r="30"/><circle cx="548" cy="790" r="30"/>
+      </g>
+      <rect x="62" y="930" width="576" height="128" rx="34" fill="#c86b4a"/>
+      <text x="350" y="1008" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="800">＋ Capture company data</text>
+    </g>
+    <text x="540" y="1775" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="39" font-weight="750">Anywhere your team works.</text>
+</svg>

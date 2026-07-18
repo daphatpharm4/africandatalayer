@@ -95,7 +95,10 @@ async function getAppliedMigrations(pool) {
 
 function listMigrationFiles(migrationsDir) {
   return readdirSync(migrationsDir)
-    .filter((name) => name.endsWith(".sql"))
+    // Only canonical, timestamped migrations are deployable. This deliberately
+    // excludes Finder/cloud conflict copies such as "migration 2.sql" and
+    // ad-hoc operator scripts that happen to live beside migrations.
+    .filter((name) => /^\d{8}_[a-z0-9_]+\.sql$/.test(name))
     .sort((a, b) => a.localeCompare(b));
 }
 

@@ -73,9 +73,13 @@ test("credentials authorize authenticates admin user from DB profile with role=a
 test("credentials authorize still allows env bootstrap admin when no DB admin exists", async () => {
   const envHash = await bcrypt.hash("Bootstrap123!", 4);
   const events: string[] = [];
+  const persisted: Array<{ id: string; role?: string; passwordHash?: string }> = [];
   const authorize = createCredentialsAuthorize({
     consumeRateLimitFn: async () => ({ allowed: true, remaining: 9, retryAfterSeconds: 60, count: 1 }),
     getUserProfileFn: async () => null,
+    upsertUserProfileFn: async (id, profile) => {
+      persisted.push({ id, role: profile.role, passwordHash: profile.passwordHash });
+    },
     logSecurityEventFn: async ({ details }) => {
       events.push(String((details as { method?: string } | undefined)?.method ?? ""));
     },
@@ -96,6 +100,7 @@ test("credentials authorize still allows env bootstrap admin when no DB admin ex
     email: "admin@example.com",
   });
   assert.deepEqual(events, ["credentials_admin_env_bootstrap"]);
+  assert.deepEqual(persisted, [{ id: "admin@example.com", role: "admin", passwordHash: envHash }]);
 });
 
 test("credentials authorize prefers DB admin over env bootstrap for the same email", async () => {

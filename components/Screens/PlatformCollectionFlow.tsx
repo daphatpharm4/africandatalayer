@@ -8,7 +8,7 @@ import {
 } from '../../lib/client/platformFieldContext';
 import { isNative } from '../../lib/client/native';
 import { validatePlatformRecord } from '../../shared/platformRecord';
-import { readPlatformPhotoFile } from '../../lib/client/platformPhoto';
+import { readPlatformPhotoAsset } from '../../lib/client/platformPhoto';
 import type {
   PlatformFieldDefinition,
   PlatformRecordEvidence,
@@ -84,12 +84,15 @@ const PlatformCollectionFlow: React.FC<Props> = ({
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [gpsEvidence, setGpsEvidence] = useState<PlatformRecordGps | undefined>();
   const [extraPhotos, setExtraPhotos] = useState<string[]>([]);
+  const [extraPhotoMetadata, setExtraPhotoMetadata] = useState<NonNullable<PlatformRecordEvidence['photoMetadata']>>([]);
+  const [fieldPhotoMetadata, setFieldPhotoMetadata] = useState<Record<string, NonNullable<PlatformRecordEvidence['photoMetadata']>[number]>>({});
   const [notes, setNotes] = useState('');
   const [isCapturingGps, setIsCapturingGps] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [submittedLabel, setSubmittedLabel] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
+  const [captureStartedAt, setCaptureStartedAt] = useState(() => new Date().toISOString());
 
   const selected = recordChoices.find((choice) => choice.key === selectedKey) ?? recordChoices[0] ?? null;
   const selectedRecordType = selected?.recordType ?? null;
@@ -99,10 +102,13 @@ const PlatformCollectionFlow: React.FC<Props> = ({
     setValues({});
     setGpsEvidence(undefined);
     setExtraPhotos([]);
+    setExtraPhotoMetadata([]);
+    setFieldPhotoMetadata({});
     setNotes('');
     setErrorMessage('');
     setSubmittedLabel('');
     setIdempotencyKey(createIdempotencyKey());
+    setCaptureStartedAt(new Date().toISOString());
   };
 
   const setValue = (key: string, value: unknown) => {
@@ -131,9 +137,14 @@ const PlatformCollectionFlow: React.FC<Props> = ({
     if (!file) return;
     setErrorMessage('');
     try {
-      const dataUrl = await readPlatformPhotoFile(file);
-      if (fieldKey) setValue(fieldKey, dataUrl);
-      else setExtraPhotos((current) => [...current, dataUrl].slice(0, 10));
+      const asset = await readPlatformPhotoAsset(file);
+      if (fieldKey) {
+        setValue(fieldKey, asset.dataUrl);
+        setFieldPhotoMetadata((current) => ({ ...current, [fieldKey]: asset.metadata }));
+      } else {
+        setExtraPhotos((current) => [...current, asset.dataUrl].slice(0, 10));
+        setExtraPhotoMetadata((current) => [...current, asset.metadata].slice(0, 10));
+      }
     } catch {
       setErrorMessage(t(
         'This photo could not be prepared for upload. Take another photo and try again.',
@@ -150,6 +161,19 @@ const PlatformCollectionFlow: React.FC<Props> = ({
     gps: gpsEvidence,
     photos: [...photoFieldValues, ...extraPhotos],
     notes: notes.trim() || undefined,
+    capturedAt: captureStartedAt,
+    device: typeof navigator === 'undefined' ? undefined : {
+      platform: navigator.platform || undefined,
+      userAgent: navigator.userAgent,
+      language: navigator.language,
+    },
+    photoMetadata: [
+      ...(selectedRecordType?.fields
+        .filter((field) => field.type === 'photo' && typeof values[field.key] === 'string')
+        .map((field) => fieldPhotoMetadata[field.key])
+        .filter((value): value is NonNullable<PlatformRecordEvidence['photoMetadata']>[number] => Boolean(value)) ?? []),
+      ...extraPhotoMetadata,
+    ],
   };
 
   const handleSubmit = async () => {

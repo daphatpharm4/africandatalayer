@@ -78,6 +78,69 @@ function formatRelativeTime(iso: string | undefined, language: 'en' | 'fr'): str
   return formatter.format(Math.round(diffMs / 86_400_000), 'day');
 }
 
+const CompanyRecordDetails: React.FC<{
+  point: DataPoint;
+  onBack: () => void;
+  language: 'en' | 'fr';
+}> = ({ point, onBack, language }) => {
+  const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
+  const record = point.platformRecord;
+  if (!record) return null;
+  const capturedAt = record.evidence.capturedAt ?? record.createdAt;
+
+  const formatValue = (value: unknown): string => {
+    if (value === null || value === undefined || value === '') return '—';
+    if (typeof value === 'boolean') return value ? t('Yes', 'Oui') : t('No', 'Non');
+    if (Array.isArray(value)) return value.map(formatValue).join(', ');
+    if (typeof value === 'object') return JSON.stringify(value, null, 2);
+    return String(value);
+  };
+
+  return (
+    <div data-testid="screen-company-record-details" className="screen-shell">
+      <ScreenHeader title={record.recordTypeLabel} onBack={onBack} language={language}
+        trailing={<span className="micro-label rounded-full bg-forest-wash px-2.5 py-1 text-forest-dark">{t('Approved', 'Approuvée')}</span>} />
+      <div className="space-y-5 px-4 pb-[max(2rem,env(safe-area-inset-bottom))] pt-4">
+        <section className="card p-5">
+          <p className="micro-label text-forest">{t('Company record', 'Donnée entreprise')}</p>
+          <h1 className="mt-1 text-xl font-bold text-ink">{point.name || record.recordTypeLabel}</h1>
+          <p className="mt-2 text-sm leading-6 text-ink-muted">
+            {t('Captured', 'Capturée')} {new Date(capturedAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB')}
+          </p>
+        </section>
+
+        <section className="card p-5">
+          <h2 className="text-sm font-semibold text-ink">{t('Submitted fields', 'Champs soumis')}</h2>
+          <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {Object.entries(record.data).map(([key, value]) => (
+              <div key={key} className="min-w-0 border-b border-gray-100 pb-3">
+                <dt className="micro-label text-ink-muted">{key.replaceAll('_', ' ')}</dt>
+                <dd className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-ink">{formatValue(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+
+        <section className="card p-5">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink"><MapPin size={16} />{t('Field evidence', 'Justificatifs terrain')}</h2>
+          <dl className="mt-4 space-y-3 text-sm">
+            <div><dt className="micro-label text-ink-muted">GPS</dt><dd className="mt-1 text-ink">{record.evidence.gps ? `${record.evidence.gps.latitude.toFixed(6)}, ${record.evidence.gps.longitude.toFixed(6)}${record.evidence.gps.accuracyMeters !== undefined ? ` · ±${Math.round(record.evidence.gps.accuracyMeters)} m` : ''}` : t('Not captured', 'Non capturé')}</dd></div>
+            {record.evidence.notes && <div><dt className="micro-label text-ink-muted">{t('Collector notes', 'Notes du collecteur')}</dt><dd className="mt-1 whitespace-pre-wrap leading-6 text-ink">{record.evidence.notes}</dd></div>}
+          </dl>
+          {record.evidence.photos.length > 0 && (
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {record.evidence.photos.map((photo, index) => (
+                <img key={`${record.id}-photo-${index}`} src={photo} loading="lazy" decoding="async"
+                  alt={t(`Field evidence photo ${index + 1}`, `Photo terrain ${index + 1}`)} className="aspect-square w-full rounded-2xl border border-navy-border object-cover" />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+};
+
 const Details: React.FC<Props> = ({
   point,
   onBack,
@@ -89,6 +152,9 @@ const Details: React.FC<Props> = ({
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   if (!point) return null;
+  if (point.platformRecord) {
+    return <CompanyRecordDetails point={point} onBack={onBack} language={language} />;
+  }
 
   const verticalId = LEGACY_CATEGORY_MAP[point.type] ?? point.type;
   const vertical = VERTICALS[verticalId];

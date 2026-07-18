@@ -164,6 +164,11 @@
     scroll-padding-bottom: var(--screen-content-bottom);
   }
 
+  .console-scroll-region {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+  }
+
   /* Screen header — sticky top bar */
   .screen-header {
     @apply sticky top-0 z-30 grid grid-cols-[auto,1fr,auto] items-center gap-2 border-b border-gray-100 bg-white px-[var(--screen-gutter)] py-2.5 backdrop-blur-xl;

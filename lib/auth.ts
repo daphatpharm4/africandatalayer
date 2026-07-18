@@ -98,12 +98,24 @@ export async function requireUser(request: Request, deps: RequireUserDeps = {}):
       : undefined;
   try {
     const profile = await getUserProfileFn(id);
-    if (profile && typeof profile.sessionVersion === "number" && Number.isFinite(profile.sessionVersion)) {
+    if (!profile) return null;
+    if (typeof profile.sessionVersion === "number" && Number.isFinite(profile.sessionVersion)) {
       const storedSessionVersion = Math.max(0, Math.floor(profile.sessionVersion));
       if ((sessionVersion ?? 0) !== storedSessionVersion) return null;
     }
+    const currentRole = profile.role === "admin" || profile.role === "client" || profile.role === "agent"
+      ? profile.role
+      : profile.isAdmin === true
+        ? "admin"
+        : role;
+    return {
+      id: profile.id,
+      token,
+      role: currentRole,
+      mustChangePassword: profile.mustChangePassword === true || mustChangePassword,
+      sessionVersion: profile.sessionVersion ?? sessionVersion,
+    };
   } catch {
     return null;
   }
-  return { id, token, role, mustChangePassword, sessionVersion };
 }

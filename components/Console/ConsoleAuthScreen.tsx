@@ -85,7 +85,7 @@ const ConsoleAuthScreen: React.FC<Props> = ({ language, inviteMode, onAuthentica
   };
 
   return (
-    <main className="route-grid flex min-h-screen items-center justify-center bg-page px-4 py-8 sm:px-6">
+    <main className="console-scroll-region route-grid flex h-[var(--app-height)] min-h-0 touch-pan-y items-center justify-center overflow-y-auto overscroll-contain bg-page px-4 py-8 sm:px-6">
       <div className="w-full max-w-md">
         <div className="mb-5 flex items-center justify-center gap-3">
           <BrandLogo size={36} />

@@ -336,7 +336,7 @@ const HomeMap: React.FC<Props> = ({
                 {singlePoint ? (
                   <div className="space-y-1">
                     <span className="micro-label text-navy">
-                      {categoryLabel(singlePoint.type)}
+                      {singlePoint.platformRecord?.recordTypeLabel ?? categoryLabel(singlePoint.type)}
                     </span>
                     <p className="text-sm font-semibold text-gray-900">{singlePoint.name}</p>
                     <p className="text-xs leading-4 text-gray-600">{formatExplorerPrimaryMeta(singlePoint)}</p>
@@ -364,7 +364,7 @@ const HomeMap: React.FC<Props> = ({
                         >
                           <p className="text-xs font-semibold text-gray-900 truncate">{point.name}</p>
                           <p className="text-[11px] tracking-[0.08em] text-gray-500">
-                            {categoryLabel(point.type)}
+                            {point.platformRecord?.recordTypeLabel ?? categoryLabel(point.type)}
                           </p>
                         </button>
                       ))}

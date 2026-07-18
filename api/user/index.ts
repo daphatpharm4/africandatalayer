@@ -25,6 +25,8 @@ import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import { logSecurityEvent } from "../../lib/server/securityAudit.js";
 import { updateUserTrust } from "../../lib/server/userTrust.js";
 import { extractRateLimitIp } from "../../lib/server/rateLimit.js";
+import { consumeRateLimit } from "../../lib/server/rateLimit.js";
+import { anonymizeUserAccount, getAccountDeletionRequirements } from "../../lib/server/accountDeletion.js";
 import { getCurrentSmsConsent, recordSmsConsent } from "../../lib/server/sms/consent.js";
 import {
   adminAccountCreateSchema,
@@ -351,6 +353,19 @@ export async function GET(request: Request): Promise<Response> {
   if (view === "sms-consent") {
     const consent = await getCurrentSmsConsent(auth.id);
     return jsonResponse(consent, { status: 200 });
+  }
+
+  if (view === "account_delete") {
+    try {
+      const requirements = await getAccountDeletionRequirements(auth.id);
+      if (!requirements) return errorResponse("Profile not found", 404);
+      return jsonResponse(requirements, { status: 200 });
+    } catch (error) {
+      if (isStorageUnavailableError(error)) {
+        return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+      }
+      throw error;
+    }
   }
 
   if (view === "assignments") {
@@ -730,5 +745,85 @@ export async function PATCH(request: Request): Promise<Response> {
     }
     const message = error instanceof Error ? error.message : "Unable to update assignment";
     return errorResponse(message, 400);
+  }
+}
+
+export async function DELETE(request: Request): Promise<Response> {
+  const auth = await requireUser(request);
+  if (!auth) return errorResponse("Unauthorized", 401);
+
+  const url = new URL(request.url);
+  if (url.searchParams.get("view") !== "account_delete") return errorResponse("Invalid view", 400);
+  if (request.headers.get("x-adl-delete-confirmation") !== "DELETE") {
+    return errorResponse("Deletion confirmation header is required", 400, { code: "confirmation_required" });
+  }
+  if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
+    return errorResponse("Content-Type must be application/json", 415);
+  }
+
+  const rateLimit = await consumeRateLimit({
+    route: "DELETE /api/user?view=account_delete",
+    key: `${extractRateLimitIp(request) ?? "unknown"}:${auth.id}`,
+    windowSeconds: 60 * 60,
+    max: 3,
+    request,
+    userId: auth.id,
+  });
+  if (!rateLimit.allowed) {
+    return errorResponse("Too many deletion attempts. Try again later.", 429, { code: "rate_limited" });
+  }
+
+  let body: { confirmation?: unknown; acknowledgeDataLoss?: unknown; password?: unknown };
+  try {
+    body = await request.json() as typeof body;
+  } catch {
+    return errorResponse("Invalid JSON body", 400);
+  }
+  if (body.confirmation !== "DELETE" || body.acknowledgeDataLoss !== true) {
+    return errorResponse("Type DELETE and acknowledge permanent data loss", 400, { code: "confirmation_required" });
+  }
+
+  try {
+    const requirements = await getAccountDeletionRequirements(auth.id);
+    if (!requirements) return errorResponse("Profile not found", 404);
+    if (requirements.blockers.length > 0) {
+      return jsonResponse({
+        error: "Transfer protected access before deleting this account",
+        code: "account_delete_blocked",
+        blockers: requirements.blockers,
+      }, { status: 409 });
+    }
+
+    const profile = await getUserProfile(auth.id);
+    if (!profile) return errorResponse("Profile not found", 404);
+    if (requirements.requiresPassword) {
+      const password = typeof body.password === "string" ? body.password : "";
+      if (!password || !profile.passwordHash || !(await bcrypt.compare(password, profile.passwordHash))) {
+        return errorResponse("Password is incorrect", 403, { code: "password_incorrect" });
+      }
+    }
+
+    const tombstone = await anonymizeUserAccount(auth.id);
+    try {
+      await logSecurityEvent({
+        eventType: "privacy_erasure",
+        userId: tombstone,
+        request,
+        details: { method: "self_service", completed: true },
+      });
+    } catch (auditError) {
+      console.warn("Unable to write privacy erasure audit event", auditError);
+    }
+    return jsonResponse({ ok: true }, { status: 200 });
+  } catch (error) {
+    if (isStorageUnavailableError(error)) {
+      return errorResponse("Storage service temporarily unavailable", 503, { code: "storage_unavailable" });
+    }
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("last_organization_owner") || message.includes("last_adl_admin")) {
+      return errorResponse("Transfer protected access before deleting this account", 409, { code: "account_delete_blocked" });
+    }
+    if (message.includes("account_not_found")) return errorResponse("Profile not found", 404);
+    throw error;
   }
 }

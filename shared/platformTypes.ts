@@ -45,6 +45,20 @@ export interface PlatformRecordEvidence {
   gps?: PlatformRecordGps;
   photos: string[];
   notes?: string;
+  capturedAt?: string;
+  device?: {
+    platform?: string;
+    userAgent?: string;
+    language?: string;
+  };
+  photoMetadata?: Array<{
+    mimeType: string;
+    originalBytes: number;
+    storedBytes: number;
+    width?: number;
+    height?: number;
+    capturedAt?: string;
+  }>;
 }
 export interface PlatformRecord {
   id: string;
@@ -57,6 +71,16 @@ export interface PlatformRecord {
   status: "pending_review" | "approved" | "rejected";
   capturedBy: string;
   createdAt: string;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  reviewNotes?: string | null;
+}
+export interface PlatformRecordSummary {
+  total: number;
+  pendingReview: number;
+  approved: number;
+  rejected: number;
+  submittedToday: number;
 }
 export interface PlatformInvite {
   id: string; organizationId: string; email: string; role: Exclude<PlatformRole, "owner">;

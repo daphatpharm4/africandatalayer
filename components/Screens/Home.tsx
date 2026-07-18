@@ -45,6 +45,8 @@ import {
   collectablePlatformProjects,
   type PlatformFieldContext,
 } from '../../lib/client/platformFieldContext';
+import { listApprovedPlatformRecordsRequest } from '../../lib/client/platformApi';
+import type { PlatformRecord } from '../../shared/platformTypes';
 
 type WindowWithIdleCallback = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -375,6 +377,9 @@ const Home: React.FC<Props> = ({
   };
 
   const formatExplorerPrimaryMeta = (point: DataPoint) => {
+    if (point.platformRecord) {
+      return `${point.platformRecord.recordTypeLabel} · ${t('Company verified', 'Vérifié par l’entreprise')}`;
+    }
     if (point.type === Category.PHARMACY) {
       if (typeof point.isOnDuty === 'boolean') {
         return point.isOnDuty ? t('Pharmacie de garde', 'Pharmacie de garde') : t('Pas de garde', 'Pas de garde');
@@ -386,6 +391,48 @@ const Home: React.FC<Props> = ({
     }
     const operator = point.operator || point.provider || point.providers?.[0];
     return operator ? `${t('Opérateur', 'Opérateur')}: ${operator}` : t('Operateur indisponible', 'Operateur indisponible');
+  };
+
+  const mapPlatformRecordToPoint = (record: PlatformRecord): DataPoint | null => {
+    const gps = record.evidence.gps;
+    if (!gps) return null;
+    const vertical = companyVerticals.find((entry) => (
+      entry.organizationId === record.organizationId
+      && entry.id === `${record.projectId}:${record.recordTypeKey}`
+    ));
+    const preferredName = ['name', 'title', 'label', 'site_name', 'siteName', 'description']
+      .map((key) => record.data[key])
+      .find((value) => typeof value === 'string' && value.trim().length > 0);
+    const fallbackName = Object.values(record.data)
+      .find((value) => typeof value === 'string' && value.trim().length > 0);
+    const recordTypeLabel = vertical?.label ?? record.recordTypeKey.replaceAll('_', ' ');
+    return {
+      id: record.id,
+      name: String(preferredName ?? fallbackName ?? recordTypeLabel),
+      type: Category.CENSUS_PROXY,
+      location: `GPS: ${gps.latitude.toFixed(5)}°, ${gps.longitude.toFixed(5)}°`,
+      coordinates: { latitude: gps.latitude, longitude: gps.longitude },
+      lastUpdated: formatTimeAgo(record.reviewedAt ?? record.createdAt),
+      updatedAtIso: record.reviewedAt ?? record.createdAt,
+      availability: 'High',
+      trustScore: 100,
+      contributorTrust: t('Company approved', 'Approuvé par l’entreprise'),
+      photoUrl: record.evidence.photos[0],
+      details: {
+        ...record.data,
+        companyRecord: true,
+        reviewStatus: record.status,
+        gpsAccuracyMeters: gps.accuracyMeters,
+        evidenceNotes: record.evidence.notes,
+        capturedAt: record.evidence.capturedAt ?? record.createdAt,
+      },
+      gaps: [],
+      verified: true,
+      platformRecord: {
+        ...record,
+        recordTypeLabel,
+      },
+    };
   };
 
   const getListCardTone = (point: DataPoint) => {
@@ -435,6 +482,23 @@ const Home: React.FC<Props> = ({
   }, [isAdmin, mapScope]);
 
   const loadPoints = async () => {
+    if (isCompanyExplore && activeCompanyVertical) {
+      try {
+        setIsLoadingPoints(true);
+        setPointsLoadError('');
+        const records = await listApprovedPlatformRecordsRequest(activeCompanyVertical.organizationId);
+        setPoints(records.map(mapPlatformRecordToPoint).filter((point): point is DataPoint => point !== null));
+      } catch {
+        setPoints([]);
+        setPointsLoadError(t(
+          'Company records failed to load. Tap retry or check your connection.',
+          'Impossible de charger les données entreprise. Réessayez ou vérifiez votre connexion.',
+        ));
+      } finally {
+        setIsLoadingPoints(false);
+      }
+      return;
+    }
     if (!isPublicExplore) {
       setPoints([]);
       setIsLoadingPoints(false);
@@ -494,7 +558,7 @@ const Home: React.FC<Props> = ({
 
   useEffect(() => {
     void loadPoints();
-  }, [isPublicExplore, mapScope, mapCacheAuthKey]); // language removed: API response is language-independent
+  }, [isPublicExplore, isCompanyExplore, activeCompanyVertical?.organizationId, mapScope, mapCacheAuthKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -528,13 +592,19 @@ const Home: React.FC<Props> = ({
     };
   }, []);
 
-  const filteredPoints = useMemo(() => points.filter((point) => point.type === activeCategory), [activeCategory, points]);
+  const filteredPoints = useMemo(() => points.filter((point) => {
+    if (!isCompanyExplore) return point.type === activeCategory;
+    return Boolean(activeCompanyVertical)
+      && point.platformRecord?.organizationId === activeCompanyVertical.organizationId
+      && point.platformRecord?.projectId === activeCompanyVertical.id.split(':', 1)[0]
+      && point.platformRecord?.recordTypeKey === activeCompanyVertical.id.slice(activeCompanyVertical.id.indexOf(':') + 1);
+  }), [activeCategory, activeCompanyVertical, isCompanyExplore, points]);
 
   const mapPointGroups = useMemo<MapPointGroup[]>(() => {
     const groups = new Map<string, MapPointGroup>();
     for (const point of filteredPoints) {
       if (!point.coordinates) continue;
-      if (mapScope === 'bonamoussadi' && !isWithinBonamoussadi(point.coordinates)) continue;
+      if (!isCompanyExplore && mapScope === 'bonamoussadi' && !isWithinBonamoussadi(point.coordinates)) continue;
       const latitude = Number(point.coordinates.latitude.toFixed(5));
       const longitude = Number(point.coordinates.longitude.toFixed(5));
       const key = `${latitude}_${longitude}`;
@@ -546,7 +616,7 @@ const Home: React.FC<Props> = ({
       }
     }
     return Array.from(groups.values());
-  }, [filteredPoints, mapScope]);
+  }, [filteredPoints, isCompanyExplore, mapScope]);
 
   const categoryLabel = (type: Category) => {
     const verticalId = LEGACY_CATEGORY_MAP[type] ?? type;

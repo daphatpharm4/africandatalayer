@@ -96,6 +96,20 @@ export const recordCreateSchema = z.object({
     }).optional(),
     photos: z.array(z.string().startsWith("data:image/").max(400_000)).max(10),
     notes: z.string().trim().max(2_000).optional(),
+    capturedAt: z.string().datetime().optional(),
+    device: z.object({
+      platform: z.string().trim().max(120).optional(),
+      userAgent: z.string().trim().max(500).optional(),
+      language: z.string().trim().max(40).optional(),
+    }).optional(),
+    photoMetadata: z.array(z.object({
+      mimeType: z.string().trim().max(100),
+      originalBytes: z.number().int().nonnegative().max(50_000_000),
+      storedBytes: z.number().int().nonnegative().max(1_000_000),
+      width: z.number().int().positive().max(20_000).optional(),
+      height: z.number().int().positive().max(20_000).optional(),
+      capturedAt: z.string().datetime().optional(),
+    })).max(10).optional(),
   }),
 });
 
@@ -103,4 +117,13 @@ export const recordReviewSchema = z.object({
   organizationId: uuid,
   recordId: uuid,
   status: z.enum(["approved", "rejected"]),
+  reviewNotes: z.string().trim().max(2_000).optional(),
+}).superRefine((value, context) => {
+  if (value.status === "rejected" && !value.reviewNotes) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["reviewNotes"],
+      message: "Explain why this record is being rejected",
+    });
+  }
 });

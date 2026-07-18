@@ -201,6 +201,28 @@ export function createCredentialsAuthorize(deps: CredentialsAuthorizeDeps = {}) 
       const adminMatch = await comparePasswordFn(password, adminPassword);
       if (adminMatch) {
         console.log("[auth:authorize] → SUCCESS: admin env bootstrap match");
+        await upsertUserProfileFn(identifier, {
+          id: identifier,
+          name: "Admin",
+          email: identifier,
+          phone: null,
+          image: encodeAvatarPresetImage(DEFAULT_AVATAR_PRESET),
+          avatarPreset: DEFAULT_AVATAR_PRESET,
+          occupation: "African Data Layer administrator",
+          XP: 0,
+          passwordHash: adminPassword,
+          isAdmin: true,
+          role: "admin",
+          mapScope: "global",
+          trustScore: 100,
+          trustTier: "trusted",
+          failedLoginCount: 0,
+          lockedUntil: null,
+          wipeRequested: false,
+          suspendedUntil: null,
+          mustChangePassword: false,
+          sessionVersion: 0,
+        });
         await logSecurityEventFn({
           eventType: "login_success",
           userId: identifier,

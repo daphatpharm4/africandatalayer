@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createRecord, listRecords, reviewRecord } from "../lib/server/platform/recordStore.ts";
+import { createRecord, getRecordSummaryForUser, listRecords, reviewRecord } from "../lib/server/platform/recordStore.ts";
 
 test("createRecord inserts with all tenant scopes and idempotent conflict handling", async () => {
   const calls: Array<{ text: string; values: unknown[] }> = [];
@@ -23,6 +23,19 @@ test("createRecord inserts with all tenant scopes and idempotent conflict handli
   assert.deepEqual(calls[0].values.slice(0, 4), ["org-1", "project-1", "schema-1", "retail_outlet"]);
 });
 
+test("getRecordSummaryForUser counts every company capture by review status", async () => {
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  const summary = await getRecordSummaryForUser("collector@example.com", {
+    queryFn: async (text, values = []) => {
+      calls.push({ text, values });
+      return { rows: [{ total: 4, pending_review: 1, approved: 2, rejected: 1, submitted_today: 3 }], rowCount: 1 };
+    },
+  });
+  assert.deepEqual(summary, { total: 4, pendingReview: 1, approved: 2, rejected: 1, submittedToday: 3 });
+  assert.match(calls[0].text, /where captured_by = \$1/i);
+  assert.deepEqual(calls[0].values, ["collector@example.com"]);
+});
+
 test("listRecords and reviewRecord keep every query tenant-scoped", async () => {
   const calls: Array<{ text: string; values: unknown[] }> = [];
   const row = {
@@ -38,9 +51,15 @@ test("listRecords and reviewRecord keep every query tenant-scoped", async () => 
   assert.match(calls[0].text, /where organization_id = \$1/i);
   assert.deepEqual(calls[0].values.slice(0, 2), ["org-1", "pending_review"]);
 
-  const reviewed = await reviewRecord({ organizationId: "org-1", recordId: "r1", status: "approved" }, { queryFn });
+  const reviewed = await reviewRecord({
+    organizationId: "org-1",
+    recordId: "r1",
+    status: "approved",
+    reviewedBy: "reviewer-1",
+    reviewNotes: "Evidence verified",
+  }, { queryFn });
   assert.equal(reviewed?.status, "approved");
   assert.match(calls[1].text, /where organization_id = \$1 and id = \$2/i);
   assert.match(calls[1].text, /status = 'pending_review'/i);
-  assert.deepEqual(calls[1].values, ["org-1", "r1", "approved"]);
+  assert.deepEqual(calls[1].values, ["org-1", "r1", "approved", "reviewer-1", "Evidence verified"]);
 });

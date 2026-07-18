@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ImagePlus, Trash2 } from 'lucide-react';
 import { updateOrganizationRequest, PlatformApiError } from '../../lib/client/platformApi';
 import type { PlatformOrganization, PlatformRole } from '../../shared/platformTypes';
+import DeleteAccountPanel from '../shared/DeleteAccountPanel';
 
 export interface SettingsScreenProps {
   organizationId: string;
@@ -312,6 +313,8 @@ const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </button>
         )}
       </div>
+
+      <DeleteAccountPanel language={language} redirectTo="/console?deleted=1" />
     </div>
   );
 };

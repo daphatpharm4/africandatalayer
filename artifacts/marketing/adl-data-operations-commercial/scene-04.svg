@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920">
+  <defs>
+    <pattern id="grid" width="72" height="72" patternUnits="userSpaceOnUse"><path d="M72 0H0V72" fill="none" stroke="#0f2b46" stroke-opacity="0.055" stroke-width="2"/></pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="20" stdDeviation="24" flood-color="#0f2b46" flood-opacity="0.18"/></filter>
+    <linearGradient id="navyGlow" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#173f63"/><stop offset="1" stop-color="#0b2035"/></linearGradient>
+  </defs>
+  <rect width="1080" height="1920" fill="#0f2b46"/>
+
+    <rect width="1080" height="1920" fill="url(#navyGlow)"/>
+    <circle cx="540" cy="830" r="520" fill="none" stroke="#fff" stroke-opacity="0.035" stroke-width="140"/>
+    <circle cx="540" cy="830" r="330" fill="#c86b4a" opacity="0.09"/>
+
+  <g transform="translate(426 205) scale(1.78125)">
+    <path d="M64 14L112 40L64 66L16 40L64 14Z" fill="#0f2b46" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M64 44L112 70L64 96L16 70L64 44Z" fill="#f4c317" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M16 76L64 102L112 76L76 114C73 117 68.9 118.5 64.8 118.5C60.7 118.5 56.6 117 53.6 114L16 76Z" fill="#0f2b46" stroke="#fff" stroke-width="6" stroke-linejoin="round"/>
+  </g>
+    <text x="540" y="560" text-anchor="middle" fill="#f4c317" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="850" letter-spacing="7">AFRICAN DATA LAYER</text>
+    <text x="540" y="790" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="78" font-weight="850" letter-spacing="-2">
+      <tspan x="540" dy="0">TURN THE</tspan><tspan x="540" dy="90">REAL WORLD</tspan><tspan x="540" dy="90">INTO RELIABLE</tspan><tspan x="540" dy="90">COMPANY DATA.</tspan>
+    </text>
+    <text x="540" y="1290" text-anchor="middle" fill="#cbd7e1" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="500">
+      <tspan x="540" dy="0">Your forms. Your people.</tspan><tspan x="540" dy="54">One trusted operational layer.</tspan>
+    </text>
+    <rect x="174" y="1465" width="732" height="126" rx="63" fill="#c86b4a"/>
+    <text x="540" y="1544" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="34" font-weight="850">BOOK YOUR DATA OPERATION</text>
+    <text x="540" y="1720" text-anchor="middle" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="31" font-weight="700">africandatalayer.com</text>
+    <text x="540" y="1770" text-anchor="middle" fill="#9fb1c1" font-family="Inter,Arial,sans-serif" font-size="24">Built for teams working across Africa and beyond.</text>
+</svg>
