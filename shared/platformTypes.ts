@@ -71,6 +71,7 @@ export interface PlatformRecord {
   status: "pending_review" | "approved" | "rejected";
   capturedBy: string;
   createdAt: string;
+  pointId?: string | null;
   reviewedBy?: string | null;
   reviewedAt?: string | null;
   reviewNotes?: string | null;
@@ -81,6 +82,14 @@ export interface PlatformRecordSummary {
   approved: number;
   rejected: number;
   submittedToday: number;
+}
+export interface PlatformNearbyPoint {
+  pointId: string;
+  category: string;
+  name: string | null;
+  location: { latitude: number; longitude: number };
+  updatedAt: string;
+  distanceMeters: number;
 }
 export interface PlatformInvite {
   id: string; organizationId: string; email: string; role: Exclude<PlatformRole, "owner">;
