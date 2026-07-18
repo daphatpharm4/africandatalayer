@@ -9,6 +9,7 @@ import type {
   PlatformAdminOrganizationSummary,
   PlatformInvite,
   PlatformMembership,
+  PlatformNearbyPoint,
   PlatformOrganization,
   PlatformOrganizationAccessStatus,
   PlatformProject,
@@ -290,6 +291,7 @@ export async function createPlatformRecordRequest(
     data: Record<string, unknown>;
     evidence: PlatformRecordEvidence;
     idempotencyKey: string;
+    pointId?: string;
   },
   deps?: PlatformApiDeps,
 ): Promise<PlatformRecord> {
@@ -304,6 +306,7 @@ export async function createPlatformRecordRequest(
         recordTypeKey: input.recordTypeKey,
         data: input.data,
         evidence: input.evidence,
+        ...(input.pointId ? { pointId: input.pointId } : {}),
       },
     },
     deps,
@@ -337,6 +340,26 @@ export async function listApprovedPlatformRecordsRequest(
     deps,
   );
   return payload.records;
+}
+
+export async function nearbyPlatformPointsRequest(
+  input: { projectId: string; latitude: number; longitude: number; radiusMeters?: number },
+  deps?: PlatformApiDeps,
+): Promise<PlatformNearbyPoint[]> {
+  const payload = await callPlatform<{ points: PlatformNearbyPoint[] }>(
+    "point_nearby",
+    {
+      method: "GET",
+      params: {
+        projectId: input.projectId,
+        latitude: String(input.latitude),
+        longitude: String(input.longitude),
+        ...(input.radiusMeters ? { radiusMeters: String(input.radiusMeters) } : {}),
+      },
+    },
+    deps,
+  );
+  return payload.points;
 }
 
 export async function reviewPlatformRecordRequest(

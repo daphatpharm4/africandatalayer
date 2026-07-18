@@ -23,6 +23,7 @@ import {
   listPlatformRecordsRequest,
   listApprovedPlatformRecordsRequest,
   reviewPlatformRecordRequest,
+  nearbyPlatformPointsRequest,
 } from "../lib/client/platformApi.ts";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -364,4 +365,45 @@ test("createPlatformRecordRequest sends the stable idempotency key outside the J
   assert.equal(calls[0].url, "/api/user?view=platform_record_create");
   assert.equal(new Headers(calls[0].init?.headers).get("Idempotency-Key"), "stable-record-key");
   assert.equal(JSON.parse(calls[0].init?.body as string).idempotencyKey, undefined);
+});
+
+const RECORD_INPUT = {
+  projectId: "p1",
+  schemaVersionId: "s1",
+  recordTypeKey: "retail_outlet",
+  data: { name: "Kiosk" },
+  evidence: { gps: { latitude: 4.05, longitude: 9.7 }, photos: [] as string[] },
+  idempotencyKey: "record-key-000001",
+};
+
+test("createPlatformRecordRequest forwards pointId when attaching to a point", async () => {
+  const { fetchFn, calls } = stubFetch(() => jsonResponse({ record: { id: "r1" } }, 201));
+  await createPlatformRecordRequest({ ...RECORD_INPUT, pointId: "pt_1" }, { fetchFn });
+  const body = JSON.parse(String(calls[0].init?.body));
+  assert.equal(body.pointId, "pt_1");
+});
+
+test("createPlatformRecordRequest omits pointId for standalone records", async () => {
+  const { fetchFn, calls } = stubFetch(() => jsonResponse({ record: { id: "r1" } }, 201));
+  await createPlatformRecordRequest(RECORD_INPUT, { fetchFn });
+  const body = JSON.parse(String(calls[0].init?.body));
+  assert.equal("pointId" in body, false);
+});
+
+test("nearbyPlatformPointsRequest hits platform_point_nearby with coordinates", async () => {
+  const points = [{
+    pointId: "pt_1", category: "pharmacy", name: "Pharmacie Centrale",
+    location: { latitude: 4.0503, longitude: 9.7001 },
+    updatedAt: "2026-07-01T00:00:00.000Z", distanceMeters: 35,
+  }];
+  const { fetchFn, calls } = stubFetch(() => jsonResponse({ points }));
+  const result = await nearbyPlatformPointsRequest(
+    { projectId: "p1", latitude: 4.05, longitude: 9.7 },
+    { fetchFn },
+  );
+  assert.match(calls[0].url, /view=platform_point_nearby/);
+  assert.match(calls[0].url, /projectId=p1/);
+  assert.match(calls[0].url, /latitude=4\.05/);
+  assert.match(calls[0].url, /longitude=9\.7/);
+  assert.deepEqual(result, points);
 });

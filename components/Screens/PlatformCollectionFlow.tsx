@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowLeft, Building2, Camera, CheckCircle, Crosshair, RefreshCw, Send } from 'lucide-react';
+import { ArrowLeft, Building2, Camera, CheckCircle, Crosshair, MapPin, RefreshCw, Send, X } from 'lucide-react';
 import { Geolocation as CapGeolocation } from '@capacitor/geolocation';
-import { createPlatformRecordRequest, PlatformApiError } from '../../lib/client/platformApi';
+import { createPlatformRecordRequest, nearbyPlatformPointsRequest, PlatformApiError } from '../../lib/client/platformApi';
 import {
   collectablePlatformProjects,
   type PlatformFieldContext,
@@ -9,8 +9,10 @@ import {
 import { isNative } from '../../lib/client/native';
 import { validatePlatformRecord } from '../../shared/platformRecord';
 import { readPlatformPhotoAsset } from '../../lib/client/platformPhoto';
+import { formatDistanceMeters, pointStaleness, stalenessLabel } from '../../lib/client/platformPointUi';
 import type {
   PlatformFieldDefinition,
+  PlatformNearbyPoint,
   PlatformRecordEvidence,
   PlatformRecordGps,
 } from '../../shared/platformTypes';
@@ -93,6 +95,10 @@ const PlatformCollectionFlow: React.FC<Props> = ({
   const [submittedLabel, setSubmittedLabel] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const [captureStartedAt, setCaptureStartedAt] = useState(() => new Date().toISOString());
+  const [attachedPoint, setAttachedPoint] = useState<PlatformNearbyPoint | null>(null);
+  const [nearbyPoints, setNearbyPoints] = useState<PlatformNearbyPoint[] | null>(null);
+  const [isLoadingNearby, setIsLoadingNearby] = useState(false);
+  const [nearbyError, setNearbyError] = useState('');
 
   const selected = recordChoices.find((choice) => choice.key === selectedKey) ?? recordChoices[0] ?? null;
   const selectedRecordType = selected?.recordType ?? null;
@@ -109,6 +115,33 @@ const PlatformCollectionFlow: React.FC<Props> = ({
     setSubmittedLabel('');
     setIdempotencyKey(createIdempotencyKey());
     setCaptureStartedAt(new Date().toISOString());
+    setAttachedPoint(null);
+    setNearbyPoints(null);
+    setIsLoadingNearby(false);
+    setNearbyError('');
+  };
+
+  const loadNearbyPoints = async () => {
+    if (!selected) return;
+    setIsLoadingNearby(true);
+    setNearbyError('');
+    try {
+      let gps = gpsEvidence;
+      if (!gps) {
+        gps = await captureGps();
+        setGpsEvidence(gps);
+      }
+      const points = await nearbyPlatformPointsRequest({
+        projectId: selected.project.id,
+        latitude: gps.latitude,
+        longitude: gps.longitude,
+      });
+      setNearbyPoints(points);
+    } catch {
+      setNearbyError(t('Could not load nearby points', 'Impossible de charger les points à proximité'));
+    } finally {
+      setIsLoadingNearby(false);
+    }
   };
 
   const setValue = (key: string, value: unknown) => {
@@ -176,6 +209,10 @@ const PlatformCollectionFlow: React.FC<Props> = ({
     ],
   };
 
+  // Defensive: loadNearbyPoints always captures GPS before a point can be attached,
+  // but the server rejects pointId-without-gps, so keep the client-side guard.
+  const pointNeedsGps = Boolean(attachedPoint) && !gpsEvidence;
+
   const handleSubmit = async () => {
     if (!selected || !selectedRecordType) return;
     const issues = validatePlatformRecord(selectedRecordType, values, evidence);
@@ -204,13 +241,31 @@ const PlatformCollectionFlow: React.FC<Props> = ({
         data: values,
         evidence,
         idempotencyKey,
+        pointId: attachedPoint?.pointId,
       });
       setSubmittedLabel(labelFor(selectedRecordType.label, language));
+      setAttachedPoint(null);
+      setNearbyPoints(null);
     } catch (error) {
       if (error instanceof PlatformApiError && error.code === 'platform_schema_stale') {
         setErrorMessage(t(
           'Your company updated this form. Reload it before submitting.',
           'Votre entreprise a mis à jour ce formulaire. Rechargez-le avant l’envoi.',
+        ));
+      } else if (error instanceof PlatformApiError && error.code === 'platform_enrich_too_far') {
+        setErrorMessage(t(
+          'You are too far from this point. Move closer and retry.',
+          'Vous êtes trop loin de ce point. Rapprochez-vous et réessayez.',
+        ));
+      } else if (error instanceof PlatformApiError && error.code === 'platform_enrich_cooldown') {
+        setErrorMessage(t(
+          'You already submitted for this point today.',
+          'Vous avez déjà soumis pour ce point aujourd’hui.',
+        ));
+      } else if (error instanceof PlatformApiError && error.code === 'platform_point_not_found') {
+        setErrorMessage(t(
+          'This point no longer exists. Detach and submit as a new record.',
+          'Ce point n’existe plus. Détachez-le et soumettez un nouveau relevé.',
         ));
       } else {
         setErrorMessage(error instanceof Error && error.message
@@ -386,6 +441,68 @@ const PlatformCollectionFlow: React.FC<Props> = ({
               </section>
             ) : selectedRecordType && (
               <>
+                <section className="card-soft space-y-3 p-4">
+                  <div>
+                    <div className="micro-label text-gray-400">{t('Existing point', 'Point existant')}</div>
+                    <p className="mt-1 text-xs text-gray-500">{t('Attach this record to a point your company already tracks.', 'Associez ce relevé à un point déjà suivi par votre entreprise.')}</p>
+                  </div>
+
+                  {attachedPoint ? (
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-forest bg-forest-wash px-3 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 truncate text-sm font-bold text-forest-dark">
+                          <MapPin size={16} className="shrink-0" />
+                          <span className="truncate">{attachedPoint.name ?? attachedPoint.category}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-forest-dark/80">{stalenessLabel(attachedPoint.updatedAt, new Date(), language)}</div>
+                      </div>
+                      <button type="button" onClick={() => setAttachedPoint(null)}
+                        aria-label={t('Remove attached point', 'Retirer le point associé')}
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-forest-dark active:scale-95 transition-all">
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ) : nearbyPoints === null ? (
+                    <button type="button" onClick={() => void loadNearbyPoints()} disabled={isLoadingNearby}
+                      className="btn-ghost flex w-full items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60">
+                      {isLoadingNearby ? <RefreshCw className="animate-spin" size={16} /> : <MapPin size={16} />}
+                      {isLoadingNearby ? t('Looking for nearby points…', 'Recherche de points à proximité…') : t('Attach to existing point', 'Associer à un point existant')}
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      {nearbyError && <div role="alert" className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs font-semibold text-red-700">{nearbyError}</div>}
+                      {nearbyPoints.length === 0 ? (
+                        <p className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">{t('No points nearby', 'Aucun point à proximité')}</p>
+                      ) : (
+                        nearbyPoints.map((point) => {
+                          const staleness = pointStaleness(point.updatedAt, new Date());
+                          return (
+                            <button key={point.pointId} type="button"
+                              onClick={() => { setAttachedPoint(point); setNearbyPoints(null); }}
+                              className="flex min-h-12 w-full items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-left active:scale-95 transition-all">
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-bold text-gray-900">{point.name ?? point.category}</div>
+                                <div className="micro-label mt-0.5 text-gray-400">{point.category}</div>
+                              </div>
+                              <div className="flex shrink-0 flex-col items-end gap-1">
+                                <span className="text-xs font-semibold text-gray-600">{formatDistanceMeters(point.distanceMeters, language)}</span>
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${staleness.stale ? 'bg-amber-wash text-amber' : 'bg-gray-100 text-gray-500'}`}>
+                                  {stalenessLabel(point.updatedAt, new Date(), language)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                      <button type="button" onClick={() => void loadNearbyPoints()} disabled={isLoadingNearby}
+                        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-xs font-semibold text-navy disabled:opacity-60">
+                        <RefreshCw size={14} className={isLoadingNearby ? 'animate-spin' : ''} />
+                        {t('Refresh', 'Actualiser')}
+                      </button>
+                    </div>
+                  )}
+                </section>
+
                 <section className="card space-y-4 p-4">
                   <div>
                     <h2 className="text-lg font-bold text-gray-900">{labelFor(selectedRecordType.label, language)}</h2>
@@ -426,7 +543,8 @@ const PlatformCollectionFlow: React.FC<Props> = ({
                 )}
 
                 {errorMessage && <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-semibold text-red-700">{errorMessage}</div>}
-                <button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting}
+                {pointNeedsGps && <p className="text-xs font-semibold text-amber">{t('Capture GPS to attach a point', 'Capturez le GPS pour associer un point')}</p>}
+                <button type="button" onClick={() => void handleSubmit()} disabled={isSubmitting || pointNeedsGps}
                   className="flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-navy px-5 text-sm font-bold text-white shadow-lg disabled:opacity-60">
                   {isSubmitting ? <RefreshCw className="animate-spin" size={18} /> : <Send size={18} />}
                   {isSubmitting ? t('Sending securely…', 'Envoi sécurisé…') : t('Submit to company', 'Envoyer à l’entreprise')}

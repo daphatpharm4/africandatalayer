@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createRecord, getRecordSummaryForUser, listRecords, reviewRecord } from "../lib/server/platform/recordStore.ts";
+import { createRecord, getRecordSummaryForUser, hasRecentRecordForPoint, listRecords, reviewRecord } from "../lib/server/platform/recordStore.ts";
 
 test("createRecord inserts with all tenant scopes and idempotent conflict handling", async () => {
   const calls: Array<{ text: string; values: unknown[] }> = [];
@@ -62,4 +62,52 @@ test("listRecords and reviewRecord keep every query tenant-scoped", async () => 
   assert.match(calls[1].text, /where organization_id = \$1 and id = \$2/i);
   assert.match(calls[1].text, /status = 'pending_review'/i);
   assert.deepEqual(calls[1].values, ["org-1", "r1", "approved", "reviewer-1", "Evidence verified"]);
+});
+
+test("createRecord persists point link and capture coordinates", async () => {
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  const queryFn = async (text: string, values: unknown[] = []) => {
+    calls.push({ text, values });
+    return { rows: [{
+      id: "r1", organization_id: "o1", project_id: "p1", schema_version_id: "s1",
+      record_type_key: "audit", data: {}, evidence: { photos: [] },
+      status: "pending_review", captured_by: "u1", created_at: new Date(),
+      point_id: "pt_1", capture_lat: 4.05, capture_lng: 9.7,
+    }], rowCount: 1 };
+  };
+  const record = await createRecord({
+    organizationId: "o1", projectId: "p1", schemaVersionId: "s1", recordTypeKey: "audit",
+    data: {}, evidence: { photos: [] }, capturedBy: "u1", idempotencyKey: "k".repeat(8), requestHash: "a".repeat(64),
+    pointId: "pt_1", captureLat: 4.05, captureLng: 9.7,
+  }, { queryFn: queryFn as any });
+  assert.match(calls[0].text, /point_id/);
+  assert.match(calls[0].text, /capture_lat/);
+  assert.ok(calls[0].values.includes("pt_1"));
+  assert.equal(record.pointId, "pt_1");
+});
+
+test("hasRecentRecordForPoint returns the EXISTS result", async () => {
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  const queryFn = async (text: string, values: unknown[] = []) => {
+    calls.push({ text, values });
+    return { rows: [{ present: true }], rowCount: 1 };
+  };
+  const result = await hasRecentRecordForPoint(
+    { organizationId: "o1", pointId: "pt_1", capturedBy: "u1", recordTypeKey: "audit", withinHours: 24 },
+    { queryFn: queryFn as any },
+  );
+  assert.equal(result, true);
+  assert.match(calls[0].text, /point_id = \$2/);
+  assert.ok(calls[0].values.includes(24));
+});
+
+test("listRecords filters by pointId when provided", async () => {
+  const calls: Array<{ text: string; values: unknown[] }> = [];
+  const queryFn = async (text: string, values: unknown[] = []) => {
+    calls.push({ text, values });
+    return { rows: [], rowCount: 0 };
+  };
+  await listRecords({ organizationId: "o1", pointId: "pt_1" }, { queryFn: queryFn as any });
+  assert.match(calls[0].text, /point_id = \$3/);
+  assert.ok(calls[0].values.includes("pt_1"));
 });

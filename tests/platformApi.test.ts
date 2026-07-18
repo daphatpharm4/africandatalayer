@@ -439,3 +439,168 @@ test("unauthenticated request gets 401 on every view", async () => {
     assert.equal(response.status, 401, view);
   }
 });
+
+// ── record_create point enrichment gates ────────────────────────────────────
+
+const enrichDefinition = { recordTypes: [{
+  key: "retail_outlet",
+  label: { en: "Retail outlet", fr: "Point de vente" },
+  fields: [{ key: "name", label: { en: "Name", fr: "Nom" }, type: "text", required: true }],
+  evidence: { gpsRequired: true, minPhotos: 0, notesRequired: false },
+}] };
+
+const enrichProject = { id: PROJECT_ID, organizationId: ORG.id, name: "Census", status: "active" as const, createdAt: "" };
+
+const enrichBody = {
+  projectId: PROJECT_ID,
+  schemaVersionId: SCHEMA_ID,
+  recordTypeKey: "retail_outlet",
+  data: { name: "Central kiosk" },
+  evidence: { gps: { latitude: 4.05, longitude: 9.7, accuracyMeters: 8 }, photos: [] },
+  pointId: "pt_test_1",
+};
+
+function enrichDeps(overrides: Record<string, unknown> = {}) {
+  return baseDeps({
+    getProjectFn: async () => enrichProject,
+    getPublishedSchemaFn: async () => ({
+      id: SCHEMA_ID, projectId: PROJECT_ID, organizationId: ORG.id, version: 2,
+      status: "published" as const, definition: enrichDefinition, publishedAt: "",
+    }),
+    findActivePointFn: async () => ({
+      id: "pt_test_1", pointId: "pt_test_1", category: "pharmacy",
+      location: { latitude: 4.0503, longitude: 9.7001 }, // ~35 m from evidence GPS
+      details: { name: "Pharmacie Centrale" }, createdAt: "", updatedAt: "2026-07-01T00:00:00.000Z",
+      gaps: [], eventsCount: 1, eventIds: ["e1"],
+    }),
+    hasRecentRecordForPointFn: async () => false,
+    ...overrides,
+  });
+}
+
+test("record_create with pointId enriches within range, records capture coords, and audits pointId", async () => {
+  const created: any[] = [];
+  const audits: any[] = [];
+  const handler = createPlatformHandler(enrichDeps({
+    createRecordFn: async (input: any) => { created.push(input); return { id: "record-2", ...input, status: "pending_review", createdAt: "" }; },
+    writeAuditFn: async (event: any) => { audits.push(event); },
+  }));
+  const request = jsonPost("record_create", enrichBody);
+  request.headers.set("Idempotency-Key", "enrich-key-1");
+  const response = await handler(request);
+  assert.equal(response.status, 201);
+  assert.equal(created[0].pointId, "pt_test_1");
+  assert.equal(created[0].captureLat, 4.05);
+  assert.equal(created[0].captureLng, 9.7);
+  assert.equal(audits[0].payload.pointId, "pt_test_1");
+});
+
+test("record_create with an unknown pointId returns 409 platform_point_not_found", async () => {
+  const handler = createPlatformHandler(enrichDeps({ findActivePointFn: async () => null }));
+  const request = jsonPost("record_create", enrichBody);
+  request.headers.set("Idempotency-Key", "enrich-key-2");
+  const response = await handler(request);
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).code, "platform_point_not_found");
+});
+
+test("record_create too far from the point returns 422 platform_enrich_too_far", async () => {
+  const handler = createPlatformHandler(enrichDeps({
+    findActivePointFn: async () => ({
+      id: "pt_test_1", pointId: "pt_test_1", category: "pharmacy",
+      location: { latitude: 4.2, longitude: 9.7 }, // ~16 km away
+      details: { name: "Pharmacie Centrale" }, createdAt: "", updatedAt: "2026-07-01T00:00:00.000Z",
+      gaps: [], eventsCount: 1, eventIds: ["e1"],
+    }),
+  }));
+  const request = jsonPost("record_create", enrichBody);
+  request.headers.set("Idempotency-Key", "enrich-key-3");
+  const response = await handler(request);
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).code, "platform_enrich_too_far");
+});
+
+test("record_create on cooldown returns 429 platform_enrich_cooldown", async () => {
+  const handler = createPlatformHandler(enrichDeps({ hasRecentRecordForPointFn: async () => true }));
+  const request = jsonPost("record_create", enrichBody);
+  request.headers.set("Idempotency-Key", "enrich-key-4");
+  const response = await handler(request);
+  assert.equal(response.status, 429);
+  assert.equal((await response.json()).code, "platform_enrich_cooldown");
+});
+
+test("record_create without a pointId is a standalone create and never touches point lookup", async () => {
+  const created: any[] = [];
+  let lookupCalled = false;
+  let cooldownCalled = false;
+  const { pointId: _pointId, ...standaloneBody } = enrichBody;
+  const handler = createPlatformHandler(enrichDeps({
+    findActivePointFn: async () => { lookupCalled = true; return null; },
+    hasRecentRecordForPointFn: async () => { cooldownCalled = true; return false; },
+    createRecordFn: async (input: any) => { created.push(input); return { id: "record-3", ...input, status: "pending_review", createdAt: "" }; },
+  }));
+  const request = jsonPost("record_create", standaloneBody);
+  request.headers.set("Idempotency-Key", "enrich-key-5");
+  const response = await handler(request);
+  assert.equal(response.status, 201);
+  assert.equal(created[0].pointId ?? null, null);
+  assert.equal(lookupCalled, false);
+  assert.equal(cooldownCalled, false);
+});
+
+// ── platform_point_nearby ────────────────────────────────────────────────────
+
+test("platform_point_nearby returns points for a project-scoped collector", async () => {
+  const handler = createPlatformHandler(baseDeps({
+    getProjectFn: async () => enrichProject,
+    listNearbyPointsFn: async (input: any) => {
+      assert.equal(input.latitude, 4.05);
+      assert.equal(input.longitude, 9.7);
+      return [{
+        pointId: "pt_test_1", category: "pharmacy", name: "Pharmacie Centrale",
+        location: { latitude: 4.0503, longitude: 9.7001 }, updatedAt: "2026-07-01T00:00:00.000Z", distanceMeters: 35,
+      }];
+    },
+  }));
+  const response = await handler(new Request(
+    `https://x.test/api/user?view=platform_point_nearby&projectId=${PROJECT_ID}&latitude=4.05&longitude=9.7`,
+  ));
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.points.length, 1);
+  assert.equal(body.points[0].pointId, "pt_test_1");
+});
+
+test("platform_point_nearby rejects missing/invalid coordinates with 400", async () => {
+  const handler = createPlatformHandler(baseDeps({ getProjectFn: async () => enrichProject }));
+  const response = await handler(new Request(
+    `https://x.test/api/user?view=platform_point_nearby&projectId=${PROJECT_ID}&longitude=9.7`,
+  ));
+  assert.equal(response.status, 400);
+});
+
+test("platform_point_nearby requires collector role: viewer gets 403", async () => {
+  const handler = createPlatformHandler(baseDeps({
+    getProjectFn: async () => enrichProject,
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "viewer" as const, createdAt: "" }),
+    listNearbyPointsFn: async () => { throw new Error("should not be called"); },
+  }));
+  const response = await handler(new Request(
+    `https://x.test/api/user?view=platform_point_nearby&projectId=${PROJECT_ID}&latitude=4.05&longitude=9.7`,
+  ));
+  assert.equal(response.status, 403);
+});
+
+// ── record_browse pointId filter ────────────────────────────────────────────
+
+test("record_browse accepts an optional pointId filter and passes it through", async () => {
+  const listed: any[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    listRecordsFn: async (input: any) => { listed.push(input); return []; },
+  }));
+  const response = await handler(new Request(
+    `https://x.test/api/user?view=platform_record_browse&organizationId=${ORG.id}&pointId=pt_1`,
+  ));
+  assert.equal(response.status, 200);
+  assert.equal(listed[0].pointId, "pt_1");
+});

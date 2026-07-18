@@ -6,6 +6,7 @@ import {
   orgCreateSchema,
   orgUpdateSchema,
   projectCreateSchema,
+  recordCreateSchema,
 } from "../lib/server/platform/validation.js";
 import { writePlatformAudit } from "../lib/server/platform/audit.js";
 
@@ -64,4 +65,28 @@ test("writePlatformAudit inserts scoped row and swallows failures", async () => 
     { organizationId: "org-1", actorUserId: "u1", eventType: "org_created" },
     { queryFn: async () => { throw new Error("db down"); } },
   );
+});
+
+test("recordCreateSchema accepts an optional pointId with gps evidence", () => {
+  const parsed = recordCreateSchema.safeParse({
+    projectId: "5a2f8f18-0000-4000-8000-000000000001",
+    schemaVersionId: "5a2f8f18-0000-4000-8000-000000000002",
+    recordTypeKey: "retail_outlet",
+    data: {},
+    evidence: { gps: { latitude: 4.05, longitude: 9.7 }, photos: [] },
+    pointId: "pt_bonamoussadi_001",
+  });
+  assert.equal(parsed.success, true);
+});
+
+test("recordCreateSchema rejects pointId without gps evidence", () => {
+  const parsed = recordCreateSchema.safeParse({
+    projectId: "5a2f8f18-0000-4000-8000-000000000001",
+    schemaVersionId: "5a2f8f18-0000-4000-8000-000000000002",
+    recordTypeKey: "retail_outlet",
+    data: {},
+    evidence: { photos: [] },
+    pointId: "pt_bonamoussadi_001",
+  });
+  assert.equal(parsed.success, false);
 });

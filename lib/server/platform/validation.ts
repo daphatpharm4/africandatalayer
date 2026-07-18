@@ -87,6 +87,7 @@ export const recordCreateSchema = z.object({
   projectId: uuid,
   schemaVersionId: uuid,
   recordTypeKey: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/),
+  pointId: z.string().trim().min(4).max(80).optional(),
   data: z.record(z.string(), z.unknown()),
   evidence: z.object({
     gps: z.object({
@@ -111,6 +112,14 @@ export const recordCreateSchema = z.object({
       capturedAt: z.string().datetime().optional(),
     })).max(10).optional(),
   }),
+}).superRefine((value, context) => {
+  if (value.pointId && !value.evidence.gps) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["evidence", "gps"],
+      message: "GPS evidence is required when attaching to an existing point",
+    });
+  }
 });
 
 export const recordReviewSchema = z.object({
