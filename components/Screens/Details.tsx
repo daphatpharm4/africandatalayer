@@ -81,8 +81,9 @@ function formatRelativeTime(iso: string | undefined, language: 'en' | 'fr'): str
 const CompanyRecordDetails: React.FC<{
   point: DataPoint;
   onBack: () => void;
+  onUpdate: () => void;
   language: 'en' | 'fr';
-}> = ({ point, onBack, language }) => {
+}> = ({ point, onBack, onUpdate, language }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const record = point.platformRecord;
   if (!record) return null;
@@ -136,6 +137,27 @@ const CompanyRecordDetails: React.FC<{
             </div>
           )}
         </section>
+
+        {record.pointId && (
+          <section className="rounded-2xl border border-forest/20 bg-forest-wash p-4">
+            <p className="micro-label text-forest-dark">{t('Linked field point', 'Point terrain associé')}</p>
+            <p className="mt-1 text-sm leading-6 text-ink-muted">
+              {t(
+                'Capture fresh evidence for this point using your company form.',
+                'Capturez de nouvelles preuves pour ce point avec le formulaire de votre entreprise.',
+              )}
+            </p>
+            <button
+              type="button"
+              data-testid="company-point-update"
+              onClick={onUpdate}
+              className="btn-cta mt-4 min-h-12 w-full"
+            >
+              <RefreshCw size={19} />
+              <span>{t('Update this point', 'Mettre à jour ce point')}</span>
+            </button>
+          </section>
+        )}
       </div>
     </div>
   );
@@ -153,7 +175,14 @@ const Details: React.FC<Props> = ({
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   if (!point) return null;
   if (point.platformRecord) {
-    return <CompanyRecordDetails point={point} onBack={onBack} language={language} />;
+    return (
+      <CompanyRecordDetails
+        point={point}
+        onBack={onBack}
+        onUpdate={isAuthenticated ? onEnrich : onAuth}
+        language={language}
+      />
+    );
   }
 
   const verticalId = LEGACY_CATEGORY_MAP[point.type] ?? point.type;

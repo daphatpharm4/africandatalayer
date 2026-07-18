@@ -7,6 +7,7 @@ const SCHEMA_ID = '5a2f8f18-0000-4000-8000-000000000003';
 test('invited collector sees company profile and submits the company form on mobile', async ({ page, gotoApp }) => {
   let submittedBody: Record<string, unknown> | null = null;
   const publicExploreRequests: string[] = [];
+  await page.context().setGeolocation({ latitude: -1.286389, longitude: 36.817223 });
   page.on('request', (request) => {
     if (new URL(request.url()).pathname === '/api/submissions') {
       publicExploreRequests.push(request.url());
@@ -50,6 +51,7 @@ test('invited collector sees company profile and submits the company form on mob
         recordTypeKey: 'retail_outlet', recordTypeLabel: 'Retail outlet',
         data: { outlet_name: 'Approved Nairobi kiosk', formal: true },
         evidence: { photos: [], gps: { latitude: -1.286389, longitude: 36.817223, accuracyMeters: 12 } },
+        pointId: 'retail-outlet-nairobi-1',
         status: 'approved', capturedBy: 'agent.bonamoussadi@adl.test', createdAt: '2026-07-17T00:00:00.000Z',
       }] }) });
       return;
@@ -90,17 +92,27 @@ test('invited collector sees company profile and submits the company form on mob
   await expect(page.getByText('Approved Nairobi kiosk')).toBeVisible();
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   expect(publicExploreRequests).toEqual([]);
-  await page.getByTestId('main-navigation').getByRole('button', { name: 'Contribute' }).click();
+  const companyPointMarker = page.locator('[title="Approved Nairobi kiosk"]');
+  await expect(companyPointMarker).toBeVisible();
+  await companyPointMarker.click();
+
+  await expect(page.getByTestId('screen-company-record-details')).toBeVisible();
+  await page.getByTestId('company-point-update').click();
 
   await expect(page.getByTestId('screen-platform-collection')).toBeVisible();
   await expect(page.getByText('Usiku Research').first()).toBeVisible();
   await expect(page.getByText('Retail outlet').first()).toBeVisible();
-  await page.getByLabel('Outlet name').fill('Marché Central Kiosk');
+  await expect(page.getByText('Approved Nairobi kiosk')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Submit to company' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Capture current location' }).click();
+  await expect(page.getByText(/GPS captured/)).toBeVisible();
+  await page.getByLabel('Outlet name').fill('Updated Nairobi kiosk');
   await page.getByRole('button', { name: 'Yes' }).click();
   await page.getByRole('button', { name: 'Submit to company' }).click();
 
   await expect(page.getByText('Company record sent')).toBeVisible();
-  expect((submittedBody?.data as Record<string, unknown>).outlet_name).toBe('Marché Central Kiosk');
+  expect(submittedBody?.pointId).toBe('retail-outlet-nairobi-1');
+  expect((submittedBody?.data as Record<string, unknown>).outlet_name).toBe('Updated Nairobi kiosk');
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByTestId('main-navigation').getByRole('button', { name: 'Profile' }).click();
   await expect(page.getByTestId('profile-company-workspace')).toContainText('Usiku Research');

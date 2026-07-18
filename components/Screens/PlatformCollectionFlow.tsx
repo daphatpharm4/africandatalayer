@@ -25,6 +25,10 @@ interface Props {
   onBack: () => void;
   onComplete: () => void;
   onRetry: () => void;
+  initialTarget?: {
+    choiceKey: string;
+    point: PlatformNearbyPoint;
+  } | null;
 }
 
 function createIdempotencyKey(): string {
@@ -73,6 +77,7 @@ const PlatformCollectionFlow: React.FC<Props> = ({
   onBack,
   onComplete,
   onRetry,
+  initialTarget = null,
 }) => {
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const suspendedOrganization = context?.organizations.find((entry) => entry.organization.accessStatus === 'suspended') ?? null;
@@ -82,7 +87,7 @@ const PlatformCollectionFlow: React.FC<Props> = ({
     recordType,
     key: `${entry.project.id}:${recordType.key}`,
   }))), [collectable]);
-  const [selectedKey, setSelectedKey] = useState('');
+  const [selectedKey, setSelectedKey] = useState(initialTarget?.choiceKey ?? '');
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [gpsEvidence, setGpsEvidence] = useState<PlatformRecordGps | undefined>();
   const [extraPhotos, setExtraPhotos] = useState<string[]>([]);
@@ -95,12 +100,14 @@ const PlatformCollectionFlow: React.FC<Props> = ({
   const [submittedLabel, setSubmittedLabel] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState(createIdempotencyKey);
   const [captureStartedAt, setCaptureStartedAt] = useState(() => new Date().toISOString());
-  const [attachedPoint, setAttachedPoint] = useState<PlatformNearbyPoint | null>(null);
+  const [attachedPoint, setAttachedPoint] = useState<PlatformNearbyPoint | null>(initialTarget?.point ?? null);
   const [nearbyPoints, setNearbyPoints] = useState<PlatformNearbyPoint[] | null>(null);
   const [isLoadingNearby, setIsLoadingNearby] = useState(false);
   const [nearbyError, setNearbyError] = useState('');
 
-  const selected = recordChoices.find((choice) => choice.key === selectedKey) ?? recordChoices[0] ?? null;
+  const selected = selectedKey
+    ? recordChoices.find((choice) => choice.key === selectedKey) ?? null
+    : recordChoices[0] ?? null;
   const selectedRecordType = selected?.recordType ?? null;
 
   const chooseRecordType = (key: string) => {
@@ -511,17 +518,21 @@ const PlatformCollectionFlow: React.FC<Props> = ({
                   {selectedRecordType.fields.map(renderField)}
                 </section>
 
-                {(selectedRecordType.evidence.gpsRequired || selectedRecordType.evidence.minPhotos > 0 || selectedRecordType.evidence.notesRequired) && (
+                {(selectedRecordType.evidence.gpsRequired || selectedRecordType.evidence.minPhotos > 0 || selectedRecordType.evidence.notesRequired || attachedPoint) && (
                   <section className="card space-y-4 p-4">
                     <div>
                       <div className="micro-label text-terra">{t('Required evidence', 'Justificatifs requis')}</div>
                       <p className="mt-1 text-xs text-gray-500">{t('Evidence helps reviewers verify your work.', 'Les justificatifs aident les réviseurs à vérifier votre travail.')}</p>
                     </div>
-                    {selectedRecordType.evidence.gpsRequired && (
+                    {(selectedRecordType.evidence.gpsRequired || attachedPoint) && (
                       <button type="button" onClick={() => void capturePosition()} disabled={isCapturingGps}
                         className={`flex min-h-14 w-full items-center justify-center gap-2 rounded-xl border px-4 text-sm font-semibold ${gpsEvidence ? 'border-forest bg-forest-wash text-forest-dark' : 'border-navy bg-navy-wash text-navy'}`}>
                         {gpsEvidence ? <CheckCircle size={18} /> : <Crosshair size={18} />}
-                        {gpsEvidence ? `${t('GPS captured', 'GPS capturé')} · ±${Math.round(gpsEvidence.accuracyMeters ?? 0)}m` : t('Capture precise GPS', 'Capturer le GPS précis')}
+                        {gpsEvidence
+                          ? `${t('GPS captured', 'GPS capturé')} · ±${Math.round(gpsEvidence.accuracyMeters ?? 0)}m`
+                          : attachedPoint
+                            ? t('Capture current location', 'Capturer la position actuelle')
+                            : t('Capture precise GPS', 'Capturer le GPS précis')}
                       </button>
                     )}
                     {selectedRecordType.evidence.minPhotos > 0 && (

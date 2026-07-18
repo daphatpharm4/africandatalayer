@@ -44,6 +44,7 @@ import {
   loadPlatformFieldContext,
   type PlatformFieldContext,
 } from './lib/client/platformFieldContext';
+import type { PlatformNearbyPoint } from './shared/platformTypes';
 
 const importDetails = () => import('./components/Screens/Details');
 const Details = lazy(importDetails);
@@ -80,6 +81,11 @@ type ContributionLaunchOptions = {
   draft?: QueueItem | null;
   point?: DataPoint | null;
   assignment?: CollectionAssignment | null;
+};
+
+type PlatformContributionTarget = {
+  choiceKey: string;
+  point: PlatformNearbyPoint;
 };
 
 const defaultQueueSnapshot: QueueSnapshot = {
@@ -131,6 +137,7 @@ const App: React.FC = () => {
   const [isLoadingPlatformFieldContext, setIsLoadingPlatformFieldContext] = useState(false);
   const [platformFieldContextError, setPlatformFieldContextError] = useState('');
   const [useGenericContribution, setUseGenericContribution] = useState(false);
+  const [platformContributionTarget, setPlatformContributionTarget] = useState<PlatformContributionTarget | null>(null);
 
   const isClient = userRole === 'client';
   const isPointOperator = userRole === 'point_operator';
@@ -194,6 +201,7 @@ const App: React.FC = () => {
     setContributionAssignment(null);
     setBatchCaptureMode(false);
     setUseGenericContribution(false);
+    setPlatformContributionTarget(null);
   };
 
   const refreshPlatformFieldContext = useCallback(async () => {
@@ -253,9 +261,9 @@ const App: React.FC = () => {
     if (nextScreen === Screen.CONTRIBUTE && isClient) {
       return;
     }
-    if (nextScreen !== Screen.CONTRIBUTE) {
-      clearContributionContext();
-    }
+    // Bottom-navigation launches always start a fresh capture. Targeted update
+    // context is only created by openContribution from a selected point.
+    clearContributionContext();
     if (nextScreen === Screen.CONTRIBUTE && !isAuthenticated) {
       setAuthReturnScreen(currentScreen);
       setCurrentScreen(Screen.AUTH);
@@ -268,18 +276,36 @@ const App: React.FC = () => {
   }, [normalizeScreenForRole, isPointOperator, isClient, isAuthenticated, currentScreen]);
 
   const openContribution = useCallback((mode: ContributionMode, options: ContributionLaunchOptions = {}) => {
+    const platformRecord = companyMode && mode === 'ENRICH'
+      ? options.point?.platformRecord
+      : undefined;
+    const pointCoordinates = options.point?.coordinates;
+    const platformTarget = platformRecord?.pointId && pointCoordinates
+      ? {
+          choiceKey: `${platformRecord.projectId}:${platformRecord.recordTypeKey}`,
+          point: {
+            pointId: platformRecord.pointId,
+            category: platformRecord.recordTypeKey,
+            name: options.point?.name ?? null,
+            location: pointCoordinates,
+            updatedAt: options.point?.updatedAtIso ?? platformRecord.reviewedAt ?? platformRecord.createdAt,
+            distanceMeters: 0,
+          },
+        }
+      : null;
     setContributionMode(mode);
     setContributionPoint(options.point ?? null);
     setContributionDraft(options.draft ?? null);
     setContributionAssignment(options.assignment ?? null);
     setBatchCaptureMode(Boolean(options.batch));
-    setUseGenericContribution(mode !== 'CREATE' || Boolean(options.draft) || Boolean(options.point) || Boolean(options.assignment));
+    setPlatformContributionTarget(platformTarget);
+    setUseGenericContribution(!platformTarget && (mode !== 'CREATE' || Boolean(options.draft) || Boolean(options.point) || Boolean(options.assignment)));
     if (isAuthenticated) {
       navigateTo(Screen.CONTRIBUTE);
       return;
     }
     navigateTo(Screen.AUTH);
-  }, [isAuthenticated, navigateTo]);
+  }, [companyMode, isAuthenticated, navigateTo]);
 
   useEffect(() => {
     void refreshPlatformFieldContext();
@@ -609,6 +635,7 @@ const App: React.FC = () => {
               isLoading={isLoadingPlatformFieldContext}
               loadError={platformFieldContextError}
               language={language}
+              initialTarget={platformContributionTarget}
               onBack={goBack}
               onComplete={() => {
                 clearContributionContext();

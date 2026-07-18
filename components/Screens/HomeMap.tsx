@@ -103,6 +103,7 @@ const getClusterIcon = (color: string, count: number) => {
 };
 
 const markerIconCache = new Map<string, L.DivIcon>();
+const companyMarkerIconCache = new Map<string, L.DivIcon>();
 
 const getMarkerIconForType = (type: Category): L.DivIcon => {
   const verticalId = LEGACY_CATEGORY_MAP[type] ?? type;
@@ -111,6 +112,21 @@ const getMarkerIconForType = (type: Category): L.DivIcon => {
   if (cached) return cached;
   const icon = createMarkerIcon(color);
   markerIconCache.set(color, icon);
+  return icon;
+};
+
+const getCompanyMarkerIconForType = (type: Category): L.DivIcon => {
+  const verticalId = LEGACY_CATEGORY_MAP[type] ?? type;
+  const color = VERTICALS[verticalId]?.color ?? '#0f2b46';
+  const cached = companyMarkerIconCache.get(color);
+  if (cached) return cached;
+  const icon = L.divIcon({
+    className: '',
+    html: `<div style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;"><div style="width:32px;height:32px;border-radius:9999px;background:${color};border:3px solid #ffffff;box-shadow:0 8px 18px rgba(15,43,70,0.38);"></div></div>`,
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
+  });
+  companyMarkerIconCache.set(color, icon);
   return icon;
 };
 
@@ -316,7 +332,7 @@ const HomeMap: React.FC<Props> = ({
           }
 
           const icon = singlePoint
-            ? getMarkerIconForType(singlePoint.type)
+            ? (companyMode ? getCompanyMarkerIconForType(singlePoint.type) : getMarkerIconForType(singlePoint.type))
             : (() => {
               const types = new Set(group.points.map((p) => LEGACY_CATEGORY_MAP[p.type] ?? p.type));
               const color = types.size === 1
@@ -330,7 +346,13 @@ const HomeMap: React.FC<Props> = ({
               key={group.key}
               position={[group.latitude, group.longitude]}
               icon={icon}
-              eventHandlers={{ mouseover: () => onPrefetchDetails?.() }}
+              zIndexOffset={companyMode ? 1200 : undefined}
+              title={singlePoint?.name}
+              alt={singlePoint?.name ?? t('Map point', 'Point sur la carte')}
+              eventHandlers={{
+                mouseover: () => onPrefetchDetails?.(),
+                ...(companyMode && singlePoint ? { click: () => onSelectPoint(singlePoint) } : {}),
+              }}
             >
               <Popup>
                 {singlePoint ? (
