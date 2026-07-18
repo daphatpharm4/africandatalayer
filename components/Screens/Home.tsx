@@ -45,8 +45,8 @@ import {
   collectablePlatformProjects,
   type PlatformFieldContext,
 } from '../../lib/client/platformFieldContext';
-import { listApprovedPlatformRecordsRequest } from '../../lib/client/platformApi';
-import type { PlatformRecord } from '../../shared/platformTypes';
+import { listApprovedPlatformRecordsRequest, nearbyPlatformPointsRequest } from '../../lib/client/platformApi';
+import type { PlatformNearbyPoint, PlatformRecord } from '../../shared/platformTypes';
 
 type WindowWithIdleCallback = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -134,6 +134,13 @@ const Home: React.FC<Props> = ({
   const [points, setPoints] = useState<DataPoint[]>([]);
   const [isLoadingPoints, setIsLoadingPoints] = useState(true);
   const [pointsLoadError, setPointsLoadError] = useState('');
+  const [nearbyCompanyPoints, setNearbyCompanyPoints] = useState<PlatformNearbyPoint[]>([]);
+  const [nearbyCompanyProjectId, setNearbyCompanyProjectId] = useState('');
+  const [nearbyPointsLoadError, setNearbyPointsLoadError] = useState('');
+  const [isLoadingNearbyPoints, setIsLoadingNearbyPoints] = useState(false);
+  const [nearbyReloadToken, setNearbyReloadToken] = useState(0);
+  const [agentLocation, setAgentLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [agentLocationError, setAgentLocationError] = useState('');
   const [assignments, setAssignments] = useState<CollectionAssignment[]>([]);
   const [activeCompanyVerticalId, setActiveCompanyVerticalId] = useState('');
   const [mapScope, setMapScope] = useState<MapScope>(() => (isAdmin ? readStoredAdminMapScope() : 'bonamoussadi'));
@@ -380,6 +387,9 @@ const Home: React.FC<Props> = ({
     if (point.platformRecord) {
       return `${point.platformRecord.recordTypeLabel} · ${t('Company verified', 'Vérifié par l’entreprise')}`;
     }
+    if (point.platformEnrichmentTarget) {
+      return `${t('ADL verified point', 'Point ADL vérifié')} · ${point.lastUpdated}`;
+    }
     if (point.type === Category.PHARMACY) {
       if (typeof point.isOnDuty === 'boolean') {
         return point.isOnDuty ? t('Pharmacie de garde', 'Pharmacie de garde') : t('Pas de garde', 'Pas de garde');
@@ -600,9 +610,45 @@ const Home: React.FC<Props> = ({
       && point.platformRecord?.recordTypeKey === activeCompanyVertical.id.slice(activeCompanyVertical.id.indexOf(':') + 1);
   }), [activeCategory, activeCompanyVertical, isCompanyExplore, points]);
 
+  const nearbyDataPoints = useMemo(() => {
+    if (!activeCompanyVertical || nearbyCompanyProjectId !== activeCompanyVertical.id.split(':', 1)[0]) return [];
+    return nearbyCompanyPoints.map((point) => ({
+      ...mapProjectedToPoint({
+        id: point.pointId,
+        pointId: point.pointId,
+        category: point.category as ProjectedPoint['category'],
+        location: point.location,
+        details: point.details,
+        photoUrl: point.photoUrl,
+        createdAt: point.createdAt,
+        updatedAt: point.updatedAt,
+        operatorSignals: point.operatorSignals,
+        gaps: point.gaps,
+        eventsCount: point.eventsCount,
+        eventIds: [],
+      }),
+      platformEnrichmentTarget: {
+        choiceKey: activeCompanyVertical.id,
+        point,
+      },
+    }));
+  }, [activeCompanyVertical, language, nearbyCompanyPoints, nearbyCompanyProjectId]);
+
+  const displayedPoints = useMemo(() => {
+    if (!isCompanyExplore) return filteredPoints;
+    const nearbyPointIds = new Set(nearbyDataPoints.map((point) => point.id));
+    return [
+      ...nearbyDataPoints,
+      ...filteredPoints.filter((point) => !point.platformRecord?.pointId || !nearbyPointIds.has(point.platformRecord.pointId)),
+    ];
+  }, [filteredPoints, isCompanyExplore, nearbyDataPoints]);
+
+  const exploreLoadError = nearbyPointsLoadError || (isCompanyExplore ? agentLocationError : '') || pointsLoadError;
+  const isLoadingExplorePoints = isLoadingPoints || isLoadingNearbyPoints;
+
   const mapPointGroups = useMemo<MapPointGroup[]>(() => {
     const groups = new Map<string, MapPointGroup>();
-    for (const point of filteredPoints) {
+    for (const point of displayedPoints) {
       if (!point.coordinates) continue;
       if (!isCompanyExplore && mapScope === 'bonamoussadi' && !isWithinBonamoussadi(point.coordinates)) continue;
       const latitude = Number(point.coordinates.latitude.toFixed(5));
@@ -616,7 +662,7 @@ const Home: React.FC<Props> = ({
       }
     }
     return Array.from(groups.values());
-  }, [filteredPoints, isCompanyExplore, mapScope]);
+  }, [displayedPoints, isCompanyExplore, mapScope]);
 
   const categoryLabel = (type: Category) => {
     const verticalId = LEGACY_CATEGORY_MAP[type] ?? type;
@@ -629,13 +675,19 @@ const Home: React.FC<Props> = ({
       .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
     return active[0] ?? null;
   }, [assignments]);
-  const [agentLocation, setAgentLocation] = useState<{ lat: number; lng: number } | null>(null);
   useEffect(() => {
     if (!isAuthenticated || userRole === 'client') {
       setAgentLocation(null);
+      setAgentLocationError('');
       return undefined;
     }
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setAgentLocationError(t(
+        'Location is unavailable. Turn on GPS to see nearby ADL points.',
+        'La localisation est indisponible. Activez le GPS pour voir les points ADL proches.',
+      ));
+      return undefined;
+    }
     let cancelled = false;
     let watchId: number | null = null;
     let timeoutId: number | null = null;
@@ -643,9 +695,16 @@ const Home: React.FC<Props> = ({
 
     const startWatch = () => {
       if (cancelled) return;
+      setAgentLocationError('');
       watchId = navigator.geolocation.watchPosition(
-        (pos) => setAgentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => {},
+        (pos) => {
+          setAgentLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setAgentLocationError('');
+        },
+        () => setAgentLocationError(t(
+          'Location permission is required to see nearby ADL points.',
+          'La localisation est nécessaire pour voir les points ADL proches.',
+        )),
         { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
       );
     };
@@ -663,15 +722,75 @@ const Home: React.FC<Props> = ({
       if (timeoutId !== null) window.clearTimeout(timeoutId);
       if (watchId !== null) navigator.geolocation.clearWatch(watchId);
     };
-  }, [isAuthenticated, userRole]);
+  }, [isAuthenticated, language, nearbyReloadToken, userRole]);
+
+  const nearbyLatitude = agentLocation ? Number(agentLocation.lat.toFixed(4)) : null;
+  const nearbyLongitude = agentLocation ? Number(agentLocation.lng.toFixed(4)) : null;
+  useEffect(() => {
+    let cancelled = false;
+    if (
+      !isCompanyExplore
+      || !activeCompanyVertical
+      || isPrimaryCompanySuspended
+      || nearbyLatitude === null
+      || nearbyLongitude === null
+    ) {
+      setNearbyCompanyPoints([]);
+      setNearbyCompanyProjectId('');
+      setNearbyPointsLoadError('');
+      setIsLoadingNearbyPoints(false);
+      return undefined;
+    }
+
+    const loadNearbyPoints = async () => {
+      try {
+        setIsLoadingNearbyPoints(true);
+        setNearbyPointsLoadError('');
+        const nearby = await nearbyPlatformPointsRequest({
+          projectId: activeCompanyVertical.id.split(':', 1)[0],
+          latitude: nearbyLatitude,
+          longitude: nearbyLongitude,
+          radiusMeters: 5000,
+        });
+        if (!cancelled) {
+          setNearbyCompanyPoints(nearby);
+          setNearbyCompanyProjectId(activeCompanyVertical.id.split(':', 1)[0]);
+        }
+      } catch {
+        if (!cancelled) {
+          setNearbyCompanyPoints([]);
+          setNearbyCompanyProjectId('');
+          setNearbyPointsLoadError(t(
+            'Nearby ADL points failed to load. Check your GPS or connection, then retry.',
+            'Impossible de charger les points ADL proches. Vérifiez votre GPS ou votre connexion, puis réessayez.',
+          ));
+        }
+      } finally {
+        if (!cancelled) setIsLoadingNearbyPoints(false);
+      }
+    };
+
+    void loadNearbyPoints();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeCompanyVertical?.id,
+    isCompanyExplore,
+    isPrimaryCompanySuspended,
+    language,
+    nearbyLatitude,
+    nearbyLongitude,
+    nearbyReloadToken,
+  ]);
 
   const nearbyEnrichCount = useMemo(() => {
     if (!agentLocation) return 0;
-    return filteredPoints.filter((p) => {
+    return displayedPoints.filter((p) => {
       if (!p.coordinates || !p.gaps || p.gaps.length === 0) return false;
       return haversineMeters(agentLocation.lat, agentLocation.lng, p.coordinates.latitude, p.coordinates.longitude) <= 200;
     }).length;
-  }, [agentLocation, filteredPoints]);
+  }, [agentLocation, displayedPoints]);
 
   const assignmentZones = useMemo(() => {
     return assignments
@@ -1082,7 +1201,7 @@ const Home: React.FC<Props> = ({
                 </div>
                 <div>
                   <div className="text-[13px] font-bold text-ink-dark">
-                    {filteredPoints.length} {t('points', 'points')}
+                    {displayedPoints.length} {t('points', 'points')}
                   </div>
                   <div className="text-[10px] text-gray-500">
                     {categoryLabel(activeCategory)} · {t('Bonamoussadi', 'Bonamoussadi')}
@@ -1092,14 +1211,18 @@ const Home: React.FC<Props> = ({
             </div>
           </div>
         )}
-        {viewMode === 'map' && pointsLoadError && !isLoadingPoints && (
+        {viewMode === 'map' && exploreLoadError && !isLoadingExplorePoints && (
           <div className="pointer-events-none absolute inset-x-4 top-4 z-30 flex justify-center">
             <div className="pointer-events-auto w-full max-w-sm rounded-2xl border border-terra/20 bg-white/96 p-3 shadow-lg backdrop-blur-sm">
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                <p className="text-sm font-semibold leading-5 text-gray-900">{exploreLoadError}</p>
                 <button
                   type="button"
-                  onClick={() => setPointsLoadError('')}
+                onClick={() => {
+                    setPointsLoadError('');
+                    setNearbyPointsLoadError('');
+                    setAgentLocationError('');
+                  }}
                   className="shrink-0 rounded-full p-2.5 text-gray-400 transition-colors hover:text-gray-600"
                   aria-label={t('Dismiss', 'Fermer')}
                 >
@@ -1108,7 +1231,10 @@ const Home: React.FC<Props> = ({
               </div>
               <button
                 type="button"
-                onClick={() => void loadPoints()}
+                  onClick={() => {
+                    void loadPoints();
+                    setNearbyReloadToken((current) => current + 1);
+                  }}
                 className="mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
               >
                 {t('Try again', 'Réessayer')}
@@ -1125,21 +1251,25 @@ const Home: React.FC<Props> = ({
             <div className="flex flex-col gap-2.5 p-4 pb-24">
               <div className="text-[13px] font-semibold text-gray-700">
                 {isCompanyExplore
-                  ? t(`${filteredPoints.length} company records`, `${filteredPoints.length} enregistrements entreprise`)
-                  : `${filteredPoints.length} ${categoryLabel(activeCategory).toLowerCase()} ${t('points', 'points')}`}
+                  ? t(`${displayedPoints.length} nearby ADL and company points`, `${displayedPoints.length} points ADL proches et entreprise`)
+                  : `${displayedPoints.length} ${categoryLabel(activeCategory).toLowerCase()} ${t('points', 'points')}`}
               </div>
-              {isLoadingPoints && (
+              {isLoadingExplorePoints && (
                 <div className="card-soft p-4 text-xs text-gray-500">
                   {t('Loading data points...', 'Chargement des points de données...')}
                 </div>
               )}
-              {pointsLoadError && !isLoadingPoints && (
+              {exploreLoadError && !isLoadingExplorePoints && (
                 <div className="card-soft border border-terra/20 p-4">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold leading-5 text-gray-900">{pointsLoadError}</p>
+                    <p className="text-sm font-semibold leading-5 text-gray-900">{exploreLoadError}</p>
                     <button
                       type="button"
-                      onClick={() => setPointsLoadError('')}
+                    onClick={() => {
+                        setPointsLoadError('');
+                        setNearbyPointsLoadError('');
+                        setAgentLocationError('');
+                      }}
                       className="shrink-0 rounded-full p-2.5 text-gray-400 transition-colors hover:text-gray-600"
                       aria-label={t('Dismiss', 'Fermer')}
                     >
@@ -1148,14 +1278,17 @@ const Home: React.FC<Props> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => void loadPoints()}
+                      onClick={() => {
+                        void loadPoints();
+                        setNearbyReloadToken((current) => current + 1);
+                      }}
                     className="motion-pressable mt-3 rounded-xl bg-navy px-3 py-2 text-xs font-semibold text-white"
                   >
                     {t('Try again', 'Réessayer')}
                   </button>
                 </div>
               )}
-              {filteredPoints.map((point) => {
+              {displayedPoints.map((point) => {
                 const locationLabel = point.location || t('Location unavailable', 'Localisation indisponible');
                 const updatedLabel = point.lastUpdated;
                 const verticalId = LEGACY_CATEGORY_MAP[point.type] ?? point.type;
@@ -1199,13 +1332,13 @@ const Home: React.FC<Props> = ({
                   </button>
                 );
               })}
-              {isCompanyExplore && filteredPoints.length === 0 && (
+              {isCompanyExplore && displayedPoints.length === 0 && !isLoadingExplorePoints && (
                 <div data-testid="company-map-empty-state" className="card-soft p-5 text-center">
                   <p className="text-sm font-semibold text-ink-dark">
-                    {t('No company records on this map yet', 'Aucun enregistrement entreprise sur cette carte')}
+                    {t('No nearby ADL or company points yet', 'Aucun point ADL proche ou point entreprise pour le moment')}
                   </p>
                   <p className="mt-1 text-xs leading-5 text-gray-500">
-                    {t('Use Contribute to capture the first record.', 'Utilisez Contribuer pour capturer le premier enregistrement.')}
+                    {t('Move closer to a mapped point or use Contribute to capture a new record.', 'Rapprochez-vous d’un point cartographié ou utilisez Contribuer pour créer un enregistrement.')}
                   </p>
                 </div>
               )}

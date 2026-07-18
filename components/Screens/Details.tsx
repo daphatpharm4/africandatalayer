@@ -248,6 +248,10 @@ const Details: React.FC<Props> = ({
     : t('GPS location', 'Localisation GPS');
   const primaryCtaLabel = !isAuthenticated
     ? t('Sign in to contribute', 'Connectez-vous pour contribuer')
+    : point.platformEnrichmentTarget
+      ? gaps.length === 0
+        ? t('Update this point', 'Mettre à jour ce point')
+        : t('Enrich this point', 'Enrichir ce point')
     : gaps.length === 0
       ? t('Update this point · +15 XP', 'Mettre à jour · +15 XP')
       : t('Complete this point · +15 XP', 'Compléter · +15 XP');

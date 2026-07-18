@@ -346,7 +346,7 @@ const HomeMap: React.FC<Props> = ({
               key={group.key}
               position={[group.latitude, group.longitude]}
               icon={icon}
-              zIndexOffset={companyMode ? 1200 : undefined}
+              zIndexOffset={companyMode ? (singlePoint?.platformEnrichmentTarget ? 1300 : 1200) : undefined}
               title={singlePoint?.name}
               alt={singlePoint?.name ?? t('Map point', 'Point sur la carte')}
               eventHandlers={{
@@ -366,7 +366,7 @@ const HomeMap: React.FC<Props> = ({
                       <p className="text-xs leading-4 text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                     )}
                     <button
-                      className="mt-2 w-full min-h-[44px] rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white"
+                      className="mt-2 min-h-12 w-full rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white"
                       onClick={() => onSelectPoint(singlePoint)}
                     >
                       {t('View details', 'Voir les détails')}

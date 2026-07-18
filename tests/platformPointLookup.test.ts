@@ -13,7 +13,14 @@ const NEAR_EVENT: PointEvent = {
   userId: "u-1",
   category: "pharmacy",
   location: { latitude: 4.0509, longitude: 9.7 },
-  details: { name: "Pharmacie du Coin" },
+  details: {
+    name: "Pharmacie du Coin",
+    openingHours: "08:00-20:00",
+    isOpenNow: true,
+    phone: "+237600000000",
+    internalFraudFlag: "manual_review",
+  },
+  photoUrl: "https://cdn.example.test/pharmacy.jpg",
   createdAt: "2026-07-01T00:00:00.000Z",
 };
 
@@ -42,6 +49,18 @@ test("listNearbyPoints filters points outside the radius and sorts ascending by 
   assert.equal(points.length, 1);
   assert.equal(points[0]?.pointId, "point-near");
   assert.equal(points[0]?.name, "Pharmacie du Coin");
+  assert.equal(points[0]?.createdAt, NEAR_EVENT.createdAt);
+  assert.equal(points[0]?.photoUrl, NEAR_EVENT.photoUrl);
+  assert.deepEqual(points[0]?.details, {
+    name: "Pharmacie du Coin",
+    siteName: "Pharmacie du Coin",
+    openingHours: "08:00-20:00",
+    isOpenNow: true,
+  });
+  assert.equal(points[0]?.eventsCount, 1);
+  assert.ok(Array.isArray(points[0]?.gaps));
+  assert.equal('phone' in (points[0]?.details ?? {}), false);
+  assert.equal('internalFraudFlag' in (points[0]?.details ?? {}), false);
   assert.ok(Math.abs(points[0]!.distanceMeters - 100) <= 30, `expected ~100m, got ${points[0]?.distanceMeters}`);
 });
 

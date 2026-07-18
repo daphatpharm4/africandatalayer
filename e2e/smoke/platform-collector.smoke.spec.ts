@@ -45,6 +45,21 @@ test('invited collector sees company profile and submits the company form on mob
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ draft: null, published, versions: [published] }) });
       return;
     }
+    if (view === 'platform_point_nearby') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ points: [{
+        pointId: 'pharmacy-nairobi-1',
+        category: 'pharmacy',
+        name: 'Pharmacie le FLEURON',
+        location: { latitude: -1.286, longitude: 36.817223 },
+        details: { name: 'Pharmacie le FLEURON', isOpenNow: true, isOnDuty: false },
+        createdAt: '2025-11-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        gaps: ['openingHours', 'isLicensed', 'hasPrescriptionService'],
+        eventsCount: 2,
+        distanceMeters: 43,
+      }] }) });
+      return;
+    }
     if (view === 'platform_record_browse') {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ records: [{
         id: 'approved-nairobi-1', organizationId: ORG_ID, projectId: PROJECT_ID, schemaVersionId: SCHEMA_ID,
@@ -90,19 +105,25 @@ test('invited collector sees company profile and submits the company form on mob
   await expect(page.getByTestId('main-navigation').getByRole('button', { name: 'Leaderboard' })).toHaveCount(0);
   await page.getByRole('button', { name: 'List', exact: true }).click();
   await expect(page.getByText('Approved Nairobi kiosk')).toBeVisible();
+  await expect(page.getByText('Pharmacie le FLEURON')).toBeVisible();
+  await expect(page.getByText(/nearby ADL and company points/)).toBeVisible();
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   expect(publicExploreRequests).toEqual([]);
-  const companyPointMarker = page.locator('[title="Approved Nairobi kiosk"]');
-  await expect(companyPointMarker).toBeVisible();
-  await companyPointMarker.click();
+  const adlPointMarker = page.locator('[title="Pharmacie le FLEURON"]');
+  await expect(adlPointMarker).toBeVisible();
+  await adlPointMarker.click();
 
-  await expect(page.getByTestId('screen-company-record-details')).toBeVisible();
-  await page.getByTestId('company-point-update').click();
+  await expect(page.getByTestId('screen-details')).toBeVisible();
+  await expect(page.getByText('Last updated')).toBeVisible();
+  await expect(page.getByText('Freshness')).toBeVisible();
+  await expect(page.getByText('Missing info')).toBeVisible();
+  await expect(page.getByText(/Critical: this data may be inaccurate/)).toBeVisible();
+  await page.getByRole('button', { name: 'Enrich this point' }).click();
 
   await expect(page.getByTestId('screen-platform-collection')).toBeVisible();
   await expect(page.getByText('Usiku Research').first()).toBeVisible();
   await expect(page.getByText('Retail outlet').first()).toBeVisible();
-  await expect(page.getByText('Approved Nairobi kiosk')).toBeVisible();
+  await expect(page.getByText('Pharmacie le FLEURON')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Submit to company' })).toBeDisabled();
   await page.getByRole('button', { name: 'Capture current location' }).click();
   await expect(page.getByText(/GPS captured/)).toBeVisible();
@@ -111,7 +132,7 @@ test('invited collector sees company profile and submits the company form on mob
   await page.getByRole('button', { name: 'Submit to company' }).click();
 
   await expect(page.getByText('Company record sent')).toBeVisible();
-  expect(submittedBody?.pointId).toBe('retail-outlet-nairobi-1');
+  expect(submittedBody?.pointId).toBe('pharmacy-nairobi-1');
   expect((submittedBody?.data as Record<string, unknown>).outlet_name).toBe('Updated Nairobi kiosk');
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByTestId('main-navigation').getByRole('button', { name: 'Profile' }).click();

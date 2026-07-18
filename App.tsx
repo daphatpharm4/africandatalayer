@@ -276,11 +276,14 @@ const App: React.FC = () => {
   }, [normalizeScreenForRole, isPointOperator, isClient, isAuthenticated, currentScreen]);
 
   const openContribution = useCallback((mode: ContributionMode, options: ContributionLaunchOptions = {}) => {
+    const nearbyPointTarget = companyMode && mode === 'ENRICH'
+      ? options.point?.platformEnrichmentTarget
+      : undefined;
     const platformRecord = companyMode && mode === 'ENRICH'
       ? options.point?.platformRecord
       : undefined;
     const pointCoordinates = options.point?.coordinates;
-    const platformTarget = platformRecord?.pointId && pointCoordinates
+    const linkedRecordTarget = platformRecord?.pointId && pointCoordinates
       ? {
           choiceKey: `${platformRecord.projectId}:${platformRecord.recordTypeKey}`,
           point: {
@@ -288,11 +291,16 @@ const App: React.FC = () => {
             category: platformRecord.recordTypeKey,
             name: options.point?.name ?? null,
             location: pointCoordinates,
+            details: { name: options.point?.name },
+            createdAt: platformRecord.createdAt,
             updatedAt: options.point?.updatedAtIso ?? platformRecord.reviewedAt ?? platformRecord.createdAt,
+            gaps: options.point?.gaps ?? [],
+            eventsCount: 1,
             distanceMeters: 0,
           },
         }
       : null;
+    const platformTarget = nearbyPointTarget ?? linkedRecordTarget;
     setContributionMode(mode);
     setContributionPoint(options.point ?? null);
     setContributionDraft(options.draft ?? null);

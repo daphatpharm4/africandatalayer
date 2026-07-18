@@ -3,6 +3,7 @@
 import type { ProjectedPoint } from "../../../shared/types.js";
 import type { PlatformNearbyPoint } from "../../../shared/platformTypes.js";
 import { projectPointById, projectPointsFromEvents } from "../pointProjection.js";
+import { toPublicProjectedPoint } from "../privacy.js";
 import { buildReadableEvents } from "../submissionEvents.js";
 import { haversineKm } from "../submissionFraud.js";
 
@@ -25,12 +26,19 @@ export async function listNearbyPoints(
   const loadEvents = deps.loadEventsFn ?? buildReadableEvents;
   const origin = { latitude: input.latitude, longitude: input.longitude };
   return projectPointsFromEvents(await loadEvents())
+    .map(toPublicProjectedPoint)
     .map((point) => ({
       pointId: point.pointId,
       category: point.category,
-      name: point.details?.name ?? null,
+      name: point.details?.name ?? point.details?.siteName ?? null,
       location: point.location,
+      details: point.details,
+      photoUrl: point.photoUrl,
+      createdAt: point.createdAt,
       updatedAt: point.updatedAt,
+      gaps: point.gaps,
+      eventsCount: point.eventsCount,
+      operatorSignals: point.operatorSignals,
       distanceMeters: Math.round(haversineKm(origin, point.location) * 1000),
     }))
     .filter((point) => point.distanceMeters <= input.radiusMeters)

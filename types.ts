@@ -1,5 +1,5 @@
 import type { PointOperatorSignalState } from './shared/types';
-import type { PlatformRecord } from './shared/platformTypes';
+import type { PlatformNearbyPoint, PlatformRecord } from './shared/platformTypes';
 
 export enum Screen {
   SPLASH = 'SPLASH',
@@ -81,6 +81,10 @@ export interface DataPoint {
   operatorSignals?: Record<string, PointOperatorSignalState>;
   platformRecord?: PlatformRecord & {
     recordTypeLabel: string;
+  };
+  platformEnrichmentTarget?: {
+    choiceKey: string;
+    point: PlatformNearbyPoint;
   };
 }
 

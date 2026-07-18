@@ -1,3 +1,5 @@
+import type { PointOperatorSignalState, SubmissionDetails } from "./types.js";
+
 export type PlatformRole = "owner" | "manager" | "reviewer" | "collector" | "viewer";
 export interface BilingualLabel { en: string; fr: string }
 export type PlatformFieldType = "text" | "number" | "select" | "multi_select" | "date" | "boolean" | "photo" | "gps";
@@ -88,7 +90,13 @@ export interface PlatformNearbyPoint {
   category: string;
   name: string | null;
   location: { latitude: number; longitude: number };
+  details: SubmissionDetails;
+  photoUrl?: string;
+  createdAt: string;
   updatedAt: string;
+  gaps: string[];
+  eventsCount: number;
+  operatorSignals?: Record<string, PointOperatorSignalState>;
   distanceMeters: number;
 }
 export interface PlatformInvite {
