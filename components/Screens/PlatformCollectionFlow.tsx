@@ -451,7 +451,7 @@ const PlatformCollectionFlow: React.FC<Props> = ({
                 <section className="card-soft space-y-3 p-4">
                   <div>
                     <div className="micro-label text-gray-400">{t('Existing point', 'Point existant')}</div>
-                    <p className="mt-1 text-xs text-gray-500">{t('Attach this record to a point from the public ADL map near you.', 'Associez ce relevé à un point de la carte publique ADL près de vous.')}</p>
+                    <p className="mt-1 text-xs text-gray-500">{t('Attach this record to a point your company already tracks.', 'Associez ce relevé à un point déjà suivi par votre entreprise.')}</p>
                   </div>
 
                   {attachedPoint ? (

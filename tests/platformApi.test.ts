@@ -467,12 +467,13 @@ function enrichDeps(overrides: Record<string, unknown> = {}) {
       id: SCHEMA_ID, projectId: PROJECT_ID, organizationId: ORG.id, version: 2,
       status: "published" as const, definition: enrichDefinition, publishedAt: "",
     }),
-    findActivePointFn: async () => ({
-      id: "pt_test_1", pointId: "pt_test_1", category: "pharmacy",
-      location: { latitude: 4.0503, longitude: 9.7001 }, // ~35 m from evidence GPS
-      details: { name: "Pharmacie Centrale" }, createdAt: "", updatedAt: "2026-07-01T00:00:00.000Z",
-      gaps: [], eventsCount: 1, eventIds: ["e1"],
-    }),
+    findOrgPointFn: async (input: any) => {
+      assert.equal(input.organizationId, ORG.id);
+      return {
+        pointId: input.pointId,
+        location: { latitude: 4.0503, longitude: 9.7001 }, // ~35 m from evidence GPS
+      };
+    },
     hasRecentRecordForPointFn: async () => false,
     ...overrides,
   });
@@ -496,7 +497,7 @@ test("record_create with pointId enriches within range, records capture coords, 
 });
 
 test("record_create with an unknown pointId returns 409 platform_point_not_found", async () => {
-  const handler = createPlatformHandler(enrichDeps({ findActivePointFn: async () => null }));
+  const handler = createPlatformHandler(enrichDeps({ findOrgPointFn: async () => null }));
   const request = jsonPost("record_create", enrichBody);
   request.headers.set("Idempotency-Key", "enrich-key-2");
   const response = await handler(request);
@@ -506,11 +507,9 @@ test("record_create with an unknown pointId returns 409 platform_point_not_found
 
 test("record_create too far from the point returns 422 platform_enrich_too_far", async () => {
   const handler = createPlatformHandler(enrichDeps({
-    findActivePointFn: async () => ({
-      id: "pt_test_1", pointId: "pt_test_1", category: "pharmacy",
+    findOrgPointFn: async () => ({
+      pointId: "pt_test_1",
       location: { latitude: 4.2, longitude: 9.7 }, // ~16 km away
-      details: { name: "Pharmacie Centrale" }, createdAt: "", updatedAt: "2026-07-01T00:00:00.000Z",
-      gaps: [], eventsCount: 1, eventIds: ["e1"],
     }),
   }));
   const request = jsonPost("record_create", enrichBody);
@@ -535,7 +534,7 @@ test("record_create without a pointId is a standalone create and never touches p
   let cooldownCalled = false;
   const { pointId: _pointId, ...standaloneBody } = enrichBody;
   const handler = createPlatformHandler(enrichDeps({
-    findActivePointFn: async () => { lookupCalled = true; return null; },
+    findOrgPointFn: async () => { lookupCalled = true; return null; },
     hasRecentRecordForPointFn: async () => { cooldownCalled = true; return false; },
     createRecordFn: async (input: any) => { created.push(input); return { id: "record-3", ...input, status: "pending_review", createdAt: "" }; },
   }));
@@ -553,7 +552,8 @@ test("record_create without a pointId is a standalone create and never touches p
 test("platform_point_nearby returns points for a project-scoped collector", async () => {
   const handler = createPlatformHandler(baseDeps({
     getProjectFn: async () => enrichProject,
-    listNearbyPointsFn: async (input: any) => {
+    listNearbyOrgPointsFn: async (input: any) => {
+      assert.equal(input.organizationId, ORG.id);
       assert.equal(input.latitude, 4.05);
       assert.equal(input.longitude, 9.7);
       return [{
@@ -583,7 +583,7 @@ test("platform_point_nearby requires collector role: viewer gets 403", async () 
   const handler = createPlatformHandler(baseDeps({
     getProjectFn: async () => enrichProject,
     getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "viewer" as const, createdAt: "" }),
-    listNearbyPointsFn: async () => { throw new Error("should not be called"); },
+    listNearbyOrgPointsFn: async () => { throw new Error("should not be called"); },
   }));
   const response = await handler(new Request(
     `https://x.test/api/user?view=platform_point_nearby&projectId=${PROJECT_ID}&latitude=4.05&longitude=9.7`,

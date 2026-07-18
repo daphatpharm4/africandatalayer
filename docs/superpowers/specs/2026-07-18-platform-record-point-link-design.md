@@ -64,3 +64,12 @@ Unchanged review queue: `pending_review → approved/rejected` by tenant reviewe
 - Cross-tenant or public sharing of tenant records
 - Category binding of record types to point categories (revisit if abuse appears)
 - Manager-assigned point lists
+
+## Amendment — 2026-07-19: org-private points only
+
+Product decision after field testing: organizations must see **only their own points, never public ADL points** in the enrichment picker.
+
+- A "point" is now a chain of the org's **approved** records sharing a root id: a record with no `point_id` is a root; records attached to it carry `point_id = root`. Repeat surveys of the same asset build a per-asset history.
+- `platform_point_nearby` returns the org's own points (grouped, latest-record freshness as `updatedAt`, `eventsCount` = chain length), org-scoped via project tenancy. Public projected points are no longer exposed on this endpoint.
+- `record_create` point validation (`findOrgPoint`) resolves the root within the caller's organization only; proximity is checked against the chain's most recent locatable record.
+- Public-dataset enrichment (the original design above) is retired for tenants; the core agent app is unaffected.

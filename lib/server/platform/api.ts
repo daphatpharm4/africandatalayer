@@ -25,7 +25,7 @@
 //   admin_org_access    POST  — suspend/reactivate a company (ADL admin)
 //   record_create       POST  — create a record (collector+); optional pointId
 //                                gates GPS proximity + a 24h per-point cooldown
-//   point_nearby        GET   — nearby public points for the picker (collector+)
+//   point_nearby        GET   — org's own nearby points for the picker (collector+)
 //
 // Every org/project view resolves tenancy via requireOrgRole/requireProjectOrgRole
 // BEFORE touching data; failures (401/403/404) are tenancy Responses returned as-is.
@@ -45,7 +45,7 @@ import * as recordStore from "./recordStore.js";
 import { writePlatformAudit, type PlatformAuditEventType } from "./audit.js";
 import { createInviteToken, hashInviteToken, INVITE_TTL_DAYS, sendInviteEmail } from "./invites.js";
 import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenancy.js";
-import { findActivePoint, listNearbyPoints } from "./pointLookup.js";
+import { findOrgPoint, listNearbyOrgPoints } from "./pointLookup.js";
 import { haversineKm } from "../submissionFraud.js";
 import {
   adminOrgAccessUpdateSchema,
@@ -104,8 +104,8 @@ export interface PlatformApiDeps {
   listRecordsFn?: typeof recordStore.listRecords;
   reviewRecordFn?: typeof recordStore.reviewRecord;
   getRecordSummaryForUserFn?: typeof recordStore.getRecordSummaryForUser;
-  findActivePointFn?: typeof findActivePoint;
-  listNearbyPointsFn?: typeof listNearbyPoints;
+  findOrgPointFn?: typeof findOrgPoint;
+  listNearbyOrgPointsFn?: typeof listNearbyOrgPoints;
   hasRecentRecordForPointFn?: typeof recordStore.hasRecentRecordForPoint;
   // services
   requireUserFn?: typeof requireUser;
@@ -177,8 +177,8 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const listRecordsFn = deps.listRecordsFn ?? recordStore.listRecords;
   const reviewRecordFn = deps.reviewRecordFn ?? recordStore.reviewRecord;
   const getRecordSummaryForUserFn = deps.getRecordSummaryForUserFn ?? recordStore.getRecordSummaryForUser;
-  const findActivePointFn = deps.findActivePointFn ?? findActivePoint;
-  const listNearbyPointsFn = deps.listNearbyPointsFn ?? listNearbyPoints;
+  const findOrgPointFn = deps.findOrgPointFn ?? findOrgPoint;
+  const listNearbyOrgPointsFn = deps.listNearbyOrgPointsFn ?? listNearbyOrgPoints;
   const hasRecentRecordForPointFn = deps.hasRecentRecordForPointFn ?? recordStore.hasRecentRecordForPoint;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
@@ -734,7 +734,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     if (body.pointId) {
       const gps = body.evidence.gps;
       if (!gps) return errorResponse("GPS evidence is required when attaching to an existing point", 422, { code: "platform_enrich_gps_required" });
-      const point = await findActivePointFn(body.pointId);
+      const point = await findOrgPointFn({ organizationId: context.organizationId, pointId: body.pointId });
       if (!point) return errorResponse("Point not found", 409, { code: "platform_point_not_found" });
       const distanceMeters = haversineKm(
         { latitude: gps.latitude, longitude: gps.longitude },
@@ -832,7 +832,13 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
       : NEARBY_DEFAULT_RADIUS_METERS;
     const context = await requireProjectOrgRole(request, projectId, "collector", tenancyDeps);
     if (isTenancyFailure(context)) return context;
-    const points = await listNearbyPointsFn({ latitude, longitude, radiusMeters, limit: NEARBY_LIMIT });
+    const points = await listNearbyOrgPointsFn({
+      organizationId: context.organizationId,
+      latitude,
+      longitude,
+      radiusMeters,
+      limit: NEARBY_LIMIT,
+    });
     return jsonResponse({ points }, { status: 200 });
   }
 
