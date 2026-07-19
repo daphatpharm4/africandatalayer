@@ -11,6 +11,10 @@ let package = Package(
         .library(
             name: "ConsoleModels",
             targets: ["ConsoleModels"]
+        ),
+        .library(
+            name: "ConsoleAPI",
+            targets: ["ConsoleAPI"]
         )
     ],
     targets: [
@@ -18,10 +22,20 @@ let package = Package(
             name: "ConsoleModels",
             path: "Sources/ConsoleModels"
         ),
+        .target(
+            name: "ConsoleAPI",
+            dependencies: ["ConsoleModels"],
+            path: "Sources/ConsoleAPI"
+        ),
         .testTarget(
             name: "ConsoleModelsTests",
             dependencies: ["ConsoleModels"],
             path: "Tests/ConsoleModelsTests"
+        ),
+        .testTarget(
+            name: "ConsoleAPITests",
+            dependencies: ["ConsoleAPI", "ConsoleModels"],
+            path: "Tests/ConsoleAPITests"
         )
     ]
 )
