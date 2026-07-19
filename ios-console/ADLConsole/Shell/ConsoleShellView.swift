@@ -41,8 +41,23 @@ struct ConsoleShellView: View {
         switch screen {
         case .overview:
             overviewContent
+        case .review:
+            reviewContent
         default:
             PlaceholderScreenView(screen: screen)
+        }
+    }
+
+    /// `.review` is nav-gated to reviewer/manager/owner by
+    /// `AppState.visibleDestinations` (backed by `canAccessConsoleScreen`)
+    /// before this view is ever reached, same as `.overview`'s capture
+    /// gating above — no role check needed here.
+    @ViewBuilder
+    private var reviewContent: some View {
+        if let organizationId = appState.organization?.id {
+            ReviewQueueView(viewModel: appState.makeReviewQueueViewModel(organizationId: organizationId))
+        } else {
+            PlaceholderScreenView(screen: .review)
         }
     }
 

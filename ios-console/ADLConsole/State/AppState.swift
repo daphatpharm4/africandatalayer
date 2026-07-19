@@ -82,6 +82,18 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// Builds a fresh `ReviewQueueViewModel` wired to this `AppState`'s
+    /// shared `apiClient`/`language` — the factory `ConsoleShellView` calls
+    /// to construct `ReviewQueueView`'s `@StateObject`, mirroring
+    /// `makeCaptureViewModel` above.
+    func makeReviewQueueViewModel(organizationId: String) -> ReviewQueueViewModel {
+        ReviewQueueViewModel(
+            apiClient: apiClient,
+            organizationId: organizationId,
+            language: language
+        )
+    }
+
     /// Destinations visible in the current role's nav — thin pass-through to
     /// the pure `ConsoleNavigation.visibleDestinations`, so views never
     /// compute this themselves.
