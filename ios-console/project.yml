@@ -31,6 +31,13 @@ targets:
         ENABLE_PREVIEWS: true
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
+        # Collector capture (task 5): photo evidence + GPS evidence usage
+        # strings. Camera + photo library cover both a direct camera capture
+        # and a PhotosUI library pick; location is when-in-use only — capture
+        # never needs background location.
+        INFOPLIST_KEY_NSCameraUsageDescription: "ADL Console uses your camera to attach photo evidence to a captured record."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "ADL Console lets you attach a photo from your library as evidence for a captured record."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "ADL Console uses your location to attach a GPS fix as evidence for a captured record."
     dependencies:
       - package: ConsoleCore
         product: ConsoleModels
@@ -38,6 +45,8 @@ targets:
         product: ConsoleAPI
       - package: ConsoleCore
         product: ConsoleState
+      - package: ConsoleCore
+        product: ConsoleForms
 
   ADLConsoleTests:
     type: bundle.unit-test
@@ -57,6 +66,8 @@ targets:
         product: ConsoleAPI
       - package: ConsoleCore
         product: ConsoleState
+      - package: ConsoleCore
+        product: ConsoleForms
 
 schemes:
   ADLConsole:

@@ -12,9 +12,13 @@
 		0E895F093A7BE1E2B2779695 /* ADLConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */; };
 		1959BE4002E4245900F84ABF /* ConsoleState in Frameworks */ = {isa = PBXBuildFile; productRef = 4F924DAF268789C0063BB4B1 /* ConsoleState */; };
 		1DB18EBE187A5B76D144BF13 /* ConsoleLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */; };
+		2255A477FA4BDCF251D82D6B /* CaptureFieldControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13EB8A729DC236F9773C5D26 /* CaptureFieldControl.swift */; };
 		2DB37526C9865B8F8B6B40C1 /* ConsoleModels in Frameworks */ = {isa = PBXBuildFile; productRef = B7D50563A39437ABAF09100A /* ConsoleModels */; };
 		32F78F4831D8D8DADBDCAFB5 /* MockAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B675B26FF4701FD0208927 /* MockAuthService.swift */; };
+		33A5FA7FC1B4A56E25B7B0EB /* ConsoleForms in Frameworks */ = {isa = PBXBuildFile; productRef = 430F5FAF1C886EF90084220F /* ConsoleForms */; };
+		36FE7F6D566EE8932C557812 /* ConsoleForms in Frameworks */ = {isa = PBXBuildFile; productRef = 4EC1124EFDCB097DB55A7DF6 /* ConsoleForms */; };
 		6B0A3651A1F1DB44BF6A9CB2 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11DA660AE3456559B18F002 /* RootView.swift */; };
+		6DD66A144E373099E9BEDCD0 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9C5756D198653BA9FC365D2 /* LocationService.swift */; };
 		7AE185132577E6F44AEA21F1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2C7AA417BE1CD3555FBD4A76 /* Assets.xcassets */; };
 		7C9E08CA1F784AF88BE316EA /* ConsoleAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 49E18CF1964ED13E8D945CFC /* ConsoleAPI */; };
 		849B13AE9BA976F1A22E896E /* ADLConsoleColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031FC650E637FA153AF3C596 /* ADLConsoleColor.swift */; };
@@ -25,11 +29,18 @@
 		ACBA096578E554C6B9AC66A0 /* ADLConsoleFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9535029D531EAE8D0C3949 /* ADLConsoleFont.swift */; };
 		AF5901F272BB063A8ADADA53 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137CDD290590B44073DE24FE /* AuthView.swift */; };
 		B29261771D33EF2F48604E9A /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F0AC450421341F693CD910 /* OverviewView.swift */; };
+		BFC08E8D9D1F62C0F36A5D0E /* CaptureViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9B5F178846E89788286542A /* CaptureViewModelTests.swift */; };
 		C72139B7B76404F8F2978867 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0163C413B012BCBEB864086B /* AuthService.swift */; };
 		C746C0769E47918835336DF1 /* ConsoleDestinationsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0718ECDBE845BB4007DD07F /* ConsoleDestinationsTests.swift */; };
+		CB7D89B404F30D9D9809A789 /* ConsoleOverviewContentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */; };
+		CC8865E2FDB333C606ABB9C2 /* MockLocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3857F03467082404E18DF626 /* MockLocationService.swift */; };
 		D556A979AE9A13FCD168D4FC /* ConsoleAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3ED90C531DEC0C3B1566C798 /* ConsoleAPI */; };
 		DAFE86DBC002CCB4B15CB394 /* StubAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFEAB3969E7318AF2F3D2F3 /* StubAuthServiceTests.swift */; };
 		DD2D6D88D269AE1F2457F010 /* ConsoleShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CE08F3646167DA72E6D1A7 /* ConsoleShellView.swift */; };
+		EE32DCD2A658A85B96A1DC9C /* CaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */; };
+		EFB7EC28633C8CF256CCCC98 /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF20BD775A3750BC88BAC553 /* CaptureView.swift */; };
+		F43D63704B24F91AA7750DE9 /* ConsoleOverviewContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23B06FDC3BBAD29D1989BD12 /* ConsoleOverviewContent.swift */; };
+		F681720847B28808DF82045E /* RoutingMockPlatformTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD4F3ADD553C4604A542BF30 /* RoutingMockPlatformTransport.swift */; };
 		F9C2068A476617868C81CA41 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFFC04E641DBE0F76C30CA77 /* AppStateTests.swift */; };
 		FC14385E46894E0B48410FAE /* ConsoleDestinations.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117E5B7585C54D2CA50E3A62 /* ConsoleDestinations.swift */; };
 /* End PBXBuildFile section */
@@ -47,25 +58,34 @@
 /* Begin PBXFileReference section */
 		0163C413B012BCBEB864086B /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		031FC650E637FA153AF3C596 /* ADLConsoleColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleColor.swift; sourceTree = "<group>"; };
+		038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
 		08D7784C42D75445E370C4B8 /* ADLConsoleTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADLConsoleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0FFEAB3969E7318AF2F3D2F3 /* StubAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubAuthServiceTests.swift; sourceTree = "<group>"; };
 		117E5B7585C54D2CA50E3A62 /* ConsoleDestinations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleDestinations.swift; sourceTree = "<group>"; };
 		137CDD290590B44073DE24FE /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
+		13EB8A729DC236F9773C5D26 /* CaptureFieldControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFieldControl.swift; sourceTree = "<group>"; };
 		1F9535029D531EAE8D0C3949 /* ADLConsoleFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleFont.swift; sourceTree = "<group>"; };
+		23B06FDC3BBAD29D1989BD12 /* ConsoleOverviewContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOverviewContent.swift; sourceTree = "<group>"; };
 		2C7AA417BE1CD3555FBD4A76 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2F839EE72C31ECC7FC50703F /* ConsoleCore */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ConsoleCore; path = Packages/ConsoleCore; sourceTree = SOURCE_ROOT; };
 		30AD6F052C32EFB5860F539B /* MockPlatformTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockPlatformTransport.swift; sourceTree = "<group>"; };
+		3857F03467082404E18DF626 /* MockLocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockLocationService.swift; sourceTree = "<group>"; };
 		8AEB59475DCD55068CE81EBB /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOverviewContentTests.swift; sourceTree = "<group>"; };
 		B0718ECDBE845BB4007DD07F /* ConsoleDestinationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleDestinationsTests.swift; sourceTree = "<group>"; };
 		B1CE08F3646167DA72E6D1A7 /* ConsoleShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleShellView.swift; sourceTree = "<group>"; };
 		BFFC04E641DBE0F76C30CA77 /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		C3F0AC450421341F693CD910 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
 		C9285C198CC532BDF8E950B5 /* PlaceholderScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderScreenView.swift; sourceTree = "<group>"; };
+		CD4F3ADD553C4604A542BF30 /* RoutingMockPlatformTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingMockPlatformTransport.swift; sourceTree = "<group>"; };
 		D11DA660AE3456559B18F002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		D9135E7C767659E8968D7D57 /* ADLConsole.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ADLConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleApp.swift; sourceTree = "<group>"; };
+		D9C5756D198653BA9FC365D2 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
+		DF20BD775A3750BC88BAC553 /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		E2B675B26FF4701FD0208927 /* MockAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAuthService.swift; sourceTree = "<group>"; };
 		E979F6715DC0C5FB3DB562A6 /* ADLConsoleComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleComponents.swift; sourceTree = "<group>"; };
+		E9B5F178846E89788286542A /* CaptureViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModelTests.swift; sourceTree = "<group>"; };
 		FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleLanguage.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -77,6 +97,7 @@
 				2DB37526C9865B8F8B6B40C1 /* ConsoleModels in Frameworks */,
 				7C9E08CA1F784AF88BE316EA /* ConsoleAPI in Frameworks */,
 				1959BE4002E4245900F84ABF /* ConsoleState in Frameworks */,
+				36FE7F6D566EE8932C557812 /* ConsoleForms in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -87,6 +108,7 @@
 				93D803FD9E74C10C412BD7E3 /* ConsoleModels in Frameworks */,
 				D556A979AE9A13FCD168D4FC /* ConsoleAPI in Frameworks */,
 				9D2AE1CD442AFEEA91AAFE55 /* ConsoleState in Frameworks */,
+				33A5FA7FC1B4A56E25B7B0EB /* ConsoleForms in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -107,9 +129,13 @@
 			isa = PBXGroup;
 			children = (
 				BFFC04E641DBE0F76C30CA77 /* AppStateTests.swift */,
+				E9B5F178846E89788286542A /* CaptureViewModelTests.swift */,
 				B0718ECDBE845BB4007DD07F /* ConsoleDestinationsTests.swift */,
+				8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */,
 				E2B675B26FF4701FD0208927 /* MockAuthService.swift */,
+				3857F03467082404E18DF626 /* MockLocationService.swift */,
 				30AD6F052C32EFB5860F539B /* MockPlatformTransport.swift */,
+				CD4F3ADD553C4604A542BF30 /* RoutingMockPlatformTransport.swift */,
 				0FFEAB3969E7318AF2F3D2F3 /* StubAuthServiceTests.swift */,
 			);
 			path = ADLConsoleTests;
@@ -149,10 +175,21 @@
 			path = Auth;
 			sourceTree = "<group>";
 		};
+		890AF84C493ACC387C2B0FC4 /* Capture */ = {
+			isa = PBXGroup;
+			children = (
+				13EB8A729DC236F9773C5D26 /* CaptureFieldControl.swift */,
+				DF20BD775A3750BC88BAC553 /* CaptureView.swift */,
+				038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */,
+			);
+			path = Capture;
+			sourceTree = "<group>";
+		};
 		A6C1C3FA2FEE43B033B59FE0 /* Shell */ = {
 			isa = PBXGroup;
 			children = (
 				117E5B7585C54D2CA50E3A62 /* ConsoleDestinations.swift */,
+				23B06FDC3BBAD29D1989BD12 /* ConsoleOverviewContent.swift */,
 				B1CE08F3646167DA72E6D1A7 /* ConsoleShellView.swift */,
 				D11DA660AE3456559B18F002 /* RootView.swift */,
 			);
@@ -164,6 +201,7 @@
 			children = (
 				C3F0AC450421341F693CD910 /* OverviewView.swift */,
 				C9285C198CC532BDF8E950B5 /* PlaceholderScreenView.swift */,
+				890AF84C493ACC387C2B0FC4 /* Capture */,
 			);
 			path = Screens;
 			sourceTree = "<group>";
@@ -172,6 +210,7 @@
 			isa = PBXGroup;
 			children = (
 				FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */,
+				D9C5756D198653BA9FC365D2 /* LocationService.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -221,6 +260,7 @@
 				90BE175E7AD2329A5C613935 /* ConsoleModels */,
 				3ED90C531DEC0C3B1566C798 /* ConsoleAPI */,
 				FDEDD3CBD4312F0E4AB42590 /* ConsoleState */,
+				430F5FAF1C886EF90084220F /* ConsoleForms */,
 			);
 			productName = ADLConsoleTests;
 			productReference = 08D7784C42D75445E370C4B8 /* ADLConsoleTests.xctest */;
@@ -243,6 +283,7 @@
 				B7D50563A39437ABAF09100A /* ConsoleModels */,
 				49E18CF1964ED13E8D945CFC /* ConsoleAPI */,
 				4F924DAF268789C0063BB4B1 /* ConsoleState */,
+				4EC1124EFDCB097DB55A7DF6 /* ConsoleForms */,
 			);
 			productName = ADLConsole;
 			productReference = D9135E7C767659E8968D7D57 /* ADLConsole.app */;
@@ -305,9 +346,14 @@
 				09477BD669DBB16183AA17D1 /* AppState.swift in Sources */,
 				C72139B7B76404F8F2978867 /* AuthService.swift in Sources */,
 				AF5901F272BB063A8ADADA53 /* AuthView.swift in Sources */,
+				2255A477FA4BDCF251D82D6B /* CaptureFieldControl.swift in Sources */,
+				EFB7EC28633C8CF256CCCC98 /* CaptureView.swift in Sources */,
+				EE32DCD2A658A85B96A1DC9C /* CaptureViewModel.swift in Sources */,
 				FC14385E46894E0B48410FAE /* ConsoleDestinations.swift in Sources */,
 				1DB18EBE187A5B76D144BF13 /* ConsoleLanguage.swift in Sources */,
+				F43D63704B24F91AA7750DE9 /* ConsoleOverviewContent.swift in Sources */,
 				DD2D6D88D269AE1F2457F010 /* ConsoleShellView.swift in Sources */,
+				6DD66A144E373099E9BEDCD0 /* LocationService.swift in Sources */,
 				B29261771D33EF2F48604E9A /* OverviewView.swift in Sources */,
 				A99D0F268043A22BD063AE82 /* PlaceholderScreenView.swift in Sources */,
 				6B0A3651A1F1DB44BF6A9CB2 /* RootView.swift in Sources */,
@@ -319,9 +365,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				F9C2068A476617868C81CA41 /* AppStateTests.swift in Sources */,
+				BFC08E8D9D1F62C0F36A5D0E /* CaptureViewModelTests.swift in Sources */,
 				C746C0769E47918835336DF1 /* ConsoleDestinationsTests.swift in Sources */,
+				CB7D89B404F30D9D9809A789 /* ConsoleOverviewContentTests.swift in Sources */,
 				32F78F4831D8D8DADBDCAFB5 /* MockAuthService.swift in Sources */,
+				CC8865E2FDB333C606ABB9C2 /* MockLocationService.swift in Sources */,
 				8E168C953966EE6D95CD487A /* MockPlatformTransport.swift in Sources */,
+				F681720847B28808DF82045E /* RoutingMockPlatformTransport.swift in Sources */,
 				DAFE86DBC002CCB4B15CB394 /* StubAuthServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -447,6 +497,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
+				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ADL Console uses your location to attach a GPS fix as evidence for a captured record.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ADL Console lets you attach a photo from your library as evidence for a captured record.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -473,6 +526,9 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
+				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ADL Console uses your location to attach a GPS fix as evidence for a captured record.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ADL Console lets you attach a photo from your library as evidence for a captured record.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
@@ -590,9 +646,17 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = ConsoleAPI;
 		};
+		430F5FAF1C886EF90084220F /* ConsoleForms */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ConsoleForms;
+		};
 		49E18CF1964ED13E8D945CFC /* ConsoleAPI */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = ConsoleAPI;
+		};
+		4EC1124EFDCB097DB55A7DF6 /* ConsoleForms */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ConsoleForms;
 		};
 		4F924DAF268789C0063BB4B1 /* ConsoleState */ = {
 			isa = XCSwiftPackageProductDependency;

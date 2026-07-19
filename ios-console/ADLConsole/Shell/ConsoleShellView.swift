@@ -40,9 +40,24 @@ struct ConsoleShellView: View {
     private func screenView(for screen: ConsoleScreen) -> some View {
         switch screen {
         case .overview:
-            OverviewView()
+            overviewContent
         default:
             PlaceholderScreenView(screen: screen)
+        }
+    }
+
+    /// `.overview` renders differently by role — see `ConsoleOverviewContent`.
+    @ViewBuilder
+    private var overviewContent: some View {
+        switch appState.role.map(ConsoleOverviewContent.content(for:)) ?? .summary {
+        case .capture:
+            if let organizationId = appState.organization?.id {
+                CaptureView(viewModel: appState.makeCaptureViewModel(organizationId: organizationId))
+            } else {
+                OverviewView()
+            }
+        case .summary:
+            OverviewView()
         }
     }
 
