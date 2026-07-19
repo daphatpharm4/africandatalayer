@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { PointEvent } from '../shared/types';
 import { computeContributionSummary } from '../lib/shared/contributionMetrics';
+import Mascot from './shared/Mascot';
 
 const BADGE_COLORS = {
   forest: { color: '#4c7c59', bg: '#eaf3ee' },
@@ -224,13 +225,20 @@ const BadgeGrid: React.FC<BadgeGridProps> = ({ badges, language }) => {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between px-1">
-        <div className="flex flex-col">
-          <span className="micro-label text-gray-400">
-            {t('Badges', 'Badges')}
-          </span>
-          <span className="text-sm font-bold text-gray-900">
-            {earnedCount}/{badges.length} {t('earned', 'obtenus')}
-          </span>
+        <div className="flex items-center gap-2">
+          <Mascot
+            pose={earnedCount >= Math.ceil(badges.length / 2) ? 'tier-gold' : 'tier-bronze'}
+            animate="float"
+            size={40}
+          />
+          <div className="flex flex-col">
+            <span className="micro-label text-gray-400">
+              {t('Badges', 'Badges')}
+            </span>
+            <span className="text-sm font-bold text-gray-900">
+              {earnedCount}/{badges.length} {t('earned', 'obtenus')}
+            </span>
+          </div>
         </div>
         {nextBadge && (
           <span className="micro-label text-navy">

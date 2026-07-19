@@ -1,5 +1,6 @@
 import React from 'react';
 import { Flame } from 'lucide-react';
+import Mascot from './shared/Mascot';
 
 interface Props {
   language: 'en' | 'fr';
@@ -17,13 +18,16 @@ const StreakTracker: React.FC<Props> = ({ language, streakDays, activeDays }) =>
   return (
     <div className="card-pill p-4 space-y-4">
       <div className="flex items-center justify-between">
-        <div>
-          <div className="micro-label-wide text-gray-400">
-            {t('Streak Tracker', 'Suivi de série')}
+        <div className="flex items-center gap-3">
+          <Mascot pose={streakDays >= 14 ? 'tier-gold' : 'tier-bronze'} animate="float" size={44} />
+          <div>
+            <div className="micro-label-wide text-gray-400">
+              {t('Streak Tracker', 'Suivi de série')}
+            </div>
+            <h4 className="mt-1 text-base font-bold text-gray-900">
+              {t('Show up again tomorrow', 'Revenez encore demain')}
+            </h4>
           </div>
-          <h4 className="mt-1 text-base font-bold text-gray-900">
-            {t('Show up again tomorrow', 'Revenez encore demain')}
-          </h4>
         </div>
         <div className="inline-flex items-center gap-2 rounded-full bg-terra-wash px-3 py-1 text-terra">
           <Flame size={14} />
