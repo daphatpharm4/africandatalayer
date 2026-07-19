@@ -1,6 +1,7 @@
 import React from 'react';
 import { Award, CheckCircle, ChevronRight, Map, Sparkles, Zap } from 'lucide-react';
 import { getEnrichFieldLabel } from '../shared/enrichFieldCatalog';
+import Mascot from './shared/Mascot';
 
 interface RewardBreakdown {
   baseXp: number;
@@ -81,8 +82,8 @@ const XPPopup: React.FC<Props> = ({
       <div className="flex-1 overflow-y-auto min-h-0 px-6 py-8 flex flex-col items-center text-center space-y-5 relative z-10">
         <div className="relative">
           <div className="ring-pulse absolute inset-[-10px] rounded-[2rem] border border-forest/20" />
-          <div className="reward-float relative z-10 w-16 h-16 rounded-2xl bg-forest-wash text-forest flex items-center justify-center shadow-sm">
-            <CheckCircle size={30} />
+          <div className="relative z-10 flex h-20 w-20 items-center justify-center">
+            <Mascot pose="cheering" animate="pop" size={80} alt={t('Data is cheering for your capture', 'Data célèbre votre capture')} />
           </div>
         </div>
 

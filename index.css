@@ -565,6 +565,57 @@
   }
 }
 
+/* Mascot ("Data" le Lionceau) micro-animations — agent app only.
+   All gated by the prefers-reduced-motion rule above. */
+@keyframes mascot-pop {
+  0% {
+    transform: scale(0.3);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.mascot-pop {
+  animation: mascot-pop 0.5s var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+@keyframes mascot-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.mascot-float {
+  animation: mascot-float 3s ease-in-out infinite;
+}
+
+@keyframes mascot-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-4deg);
+  }
+  75% {
+    transform: rotate(4deg);
+  }
+}
+
+.mascot-wiggle {
+  animation: mascot-wiggle 0.6s ease-in-out;
+}
+
 /* Print styles for Investor Dashboard */
 @media print {
   body {
