@@ -108,3 +108,45 @@ All on transparent or `*-wash` backgrounds for in-app compositing.
 - Full brand-mascot style guide document — this spec + reference art is enough
   to validate the direction before deeper investment.
 - Secondary characters.
+
+---
+
+## Implementation (2026-07-19)
+
+### Scope: agent app ONLY
+
+Data renders only on the field-agent app (`main.html` / iOS / Android). He is
+**forbidden** on the company console (`console.html` — Admin & Client screens).
+Rationale = brand emotional registers: Agent is celebratory (mascot fits);
+Admin is clinical and Client is premium (both stay mascot-free). Enforce by
+rendering `<Mascot>` only under the existing agent role gating.
+
+### Component
+
+`components/shared/Mascot.tsx` — `<Mascot pose animate size alt />`.
+- Poses: `canonical`, `standing`, `cheering`, `sleeping`, `determined`,
+  `tier-bronze`, `tier-gold`.
+- Animations (CSS keyframes in `index.css`, all reduced-motion safe):
+  `none`, `pop`, `float`, `wiggle`. No video/Lottie — field-first (2G).
+- Decorative by default (`alt=""` + `aria-hidden`); pass `alt` when meaningful.
+
+### Assets
+
+- `assets/mascot/web/*.webp` — 512px, ~22KB each. **Used by the app.**
+- `assets/mascot/*.png` — full-res 896×1200 transparent originals. Marketing only.
+
+### Placement (live)
+
+| Pose | Location | Trigger |
+|------|----------|---------|
+| `cheering` (pop) | `XPPopup` | Capture accepted |
+| `tier-gold` (pop) | `LevelUpCelebration` | Level up — mane-growth payoff |
+| `sleeping` (float) | `SubmissionQueue` empty card | All uploads synced |
+| `determined` (float) | `Home` company-map empty state | No nearby points |
+
+### Placement (planned, not yet wired)
+
+- `tier-bronze → tier-gold` in `BadgeSystem` / `StreakTracker` for tier identity.
+- `canonical` / `standing` on `Splash` onboarding + `Auth` welcome.
+- NOTE: `Profile` hero deliberately excluded — design principle 6 (identity =
+  letter-initial gradient circle, no avatar). Do not put Data in the profile hero.

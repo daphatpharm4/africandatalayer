@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
+import Mascot from "./shared/Mascot";
 
 /** Brand palette tokens — keep in sync with tailwind.config.js */
 const BRAND = {
@@ -110,6 +111,7 @@ export default function LevelUpCelebration({
       <div className="ambient-orb bottom-[10%] left-[12%] h-28 w-28 bg-white/10" style={{ animationDelay: '-4s' }} />
       {confettiPieces}
       <div className="relative z-10 flex flex-col items-center gap-6 px-6 text-center">
+        <Mascot pose="tier-gold" animate="pop" size={104} className="drop-shadow-2xl" />
         <div className="relative">
           <div className="ring-pulse absolute inset-[-18px] rounded-full border border-white/30" />
           <div className="ring-pulse absolute inset-[-32px] rounded-full border border-gold/20" style={{ animationDelay: '0.8s' }} />

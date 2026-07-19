@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Pencil, RefreshCw, RotateCcw, Trash2, Wifi, WifiOff } from 'lucide-react';
 import ScreenHeader from '../shared/ScreenHeader';
+import Mascot from '../shared/Mascot';
 import {
   clearSyncErrorRecords,
   deleteQueueItem,
@@ -241,8 +242,9 @@ const SubmissionQueue: React.FC<Props> = ({ onBack, onEditDraft, language }) => 
             <span className="micro-label text-gray-400">{failedItems.length}</span>
           </div>
           {failedItems.length === 0 && (
-            <div className="card p-4 text-xs text-gray-500">
-              {t('No issues here. All uploads are good.', 'Aucun problème. Tous les envois sont bons.')}
+            <div className="card flex items-center gap-3 p-4 text-xs text-gray-500">
+              <Mascot pose="sleeping" animate="float" size={48} className="flex-shrink-0" />
+              <span>{t('No issues here. All uploads are good.', 'Aucun problème. Tous les envois sont bons.')}</span>
             </div>
           )}
           {failedItems.map((item) => (

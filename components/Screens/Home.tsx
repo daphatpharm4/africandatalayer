@@ -9,6 +9,7 @@ import {
   cameroonLeafletBounds,
   isWithinBonamoussadi
 } from '../../shared/geofence';
+import Mascot from '../shared/Mascot';
 import {
   AlertTriangle,
   Building2,
@@ -1326,6 +1327,7 @@ const Home: React.FC<Props> = ({
               })}
               {isCompanyExplore && displayedPoints.length === 0 && !isLoadingExplorePoints && (
                 <div data-testid="company-map-empty-state" className="card-soft p-5 text-center">
+                  <Mascot pose="determined" animate="float" size={72} className="mx-auto mb-3" />
                   <p className="text-sm font-semibold text-ink-dark">
                     {t('No nearby ADL or company points yet', 'Aucun point ADL proche ou point entreprise pour le moment')}
                   </p>
