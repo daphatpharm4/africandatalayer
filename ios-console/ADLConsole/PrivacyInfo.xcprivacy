@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	ADL Console is a B2B field-collection companion to the web Data Ops
+	Platform console — declarations below map to what THIS app actually
+	does (not copied from the agent app's manifest):
+
+	  * Auth/AuthService.swift — email/password sign-in against the
+	    platform's org-scoped account system (StubAuthService today; the
+	    real cookie-session handshake lands in a later task, same account
+	    model). -> EmailAddress.
+	  * Screens/Capture + Support/LocationService.swift — CoreLocation
+	    when-in-use GPS fix (kCLLocationAccuracyBest) attached as evidence
+	    to a captured record; if the user has restricted the app to
+	    "Approximate Location" in Settings, CoreLocation delivers a
+	    reduced-accuracy (coarse) fix instead. -> PreciseLocation +
+	    CoarseLocation.
+	  * Screens/Capture — camera/photo-library evidence attached to a
+	    captured record (NSCameraUsageDescription /
+	    NSPhotoLibraryUsageDescription in project.yml). -> PhotosorVideos.
+	  * Screens/Capture + ConsoleModels.PlatformRecord — the schema-driven
+	    form field values and free-text notes that make up a record's
+	    `data`/`evidence.notes` payload, submitted to the platform API.
+	    -> OtherUserContent.
+
+	None of this data is used for tracking (no ad SDKs, no cross-app/
+	cross-site identifiers) and everything is scoped to the app's own
+	functionality (record capture, review, org membership).
+	-->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePreciseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeCoarseLocation</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePhotosorVideos</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUserContent</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<!--
+	No required-reason APIs are called by this app's own code as of this
+	task: the offline draft queue (ConsoleForms.FileRecordQueueStore, wired
+	in State/AppState.swift) persists via plain FileManager
+	read/write/createDirectory calls, none of which are on Apple's
+	required-reason list (no file-timestamp, disk-space, or
+	system-boot-time APIs). `ConsoleForms.UserDefaultsRecordQueueStore`
+	exists as an alternative store implementation but is NOT instantiated
+	anywhere in the shipped app target, so UserDefaults (CA92.1) is
+	intentionally omitted here. If a future change wires that store in (or
+	adds a required-reason API call anywhere else), this array must gain
+	the matching entry before that change ships.
+	-->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array/>
+</dict>
+</plist>

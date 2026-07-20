@@ -1,0 +1,89 @@
+name: ADLConsole
+options:
+  bundleIdPrefix: com.africandatalayer
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  ConsoleCore:
+    path: Packages/ConsoleCore
+
+targets:
+  ADLConsole:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ADLConsole
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.africandatalayer.console
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_CFBundleDisplayName: ADL Console
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: true
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # No custom/proprietary encryption — only standard HTTPS/TLS via
+        # URLSession — so the App Store Connect export-compliance question
+        # is answered "No" ahead of time and upload isn't blocked on it.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
+        # Collector capture (task 5): photo evidence + GPS evidence usage
+        # strings. Camera + photo library cover both a direct camera capture
+        # and a PhotosUI library pick; location is when-in-use only — capture
+        # never needs background location.
+        INFOPLIST_KEY_NSCameraUsageDescription: "ADL Console uses your camera to attach photo evidence to a captured record."
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "ADL Console lets you attach a photo from your library as evidence for a captured record."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "ADL Console uses your location to attach a GPS fix as evidence for a captured record."
+    dependencies:
+      - package: ConsoleCore
+        product: ConsoleModels
+      - package: ConsoleCore
+        product: ConsoleAPI
+      - package: ConsoleCore
+        product: ConsoleState
+      - package: ConsoleCore
+        product: ConsoleForms
+
+  ADLConsoleTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ADLConsoleTests
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - target: ADLConsole
+      - package: ConsoleCore
+        product: ConsoleModels
+      - package: ConsoleCore
+        product: ConsoleAPI
+      - package: ConsoleCore
+        product: ConsoleState
+      - package: ConsoleCore
+        product: ConsoleForms
+
+schemes:
+  ADLConsole:
+    build:
+      targets:
+        ADLConsole: all
+        ADLConsoleTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ADLConsoleTests
+    archive:
+      config: Release
