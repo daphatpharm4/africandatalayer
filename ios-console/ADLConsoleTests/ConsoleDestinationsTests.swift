@@ -44,6 +44,18 @@ final class ConsoleDestinationsTests: XCTestCase {
         XCTAssertTrue(screens.contains(.projects))
     }
 
+    /// The brief for the company map explicitly requires it be visible to
+    /// "at least collector" — the one role `DATA` (company records browse)
+    /// is hidden from.
+    func testEveryRoleIncludingCollectorSeesMap() {
+        for role in PlatformRole.allCases {
+            XCTAssertTrue(
+                ConsoleNavigation.visibleDestinations(role: role).map(\.screen).contains(.map),
+                "role=\(role) must see the MAP destination"
+            )
+        }
+    }
+
     func testViewerSeesDataButNotReviewMembersOrSettings() {
         let screens = Set(ConsoleNavigation.visibleDestinations(role: .viewer).map(\.screen))
         XCTAssertTrue(screens.contains(.data))

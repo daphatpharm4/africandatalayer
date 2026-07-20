@@ -14,6 +14,12 @@ final class ConsoleScreenTests: XCTestCase {
         XCTAssertEqual(ConsoleScreen.members.rawValue, "MEMBERS")
         XCTAssertEqual(ConsoleScreen.settings.rawValue, "SETTINGS")
         XCTAssertEqual(ConsoleScreen.join.rawValue, "JOIN")
-        XCTAssertEqual(ConsoleScreen.allCases.count, 11)
+        XCTAssertEqual(ConsoleScreen.allCases.count, 12)
+    }
+
+    /// `.map` has no TS `ConsoleScreen` counterpart (see its doc comment) —
+    /// asserted separately from the TS-mirrored raw values above.
+    func testMapRawValue() {
+        XCTAssertEqual(ConsoleScreen.map.rawValue, "MAP")
     }
 }
