@@ -91,7 +91,7 @@ export async function listRecords(
        data, evidence, status, captured_by, created_at, point_id, reviewed_by, reviewed_at, review_notes
      FROM public.platform_records
      WHERE organization_id = $1
-       AND ($2::text IS NULL OR project_id = $2)
+       AND ($2::uuid IS NULL OR project_id = $2::uuid)
        AND ($3::text IS NULL OR status = $3)
        AND ($4::text IS NULL OR point_id = $4)
      ORDER BY created_at DESC
@@ -110,7 +110,7 @@ export async function listRecordsForExport(
        data, evidence, status, captured_by, created_at, point_id, reviewed_by, reviewed_at, review_notes
      FROM public.platform_records
      WHERE organization_id = $1
-       AND ($2::text IS NULL OR project_id = $2)
+       AND ($2::uuid IS NULL OR project_id = $2::uuid)
        AND ($3::text IS NULL OR status = $3)
      ORDER BY created_at DESC
      LIMIT 10000`,
