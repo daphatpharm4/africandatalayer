@@ -4,7 +4,59 @@
 // and console point badges (ReviewQueueScreen). No fetches, no state — just
 // formatting shared by both screens.
 
+import type { PlatformRecord } from "../../shared/platformTypes.js";
+
 export const POINT_STALE_AFTER_DAYS = 30;
+
+export type CollapsedPlatformPoint = PlatformRecord & { chainCount: number };
+
+/**
+ * Collapse a flat list of approved platform records into ONE representative
+ * record per point-chain, mirroring the server's group-by-root
+ * (`lib/server/platform/pointLookup.ts`). A record with no `pointId` is a chain
+ * root (root = its own id); enrichments carry `pointId = root`. Without this the
+ * company map renders one pin PER record, so every daily update of an asset drops
+ * a duplicate pin on top of the last one instead of appending to the same point.
+ *
+ * The newest record (by `createdAt`) becomes the representative (latest state
+ * wins); photos aggregate across the chain, newest first, deduped; `chainCount`
+ * exposes how many surveys the point has.
+ */
+export function collapseRecordChains(records: PlatformRecord[]): CollapsedPlatformPoint[] {
+  const groups = new Map<string, PlatformRecord[]>();
+  for (const record of records) {
+    const root = record.pointId ?? record.id;
+    const group = groups.get(root);
+    if (group) group.push(record);
+    else groups.set(root, [record]);
+  }
+
+  const points: CollapsedPlatformPoint[] = [];
+  for (const group of groups.values()) {
+    const byNewest = [...group].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+    const base = byNewest[0];
+
+    const photos: string[] = [];
+    const seen = new Set<string>();
+    for (const record of byNewest) {
+      for (const photo of record.evidence?.photos ?? []) {
+        if (!seen.has(photo)) {
+          seen.add(photo);
+          photos.push(photo);
+        }
+      }
+    }
+
+    points.push({
+      ...base,
+      evidence: { ...base.evidence, photos },
+      chainCount: group.length,
+    });
+  }
+  return points;
+}
 
 export function formatDistanceMeters(meters: number, _language: "en" | "fr"): string {
   if (meters < 1000) return `${Math.round(meters)} m`;

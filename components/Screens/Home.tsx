@@ -47,6 +47,7 @@ import {
   type PlatformFieldContext,
 } from '../../lib/client/platformFieldContext';
 import { listApprovedPlatformRecordsRequest, nearbyPlatformPointsRequest } from '../../lib/client/platformApi';
+import { collapseRecordChains } from '../../lib/client/platformPointUi';
 import type { PlatformNearbyPoint, PlatformRecord } from '../../shared/platformTypes';
 
 type WindowWithIdleCallback = Window & {
@@ -498,7 +499,10 @@ const Home: React.FC<Props> = ({
         setIsLoadingPoints(true);
         setPointsLoadError('');
         const records = await listApprovedPlatformRecordsRequest(activeCompanyVertical.organizationId);
-        setPoints(records.map(mapPlatformRecordToPoint).filter((point): point is DataPoint => point !== null));
+        // Collapse each point-chain (root + its enrichments) into ONE pin.
+        // Without this, every approved record is its own pin, so daily updates
+        // of an asset stack duplicate pins instead of appending to the point.
+        setPoints(collapseRecordChains(records).map(mapPlatformRecordToPoint).filter((point): point is DataPoint => point !== null));
       } catch {
         setPoints([]);
         setPointsLoadError(t(
