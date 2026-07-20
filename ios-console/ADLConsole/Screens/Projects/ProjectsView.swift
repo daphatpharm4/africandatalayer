@@ -1,4 +1,5 @@
 import ConsoleModels
+import ConsoleState
 import SwiftUI
 
 /// The PROJECTS destination: every role can view the list, manager/owner get
@@ -6,8 +7,12 @@ import SwiftUI
 /// `components/Console/ProjectsScreen.tsx`. All load/create logic lives in
 /// `ProjectsViewModel` — this view only renders `@Published` state.
 ///
-/// Tapping a project row to open Schema Builder (`SCHEMA_BUILDER` on the
-/// web) is intentionally not wired here — Schema Builder is Task 7b's scope.
+/// Tapping a project row opens Schema Builder (`SCHEMA_BUILDER` on the web)
+/// — port of `ProjectsScreen.tsx`'s row rendering: `canManage ? <button
+/// onClick={() => onNavigate({ screen: 'SCHEMA_BUILDER', projectId })}> :
+/// <article>` (manager/owner rows are tappable with a chevron; every other
+/// role's rows are static). `ConsoleShellView` owns presenting
+/// `SchemaBuilderView` off `appState.route`, this view only sets the route.
 struct ProjectsView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: ProjectsViewModel
@@ -113,6 +118,21 @@ struct ProjectsView: View {
     // MARK: - Row
 
     private func projectRow(_ project: PlatformProject) -> some View {
+        Group {
+            if viewModel.canManage {
+                Button {
+                    appState.navigate(to: ConsoleRoute(screen: .schemaBuilder, projectId: project.id))
+                } label: {
+                    projectRowContent(project, showsChevron: true)
+                }
+                .buttonStyle(.plain)
+            } else {
+                projectRowContent(project, showsChevron: false)
+            }
+        }
+    }
+
+    private func projectRowContent(_ project: PlatformProject, showsChevron: Bool) -> some View {
         ADLConsoleCard {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -128,6 +148,11 @@ struct ProjectsView: View {
                 }
                 Spacer()
                 statusPill(project.status)
+                if showsChevron {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14))
+                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                }
             }
             .padding(16)
         }

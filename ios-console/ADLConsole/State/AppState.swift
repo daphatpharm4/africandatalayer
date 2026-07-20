@@ -121,6 +121,18 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// Builds a fresh `SchemaBuilderViewModel` for the SCHEMA_BUILDER
+    /// destination (`route.projectId`), mirroring `makeReviewQueueViewModel`
+    /// above. Access is already gated manager/owner by
+    /// `canAccessConsoleScreen` before `ConsoleShellView` ever presents this.
+    func makeSchemaBuilderViewModel(projectId: String) -> SchemaBuilderViewModel {
+        SchemaBuilderViewModel(
+            apiClient: apiClient,
+            projectId: projectId,
+            language: language
+        )
+    }
+
     /// Builds a fresh `SettingsViewModel` for `ConsoleShellView`'s SETTINGS
     /// destination, seeded from the currently-selected `organization`.
     func makeSettingsViewModel(organizationId: String, organization: PlatformOrganization) -> SettingsViewModel {

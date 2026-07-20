@@ -34,6 +34,35 @@ struct ConsoleShellView: View {
             }
         }
         .tint(ADLConsoleColor.navy)
+        .fullScreenCover(isPresented: schemaBuilderPresented) {
+            if let projectId = appState.route.projectId, canAccessSchemaBuilder {
+                SchemaBuilderView(
+                    viewModel: appState.makeSchemaBuilderViewModel(projectId: projectId),
+                    onDismiss: { appState.navigate(to: ConsoleRoute(screen: .projects)) }
+                )
+            }
+        }
+    }
+
+    /// `.schemaBuilder` is not a tab (`AppState.visibleDestinations` never
+    /// includes it — it's reached by tapping a project row, not the tab
+    /// bar), so it is presented as a full-screen cover driven directly by
+    /// `appState.route` rather than through `screenView(for:)`'s `TabView`
+    /// switch above. Access is still gated the same way every other
+    /// manager/owner-only destination is: `canAccessConsoleScreen` (not a
+    /// hand-rolled check here).
+    private var schemaBuilderPresented: Binding<Bool> {
+        Binding(
+            get: { appState.route.screen == .schemaBuilder },
+            set: { isPresented in
+                if !isPresented { appState.navigate(to: ConsoleRoute(screen: .projects)) }
+            }
+        )
+    }
+
+    private var canAccessSchemaBuilder: Bool {
+        guard let role = appState.role else { return false }
+        return canAccessConsoleScreen(role: role, screen: .schemaBuilder, isAdlAdmin: appState.isAdlAdmin)
     }
 
     @ViewBuilder
