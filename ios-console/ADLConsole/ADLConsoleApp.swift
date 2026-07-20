@@ -7,7 +7,7 @@ import SwiftUI
 /// deployment) once the real auth handshake (see
 /// `Auth/AuthService.swift`) is wired up and needs a real backend to talk
 /// to.
-private let consoleAPIBaseURL = URL(string: "https://africandatalayer.com")!
+private let consoleAPIBaseURL = URL(string: "https://www.app.africandatalayer.com")!
 
 @main
 struct ADLConsoleApp: App {
