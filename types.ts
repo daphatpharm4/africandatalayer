@@ -82,6 +82,9 @@ export interface DataPoint {
   platformRecord?: PlatformRecord & {
     recordTypeLabel: string;
   };
+  /** Full survey history for this point-chain, newest first — one entry per
+   *  update. Rendered as demarcated sections on the point detail. */
+  platformRecordChain?: PlatformRecord[];
   platformEnrichmentTarget?: {
     choiceKey: string;
     point: PlatformNearbyPoint;

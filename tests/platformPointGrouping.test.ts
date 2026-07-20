@@ -57,3 +57,11 @@ test("chain length exposed for the map/detail", () => {
   assert.equal(out.length, 1);
   assert.equal(out[0].chainCount, 3);
 });
+
+test("chain carries every update newest-first (one section per update)", () => {
+  const root = rec({ id: "root", createdAt: "2026-07-18T10:00:00Z", pointId: null });
+  const e1 = rec({ id: "e1", createdAt: "2026-07-19T10:00:00Z", pointId: "root" });
+  const e2 = rec({ id: "e2", createdAt: "2026-07-20T10:00:00Z", pointId: "root" });
+  const out = collapseRecordChains([e1, root, e2]); // unordered
+  assert.deepEqual(out[0].chain.map((r) => r.id), ["e2", "e1", "root"]);
+});

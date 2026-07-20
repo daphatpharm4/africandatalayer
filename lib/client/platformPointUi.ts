@@ -8,7 +8,12 @@ import type { PlatformRecord } from "../../shared/platformTypes.js";
 
 export const POINT_STALE_AFTER_DAYS = 30;
 
-export type CollapsedPlatformPoint = PlatformRecord & { chainCount: number };
+export type CollapsedPlatformPoint = PlatformRecord & {
+  chainCount: number;
+  /** Every record in the chain, newest first — one entry per survey/update.
+   *  Powers the per-update history sections on the point detail. */
+  chain: PlatformRecord[];
+};
 
 /**
  * Collapse a flat list of approved platform records into ONE representative
@@ -53,6 +58,7 @@ export function collapseRecordChains(records: PlatformRecord[]): CollapsedPlatfo
       ...base,
       evidence: { ...base.evidence, photos },
       chainCount: group.length,
+      chain: byNewest,
     });
   }
   return points;

@@ -502,7 +502,14 @@ const Home: React.FC<Props> = ({
         // Collapse each point-chain (root + its enrichments) into ONE pin.
         // Without this, every approved record is its own pin, so daily updates
         // of an asset stack duplicate pins instead of appending to the point.
-        setPoints(collapseRecordChains(records).map(mapPlatformRecordToPoint).filter((point): point is DataPoint => point !== null));
+        setPoints(
+          collapseRecordChains(records)
+            .map((collapsed): DataPoint | null => {
+              const dp = mapPlatformRecordToPoint(collapsed);
+              return dp ? { ...dp, platformRecordChain: collapsed.chain } : null;
+            })
+            .filter((point): point is DataPoint => point !== null),
+        );
       } catch {
         setPoints([]);
         setPointsLoadError(t(
