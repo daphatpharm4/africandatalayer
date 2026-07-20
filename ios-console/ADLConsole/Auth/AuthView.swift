@@ -183,7 +183,7 @@ struct AuthView: View {
                 .frame(maxWidth: .infinity)
             }
             .padding(20)
-            .background(Color.white)
+            .background(ADLConsoleColor.surface)
         }
         .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(

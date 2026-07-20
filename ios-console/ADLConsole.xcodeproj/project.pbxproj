@@ -10,6 +10,7 @@
 		054C479A8C0C3BA2DE76C06E /* NetworkAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34CD969F94FB035DF8D1FE1 /* NetworkAuthServiceTests.swift */; };
 		09477BD669DBB16183AA17D1 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEB59475DCD55068CE81EBB /* AppState.swift */; };
 		09B5B0A9EA8E97730F430292 /* ADLConsoleComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E979F6715DC0C5FB3DB562A6 /* ADLConsoleComponents.swift */; };
+		B1C2D3E4F5000001000001B1 /* ADLImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000001A1 /* ADLImageCache.swift */; };
 		0D6A395201C57E3E7F7FD3C6 /* SchemaBuilderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DDB4F5FF96EC8981E97573B /* SchemaBuilderViewModelTests.swift */; };
 		0E87C0811873EC7972A5D8BB /* PlatformErrorMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */; };
 		0E895F093A7BE1E2B2779695 /* ADLConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */; };
@@ -46,6 +47,7 @@
 		A99D0F268043A22BD063AE82 /* PlaceholderScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9285C198CC532BDF8E950B5 /* PlaceholderScreenView.swift */; };
 		A9B70719C75007C48C805E9F /* ProjectsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 125A4B1EC86659B789FE0581 /* ProjectsViewModelTests.swift */; };
 		ACBA096578E554C6B9AC66A0 /* ADLConsoleFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F9535029D531EAE8D0C3949 /* ADLConsoleFont.swift */; };
+		AD94EF46861563272FBA4871 /* ADLConsoleDateFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 001A8F88FC157B888A19271F /* ADLConsoleDateFormatting.swift */; };
 		ADC670F171BF03D9BD93F246 /* DataBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B63CA04DD109C10734A9398A /* DataBrowseView.swift */; };
 		AF5901F272BB063A8ADADA53 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137CDD290590B44073DE24FE /* AuthView.swift */; };
 		B194063E7256E4218CDD9B61 /* MembersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF89EE969F1884F273796C39 /* MembersViewModel.swift */; };
@@ -84,6 +86,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		001A8F88FC157B888A19271F /* ADLConsoleDateFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleDateFormatting.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001000001A1 /* ADLImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLImageCache.swift; sourceTree = "<group>"; };
 		0163C413B012BCBEB864086B /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		031FC650E637FA153AF3C596 /* ADLConsoleColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleColor.swift; sourceTree = "<group>"; };
 		038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
@@ -329,6 +333,8 @@
 		DD9F0CFEED23BDBD69936BAA /* Support */ = {
 			isa = PBXGroup;
 			children = (
+				001A8F88FC157B888A19271F /* ADLConsoleDateFormatting.swift */,
+				A1B2C3D4E5F60001000001A1 /* ADLImageCache.swift */,
 				FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */,
 				D9C5756D198653BA9FC365D2 /* LocationService.swift */,
 				7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */,
@@ -475,7 +481,9 @@
 				0E895F093A7BE1E2B2779695 /* ADLConsoleApp.swift in Sources */,
 				849B13AE9BA976F1A22E896E /* ADLConsoleColor.swift in Sources */,
 				09B5B0A9EA8E97730F430292 /* ADLConsoleComponents.swift in Sources */,
+				AD94EF46861563272FBA4871 /* ADLConsoleDateFormatting.swift in Sources */,
 				ACBA096578E554C6B9AC66A0 /* ADLConsoleFont.swift in Sources */,
+				B1C2D3E4F5000001000001B1 /* ADLImageCache.swift in Sources */,
 				09477BD669DBB16183AA17D1 /* AppState.swift in Sources */,
 				C72139B7B76404F8F2978867 /* AuthService.swift in Sources */,
 				5C39D44E339A94B9113A8C38 /* AuthTransport.swift in Sources */,

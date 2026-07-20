@@ -65,7 +65,7 @@ struct CompanyPointDetailView: View {
                     .foregroundStyle(ADLConsoleColor.ink)
                 Text(
                     "\(t("Captured", "Capturée")) "
-                        + formattedDate(collapsedPoint.representative.evidence.capturedAt ?? collapsedPoint.representative.createdAt)
+                        + ADLConsoleDateFormatting.mediumDateTime(collapsedPoint.representative.evidence.capturedAt ?? collapsedPoint.representative.createdAt)
                 )
                 .font(ADLConsoleFont.footnote)
                 .foregroundStyle(ADLConsoleColor.inkMuted)
@@ -89,7 +89,7 @@ struct CompanyPointDetailView: View {
                 HStack(alignment: .firstTextBaseline) {
                     ADLConsoleMicroLabel(text: sectionTitle(index: index))
                     Spacer(minLength: 8)
-                    Text(formattedDate(record.evidence.capturedAt ?? record.createdAt))
+                    Text(ADLConsoleDateFormatting.mediumDateTime(record.evidence.capturedAt ?? record.createdAt))
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
                 }
@@ -135,6 +135,7 @@ struct CompanyPointDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "mappin.circle")
+                    .accessibilityHidden(true)
                 Text(t("Field evidence", "Justificatifs terrain"))
                     .font(ADLConsoleFont.microLabel)
             }
@@ -151,21 +152,7 @@ struct CompanyPointDetailView: View {
             }
 
             if !record.evidence.photos.isEmpty {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 8)], spacing: 8) {
-                    ForEach(Array(record.evidence.photos.enumerated()), id: \.offset) { _, photo in
-                        if let url = URL(string: photo) {
-                            AsyncImage(url: url) { phase in
-                                if let image = phase.image {
-                                    image.resizable().scaledToFill()
-                                } else {
-                                    ADLConsoleColor.navyWash
-                                }
-                            }
-                            .frame(height: 90)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                    }
-                }
+                ADLConsolePhotoGrid(photoURLs: record.evidence.photos)
             }
         }
         .padding(12)
@@ -199,31 +186,4 @@ struct CompanyPointDetailView: View {
             }
         }
     }
-
-    // MARK: - Date formatting
-
-    private func formattedDate(_ isoString: String) -> String {
-        guard let date = ISO8601Formatters.fractionalSeconds.date(from: isoString)
-            ?? ISO8601Formatters.plain.date(from: isoString)
-        else {
-            return isoString
-        }
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
-}
-
-/// `ISO8601DateFormatter` is not `Sendable`, but these instances are only
-/// ever read (never mutated) after creation — same reasoning as
-/// `DataBrowseView`'s local formatter extension.
-private enum ISO8601Formatters {
-    nonisolated(unsafe) static let fractionalSeconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    nonisolated(unsafe) static let plain = ISO8601DateFormatter()
 }

@@ -9,12 +9,17 @@ import SwiftUI
 struct PlaceholderScreenView: View {
     @EnvironmentObject private var appState: AppState
     let screen: ConsoleScreen
+    @State private var isAnimating = false
 
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: "hourglass")
                 .font(.system(size: 32))
                 .foregroundStyle(ADLConsoleColor.inkMuted)
+                .rotationEffect(.degrees(isAnimating ? 15 : -15))
+                .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
+                .onAppear { isAnimating = true }
+                .accessibilityHidden(true)
             Text(appState.language.t("Coming soon", "Bientôt disponible"))
                 .font(ADLConsoleFont.headline)
                 .foregroundStyle(ADLConsoleColor.ink)

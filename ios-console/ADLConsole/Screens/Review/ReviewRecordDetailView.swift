@@ -70,12 +70,12 @@ struct ReviewRecordDetailView: View {
         ADLConsoleCard {
             VStack(alignment: .leading, spacing: 10) {
                 ADLConsoleMicroLabel(text: t("Capture metadata", "Métadonnées de capture"))
-                metadataRow(label: t("Record ID", "ID de donnée"), value: record.id)
-                metadataRow(label: t("Captured by", "Capturé par"), value: record.capturedBy)
-                metadataRow(label: t("Captured at", "Capturé le"), value: record.evidence.capturedAt ?? record.createdAt)
-                metadataRow(label: "GPS", value: gpsText)
+                ADLConsoleMetadataRow(label: t("Record ID", "ID de donnée"), value: record.id)
+                ADLConsoleMetadataRow(label: t("Captured by", "Capturé par"), value: record.capturedBy)
+                ADLConsoleMetadataRow(label: t("Captured at", "Capturé le"), value: record.evidence.capturedAt ?? record.createdAt)
+                ADLConsoleMetadataRow(label: "GPS", value: gpsText)
                 if let reviewedAt = record.reviewedAt {
-                    metadataRow(label: t("Reviewed at", "Révisé le"), value: reviewedAt)
+                    ADLConsoleMetadataRow(label: t("Reviewed at", "Révisé le"), value: reviewedAt)
                 }
             }
             .padding(16)
@@ -90,36 +90,11 @@ struct ReviewRecordDetailView: View {
         return String(format: "%.6f, %.6f%@", gps.latitude, gps.longitude, accuracy)
     }
 
-    private func metadataRow(label: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label)
-                .font(ADLConsoleFont.microLabel)
-                .foregroundStyle(ADLConsoleColor.inkMuted)
-            Text(value)
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.ink)
-        }
-    }
-
     private var photosSection: some View {
         ADLConsoleCard {
             VStack(alignment: .leading, spacing: 12) {
                 ADLConsoleMicroLabel(text: t("Field photos", "Photos terrain") + " (\(record.evidence.photos.count))")
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 90), spacing: 8)], spacing: 8) {
-                    ForEach(Array(record.evidence.photos.enumerated()), id: \.offset) { _, photo in
-                        if let url = URL(string: photo) {
-                            AsyncImage(url: url) { phase in
-                                if let image = phase.image {
-                                    image.resizable().scaledToFill()
-                                } else {
-                                    ADLConsoleColor.navyWash
-                                }
-                            }
-                            .frame(height: 90)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        }
-                    }
-                }
+                ADLConsolePhotoGrid(photoURLs: record.evidence.photos)
             }
             .padding(16)
         }

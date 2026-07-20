@@ -28,17 +28,13 @@ struct ProjectsView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t("Projects", "Projets"))
-                        .font(ADLConsoleFont.title)
-                        .foregroundStyle(ADLConsoleColor.ink)
-                    Text(t(
+                ADLConsoleSectionHeader(
+                    title: t("Projects", "Projets"),
+                    subtitle: t(
                         "Each project has its own record schema and its own data.",
                         "Chaque projet possède son propre schéma d'enregistrement et ses propres données."
-                    ))
-                    .font(ADLConsoleFont.footnote)
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
-                }
+                    )
+                )
                 Spacer(minLength: 8)
                 if viewModel.canManage {
                     Button {
@@ -89,40 +85,25 @@ struct ProjectsView: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: 12) {
-            Text(message)
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.danger)
-                .multilineTextAlignment(.center)
-            Button(t("Try again", "Réessayer")) {
-                Task { await viewModel.load() }
-            }
-            .font(ADLConsoleFont.subheadline)
+        ADLConsoleErrorState(
+            message: message,
+            retryTitle: t("Try again", "Réessayer")
+        ) {
+            Task { await viewModel.load() }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {
         ScrollView {
             ADLConsoleCard {
-                VStack(spacing: 8) {
-                    Image(systemName: "folder")
-                        .font(.system(size: 28))
-                        .foregroundStyle(ADLConsoleColor.inkMuted)
-                    Text(t("No projects yet", "Aucun projet pour le moment"))
-                        .font(ADLConsoleFont.headline)
-                        .foregroundStyle(ADLConsoleColor.ink)
-                    Text(t(
+                ADLConsoleEmptyState(
+                    systemImage: "folder",
+                    headline: t("No projects yet", "Aucun projet pour le moment"),
+                    description: t(
                         "Create your first one to define a record schema.",
                         "Créez le premier pour définir un schéma d'enregistrement."
-                    ))
-                    .font(ADLConsoleFont.footnote)
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
-                    .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(24)
+                    )
+                )
             }
             .padding(20)
         }
@@ -165,7 +146,7 @@ struct ProjectsView: View {
                     Text(project.name)
                         .font(ADLConsoleFont.headline)
                         .foregroundStyle(ADLConsoleColor.ink)
-                    Text("\(t("Created", "Créé le")) \(formattedDate(project.createdAt))")
+                    Text("\(t("Created", "Créé le")) \(ADLConsoleDateFormatting.mediumDate(project.createdAt))")
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
                     Text(coverageText(project))
@@ -178,6 +159,7 @@ struct ProjectsView: View {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 14))
                         .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .accessibilityHidden(true)
                 }
             }
             .padding(16)
@@ -218,11 +200,11 @@ struct ProjectsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         ADLConsoleMicroLabel(text: t("Project name", "Nom du projet"))
-                        TextField(t("e.g. Douala Pilot", "p. ex. Pilote Douala"), text: $viewModel.newName)
-                            .disabled(viewModel.isCreateBusy)
-                            .padding(12)
-                            .background(ADLConsoleColor.navyWash)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        ADLConsoleInputField(
+                            placeholder: t("e.g. Douala Pilot", "p. ex. Pilote Douala"),
+                            text: $viewModel.newName,
+                            disabled: viewModel.isCreateBusy
+                        )
                     }
 
                     coverageFields
@@ -268,14 +250,11 @@ struct ProjectsView: View {
                 coverageScopeButton(.worldwide, title: t("Worldwide", "Monde"))
             }
             if viewModel.coverageScope != .worldwide {
-                TextField(
-                    viewModel.coverageScope == .town ? t("e.g. Nairobi", "p. ex. Nairobi") : t("e.g. Kenya", "p. ex. Kenya"),
-                    text: $viewModel.coverageLabel
+                ADLConsoleInputField(
+                    placeholder: viewModel.coverageScope == .town ? t("e.g. Nairobi", "p. ex. Nairobi") : t("e.g. Kenya", "p. ex. Kenya"),
+                    text: $viewModel.coverageLabel,
+                    disabled: viewModel.isCreateBusy
                 )
-                .disabled(viewModel.isCreateBusy)
-                .padding(12)
-                .background(ADLConsoleColor.navyWash)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
         }
     }
@@ -296,23 +275,4 @@ struct ProjectsView: View {
         }
         .disabled(viewModel.isCreateBusy)
     }
-}
-
-private func formattedDate(_ isoString: String) -> String {
-    guard let date = ISO8601DateFormatter.parsingFractionalSeconds.date(from: isoString)
-        ?? ISO8601DateFormatter().date(from: isoString)
-    else {
-        return isoString
-    }
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    return formatter.string(from: date)
-}
-
-private extension ISO8601DateFormatter {
-    nonisolated(unsafe) static let parsingFractionalSeconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }

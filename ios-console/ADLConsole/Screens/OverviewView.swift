@@ -108,7 +108,7 @@ struct OverviewView: View {
             summaryTile(title: t("My captures", "Mes captures"), value: summary.total, color: ADLConsoleColor.navy, background: ADLConsoleColor.navyWash)
             summaryTile(title: t("Today", "Aujourd'hui"), value: summary.submittedToday, color: ADLConsoleColor.terraDark, background: ADLConsoleColor.terraWash)
             summaryTile(title: t("Approved", "Approuvées"), value: summary.approved, color: ADLConsoleColor.forestDark, background: ADLConsoleColor.forestWash)
-            summaryTile(title: t("Pending", "En attente"), value: summary.pendingReview, color: Color(hex: 0xb45309), background: ADLConsoleColor.goldWash)
+            summaryTile(title: t("Pending", "En attente"), value: summary.pendingReview, color: ADLConsoleColor.goldDark, background: ADLConsoleColor.goldWash)
         }
     }
 
@@ -118,6 +118,13 @@ struct OverviewView: View {
                 .font(ADLConsoleFont.largeTitle)
                 .foregroundStyle(color)
             ADLConsoleMicroLabel(text: title, color: color.opacity(0.85))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
