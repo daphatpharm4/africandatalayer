@@ -152,7 +152,7 @@ struct CompanyMapView: View {
             ADLConsoleColor.terra,
             ADLConsoleColor.gold,
         ]
-        let hash = abs(collapsedPoint.recordTypeKey.hashValue)
+        let hash = abs(collapsedPoint.representative.recordTypeKey.hashValue)
         return palette[hash % palette.count]
     }
 
