@@ -1,3 +1,4 @@
+import ConsoleModels
 import SwiftUI
 
 /// Standard console card — white surface, soft navy border, continuous corners.
