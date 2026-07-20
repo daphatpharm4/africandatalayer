@@ -88,6 +88,11 @@ const CompanyRecordDetails: React.FC<{
   const record = point.platformRecord;
   if (!record) return null;
   const capturedAt = record.evidence.capturedAt ?? record.createdAt;
+  // One section per survey/update, newest first. Falls back to the single
+  // representative record when no chain history is present.
+  const chain = point.platformRecordChain && point.platformRecordChain.length > 0
+    ? point.platformRecordChain
+    : [record];
 
   const formatValue = (value: unknown): string => {
     if (value === null || value === undefined || value === '') return '—';
@@ -114,33 +119,55 @@ const CompanyRecordDetails: React.FC<{
           </p>
         </section>
 
-        <section className="card p-5">
-          <h2 className="text-sm font-semibold text-ink">{t('Submitted fields', 'Champs soumis')}</h2>
-          <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {Object.entries(record.data).map(([key, value]) => (
-              <div key={key} className="min-w-0 border-b border-gray-100 pb-3">
-                <dt className="micro-label text-ink-muted">{key.replaceAll('_', ' ')}</dt>
-                <dd className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-ink">{formatValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        </section>
+        {chain.length > 1 && (
+          <p className="px-1 text-sm font-semibold text-ink-muted">
+            {chain.length} {t('updates on this point', 'mises à jour sur ce point')}
+          </p>
+        )}
 
-        <section className="card p-5">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-ink"><MapPin size={16} />{t('Field evidence', 'Justificatifs terrain')}</h2>
-          <dl className="mt-4 space-y-3 text-sm">
-            <div><dt className="micro-label text-ink-muted">GPS</dt><dd className="mt-1 text-ink">{record.evidence.gps ? `${record.evidence.gps.latitude.toFixed(6)}, ${record.evidence.gps.longitude.toFixed(6)}${record.evidence.gps.accuracyMeters !== undefined ? ` · ±${Math.round(record.evidence.gps.accuracyMeters)} m` : ''}` : t('Not captured', 'Non capturé')}</dd></div>
-            {record.evidence.notes && <div><dt className="micro-label text-ink-muted">{t('Collector notes', 'Notes du collecteur')}</dt><dd className="mt-1 whitespace-pre-wrap leading-6 text-ink">{record.evidence.notes}</dd></div>}
-          </dl>
-          {record.evidence.photos.length > 0 && (
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {record.evidence.photos.map((photo, index) => (
-                <img key={`${record.id}-photo-${index}`} src={photo} loading="lazy" decoding="async"
-                  alt={t(`Field evidence photo ${index + 1}`, `Photo terrain ${index + 1}`)} className="aspect-square w-full rounded-2xl border border-navy-border object-cover" />
-              ))}
-            </div>
-          )}
-        </section>
+        {chain.map((entry, idx) => {
+          const entryAt = entry.evidence.capturedAt ?? entry.createdAt;
+          const isMulti = chain.length > 1;
+          return (
+            <section key={entry.id} className="card p-5">
+              <div className="flex items-center justify-between gap-2 border-b border-gray-100 pb-3">
+                <h2 className="text-sm font-semibold text-ink">
+                  {isMulti
+                    ? (idx === 0 ? t('Latest update', 'Dernière mise à jour') : `${t('Update', 'Mise à jour')} ${chain.length - idx}`)
+                    : t('Submitted fields', 'Champs soumis')}
+                </h2>
+                <span className="micro-label text-ink-muted">
+                  {new Date(entryAt).toLocaleString(language === 'fr' ? 'fr-FR' : 'en-GB')}
+                </span>
+              </div>
+
+              <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {Object.entries(entry.data).map(([key, value]) => (
+                  <div key={key} className="min-w-0 border-b border-gray-100 pb-3">
+                    <dt className="micro-label text-ink-muted">{key.replaceAll('_', ' ')}</dt>
+                    <dd className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-ink">{formatValue(value)}</dd>
+                  </div>
+                ))}
+              </dl>
+
+              <div className="mt-4 rounded-2xl bg-navy-wash/50 p-3">
+                <h3 className="flex items-center gap-2 text-xs font-semibold text-ink-muted"><MapPin size={14} />{t('Field evidence', 'Justificatifs terrain')}</h3>
+                <dl className="mt-3 space-y-2 text-sm">
+                  <div><dt className="micro-label text-ink-muted">GPS</dt><dd className="mt-1 text-ink">{entry.evidence.gps ? `${entry.evidence.gps.latitude.toFixed(6)}, ${entry.evidence.gps.longitude.toFixed(6)}${entry.evidence.gps.accuracyMeters !== undefined ? ` · ±${Math.round(entry.evidence.gps.accuracyMeters)} m` : ''}` : t('Not captured', 'Non capturé')}</dd></div>
+                  {entry.evidence.notes && <div><dt className="micro-label text-ink-muted">{t('Collector notes', 'Notes du collecteur')}</dt><dd className="mt-1 whitespace-pre-wrap leading-6 text-ink">{entry.evidence.notes}</dd></div>}
+                </dl>
+                {entry.evidence.photos.length > 0 && (
+                  <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {entry.evidence.photos.map((photo, index) => (
+                      <img key={`${entry.id}-photo-${index}`} src={photo} loading="lazy" decoding="async"
+                        alt={t(`Field evidence photo ${index + 1}`, `Photo terrain ${index + 1}`)} className="aspect-square w-full rounded-2xl border border-navy-border object-cover" />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          );
+        })}
 
         {record.status === 'approved' && (
           <section className="rounded-2xl border border-forest/20 bg-forest-wash p-4">

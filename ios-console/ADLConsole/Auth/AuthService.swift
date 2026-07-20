@@ -37,32 +37,15 @@ protocol AuthServiceProtocol: Sendable {
     func signIn(email: String, password: String) async throws
 }
 
-/// TODO(real-cookie-handshake): This is a STUB, not the real native auth
-/// integration. The web client (`lib/client/auth.ts`) does a three-step
-/// dance against the @auth/core credentials provider:
-///   1. `GET /api/auth/csrf` → `{ csrfToken }`
-///   2. `POST /api/auth/callback/credentials` (form-encoded: identifier,
-///      password, csrfToken, json:true) — on success the server sets the
-///      session cookie via `Set-Cookie`.
-///   3. `GET /api/auth/session` → `{ user }` to confirm the session landed.
-///
-/// A native port needs to:
-///   - Use a `URLSession` whose `HTTPCookieStorage` is shared with (or
-///     configured identically to) the one `URLSessionPlatformTransport`
-///     uses, so the session cookie set in step 2 is replayed by every
-///     subsequent `PlatformAPIClient` call.
-///   - Confirm the console API's cookie is not marked `SameSite=Strict` in
-///     a way that blocks a native (non-browser) client — this needs
-///     validation against a live preview deployment, which is out of scope
-///     for this task per the brief ("Do NOT block on backend auth
-///     details").
-///   - Decide how CSRF token fetch + form encoding is done from
-///     `URLSession` (no cookie jar quirks expected there, but untested).
-///
-/// Until that lands, this stub validates input shape only (non-empty,
-/// syntactically-plausible email) and always succeeds — letting the rest of
-/// the shell (role bootstrap, nav gating, Overview) be built and tested
-/// against a real `AppState` flow.
+/// STUB, not the real native auth integration — kept around (and wired to
+/// `AppState` in tests/previews) purely as a fast, deterministic input-shape
+/// validator. The real handshake against @auth/core's credentials provider —
+/// `GET /api/auth/csrf` → `POST /api/auth/callback/credentials` → `GET
+/// /api/auth/session`, sharing `URLSession.shared`'s cookie jar with
+/// `URLSessionPlatformTransport` — now lives in `NetworkAuthService.swift`
+/// (see also `AuthTransport.swift` for its injectable transport seam). This
+/// stub validates input shape only (non-empty, syntactically-plausible
+/// email) and always succeeds.
 struct StubAuthService: AuthServiceProtocol {
     func signIn(email: String, password: String) async throws {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
