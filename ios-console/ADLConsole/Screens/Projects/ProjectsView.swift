@@ -26,24 +26,50 @@ struct ProjectsView: View {
     }
 
     var body: some View {
-        content
-            .background(ADLConsoleColor.page)
-            .toolbar {
+        VStack(spacing: 0) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Projects", "Projets"))
+                        .font(ADLConsoleFont.title)
+                        .foregroundStyle(ADLConsoleColor.ink)
+                    Text(t(
+                        "Each project has its own record schema and its own data.",
+                        "Chaque projet possède son propre schéma d'enregistrement et ses propres données."
+                    ))
+                    .font(ADLConsoleFont.footnote)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                }
+                Spacer(minLength: 8)
                 if viewModel.canManage {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button {
-                            isCreateSheetPresented = true
-                        } label: {
+                    Button {
+                        isCreateSheetPresented = true
+                    } label: {
+                        HStack(spacing: 6) {
                             Image(systemName: "plus")
+                            Text(t("New project", "Nouveau projet"))
+                                .font(ADLConsoleFont.subheadline)
                         }
-                        .accessibilityLabel(t("New project", "Nouveau projet"))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(ADLConsoleColor.navy)
+                        .clipShape(Capsule())
                     }
+                    .buttonStyle(ADLConsolePressStyle())
+                    .accessibilityLabel(t("New project", "Nouveau projet"))
                 }
             }
-            .task { await viewModel.load() }
-            .sheet(isPresented: $isCreateSheetPresented) {
-                createSheet
-            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+
+            content
+        }
+        .background(ADLConsoleColor.page)
+        .task { await viewModel.load() }
+        .sheet(isPresented: $isCreateSheetPresented) {
+            createSheet
+        }
     }
 
     // MARK: - Content states

@@ -82,7 +82,7 @@ export async function createRecord(
 }
 
 export async function listRecords(
-  input: { organizationId: string; status?: PlatformRecord["status"]; pointId?: string; limit?: number },
+  input: { organizationId: string; projectId?: string; status?: PlatformRecord["status"]; pointId?: string; limit?: number },
   deps: StoreDeps = {},
 ): Promise<PlatformRecord[]> {
   const limit = Math.min(200, Math.max(1, input.limit ?? 100));
@@ -91,11 +91,30 @@ export async function listRecords(
        data, evidence, status, captured_by, created_at, point_id, reviewed_by, reviewed_at, review_notes
      FROM public.platform_records
      WHERE organization_id = $1
-       AND ($2::text IS NULL OR status = $2)
-       AND ($3::text IS NULL OR point_id = $3)
+       AND ($2::text IS NULL OR project_id = $2)
+       AND ($3::text IS NULL OR status = $3)
+       AND ($4::text IS NULL OR point_id = $4)
      ORDER BY created_at DESC
-     LIMIT $4`,
-    [input.organizationId, input.status ?? null, input.pointId ?? null, limit],
+     LIMIT $5`,
+    [input.organizationId, input.projectId ?? null, input.status ?? null, input.pointId ?? null, limit],
+  );
+  return result.rows.map(rowToRecord);
+}
+
+export async function listRecordsForExport(
+  input: { organizationId: string; projectId?: string; status?: PlatformRecord["status"] },
+  deps: StoreDeps = {},
+): Promise<PlatformRecord[]> {
+  const result = await db(deps)(
+    `SELECT id, organization_id, project_id, schema_version_id, record_type_key,
+       data, evidence, status, captured_by, created_at, point_id, reviewed_by, reviewed_at, review_notes
+     FROM public.platform_records
+     WHERE organization_id = $1
+       AND ($2::text IS NULL OR project_id = $2)
+       AND ($3::text IS NULL OR status = $3)
+     ORDER BY created_at DESC
+     LIMIT 10000`,
+    [input.organizationId, input.projectId ?? null, input.status ?? null],
   );
   return result.rows.map(rowToRecord);
 }

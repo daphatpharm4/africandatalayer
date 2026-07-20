@@ -102,6 +102,7 @@ export interface PlatformApiDeps {
   listSchemaVersionsFn?: typeof projectStore.listSchemaVersions;
   createRecordFn?: typeof recordStore.createRecord;
   listRecordsFn?: typeof recordStore.listRecords;
+  listRecordsForExportFn?: typeof recordStore.listRecordsForExport;
   reviewRecordFn?: typeof recordStore.reviewRecord;
   getRecordSummaryForUserFn?: typeof recordStore.getRecordSummaryForUser;
   findOrgPointFn?: typeof findOrgPoint;
@@ -175,6 +176,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const listSchemaVersionsFn = deps.listSchemaVersionsFn ?? projectStore.listSchemaVersions;
   const createRecordFn = deps.createRecordFn ?? recordStore.createRecord;
   const listRecordsFn = deps.listRecordsFn ?? recordStore.listRecords;
+  const listRecordsForExportFn = deps.listRecordsForExportFn ?? recordStore.listRecordsForExport;
   const reviewRecordFn = deps.reviewRecordFn ?? recordStore.reviewRecord;
   const getRecordSummaryForUserFn = deps.getRecordSummaryForUserFn ?? recordStore.getRecordSummaryForUser;
   const findOrgPointFn = deps.findOrgPointFn ?? findOrgPoint;
@@ -877,6 +879,92 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ record }, { status: 200 });
   }
 
+  async function handleRecordExportCsv(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const projectId = url.searchParams.get("projectId") ?? undefined;
+    const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const records = await listRecordsForExportFn({
+      organizationId,
+      projectId,
+      status: "approved",
+    });
+
+    await audit({
+      organizationId,
+      projectId: projectId ?? null,
+      actorUserId: context.userId,
+      eventType: "record_exported",
+      payload: { format: "csv", recordCount: records.length },
+    });
+
+    const csvRows = ["id,record_type_key,status,captured_by,created_at,latitude,longitude,data"];
+    for (const r of records) {
+      const lat = r.evidence.gps?.latitude ?? "";
+      const lng = r.evidence.gps?.longitude ?? "";
+      const dataStr = JSON.stringify(r.data).replace(/"/g, '""');
+      csvRows.push(`"${r.id}","${r.recordTypeKey}","${r.status}","${r.capturedBy}","${r.createdAt}",${lat},${lng},"${dataStr}"`);
+    }
+
+    return new Response(csvRows.join("\n"), {
+      status: 200,
+      headers: {
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="platform-records-${organizationId.slice(0, 8)}.csv"`,
+      },
+    });
+  }
+
+  async function handleRecordExportGeojson(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const projectId = url.searchParams.get("projectId") ?? undefined;
+    const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const records = await listRecordsForExportFn({
+      organizationId,
+      projectId,
+      status: "approved",
+    });
+
+    await audit({
+      organizationId,
+      projectId: projectId ?? null,
+      actorUserId: context.userId,
+      eventType: "record_exported",
+      payload: { format: "geojson", recordCount: records.length },
+    });
+
+    const features = records
+      .filter((r) => r.evidence.gps?.latitude != null && r.evidence.gps?.longitude != null)
+      .map((r) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [r.evidence.gps!.longitude, r.evidence.gps!.latitude],
+        },
+        properties: {
+          id: r.id,
+          recordTypeKey: r.recordTypeKey,
+          status: r.status,
+          capturedBy: r.capturedBy,
+          createdAt: r.createdAt,
+          ...r.data,
+        },
+      }));
+
+    const geojson = { type: "FeatureCollection", features };
+
+    return new Response(JSON.stringify(geojson), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/geo+json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="platform-records-${organizationId.slice(0, 8)}.geojson"`,
+      },
+    });
+  }
+
   // ── Dispatch map ──────────────────────────────────────────────────────────
   const routes: Record<string, { method: "GET" | "POST"; handler: (request: Request) => Promise<Response> }> = {
     platform_admin_org_list: { method: "GET", handler: handleAdminOrgList },
@@ -901,6 +989,8 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
     platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
     platform_record_review: { method: "POST", handler: handleRecordReview },
+    platform_record_export_csv: { method: "GET", handler: (request) => handleRecordExportCsv(request, new URL(request.url)) },
+    platform_record_export_geojson: { method: "GET", handler: (request) => handleRecordExportGeojson(request, new URL(request.url)) },
     platform_point_nearby: { method: "GET", handler: (request) => handlePointNearby(request, new URL(request.url)) },
   };
 

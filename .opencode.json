@@ -1,12 +1,48 @@
 {
-  "mcpServers": {
-    "code-review-graph": {
-      "command": "code-review-graph",
-      "args": [
-        "serve"
-      ],
-      "type": "stdio",
-      "env": []
+  "$schema": "https://opencode.ai/config.json",
+  "shell": "/bin/zsh",
+  "instructions": [
+    "CLAUDE.md",
+    "AGENTS.md",
+    "RTK.md"
+  ],
+  "skills": {
+    "paths": [
+      ".claude/skills"
+    ]
+  },
+  "references": {
+    "design": {
+      "path": "./design",
+      "description": "Design plans, UI specs, gamification docs, and aesthetic direction for ADL"
     }
+  },
+  "mcp": {
+    "code-review-graph": {
+      "type": "local",
+      "command": [
+        "code-review-graph",
+        "serve"
+      ]
+    }
+  },
+  "permission": {
+    "bash": {
+      "git *": "allow",
+      "bd *": "allow",
+      "npm *": "allow",
+      "npx *": "allow",
+      "node *": "allow",
+      "rg *": "allow",
+      "ls *": "allow",
+      "cat *": "allow",
+      "cat": "allow",
+      "brctl status *": "allow",
+      "*": "ask"
+    }
+  },
+  "compaction": {
+    "auto": true,
+    "tail_turns": 5
   }
 }

@@ -24,20 +24,11 @@ struct ReviewQueueView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            headerBar
             content
             massApproveBar
         }
         .background(ADLConsoleColor.page)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if !viewModel.records.isEmpty {
-                    Button(isSelectionMode ? t("Done", "Terminé") : t("Select", "Sélectionner")) {
-                        isSelectionMode.toggle()
-                        if !isSelectionMode { viewModel.clearSelection() }
-                    }
-                }
-            }
-        }
         .task { await viewModel.load() }
         .sheet(item: $detailRecord) { record in
             ReviewRecordDetailView(record: record, language: appState.language)
@@ -45,6 +36,44 @@ struct ReviewQueueView: View {
         .sheet(item: $rejectingRecord) { record in
             rejectSheet(for: record)
         }
+    }
+
+    private var headerBar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t("Evidence review", "Révision des justificatifs"))
+                    .font(ADLConsoleFont.title)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                Text(t(
+                    "Inspect all field evidence before approving or rejecting a company record.",
+                    "Inspectez tous les justificatifs terrain avant d'approuver ou de rejeter une donnée entreprise."
+                ))
+                .font(ADLConsoleFont.footnote)
+                .foregroundStyle(ADLConsoleColor.inkMuted)
+            }
+
+            HStack(spacing: 10) {
+                ADLConsoleSecondaryButton(
+                    title: t("Refresh data", "Actualiser les données"),
+                    systemImage: "arrow.clockwise"
+                ) {
+                    Task { await viewModel.load() }
+                }
+                if !viewModel.records.isEmpty {
+                    ADLConsoleSecondaryButton(
+                        title: isSelectionMode ? t("Done", "Terminé") : t("Select", "Sélectionner")
+                    ) {
+                        isSelectionMode.toggle()
+                        if !isSelectionMode { viewModel.clearSelection() }
+                    }
+                }
+            }
+
+            ADLConsoleChip(title: t("Pending", "En attente"), isSelected: true) {}
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Content states

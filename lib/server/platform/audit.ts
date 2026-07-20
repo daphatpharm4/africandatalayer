@@ -16,7 +16,8 @@ export type PlatformAuditEventType =
   | "schema_draft_saved"
   | "schema_published"
   | "record_created"
-  | "record_reviewed";
+  | "record_reviewed"
+  | "record_exported";
 
 export interface PlatformAuditEvent {
   organizationId: string;
