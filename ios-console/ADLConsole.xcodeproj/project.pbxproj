@@ -20,6 +20,7 @@
 		2255A477FA4BDCF251D82D6B /* CaptureFieldControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13EB8A729DC236F9773C5D26 /* CaptureFieldControl.swift */; };
 		2BE86F3F8D99D9017F509D3C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0948CE2D0955F7887148B0A9 /* SettingsView.swift */; };
 		2DB37526C9865B8F8B6B40C1 /* ConsoleModels in Frameworks */ = {isa = PBXBuildFile; productRef = B7D50563A39437ABAF09100A /* ConsoleModels */; };
+		30226AC8B5A49DCEFBBFFE08 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */; };
 		32F78F4831D8D8DADBDCAFB5 /* MockAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2B675B26FF4701FD0208927 /* MockAuthService.swift */; };
 		33A5FA7FC1B4A56E25B7B0EB /* ConsoleForms in Frameworks */ = {isa = PBXBuildFile; productRef = 430F5FAF1C886EF90084220F /* ConsoleForms */; };
 		36FE7F6D566EE8932C557812 /* ConsoleForms in Frameworks */ = {isa = PBXBuildFile; productRef = 4EC1124EFDCB097DB55A7DF6 /* ConsoleForms */; };
@@ -95,6 +96,7 @@
 		3857F03467082404E18DF626 /* MockLocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockLocationService.swift; sourceTree = "<group>"; };
 		5466134B1E28B26BFB511D6C /* ReviewRecordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRecordDetailView.swift; sourceTree = "<group>"; };
 		68682D6319039E661D9D69F7 /* SchemaBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderView.swift; sourceTree = "<group>"; };
+		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7DDB4F5FF96EC8981E97573B /* SchemaBuilderViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderViewModelTests.swift; sourceTree = "<group>"; };
 		7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformErrorMessage.swift; sourceTree = "<group>"; };
 		8AEB59475DCD55068CE81EBB /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -314,6 +316,7 @@
 			children = (
 				D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */,
 				2C7AA417BE1CD3555FBD4A76 /* Assets.xcassets */,
+				68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */,
 				85B45F2A010FB0E34479C738 /* Auth */,
 				0B78C8DCA23F992608BD4167 /* DesignSystem */,
 				B6354367202AD37D34D9FF6E /* Screens */,
@@ -423,6 +426,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				7AE185132577E6F44AEA21F1 /* Assets.xcassets in Resources */,
+				30226AC8B5A49DCEFBBFFE08 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -609,6 +613,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ADL Console uses your location to attach a GPS fix as evidence for a captured record.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ADL Console lets you attach a photo from your library as evidence for a captured record.";
@@ -621,7 +626,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.console;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
@@ -638,6 +643,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ADL Console uses your location to attach a GPS fix as evidence for a captured record.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ADL Console lets you attach a photo from your library as evidence for a captured record.";
@@ -650,7 +656,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.console;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;

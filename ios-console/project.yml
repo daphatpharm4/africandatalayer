@@ -29,8 +29,12 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: true
-        MARKETING_VERSION: "1.0"
+        MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
+        # No custom/proprietary encryption — only standard HTTPS/TLS via
+        # URLSession — so the App Store Connect export-compliance question
+        # is answered "No" ahead of time and upload isn't blocked on it.
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
         # Collector capture (task 5): photo evidence + GPS evidence usage
         # strings. Camera + photo library cover both a direct camera capture
         # and a PhotosUI library pick; location is when-in-use only — capture
