@@ -219,7 +219,7 @@ struct ADLConsoleChip: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
                 .foregroundStyle(isSelected ? Color.white : ADLConsoleColor.ink)
-                .background(isSelected ? ADLConsoleColor.navy : Color.white)
+                .background(isSelected ? ADLConsoleColor.navy : ADLConsoleColor.surface)
                 .clipShape(Capsule())
                 .overlay(
                     Capsule()

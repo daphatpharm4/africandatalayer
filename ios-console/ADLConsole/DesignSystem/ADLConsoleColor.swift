@@ -1,14 +1,7 @@
 import SwiftUI
-
-// MARK: - Brand color tokens
-//
-// Values COPIED from `ios/App/App/Native/ADLDesignSystem.swift` /
-// `tailwind.config.js` per the task-4 brief (read-only reference; this app
-// target has no dependency on `ios/`). Console register is clinical/premium
-// per CLAUDE.md — no gamification colors (streak purple, etc.) are ported.
+import UIKit
 
 extension Color {
-    /// Hex like 0x0f2b46 — mirrors web hex tokens exactly.
     init(hex: UInt32) {
         self.init(
             red: Double((hex >> 16) & 0xFF) / 255,
@@ -18,41 +11,51 @@ extension Color {
     }
 }
 
-/// Exact mirror of the brand tokens in `tailwind.config.js` used by the
-/// company console surfaces (navy authority, terra accent, forest success,
-/// gold achievement).
-///
-/// Surface tokens add warmth — pure `Color.white` feels clinical;
-/// a barely-tinted surface reads as premium and intentional.
+private func dynamic(_ light: UInt32, _ dark: UInt32) -> Color {
+    Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(hex: dark)
+            : UIColor(hex: light)
+    })
+}
+
+private extension UIColor {
+    convenience init(hex: UInt32) {
+        self.init(
+            red: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}
+
 enum ADLConsoleColor {
-    static let navy = Color(hex: 0x0f2b46)        // navy.DEFAULT
-    static let navyDark = Color(hex: 0x0b2236)    // navy.dark
-    static let navyMid = Color(hex: 0x1d4565)     // navy.mid
-    static let navyWash = Color(hex: 0xf2f6fa)    // navy.wash
-    static let navyBorder = Color(hex: 0xd5e1eb)  // navy.border
+    static let navy = Color(hex: 0x0f2b46)
+    static let navyDark = Color(hex: 0x0b2236)
+    static let navyMid = Color(hex: 0x1d4565)
+    static let navyWash = dynamic(0xf2f6fa, 0x0d1b2a)
+    static let navyBorder = dynamic(0xd5e1eb, 0x1a3048)
 
-    static let terra = Color(hex: 0xc86b4a)       // terra.DEFAULT
-    static let terraDark = Color(hex: 0xb85f3f)   // terra.dark
-    static let terraWash = Color(hex: 0xfff8f4)   // terra.wash
+    static let terra = Color(hex: 0xc86b4a)
+    static let terraDark = Color(hex: 0xb85f3f)
+    static let terraWash = dynamic(0xfff8f4, 0x1f1210)
 
-    static let forest = Color(hex: 0x4c7c59)      // forest.DEFAULT
-    static let forestDark = Color(hex: 0x3a6145)  // forest.dark
-    static let forestWash = Color(hex: 0xeaf3ee)  // forest.wash
+    static let forest = Color(hex: 0x4c7c59)
+    static let forestDark = Color(hex: 0x3a6145)
+    static let forestWash = dynamic(0xeaf3ee, 0x0f1f14)
 
-    static let gold = Color(hex: 0xf4c317)        // gold.DEFAULT
-    static let goldDark = Color(hex: 0xb45309)    // gold.dark (text on goldWash)
-    static let goldWash = Color(hex: 0xfef9e7)    // gold.wash
+    static let gold = Color(hex: 0xf4c317)
+    static let goldDark = dynamic(0xb45309, 0xf4c317)
+    static let goldWash = dynamic(0xfef9e7, 0x1f1a08)
 
     static let danger = Color(hex: 0xb91c1c)
-    static let dangerWash = Color(hex: 0xfef2f2)
+    static let dangerWash = dynamic(0xfef2f2, 0x1f0c0c)
 
-    static let ink = Color(hex: 0x0f1f2e)
-    static let inkMuted = Color(hex: 0x5b6b7a)
-    static let page = Color(hex: 0xf7f9fb)
+    static let ink = dynamic(0x0f1f2e, 0xe8edf2)
+    static let inkMuted = dynamic(0x5b6b7a, 0x8b9bab)
+    static let page = dynamic(0xf7f9fb, 0x0a0f14)
 
-    // MARK: - Surface tokens (warm white alternatives)
-    /// Card/surface background — barely warm off-white. Replaces raw Color.white.
-    static let surface = Color(hex: 0xfdfefe)
-    /// Elevated surface (hero cards, modals) — slightly more warm.
-    static let surfaceElevated = Color(hex: 0xffffff)
+    static let surface = dynamic(0xfdfefe, 0x111820)
+    static let surfaceElevated = dynamic(0xffffff, 0x161e28)
 }
