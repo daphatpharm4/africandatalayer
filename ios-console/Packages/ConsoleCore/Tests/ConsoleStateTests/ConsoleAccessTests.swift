@@ -32,10 +32,11 @@ final class ConsoleAccessTests: XCTestCase {
     //   SETTINGS                     -> role == "owner"
     //   ONBOARDING                   -> isAdlAdmin
     //   LOADING, AUTH_REQUIRED       -> false (falls into TS `default: return false`)
+    //   MAP                          -> true for every role (iOS-only, no TS case)
 
     private func expectedAccess(role: PlatformRole, screen: ConsoleScreen, isAdlAdmin: Bool) -> Bool {
         switch screen {
-        case .join, .overview, .projects:
+        case .join, .overview, .projects, .map:
             return true
         case .data:
             return role != .collector
@@ -91,11 +92,12 @@ final class ConsoleAccessTests: XCTestCase {
     // MARK: - Explicit literal table (belt-and-suspenders vs the closure above)
 
     func testExplicitAccessMatrixLiterals() {
-        // JOIN, OVERVIEW, PROJECTS: true for all roles.
+        // JOIN, OVERVIEW, PROJECTS, MAP: true for all roles.
         for role in PlatformRole.allCases {
             XCTAssertTrue(canAccessConsoleScreen(role: role, screen: .join))
             XCTAssertTrue(canAccessConsoleScreen(role: role, screen: .overview))
             XCTAssertTrue(canAccessConsoleScreen(role: role, screen: .projects))
+            XCTAssertTrue(canAccessConsoleScreen(role: role, screen: .map))
         }
 
         // DATA: everyone except collector.

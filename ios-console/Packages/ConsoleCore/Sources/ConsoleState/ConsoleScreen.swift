@@ -16,6 +16,14 @@ public enum ConsoleScreen: String, Codable, CaseIterable, Sendable, Equatable {
     case members = "MEMBERS"
     case settings = "SETTINGS"
     case join = "JOIN"
+    /// The collector's native MapKit company map (org points + per-update
+    /// history + capture). Deliberately NOT a port of a TS `ConsoleScreen`
+    /// case — the web console has no map screen yet, this is an iOS-console-
+    /// only addition — but it plugs into the exact same `ConsoleRoute`/
+    /// `canAccessConsoleScreen`/`ConsoleNavigation` nav-gating pattern as
+    /// every mirrored case above so it behaves consistently with the rest of
+    /// the shell.
+    case map = "MAP"
 }
 
 /// Mirrors the `ConsoleRoute` interface in `lib/client/consoleState.ts`.

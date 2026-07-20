@@ -181,6 +181,16 @@ final class ConsoleRoutingTests: XCTestCase {
         XCTAssertEqual(consoleRouteToHash(ConsoleRoute(screen: .authRequired)), "")
     }
 
+    // MARK: - MAP (iOS-console-only, no TS counterpart — see `ConsoleScreen.map`)
+
+    func testMap() {
+        XCTAssertEqual(parseConsoleHash("#/map"), ConsoleRoute(screen: .map))
+    }
+
+    func testToHashMap() {
+        XCTAssertEqual(consoleRouteToHash(ConsoleRoute(screen: .map)), "#/map")
+    }
+
     // MARK: - Round trips
 
     func testRoundTripsForEveryProducibleRoute() {
@@ -195,6 +205,7 @@ final class ConsoleRoutingTests: XCTestCase {
             ConsoleRoute(screen: .onboarding),
             ConsoleRoute(screen: .join),
             ConsoleRoute(screen: .join, joinToken: "tok-1"),
+            ConsoleRoute(screen: .map),
         ]
         for route in routes {
             let hash = consoleRouteToHash(route)

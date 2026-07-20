@@ -21,12 +21,15 @@ struct ConsoleDestination: Equatable, Identifiable, Sendable {
 /// (from `ConsoleState`) without touching a view hierarchy.
 enum ConsoleNavigation {
     /// The full, unfiltered destination list — a direct port of `NAV_ITEMS`
-    /// in `ConsoleShell.tsx`. Order matters: it is the order rendered in the
-    /// nav. Note `JOIN` and `ONBOARDING` are deliberately absent here, same
-    /// as on the web: `JOIN` is reached by invite link, and `ONBOARDING` by
-    /// the separate ADL-admin-only "Create company" action, not this list.
+    /// in `ConsoleShell.tsx`, PLUS `.map` (see `ConsoleScreen.map`'s doc
+    /// comment — an iOS-console-only addition with no web `NAV_ITEMS`
+    /// counterpart yet). Order matters: it is the order rendered in the nav.
+    /// Note `JOIN` and `ONBOARDING` are deliberately absent here, same as on
+    /// the web: `JOIN` is reached by invite link, and `ONBOARDING` by the
+    /// separate ADL-admin-only "Create company" action, not this list.
     static let allDestinations: [ConsoleDestination] = [
         ConsoleDestination(screen: .overview, titleEN: "Workspace", titleFR: "Espace de travail"),
+        ConsoleDestination(screen: .map, titleEN: "Map", titleFR: "Carte"),
         ConsoleDestination(screen: .data, titleEN: "Company data", titleFR: "Données entreprise"),
         ConsoleDestination(screen: .review, titleEN: "Review queue", titleFR: "File de révision"),
         ConsoleDestination(screen: .projects, titleEN: "Projects", titleFR: "Projets"),

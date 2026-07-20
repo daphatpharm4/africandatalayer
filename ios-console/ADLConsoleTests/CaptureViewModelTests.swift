@@ -199,6 +199,49 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertEqual(items?.first?.status, .failed)
     }
 
+    // MARK: - Attach to an existing point (company map "Update this point" seam)
+
+    func testAttachPointIdIsSentAsPointIdOnSubmit() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en,
+            attachPointId: "point-root-1"
+        )
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(schemaJSON, forView: "platform_schema_get")
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submit()
+
+        XCTAssertEqual(viewModel.submitState, .synced)
+        let createRequests = transport.requests(forView: "platform_record_create")
+        XCTAssertEqual(createRequests.count, 1)
+        let body = try? JSONSerialization.jsonObject(with: createRequests[0].httpBody ?? Data()) as? [String: Any]
+        XCTAssertEqual(body?["pointId"] as? String, "point-root-1")
+    }
+
+    func testNoAttachPointIdOmitsPointIdOnSubmit() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submit()
+
+        let createRequests = transport.requests(forView: "platform_record_create")
+        let body = try? JSONSerialization.jsonObject(with: createRequests[0].httpBody ?? Data()) as? [String: Any]
+        XCTAssertNil(body?["pointId"])
+    }
+
     // MARK: - GPS evidence capture
 
     func testRequestLocationPopulatesEvidenceGps() async {

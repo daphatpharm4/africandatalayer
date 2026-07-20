@@ -65,12 +65,23 @@ final class CaptureViewModel: ObservableObject {
     private let locationService: LocationServiceProtocol?
     private let now: () -> Date
 
+    /// When set, every submitted `RecordDraft` carries this as its
+    /// `pointId` — the attach seam the company map's "Update this point" /
+    /// floating "+" flows use to link a fresh capture into an existing
+    /// point-chain instead of starting a new one. `nil` (the default) is the
+    /// ordinary "new point" capture flow unchanged from before this seam
+    /// existed. See `CollapsedPlatformPoint.rootId` (`ConsoleForms`) for the
+    /// value callers should pass here — the chain's root id, not necessarily
+    /// the representative record's own id.
+    private let attachPointId: String?
+
     init(
         apiClient: PlatformAPIClient,
         organizationId: String,
         queue: RecordQueue,
         language: ConsoleLanguage,
         locationService: LocationServiceProtocol? = nil,
+        attachPointId: String? = nil,
         now: @escaping () -> Date = { Date() }
     ) {
         self.apiClient = apiClient
@@ -78,6 +89,7 @@ final class CaptureViewModel: ObservableObject {
         self.queue = queue
         self.language = language
         self.locationService = locationService
+        self.attachPointId = attachPointId
         self.now = now
     }
 
@@ -254,6 +266,7 @@ final class CaptureViewModel: ObservableObject {
             photoRefs: evidencePhotoRefs,
             gps: evidenceGps,
             notes: evidenceNotes.isEmpty ? nil : evidenceNotes,
+            pointId: attachPointId,
             capturedAt: ISO8601DateFormatter().string(from: now())
         )
 

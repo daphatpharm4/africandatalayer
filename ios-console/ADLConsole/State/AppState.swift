@@ -71,14 +71,29 @@ final class AppState: ObservableObject {
 
     /// Builds a fresh `CaptureViewModel` wired to this `AppState`'s shared
     /// `apiClient`/`recordQueue`/`language` — the factory `ConsoleShellView`
-    /// calls to construct `CaptureView`'s `@StateObject`.
-    func makeCaptureViewModel(organizationId: String) -> CaptureViewModel {
+    /// calls to construct `CaptureView`'s `@StateObject`. `attachPointId`
+    /// (default `nil`) is the company map's attach seam: when the map's
+    /// floating "+" is used, it is `nil` (a fresh point); when "Update this
+    /// point" is used, it is the tapped point's `CollapsedPlatformPoint.rootId`,
+    /// so the new capture joins that point's chain instead of starting one.
+    func makeCaptureViewModel(organizationId: String, attachPointId: String? = nil) -> CaptureViewModel {
         CaptureViewModel(
             apiClient: apiClient,
             organizationId: organizationId,
             queue: recordQueue,
             language: language,
-            locationService: locationServiceFactory()
+            locationService: locationServiceFactory(),
+            attachPointId: attachPointId
+        )
+    }
+
+    /// Builds a fresh `CompanyMapViewModel` for `ConsoleShellView`'s MAP
+    /// destination, mirroring `makeReviewQueueViewModel` above.
+    func makeCompanyMapViewModel(organizationId: String) -> CompanyMapViewModel {
+        CompanyMapViewModel(
+            apiClient: apiClient,
+            organizationId: organizationId,
+            language: language
         )
     }
 

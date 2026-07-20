@@ -63,6 +63,9 @@ public func parseConsoleHash(_ hash: String) -> ConsoleRoute {
         return ConsoleRoute(screen: .settings)
     case "onboarding":
         return ConsoleRoute(screen: .onboarding)
+    case "map":
+        // iOS-console-only screen — see `ConsoleScreen.map`'s doc comment.
+        return ConsoleRoute(screen: .map)
     default:
         return ConsoleRoute(screen: .overview)
     }
@@ -96,6 +99,9 @@ public func consoleRouteToHash(_ route: ConsoleRoute) -> String {
         return "#/settings"
     case .onboarding:
         return "#/onboarding"
+    case .map:
+        // iOS-console-only screen — see `ConsoleScreen.map`'s doc comment.
+        return "#/map"
     case .loading, .authRequired:
         return ""
     }

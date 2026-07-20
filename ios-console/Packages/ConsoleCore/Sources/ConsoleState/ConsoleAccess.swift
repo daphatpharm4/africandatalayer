@@ -15,13 +15,18 @@ public func consoleLandingRoute(role: PlatformRole) -> ConsoleRoute {
 ///   SETTINGS                 -> role == .owner
 ///   ONBOARDING               -> isAdlAdmin (role-independent)
 ///   LOADING, AUTH_REQUIRED   -> false (TS `default: return false`)
+///   MAP                      -> true for every role (iOS-only addition, no
+///                               TS case — a collector must reach it to
+///                               capture/browse points, so it stays as open
+///                               as OVERVIEW/PROJECTS rather than following
+///                               DATA's `role != .collector` gate)
 public func canAccessConsoleScreen(
     role: PlatformRole,
     screen: ConsoleScreen,
     isAdlAdmin: Bool = false
 ) -> Bool {
     switch screen {
-    case .join, .overview, .projects:
+    case .join, .overview, .projects, .map:
         return true
     case .data:
         return role != .collector

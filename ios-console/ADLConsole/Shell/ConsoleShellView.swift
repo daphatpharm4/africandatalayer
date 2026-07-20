@@ -168,6 +168,8 @@ struct ConsoleShellView: View {
         switch screen {
         case .overview:
             overviewContent
+        case .map:
+            mapContent
         case .data:
             dataContent
         case .review:
@@ -230,6 +232,15 @@ struct ConsoleShellView: View {
             ReviewQueueView(viewModel: appState.makeReviewQueueViewModel(organizationId: organizationId))
         } else {
             PlaceholderScreenView(screen: .review)
+        }
+    }
+
+    @ViewBuilder
+    private var mapContent: some View {
+        if let organizationId = appState.organization?.id {
+            CompanyMapView(viewModel: appState.makeCompanyMapViewModel(organizationId: organizationId))
+        } else {
+            PlaceholderScreenView(screen: .map)
         }
     }
 
