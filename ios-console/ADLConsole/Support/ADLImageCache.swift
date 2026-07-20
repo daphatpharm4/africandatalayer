@@ -14,7 +14,7 @@ enum ADLImageCache {
     }
 }
 
-final class ADLImageCacheImpl {
+final class ADLImageCacheImpl: @unchecked Sendable {
     private let cache = NSCache<NSURL, UIImage>()
     private let session: URLSession
 
