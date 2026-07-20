@@ -49,7 +49,7 @@ test("listRecords and reviewRecord keep every query tenant-scoped", async () => 
   };
   assert.equal((await listRecords({ organizationId: "org-1", status: "pending_review" }, { queryFn })).length, 1);
   assert.match(calls[0].text, /where organization_id = \$1/i);
-  assert.deepEqual(calls[0].values.slice(0, 2), ["org-1", "pending_review"]);
+  assert.deepEqual(calls[0].values.slice(0, 4), ["org-1", null, "pending_review", null]);
 
   const reviewed = await reviewRecord({
     organizationId: "org-1",
@@ -108,6 +108,6 @@ test("listRecords filters by pointId when provided", async () => {
     return { rows: [], rowCount: 0 };
   };
   await listRecords({ organizationId: "o1", pointId: "pt_1" }, { queryFn: queryFn as any });
-  assert.match(calls[0].text, /point_id = \$3/);
+  assert.match(calls[0].text, /point_id = \$4/);
   assert.ok(calls[0].values.includes("pt_1"));
 });

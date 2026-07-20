@@ -3,37 +3,21 @@ import ConsoleModels
 import ConsoleState
 import SwiftUI
 
-/// Role-based navigation shell. Visible destinations come from
-/// `AppState.visibleDestinations` (backed by the pure
-/// `ConsoleNavigation.visibleDestinations`, which itself wraps
-/// `canAccessConsoleScreen`) — this view never decides access itself, it
-/// only renders what it's given. Mirrors `ConsoleShell.tsx`'s
-/// `NAV_ITEMS.filter(...)` pattern, adapted to a mobile tab bar.
+/// Role-based shell matching web console mobile chrome:
+/// org header · horizontal pill tabs · language / sign-out · content.
 struct ConsoleShellView: View {
     @EnvironmentObject private var appState: AppState
 
-    private var selection: Binding<ConsoleScreen> {
-        Binding(
-            get: { appState.route.screen },
-            set: { appState.navigate(to: ConsoleRoute(screen: $0)) }
-        )
-    }
-
     var body: some View {
-        TabView(selection: selection) {
-            ForEach(appState.visibleDestinations) { destination in
-                NavigationStack {
-                    screenView(for: destination.screen)
-                        .navigationTitle(destination.title(appState.language))
-                        .toolbar { toolbarContent }
-                }
-                .tabItem {
-                    Label(destination.title(appState.language), systemImage: icon(for: destination.screen))
-                }
-                .tag(destination.screen)
-            }
+        VStack(spacing: 0) {
+            header
+            pillNav
+            controlsRow
+            Divider().overlay(ADLConsoleColor.navyBorder.opacity(0.6))
+            screenBody
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .tint(ADLConsoleColor.navy)
+        .background(ADLConsoleColor.page.ignoresSafeArea())
         .fullScreenCover(isPresented: schemaBuilderPresented) {
             if let projectId = appState.route.projectId, canAccessSchemaBuilder {
                 SchemaBuilderView(
@@ -44,13 +28,161 @@ struct ConsoleShellView: View {
         }
     }
 
-    /// `.schemaBuilder` is not a tab (`AppState.visibleDestinations` never
-    /// includes it — it's reached by tapping a project row, not the tab
-    /// bar), so it is presented as a full-screen cover driven directly by
-    /// `appState.route` rather than through `screenView(for:)`'s `TabView`
-    /// switch above. Access is still gated the same way every other
-    /// manager/owner-only destination is: `canAccessConsoleScreen` (not a
-    /// hand-rolled check here).
+    // MARK: - Header
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            orgAvatar
+            VStack(alignment: .leading, spacing: 2) {
+                Text(appState.organization?.name ?? appState.language.t("No organization", "Aucune organisation"))
+                    .font(ADLConsoleFont.headline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .lineLimit(1)
+                if let role = appState.role {
+                    Text(roleLabel(role).uppercased())
+                        .font(ADLConsoleFont.microLabel)
+                        .tracking(0.6)
+                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                }
+            }
+            Spacer(minLength: 8)
+            if appState.organizations.count > 1 {
+                Menu {
+                    ForEach(appState.organizations, id: \.organization.id) { membership in
+                        Button {
+                            appState.selectOrganization(organizationId: membership.organization.id)
+                        } label: {
+                            if membership.organization.id == appState.organization?.id {
+                                Label(membership.organization.name, systemImage: "checkmark")
+                            } else {
+                                Text(membership.organization.name)
+                            }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(ADLConsoleColor.navy.opacity(0.75))
+                }
+                .accessibilityLabel(appState.language.t("Organization", "Organisation"))
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .background(Color.white)
+    }
+
+    @ViewBuilder
+    private var orgAvatar: some View {
+        if let logo = appState.organization?.logoUrl, let url = URL(string: logo) {
+            AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let image):
+                    image.resizable().scaledToFill()
+                default:
+                    avatarFallback
+                }
+            }
+            .frame(width: 40, height: 40)
+            .clipShape(Circle())
+            .overlay(Circle().stroke(ADLConsoleColor.navyBorder, lineWidth: 1))
+        } else {
+            avatarFallback
+        }
+    }
+
+    private var avatarFallback: some View {
+        let initial = String((appState.organization?.name ?? "A").prefix(1)).uppercased()
+        return ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [ADLConsoleColor.navy, ADLConsoleColor.terra],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+            Text(initial)
+                .font(ADLConsoleFont.headline)
+                .foregroundStyle(.white)
+        }
+        .frame(width: 40, height: 40)
+    }
+
+    // MARK: - Pill nav
+
+    private var pillNav: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(appState.visibleDestinations) { destination in
+                    let selected = appState.route.screen == destination.screen
+                        || (appState.route.screen == .schemaBuilder && destination.screen == .projects)
+                    Button {
+                        appState.navigate(to: ConsoleRoute(screen: destination.screen))
+                    } label: {
+                        Text(destination.title(appState.language))
+                            .font(ADLConsoleFont.subheadline)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .foregroundStyle(selected ? ADLConsoleColor.navy : ADLConsoleColor.inkMuted)
+                            .background(selected ? ADLConsoleColor.navyWash : Color.clear)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(ADLConsolePressStyle())
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .background(Color.white)
+    }
+
+    // MARK: - Controls
+
+    private var controlsRow: some View {
+        HStack(spacing: 10) {
+            ADLConsoleSecondaryButton(
+                title: appState.language == .fr
+                    ? "FR · \(appState.language.t("Switch to English", "Passer en anglais"))"
+                    : "EN · \(appState.language.t("Switch to French", "Passer en français"))"
+            ) {
+                appState.toggleLanguage()
+            }
+            ADLConsoleDestructiveButton(
+                title: appState.language.t("Sign out", "Se déconnecter")
+            ) {
+                appState.signOut()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.white)
+    }
+
+    // MARK: - Body
+
+    @ViewBuilder
+    private var screenBody: some View {
+        let screen = appState.route.screen == .schemaBuilder ? ConsoleScreen.projects : appState.route.screen
+        switch screen {
+        case .overview:
+            overviewContent
+        case .data:
+            dataContent
+        case .review:
+            reviewContent
+        case .projects:
+            projectsContent
+        case .members:
+            membersContent
+        case .settings:
+            settingsContent
+        default:
+            PlaceholderScreenView(screen: screen)
+        }
+    }
+
     private var schemaBuilderPresented: Binding<Bool> {
         Binding(
             get: { appState.route.screen == .schemaBuilder },
@@ -66,28 +198,6 @@ struct ConsoleShellView: View {
     }
 
     @ViewBuilder
-    private func screenView(for screen: ConsoleScreen) -> some View {
-        switch screen {
-        case .overview:
-            overviewContent
-        case .review:
-            reviewContent
-        case .projects:
-            projectsContent
-        case .members:
-            membersContent
-        case .settings:
-            settingsContent
-        default:
-            PlaceholderScreenView(screen: screen)
-        }
-    }
-
-    /// `.projects` is nav-gated visible for every role by
-    /// `AppState.visibleDestinations` — `ProjectsViewModel.canManage` (not a
-    /// nav gate) handles the manager/owner-only "New project" action inside
-    /// the view itself, same split `ProjectsScreen.tsx` uses.
-    @ViewBuilder
     private var projectsContent: some View {
         if let organizationId = appState.organization?.id {
             ProjectsView(viewModel: appState.makeProjectsViewModel(organizationId: organizationId))
@@ -96,7 +206,6 @@ struct ConsoleShellView: View {
         }
     }
 
-    /// `.members` is nav-gated to manager/owner by `AppState.visibleDestinations`.
     @ViewBuilder
     private var membersContent: some View {
         if let organizationId = appState.organization?.id {
@@ -106,7 +215,6 @@ struct ConsoleShellView: View {
         }
     }
 
-    /// `.settings` is nav-gated to owner by `AppState.visibleDestinations`.
     @ViewBuilder
     private var settingsContent: some View {
         if let organizationId = appState.organization?.id, let organization = appState.organization {
@@ -116,10 +224,6 @@ struct ConsoleShellView: View {
         }
     }
 
-    /// `.review` is nav-gated to reviewer/manager/owner by
-    /// `AppState.visibleDestinations` (backed by `canAccessConsoleScreen`)
-    /// before this view is ever reached, same as `.overview`'s capture
-    /// gating above — no role check needed here.
     @ViewBuilder
     private var reviewContent: some View {
         if let organizationId = appState.organization?.id {
@@ -129,7 +233,15 @@ struct ConsoleShellView: View {
         }
     }
 
-    /// `.overview` renders differently by role — see `ConsoleOverviewContent`.
+    @ViewBuilder
+    private var dataContent: some View {
+        if let organizationId = appState.organization?.id {
+            DataBrowseView(organizationId: organizationId)
+        } else {
+            PlaceholderScreenView(screen: .data)
+        }
+    }
+
     @ViewBuilder
     private var overviewContent: some View {
         switch appState.role.map(ConsoleOverviewContent.content(for:)) ?? .summary {
@@ -144,51 +256,13 @@ struct ConsoleShellView: View {
         }
     }
 
-    private func icon(for screen: ConsoleScreen) -> String {
-        switch screen {
-        case .overview: return "square.grid.2x2"
-        case .data: return "tray.full"
-        case .review: return "checkmark.shield"
-        case .projects: return "folder"
-        case .members: return "person.2"
-        case .settings: return "gearshape"
-        case .join, .onboarding, .loading, .authRequired, .schemaBuilder: return "questionmark.circle"
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Menu {
-                if appState.organizations.count > 1 {
-                    Section(appState.language.t("Organization", "Organisation")) {
-                        ForEach(appState.organizations, id: \.organization.id) { membership in
-                            Button {
-                                appState.selectOrganization(organizationId: membership.organization.id)
-                            } label: {
-                                if membership.organization.id == appState.organization?.id {
-                                    Label(membership.organization.name, systemImage: "checkmark")
-                                } else {
-                                    Text(membership.organization.name)
-                                }
-                            }
-                        }
-                    }
-                }
-                Button {
-                    appState.toggleLanguage()
-                } label: {
-                    Text(appState.language == .fr ? "EN · \(appState.language.t("Switch to English", "Passer en anglais"))" : "FR · \(appState.language.t("Switch to French", "Passer en français"))")
-                }
-                Button(role: .destructive) {
-                    appState.signOut()
-                } label: {
-                    Text(appState.language.t("Sign out", "Se déconnecter"))
-                }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-            }
-            .accessibilityLabel(appState.language.t("Console menu", "Menu de la console"))
+    private func roleLabel(_ role: PlatformRole) -> String {
+        switch role {
+        case .owner: return appState.language.t("Owner", "Propriétaire")
+        case .manager: return appState.language.t("Manager", "Gestionnaire")
+        case .reviewer: return appState.language.t("Reviewer", "Réviseur")
+        case .collector: return appState.language.t("Collector", "Collecteur")
+        case .viewer: return appState.language.t("Viewer", "Observateur")
         }
     }
 }

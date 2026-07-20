@@ -17,6 +17,7 @@ const JoinScreen = lazy(() => import('./JoinScreen'));
 const MembersScreen = lazy(() => import('./MembersScreen'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
 const ProjectsScreen = lazy(() => import('./ProjectsScreen'));
+const RecordsScreen = lazy(() => import('./RecordsScreen'));
 const ReviewQueueScreen = lazy(() => import('./ReviewQueueScreen'));
 const RoleWorkspaceScreen = lazy(() => import('./RoleWorkspaceScreen'));
 const SchemaBuilder = lazy(() => import('./SchemaBuilder'));
@@ -336,7 +337,7 @@ const ConsoleApp: React.FC = () => {
       break;
     case 'DATA':
       screenContent = selectedOrganization ? (
-        <ReviewQueueScreen organizationId={selectedOrganization.id} language={language} readOnly />
+        <RecordsScreen organizationId={selectedOrganization.id} language={language} />
       ) : null;
       break;
     case 'PROJECTS':

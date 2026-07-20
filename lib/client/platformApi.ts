@@ -384,3 +384,47 @@ export async function getMyPlatformRecordSummaryRequest(
   );
   return payload.summary;
 }
+
+// ─── Exports ────────────────────────────────────────────────────────────────
+
+export async function exportPlatformRecordsCsv(
+  input: { organizationId: string; projectId?: string },
+  deps?: PlatformApiDeps,
+): Promise<string> {
+  const fetchFn = deps?.fetchFn ?? fetch;
+  const params = new URLSearchParams({
+    view: "platform_record_export_csv",
+    organizationId: input.organizationId,
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+  });
+  const response = await fetchFn(`/api/user?${params.toString()}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Export failed" }));
+    throw new PlatformApiError(error.error ?? "Export failed", response.status);
+  }
+  return response.text();
+}
+
+export async function exportPlatformRecordsGeojson(
+  input: { organizationId: string; projectId?: string },
+  deps?: PlatformApiDeps,
+): Promise<string> {
+  const fetchFn = deps?.fetchFn ?? fetch;
+  const params = new URLSearchParams({
+    view: "platform_record_export_geojson",
+    organizationId: input.organizationId,
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+  });
+  const response = await fetchFn(`/api/user?${params.toString()}`, {
+    method: "GET",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Export failed" }));
+    throw new PlatformApiError(error.error ?? "Export failed", response.status);
+  }
+  return response.text();
+}

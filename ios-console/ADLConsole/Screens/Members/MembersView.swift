@@ -89,6 +89,18 @@ struct MembersView: View {
     private var memberAndInviteList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t("Members", "Membres"))
+                        .font(ADLConsoleFont.title)
+                        .foregroundStyle(ADLConsoleColor.ink)
+                    Text(t(
+                        "Manage who has access to this organization and what each person can do.",
+                        "Gérez qui a accès à cette organisation et ce que chacun peut faire."
+                    ))
+                    .font(ADLConsoleFont.footnote)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                }
+
                 VStack(spacing: 12) {
                     ForEach(viewModel.members ?? [], id: \.userId) { member in
                         memberRow(member)
