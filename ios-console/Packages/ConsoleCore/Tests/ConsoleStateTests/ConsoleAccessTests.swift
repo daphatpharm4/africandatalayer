@@ -10,8 +10,12 @@ final class ConsoleAccessTests: XCTestCase {
         XCTAssertEqual(consoleLandingRoute(role: .reviewer), ConsoleRoute(screen: .review))
     }
 
-    func testLandingRouteForEveryOtherRoleIsOverview() {
-        for role in PlatformRole.allCases where role != .reviewer {
+    func testLandingRouteForCollectorIsMap() {
+        XCTAssertEqual(consoleLandingRoute(role: .collector), ConsoleRoute(screen: .map))
+    }
+
+    func testLandingRouteForNonCollectorNonReviewerIsOverview() {
+        for role in PlatformRole.allCases where role != .reviewer && role != .collector {
             XCTAssertEqual(
                 consoleLandingRoute(role: role),
                 ConsoleRoute(screen: .overview),

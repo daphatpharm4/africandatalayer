@@ -1,8 +1,13 @@
 import ConsoleModels
 
-/// Direct port of `consoleLandingRoute` in `lib/client/consoleState.ts`.
+/// Collector lands on the map (field-collection is map-first),
+/// reviewer lands on the review queue, everyone else on the overview dashboard.
 public func consoleLandingRoute(role: PlatformRole) -> ConsoleRoute {
-    role == .reviewer ? ConsoleRoute(screen: .review) : ConsoleRoute(screen: .overview)
+    switch role {
+    case .reviewer: return ConsoleRoute(screen: .review)
+    case .collector: return ConsoleRoute(screen: .map)
+    default: return ConsoleRoute(screen: .overview)
+    }
 }
 
 /// Direct port of `canAccessConsoleScreen` in `lib/client/consoleState.ts`.

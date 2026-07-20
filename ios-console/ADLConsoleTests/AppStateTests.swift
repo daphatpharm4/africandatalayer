@@ -53,7 +53,7 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(state.authErrorMessage)
         XCTAssertEqual(state.role, .owner)
         XCTAssertEqual(state.organization?.id, "org-1")
-        // consoleLandingRoute(.owner) == .overview (only .reviewer lands on .review).
+        // consoleLandingRoute(.owner) == .overview (reviewer -> .review, collector -> .map).
         XCTAssertEqual(state.route, ConsoleRoute(screen: .overview))
         XCTAssertEqual(auth.signInCallCount, 1)
         XCTAssertEqual(auth.lastEmail, "owner@acme.test")

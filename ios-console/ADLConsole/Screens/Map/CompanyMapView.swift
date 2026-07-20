@@ -123,31 +123,37 @@ struct CompanyMapView: View {
         } label: {
             ZStack(alignment: .topTrailing) {
                 Circle()
-                    .fill(ADLConsoleColor.navy)
-                    .frame(width: 32, height: 32)
+                    .fill(pinColor(for: collapsedPoint))
+                    .frame(width: 18, height: 18)
                     .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                    .overlay(
-                        Image(systemName: "mappin")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.white)
-                    )
+                    .shadow(color: ADLConsoleColor.navy.opacity(0.28), radius: 5, x: 0, y: 4)
                 if collapsedPoint.chainCount > 1 {
                     Text("\(collapsedPoint.chainCount)")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(4)
+                        .padding(3)
                         .background(ADLConsoleColor.terra)
                         .clipShape(Circle())
-                        .offset(x: 8, y: -8)
+                        .offset(x: 6, y: -6)
                 }
             }
-            .shadow(color: Color.black.opacity(0.2), radius: 3, x: 0, y: 1)
         }
         .accessibilityLabel(
             collapsedPoint.chainCount > 1
                 ? "\(pinTitle(for: collapsedPoint)) · \(collapsedPoint.chainCount) \(t("updates", "mises à jour"))"
                 : pinTitle(for: collapsedPoint)
         )
+    }
+
+    private func pinColor(for collapsedPoint: CollapsedPlatformPoint) -> Color {
+        let palette: [Color] = [
+            ADLConsoleColor.navy,
+            ADLConsoleColor.forest,
+            ADLConsoleColor.terra,
+            ADLConsoleColor.gold,
+        ]
+        let hash = abs(collapsedPoint.recordTypeKey.hashValue)
+        return palette[hash % palette.count]
     }
 
     private func focusCamera() {

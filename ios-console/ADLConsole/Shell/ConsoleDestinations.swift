@@ -28,8 +28,8 @@ enum ConsoleNavigation {
     /// the web: `JOIN` is reached by invite link, and `ONBOARDING` by the
     /// separate ADL-admin-only "Create company" action, not this list.
     static let allDestinations: [ConsoleDestination] = [
-        ConsoleDestination(screen: .overview, titleEN: "Workspace", titleFR: "Espace de travail"),
         ConsoleDestination(screen: .map, titleEN: "Map", titleFR: "Carte"),
+        ConsoleDestination(screen: .overview, titleEN: "Workspace", titleFR: "Espace de travail"),
         ConsoleDestination(screen: .data, titleEN: "Company data", titleFR: "Données entreprise"),
         ConsoleDestination(screen: .review, titleEN: "Review queue", titleFR: "File de révision"),
         ConsoleDestination(screen: .projects, titleEN: "Projects", titleFR: "Projets"),

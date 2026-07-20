@@ -40,8 +40,14 @@ final class ConsoleDestinationsTests: XCTestCase {
         XCTAssertFalse(screens.contains(.review))
         XCTAssertFalse(screens.contains(.members))
         XCTAssertFalse(screens.contains(.settings))
+        XCTAssertTrue(screens.contains(.map))
         XCTAssertTrue(screens.contains(.overview))
         XCTAssertTrue(screens.contains(.projects))
+    }
+
+    func testCollectorMapIsFirstVisibleDestination() {
+        let destinations = ConsoleNavigation.visibleDestinations(role: .collector)
+        XCTAssertEqual(destinations.first?.screen, .map)
     }
 
     /// The brief for the company map explicitly requires it be visible to

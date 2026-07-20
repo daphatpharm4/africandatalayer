@@ -1,6 +1,5 @@
 import ConsoleForms
 import ConsoleModels
-import PhotosUI
 import SwiftUI
 
 /// The collector's primary destination: pick a project + record type, fill
@@ -12,7 +11,7 @@ import SwiftUI
 struct CaptureView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: CaptureViewModel
-    @State private var photoPickerItem: PhotosPickerItem?
+    @State private var showingCamera = false
 
     private var t: (String, String) -> String { appState.language.t }
 
@@ -171,22 +170,18 @@ struct CaptureView: View {
                     .foregroundStyle(ADLConsoleColor.inkMuted)
             }
             Spacer()
-            PhotosPicker(selection: $photoPickerItem, matching: .images) {
-                Label(t("Add photo", "Ajouter une photo"), systemImage: "camera.fill")
+            Button {
+                showingCamera = true
+            } label: {
+                Label(t("Take photo", "Prendre une photo"), systemImage: "camera.fill")
                     .font(ADLConsoleFont.subheadline)
             }
-            .onChange(of: photoPickerItem) { _, newItem in
-                Task { await loadPickedPhoto(newItem) }
-            }
         }
-    }
-
-    private func loadPickedPhoto(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self) else { return }
-        let dataUrl = "data:image/jpeg;base64,\(data.base64EncodedString())"
-        await MainActor.run {
-            viewModel.addPhotoRef(dataUrl)
-            photoPickerItem = nil
+        .sheet(isPresented: $showingCamera) {
+            CameraCaptureView { imageData in
+                let dataUrl = "data:image/jpeg;base64,\(imageData.base64EncodedString())"
+                viewModel.addPhotoRef(dataUrl)
+            }
         }
     }
 
