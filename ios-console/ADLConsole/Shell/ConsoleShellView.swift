@@ -70,7 +70,7 @@ struct ConsoleShellView: View {
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 8)
-        .background(Color.white)
+        .background(ADLConsoleColor.surface)
     }
 
     @ViewBuilder
@@ -135,7 +135,7 @@ struct ConsoleShellView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
-        .background(Color.white)
+        .background(ADLConsoleColor.surface)
     }
 
     // MARK: - Controls
@@ -157,7 +157,7 @@ struct ConsoleShellView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(Color.white)
+        .background(ADLConsoleColor.surface)
     }
 
     // MARK: - Body
@@ -268,12 +268,6 @@ struct ConsoleShellView: View {
     }
 
     private func roleLabel(_ role: PlatformRole) -> String {
-        switch role {
-        case .owner: return appState.language.t("Owner", "Propriétaire")
-        case .manager: return appState.language.t("Manager", "Gestionnaire")
-        case .reviewer: return appState.language.t("Reviewer", "Réviseur")
-        case .collector: return appState.language.t("Collector", "Collecteur")
-        case .viewer: return appState.language.t("Viewer", "Observateur")
-        }
+        role.label(appState.language.t)
     }
 }

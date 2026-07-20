@@ -10,6 +10,7 @@ import SwiftUI
 struct ReviewQueueView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: ReviewQueueViewModel
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     @State private var isSelectionMode = false
     @State private var detailRecord: PlatformRecord?
@@ -17,6 +18,7 @@ struct ReviewQueueView: View {
     @State private var rejectReasonDraft = ""
 
     private var t: (String, String) -> String { appState.language.t }
+    private var isWide: Bool { sizeClass == .regular }
 
     init(viewModel: @autoclosure @escaping () -> ReviewQueueViewModel) {
         _viewModel = StateObject(wrappedValue: viewModel())
@@ -96,40 +98,26 @@ struct ReviewQueueView: View {
     }
 
     private var errorState: some View {
-        VStack(spacing: 12) {
-            Text(viewModel.loadErrorMessage ?? t("Something went wrong.", "Une erreur est survenue."))
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.danger)
-                .multilineTextAlignment(.center)
-            Button(t("Retry", "Réessayer")) {
-                Task { await viewModel.load() }
-            }
-            .font(ADLConsoleFont.subheadline)
+        ADLConsoleErrorState(
+            message: viewModel.loadErrorMessage ?? t("Something went wrong.", "Une erreur est survenue."),
+            retryTitle: t("Retry", "Réessayer")
+        ) {
+            Task { await viewModel.load() }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {
         ScrollView {
             ADLConsoleCard {
-                VStack(spacing: 8) {
-                    Image(systemName: "checkmark.shield")
-                        .font(.system(size: 28))
-                        .foregroundStyle(ADLConsoleColor.forestDark)
-                    Text(t("No records in this queue", "Aucune donnée dans cette file"))
-                        .font(ADLConsoleFont.headline)
-                        .foregroundStyle(ADLConsoleColor.ink)
-                    Text(t(
-                        "New field captures will appear here after they sync.",
-                        "Les nouvelles captures terrain apparaîtront ici après synchronisation."
-                    ))
-                    .font(ADLConsoleFont.footnote)
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
-                    .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(24)
+                ADLConsoleEmptyState(
+                    systemImage: "checkmark.shield",
+                    headline: t("No records in this queue", "Aucune donnée dans cette file"),
+                    description: t(
+                        "All caught up! New field captures will appear here after they sync.",
+                        "Tout est à jour ! Les nouvelles captures terrain apparaîtront ici après synchronisation."
+                    ),
+                    iconColor: ADLConsoleColor.forestDark
+                )
             }
             .padding(20)
         }
@@ -141,9 +129,14 @@ struct ReviewQueueView: View {
             LazyVStack(spacing: 12) {
                 ForEach(viewModel.records, id: \.id) { record in
                     recordRow(record)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .scale.combined(with: .opacity)
+                        ))
                 }
             }
             .padding(20)
+            .animation(.easeInOut(duration: 0.3), value: viewModel.records.map(\.id))
         }
         .refreshable { await viewModel.load() }
     }
@@ -158,28 +151,32 @@ struct ReviewQueueView: View {
                         Image(systemName: viewModel.isSelected(record.id) ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 20))
                             .foregroundStyle(viewModel.isSelected(record.id) ? ADLConsoleColor.navy : ADLConsoleColor.navyBorder)
+                            .transition(.scale.combined(with: .opacity))
+                            .accessibilityLabel(viewModel.isSelected(record.id)
+                                ? t("Selected", "Sélectionnée")
+                                : t("Not selected", "Non sélectionnée"))
+                            .accessibilityAddTraits(.isButton)
                     } else if let thumbnail = record.evidence.photos.first, let url = URL(string: thumbnail) {
-                        AsyncImage(url: url) { phase in
-                            if let image = phase.image {
-                                image.resizable().scaledToFill()
-                            } else {
-                                ADLConsoleColor.navyWash
-                            }
+                        ADLCachedAsyncImage(url: url, targetSize: CGSize(width: 44, height: 44)) { image in
+                            image.resizable().scaledToFill()
+                        } placeholder: {
+                            ADLConsoleColor.navyWash
                         }
                         .frame(width: 44, height: 44)
                         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .accessibilityHidden(true)
                     }
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(record.recordTypeKey.replacingOccurrences(of: "_", with: " ").capitalized)
                             .font(ADLConsoleFont.headline)
                             .foregroundStyle(ADLConsoleColor.ink)
-                        Text("\(record.capturedBy) · \(formattedDate(record.createdAt))")
+                        Text("\(record.capturedBy) · \(ADLConsoleDateFormatting.mediumDateTime(record.createdAt))")
                             .font(ADLConsoleFont.footnote)
                             .foregroundStyle(ADLConsoleColor.inkMuted)
                         HStack(spacing: 12) {
-                            Label("\(record.evidence.photos.count)", systemImage: "camera")
-                            Label("\(record.data.count)", systemImage: "list.bullet")
+                            Label("\(record.evidence.photos.count) \(t("photos", "photos"))", systemImage: "camera")
+                            Label("\(record.data.count) \(t("fields", "champs"))", systemImage: "list.bullet")
                         }
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
@@ -195,14 +192,14 @@ struct ReviewQueueView: View {
                 }
 
                 if !isSelectionMode {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 10) {
                         Button {
                             detailRecord = record
                         } label: {
                             Text(t("Inspect", "Inspecter"))
                                 .font(ADLConsoleFont.subheadline)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(ADLConsoleChipStyle(outlined: true))
 
                         Spacer()
 
@@ -213,7 +210,7 @@ struct ReviewQueueView: View {
                             Text(t("Reject", "Rejeter"))
                                 .font(ADLConsoleFont.subheadline)
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(ADLConsoleChipStyle(outlined: true, tinted: ADLConsoleColor.danger))
                         .disabled(viewModel.busyRecordId == record.id)
 
                         Button {
@@ -221,14 +218,15 @@ struct ReviewQueueView: View {
                         } label: {
                             if viewModel.busyRecordId == record.id {
                                 ProgressView()
+                                    .frame(width: 44, height: 36)
                             } else {
                                 Text(t("Approve", "Approuver"))
                                     .font(ADLConsoleFont.subheadline)
                             }
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(ADLConsoleColor.forest)
+                        .buttonStyle(ADLConsoleChipStyle(filled: true, fillColor: ADLConsoleColor.forest))
                         .disabled(viewModel.busyRecordId == record.id)
+                        .sensoryFeedback(.success, trigger: viewModel.busyRecordId == record.id)
                     }
                 }
             }
@@ -262,10 +260,11 @@ struct ReviewQueueView: View {
                     Task { await viewModel.approveSelected() }
                 }
                 .frame(width: 200, height: 44)
+                .sensoryFeedback(.success, trigger: viewModel.isBulkBusy)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
-            .background(Color.white)
+            .background(ADLConsoleColor.surface)
             .overlay(Rectangle().frame(height: 1).foregroundStyle(ADLConsoleColor.navyBorder), alignment: .top)
         }
     }
@@ -301,6 +300,7 @@ struct ReviewQueueView: View {
                 ) {
                     Task {
                         if await viewModel.reject(record.id, reason: rejectReasonDraft) {
+                            UINotificationFeedbackGenerator().notificationOccurred(.warning)
                             rejectingRecord = nil
                         }
                     }
@@ -317,30 +317,6 @@ struct ReviewQueueView: View {
             }
         }
     }
-}
-
-private func formattedDate(_ isoString: String) -> String {
-    guard let date = ISO8601DateFormatter.parsingFractionalSeconds.date(from: isoString)
-        ?? ISO8601DateFormatter().date(from: isoString)
-    else {
-        return isoString
-    }
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    formatter.timeStyle = .short
-    return formatter.string(from: date)
-}
-
-private extension ISO8601DateFormatter {
-    // `ISO8601DateFormatter` isn't `Sendable`, but this instance is only
-    // ever read (never mutated) after initialization, and formatting is
-    // only ever called from the main actor (SwiftUI view body) — safe to
-    // opt out of the compiler's conservative check.
-    nonisolated(unsafe) static let parsingFractionalSeconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }
 
 extension PlatformRecord: @retroactive Identifiable {}

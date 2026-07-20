@@ -21,6 +21,9 @@ extension Color {
 /// Exact mirror of the brand tokens in `tailwind.config.js` used by the
 /// company console surfaces (navy authority, terra accent, forest success,
 /// gold achievement).
+///
+/// Surface tokens add warmth — pure `Color.white` feels clinical;
+/// a barely-tinted surface reads as premium and intentional.
 enum ADLConsoleColor {
     static let navy = Color(hex: 0x0f2b46)        // navy.DEFAULT
     static let navyDark = Color(hex: 0x0b2236)    // navy.dark
@@ -37,6 +40,7 @@ enum ADLConsoleColor {
     static let forestWash = Color(hex: 0xeaf3ee)  // forest.wash
 
     static let gold = Color(hex: 0xf4c317)        // gold.DEFAULT
+    static let goldDark = Color(hex: 0xb45309)    // gold.dark (text on goldWash)
     static let goldWash = Color(hex: 0xfef9e7)    // gold.wash
 
     static let danger = Color(hex: 0xb91c1c)
@@ -45,4 +49,10 @@ enum ADLConsoleColor {
     static let ink = Color(hex: 0x0f1f2e)
     static let inkMuted = Color(hex: 0x5b6b7a)
     static let page = Color(hex: 0xf7f9fb)
+
+    // MARK: - Surface tokens (warm white alternatives)
+    /// Card/surface background — barely warm off-white. Replaces raw Color.white.
+    static let surface = Color(hex: 0xfdfefe)
+    /// Elevated surface (hero cards, modals) — slightly more warm.
+    static let surfaceElevated = Color(hex: 0xffffff)
 }

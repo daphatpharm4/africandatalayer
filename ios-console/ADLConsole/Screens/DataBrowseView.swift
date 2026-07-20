@@ -34,17 +34,13 @@ struct DataBrowseView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(t("Approved company data", "Données entreprise approuvées"))
-                .font(ADLConsoleFont.title)
-                .foregroundStyle(ADLConsoleColor.ink)
-            Text(t(
+        ADLConsoleSectionHeader(
+            title: t("Approved company data", "Données entreprise approuvées"),
+            subtitle: t(
                 "Open a record to inspect the form, photos, GPS and capture metadata.",
                 "Ouvrez une donnée pour consulter le formulaire, les photos, le GPS et les métadonnées de capture."
-            ))
-            .font(ADLConsoleFont.footnote)
-            .foregroundStyle(ADLConsoleColor.inkMuted)
-        }
+            )
+        )
     }
 
     private var refreshButton: some View {
@@ -60,14 +56,18 @@ struct DataBrowseView: View {
     private var content: some View {
         if isLoading {
             ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.top, 40)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let errorMessage {
             ADLConsoleCard(padding: 16) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(errorMessage)
-                        .font(ADLConsoleFont.footnote)
-                        .foregroundStyle(ADLConsoleColor.danger)
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .foregroundStyle(ADLConsoleColor.danger.opacity(0.7))
+                            .accessibilityHidden(true)
+                        Text(errorMessage)
+                            .font(ADLConsoleFont.footnote)
+                            .foregroundStyle(ADLConsoleColor.danger)
+                    }
                     Button(t("Try again", "Réessayer")) {
                         Task { await load() }
                     }
@@ -77,29 +77,27 @@ struct DataBrowseView: View {
             }
         } else if records.isEmpty {
             ADLConsoleCard(padding: 24) {
-                VStack(spacing: 8) {
-                    Image(systemName: "tray")
-                        .font(.system(size: 28))
-                        .foregroundStyle(ADLConsoleColor.inkMuted)
-                    Text(t("No approved records yet", "Aucune donnée approuvée pour le moment"))
-                        .font(ADLConsoleFont.headline)
-                        .foregroundStyle(ADLConsoleColor.ink)
-                    Text(t(
-                        "Records appear here after reviewers approve them.",
-                        "Les données apparaissent ici après validation par les réviseurs."
-                    ))
-                    .font(ADLConsoleFont.footnote)
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
-                    .multilineTextAlignment(.center)
-                }
-                .frame(maxWidth: .infinity)
+                ADLConsoleEmptyState(
+                    systemImage: "tray",
+                    headline: t("No approved records yet", "Aucune donnée approuvée pour le moment"),
+                    description: t(
+                        "Records appear here after reviewers approve them. Check back soon.",
+                        "Les données apparaissent ici après validation par les réviseurs. Revenez bientôt."
+                    ),
+                    iconColor: ADLConsoleColor.inkMuted
+                )
             }
         } else {
             LazyVStack(spacing: 12) {
                 ForEach(records, id: \.id) { record in
                     recordCard(record)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .scale.combined(with: .opacity)
+                        ))
                 }
             }
+            .animation(.easeInOut(duration: 0.3), value: records.map(\.id))
         }
     }
 
@@ -129,8 +127,9 @@ struct DataBrowseView: View {
                         Image(systemName: "chevron.down")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(ADLConsoleColor.inkMuted)
+                            .accessibilityHidden(true)
                     }
-                    Text("\(record.capturedBy) · \(formattedDate(record.createdAt))")
+                    Text("\(record.capturedBy) · \(ADLConsoleDateFormatting.mediumDateTime(record.createdAt))")
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
                         .lineLimit(1)
@@ -160,24 +159,4 @@ struct DataBrowseView: View {
         }
         isLoading = false
     }
-}
-
-private func formattedDate(_ isoString: String) -> String {
-    guard let date = ISO8601DateFormatter.parsingFractionalSecondsData.date(from: isoString)
-        ?? ISO8601DateFormatter().date(from: isoString)
-    else {
-        return isoString
-    }
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    formatter.timeStyle = .short
-    return formatter.string(from: date)
-}
-
-private extension ISO8601DateFormatter {
-    nonisolated(unsafe) static let parsingFractionalSecondsData: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }

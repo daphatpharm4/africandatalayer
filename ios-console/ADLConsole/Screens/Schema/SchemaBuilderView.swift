@@ -94,18 +94,12 @@ struct SchemaBuilderView: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: 12) {
-            Text(message)
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.danger)
-                .multilineTextAlignment(.center)
-            Button(t("Try again", "Réessayer")) {
-                Task { await viewModel.load() }
-            }
-            .font(ADLConsoleFont.subheadline)
+        ADLConsoleErrorState(
+            message: message,
+            retryTitle: t("Try again", "Réessayer")
+        ) {
+            Task { await viewModel.load() }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var editorContent: some View {
@@ -125,11 +119,11 @@ struct SchemaBuilderView: View {
                     evidenceCard(selected)
                 } else {
                     ADLConsoleCard {
-                        Text(t("Add a record type to get started.", "Ajoutez un type d’enregistrement pour commencer."))
-                            .font(ADLConsoleFont.footnote)
-                            .foregroundStyle(ADLConsoleColor.inkMuted)
-                            .frame(maxWidth: .infinity)
-                            .padding(24)
+                        ADLConsoleEmptyState(
+                            systemImage: "doc.text",
+                            headline: t("Add a record type to get started.", "Ajoutez un type d'enregistrement pour commencer."),
+                            description: ""
+                        )
                     }
                 }
 
@@ -181,7 +175,8 @@ struct SchemaBuilderView: View {
                 viewModel.removeRecordType(at: index)
             } label: {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 12))
+                    .font(.system(size: 14))
+                    .frame(width: 28, height: 28)
             }
             .accessibilityLabel(t("Remove record type", "Supprimer le type"))
         }
@@ -270,11 +265,13 @@ struct SchemaBuilderView: View {
                     viewModel.mutate { $0.removeField(typeIndex: typeIndex, fieldIndex: fieldIndex) }
                 } label: {
                     Image(systemName: "trash")
-                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .frame(width: 36, height: 36)
                 }
+                .accessibilityLabel(t("Remove field", "Supprimer le champ"))
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12))
                     .foregroundStyle(ADLConsoleColor.inkMuted)
+                    .accessibilityHidden(true)
             }
             .padding(12)
             .background(ADLConsoleColor.navyWash.opacity(0.4))
@@ -444,33 +441,16 @@ struct SchemaBuilderView: View {
 
     // MARK: - Shared field-type label helper
 
-    /// Port of `fieldTypeLabel` in `SchemaBuilder.tsx`.
     private func fieldTypeLabel(_ type: PlatformFieldType) -> String {
-        switch type {
-        case .text: return t("Text", "Texte")
-        case .number: return t("Number", "Nombre")
-        case .select: return t("Select (one)", "Choix (unique)")
-        case .multiSelect: return t("Select (multiple)", "Choix (multiple)")
-        case .date: return t("Date", "Date")
-        case .boolean: return t("Yes/No", "Oui/Non")
-        case .photo: return t("Photo", "Photo")
-        case .gps: return t("GPS location", "Position GPS")
-        }
+        type.label(t)
     }
 
     private func labeledTextField(_ label: String, text: Binding<String>, keyboardType: UIKeyboardType = .default) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ADLConsoleMicroLabel(text: label)
-            TextField(label, text: text)
-                .keyboardType(keyboardType)
-                .padding(10)
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
-                )
-        }
+        ADLConsoleLabeledField(
+            label: label,
+            text: text,
+            keyboardType: keyboardType
+        )
     }
 }
 
@@ -633,15 +613,6 @@ private struct FieldEditSheet: View {
     }
 
     private func fieldTypeLabel(_ type: PlatformFieldType) -> String {
-        switch type {
-        case .text: return t("Text", "Texte")
-        case .number: return t("Number", "Nombre")
-        case .select: return t("Select (one)", "Choix (unique)")
-        case .multiSelect: return t("Select (multiple)", "Choix (multiple)")
-        case .date: return t("Date", "Date")
-        case .boolean: return t("Yes/No", "Oui/Non")
-        case .photo: return t("Photo", "Photo")
-        case .gps: return t("GPS location", "Position GPS")
-        }
+        type.label(t)
     }
 }

@@ -72,34 +72,24 @@ struct MembersView: View {
     }
 
     private func errorState(_ message: String) -> some View {
-        VStack(spacing: 12) {
-            Text(message)
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.danger)
-                .multilineTextAlignment(.center)
-            Button(t("Try again", "Réessayer")) {
-                Task { await viewModel.load() }
-            }
-            .font(ADLConsoleFont.subheadline)
+        ADLConsoleErrorState(
+            message: message,
+            retryTitle: t("Try again", "Réessayer")
+        ) {
+            Task { await viewModel.load() }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var memberAndInviteList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t("Members", "Membres"))
-                        .font(ADLConsoleFont.title)
-                        .foregroundStyle(ADLConsoleColor.ink)
-                    Text(t(
+                ADLConsoleSectionHeader(
+                    title: t("Members", "Membres"),
+                    subtitle: t(
                         "Manage who has access to this organization and what each person can do.",
                         "Gérez qui a accès à cette organisation et ce que chacun peut faire."
-                    ))
-                    .font(ADLConsoleFont.footnote)
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
-                }
+                    )
+                )
 
                 VStack(spacing: 12) {
                     ForEach(viewModel.members ?? [], id: \.userId) { member in
@@ -152,7 +142,7 @@ struct MembersView: View {
                         .font(ADLConsoleFont.headline)
                         .foregroundStyle(ADLConsoleColor.ink)
                         .lineLimit(1)
-                    Text("\(t("Member since", "Membre depuis")) \(formattedDate(member.createdAt))")
+                    Text("\(t("Member since", "Membre depuis")) \(ADLConsoleDateFormatting.mediumDate(member.createdAt))")
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
                 }
@@ -172,6 +162,7 @@ struct MembersView: View {
                         HStack(spacing: 4) {
                             Text(roleLabel(member.role))
                             Image(systemName: "chevron.down")
+                                .accessibilityHidden(true)
                         }
                         .font(ADLConsoleFont.subheadline)
                         .foregroundStyle(ADLConsoleColor.navy)
@@ -192,7 +183,7 @@ struct MembersView: View {
                         memberPendingRemoval = member
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(ADLConsoleColor.danger)
+                            .frame(width: 36, height: 36)
                     }
                     .disabled(!viewModel.canRemove(member) || viewModel.rowBusyUserId == member.userId)
                     .accessibilityLabel(t("Remove member", "Retirer le membre"))
@@ -231,7 +222,7 @@ struct MembersView: View {
                         invitePendingRevoke = invite
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundStyle(ADLConsoleColor.danger)
+                            .frame(width: 36, height: 36)
                     }
                     .disabled(viewModel.revokingInviteId == invite.id)
                     .accessibilityLabel(t("Revoke invitation", "Révoquer l'invitation"))
@@ -244,9 +235,9 @@ struct MembersView: View {
     private func inviteSubtitle(_ invite: PlatformInvite, accepted: Bool) -> String {
         let rolePart = roleLabel(invite.role)
         if accepted, let acceptedAt = invite.acceptedAt {
-            return "\(rolePart) · \(t("Accepted", "Acceptée")) \(formattedDate(acceptedAt))"
+            return "\(rolePart) · \(t("Accepted", "Acceptée")) \(ADLConsoleDateFormatting.mediumDate(acceptedAt))"
         }
-        return "\(rolePart) · \(t("Expires", "Expire le")) \(formattedDate(invite.expiresAt))"
+        return "\(rolePart) · \(t("Expires", "Expire le")) \(ADLConsoleDateFormatting.mediumDate(invite.expiresAt))"
     }
 
     // MARK: - Invite form
@@ -263,15 +254,14 @@ struct MembersView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     ADLConsoleMicroLabel(text: t("Email", "Email"))
-                    TextField(t("teammate@example.com", "collegue@exemple.com"), text: $viewModel.inviteEmail)
-                        .textContentType(.emailAddress)
-                        .keyboardType(.emailAddress)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .disabled(viewModel.isInviting)
-                        .padding(12)
-                        .background(ADLConsoleColor.navyWash)
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    ADLConsoleInputField(
+                        placeholder: "teammate@example.com",
+                        text: $viewModel.inviteEmail,
+                        disabled: viewModel.isInviting,
+                        contentType: .emailAddress,
+                        autocapitalization: .never,
+                        autocorrectionDisabled: true
+                    )
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
@@ -306,31 +296,6 @@ struct MembersView: View {
     // MARK: - Role copy
 
     private func roleLabel(_ role: PlatformRole) -> String {
-        switch role {
-        case .owner: return t("Owner", "Propriétaire")
-        case .manager: return t("Manager", "Gestionnaire")
-        case .reviewer: return t("Reviewer", "Réviseur")
-        case .collector: return t("Collector", "Collecteur")
-        case .viewer: return t("Viewer", "Observateur")
-        }
+        role.label(t)
     }
-}
-
-private func formattedDate(_ isoString: String) -> String {
-    guard let date = ISO8601DateFormatter.parsingFractionalSecondsMembers.date(from: isoString)
-        ?? ISO8601DateFormatter().date(from: isoString)
-    else {
-        return isoString
-    }
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    return formatter.string(from: date)
-}
-
-private extension ISO8601DateFormatter {
-    nonisolated(unsafe) static let parsingFractionalSecondsMembers: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 }

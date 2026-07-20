@@ -63,42 +63,28 @@ struct CompanyMapView: View {
     }
 
     private var errorState: some View {
-        VStack(spacing: 12) {
-            ADLConsoleCard(padding: 16) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(viewModel.loadErrorMessage ?? "")
-                        .font(ADLConsoleFont.footnote)
-                        .foregroundStyle(ADLConsoleColor.danger)
-                    Button(t("Try again", "Réessayer")) {
-                        Task { await viewModel.load() }
-                    }
-                    .font(ADLConsoleFont.subheadline)
-                    .foregroundStyle(ADLConsoleColor.navy)
-                }
+        ADLConsoleCard(padding: 16) {
+            ADLConsoleErrorState(
+                message: viewModel.loadErrorMessage ?? "",
+                retryTitle: t("Try again", "Réessayer")
+            ) {
+                Task { await viewModel.load() }
             }
-            .padding(20)
         }
+        .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var emptyState: some View {
         ADLConsoleCard(padding: 24) {
-            VStack(spacing: 8) {
-                Image(systemName: "map")
-                    .font(.system(size: 28))
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
-                Text(t("No points on the map yet", "Aucun point sur la carte pour le moment"))
-                    .font(ADLConsoleFont.headline)
-                    .foregroundStyle(ADLConsoleColor.ink)
-                Text(t(
+            ADLConsoleEmptyState(
+                systemImage: "map",
+                headline: t("No points on the map yet", "Aucun point sur la carte pour le moment"),
+                description: t(
                     "Tap + to capture your company's first point.",
                     "Appuyez sur + pour capturer le premier point de votre entreprise."
-                ))
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.inkMuted)
-                .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
+                )
+            )
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

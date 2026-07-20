@@ -4,6 +4,10 @@
 
 product
 
+## Platform
+
+adaptive
+
 ## Users
 
 African Data Layer serves three connected audiences, with field contributors as the primary product surface.
@@ -19,6 +23,10 @@ The primary job is to make the next useful contribution obvious and quick while 
 African Data Layer turns distributed field observations into trustworthy, usable infrastructure intelligence. It combines map-native capture, evidence and fraud checks, review operations, progress feedback, tenant-configurable projects, and decision-ready outputs across web, iOS, and Android.
 
 Success means contributors can complete high-value work reliably in real field conditions, reviewers can establish confidence quickly, and clients can understand provenance and deltas without manual reconciliation.
+
+## Positioning
+
+Turns distributed field observations into trustworthy, usable infrastructure intelligence.
 
 ## Brand Personality
 

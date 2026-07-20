@@ -21,9 +21,10 @@ colors:
   ink-strong: "#111827"
   ink-muted: "#4b5563"
   danger: "#c53030"
+  streak-purple: "#6b46c1"
 typography:
   display:
-    fontFamily: "Inter, system-ui, sans-serif"
+    fontFamily: "Sora, system-ui, sans-serif"
     fontSize: "1.875rem"
     fontWeight: 700
     lineHeight: 1.2
@@ -121,6 +122,7 @@ The palette combines a deep cartographic navy with grounded African earth and ve
 
 - **Progress Gold:** Rewards and meaningful progress milestones. Pair it with dark ink; never use it as body text on white.
 - **Warning Amber:** Caution and pending states that require attention without implying failure.
+- **Streak Purple:** Active streaks, consecutive-day milestones, and gamification momentum cues. Reserved for streak-specific UI; do not use as a general accent.
 
 ### Neutral
 
@@ -135,10 +137,10 @@ The palette combines a deep cartographic navy with grounded African earth and ve
 
 ## Typography
 
-**Display Font:** Inter (with system-ui fallback)
+**Display Font:** Sora (with system-ui fallback)
 **Body Font:** Inter (with system-ui fallback)
 
-**Character:** Direct, familiar, and highly legible. One family carries the product across web, iOS, and Android so type disappears into the task.
+**Character:** Sora carries headings with geometric confidence; Inter handles body, labels, and data with neutral legibility. The pairing contrasts on a geometric-sans axis — Sora's slightly rounded terminals soften the operational tone without losing precision.
 
 ### Hierarchy
 
