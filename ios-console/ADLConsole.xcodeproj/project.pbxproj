@@ -10,7 +10,6 @@
 		054C479A8C0C3BA2DE76C06E /* NetworkAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34CD969F94FB035DF8D1FE1 /* NetworkAuthServiceTests.swift */; };
 		09477BD669DBB16183AA17D1 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEB59475DCD55068CE81EBB /* AppState.swift */; };
 		09B5B0A9EA8E97730F430292 /* ADLConsoleComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E979F6715DC0C5FB3DB562A6 /* ADLConsoleComponents.swift */; };
-		B1C2D3E4F5000001000001B1 /* ADLImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000001A1 /* ADLImageCache.swift */; };
 		0D6A395201C57E3E7F7FD3C6 /* SchemaBuilderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DDB4F5FF96EC8981E97573B /* SchemaBuilderViewModelTests.swift */; };
 		0E87C0811873EC7972A5D8BB /* PlatformErrorMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */; };
 		0E895F093A7BE1E2B2779695 /* ADLConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */; };
@@ -51,6 +50,7 @@
 		ADC670F171BF03D9BD93F246 /* DataBrowseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B63CA04DD109C10734A9398A /* DataBrowseView.swift */; };
 		AF5901F272BB063A8ADADA53 /* AuthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 137CDD290590B44073DE24FE /* AuthView.swift */; };
 		B194063E7256E4218CDD9B61 /* MembersViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF89EE969F1884F273796C39 /* MembersViewModel.swift */; };
+		B1C2D3E4F5000001000001B1 /* ADLImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000001A1 /* ADLImageCache.swift */; };
 		B29261771D33EF2F48604E9A /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3F0AC450421341F693CD910 /* OverviewView.swift */; };
 		B3D6E1BB325A39D6D1F935A8 /* ReviewQueueViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDF9DB7FBF20596C75C1163B /* ReviewQueueViewModelTests.swift */; };
 		BDE4B1838CA66CC84E7D5921 /* ProjectsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68AC3813E459AB00923B123 /* ProjectsView.swift */; };
@@ -87,7 +87,6 @@
 
 /* Begin PBXFileReference section */
 		001A8F88FC157B888A19271F /* ADLConsoleDateFormatting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleDateFormatting.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F60001000001A1 /* ADLImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLImageCache.swift; sourceTree = "<group>"; };
 		0163C413B012BCBEB864086B /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		031FC650E637FA153AF3C596 /* ADLConsoleColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleColor.swift; sourceTree = "<group>"; };
 		038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
@@ -113,12 +112,13 @@
 		452FCB9914E96A757ACF579D /* CompanyMapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanyMapViewModel.swift; sourceTree = "<group>"; };
 		5466134B1E28B26BFB511D6C /* ReviewRecordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRecordDetailView.swift; sourceTree = "<group>"; };
 		68682D6319039E661D9D69F7 /* SchemaBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderView.swift; sourceTree = "<group>"; };
-		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		7DDB4F5FF96EC8981E97573B /* SchemaBuilderViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderViewModelTests.swift; sourceTree = "<group>"; };
 		7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformErrorMessage.swift; sourceTree = "<group>"; };
 		8AEB59475DCD55068CE81EBB /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOverviewContentTests.swift; sourceTree = "<group>"; };
 		A0E57D6FC6D409D104085995 /* MockAuthTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockAuthTransport.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001000001A1 /* ADLImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLImageCache.swift; sourceTree = "<group>"; };
 		B0718ECDBE845BB4007DD07F /* ConsoleDestinationsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleDestinationsTests.swift; sourceTree = "<group>"; };
 		B1CE08F3646167DA72E6D1A7 /* ConsoleShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleShellView.swift; sourceTree = "<group>"; };
 		B34CD969F94FB035DF8D1FE1 /* NetworkAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkAuthServiceTests.swift; sourceTree = "<group>"; };
@@ -135,7 +135,7 @@
 		CDA356BFA8DEACC0D49A4DFD /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		CF89EE969F1884F273796C39 /* MembersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersViewModel.swift; sourceTree = "<group>"; };
 		D11DA660AE3456559B18F002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		D9135E7C767659E8968D7D57 /* ADLConsole.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ADLConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D9135E7C767659E8968D7D57 /* ADLConsole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADLConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleApp.swift; sourceTree = "<group>"; };
 		D9C5756D198653BA9FC365D2 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		D9D6C5D4CABBA873B7D166C1 /* MembersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersView.swift; sourceTree = "<group>"; };
@@ -435,8 +435,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-				};
 			};
 			buildConfigurationList = C359A052E1079A6A05419E91 /* Build configuration list for PBXProject "ADLConsole" */;
 			developmentRegion = en;
@@ -660,7 +658,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -690,7 +689,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;

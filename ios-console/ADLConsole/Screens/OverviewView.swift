@@ -125,12 +125,6 @@ struct OverviewView: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .combine)
     }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(background)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
 
     @ViewBuilder
     private var actions: some View {
