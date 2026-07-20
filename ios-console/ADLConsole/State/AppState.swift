@@ -94,6 +94,45 @@ final class AppState: ObservableObject {
         )
     }
 
+    /// Builds a fresh `ProjectsViewModel` for `ConsoleShellView`'s PROJECTS
+    /// destination, mirroring `makeReviewQueueViewModel` above.
+    func makeProjectsViewModel(organizationId: String) -> ProjectsViewModel {
+        ProjectsViewModel(
+            apiClient: apiClient,
+            organizationId: organizationId,
+            role: role ?? .viewer,
+            language: language
+        )
+    }
+
+    /// Builds a fresh `MembersViewModel` for `ConsoleShellView`'s MEMBERS
+    /// destination. `viewerUserId` mirrors `isAdlAdmin` above — the stub
+    /// auth flow has no session payload to read the signed-in user's id
+    /// from yet, so it stays `nil` until the real cookie handshake lands
+    /// (TODO(real-cookie-handshake), same as `isAdlAdmin`).
+    func makeMembersViewModel(organizationId: String) -> MembersViewModel {
+        MembersViewModel(
+            apiClient: apiClient,
+            organizationId: organizationId,
+            viewerRole: role ?? .viewer,
+            viewerUserId: nil,
+            viewerIsAdlAdmin: isAdlAdmin,
+            language: language
+        )
+    }
+
+    /// Builds a fresh `SettingsViewModel` for `ConsoleShellView`'s SETTINGS
+    /// destination, seeded from the currently-selected `organization`.
+    func makeSettingsViewModel(organizationId: String, organization: PlatformOrganization) -> SettingsViewModel {
+        SettingsViewModel(
+            apiClient: apiClient,
+            organizationId: organizationId,
+            organization: organization,
+            role: role ?? .viewer,
+            language: language
+        )
+    }
+
     /// Destinations visible in the current role's nav — thin pass-through to
     /// the pure `ConsoleNavigation.visibleDestinations`, so views never
     /// compute this themselves.

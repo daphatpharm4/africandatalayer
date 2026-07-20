@@ -43,8 +43,47 @@ struct ConsoleShellView: View {
             overviewContent
         case .review:
             reviewContent
+        case .projects:
+            projectsContent
+        case .members:
+            membersContent
+        case .settings:
+            settingsContent
         default:
             PlaceholderScreenView(screen: screen)
+        }
+    }
+
+    /// `.projects` is nav-gated visible for every role by
+    /// `AppState.visibleDestinations` — `ProjectsViewModel.canManage` (not a
+    /// nav gate) handles the manager/owner-only "New project" action inside
+    /// the view itself, same split `ProjectsScreen.tsx` uses.
+    @ViewBuilder
+    private var projectsContent: some View {
+        if let organizationId = appState.organization?.id {
+            ProjectsView(viewModel: appState.makeProjectsViewModel(organizationId: organizationId))
+        } else {
+            PlaceholderScreenView(screen: .projects)
+        }
+    }
+
+    /// `.members` is nav-gated to manager/owner by `AppState.visibleDestinations`.
+    @ViewBuilder
+    private var membersContent: some View {
+        if let organizationId = appState.organization?.id {
+            MembersView(viewModel: appState.makeMembersViewModel(organizationId: organizationId))
+        } else {
+            PlaceholderScreenView(screen: .members)
+        }
+    }
+
+    /// `.settings` is nav-gated to owner by `AppState.visibleDestinations`.
+    @ViewBuilder
+    private var settingsContent: some View {
+        if let organizationId = appState.organization?.id, let organization = appState.organization {
+            SettingsView(viewModel: appState.makeSettingsViewModel(organizationId: organizationId, organization: organization))
+        } else {
+            PlaceholderScreenView(screen: .settings)
         }
     }
 
