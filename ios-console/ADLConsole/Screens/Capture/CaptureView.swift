@@ -1,5 +1,6 @@
 import ConsoleForms
 import ConsoleModels
+import PhotosUI
 import SwiftUI
 
 /// The collector's primary destination: pick a project + record type, fill
