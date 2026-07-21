@@ -40,21 +40,53 @@ struct CaptureFieldControl: View {
         switch descriptor.control {
         case .text:
             TextField(t("Enter text", "Saisir un texte"), text: textBinding)
-                .textFieldStyle(.roundedBorder)
+                .font(ADLConsoleFont.body)
+                .padding(12)
+                .background(ADLConsoleColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                        .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+                )
 
         case .number:
             TextField(t("Enter a number", "Saisir un nombre"), text: numberTextBinding)
-                .textFieldStyle(.roundedBorder)
+                .font(ADLConsoleFont.body)
                 .keyboardType(.decimalPad)
+                .padding(12)
+                .background(ADLConsoleColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                        .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+                )
 
         case .singleSelect:
-            Picker(t("Select one", "Choisir une option"), selection: selectBinding) {
-                Text(t("Select…", "Choisir…")).tag(Optional<String>.none)
+            Menu {
+                Button(t("Select…", "Choisir…")) { value = .select(nil) }
                 ForEach(descriptor.options, id: \.value) { option in
-                    Text(t(option.label.en, option.label.fr)).tag(Optional(option.value))
+                    Button(t(option.label.en, option.label.fr)) { value = .select(option.value) }
                 }
+            } label: {
+                HStack {
+                    Text(selectBinding.wrappedValue.map { key in
+                        descriptor.options.first { $0.value == key }.map { t($0.label.en, $0.label.fr) } ?? key
+                    } ?? t("Select…", "Choisir…"))
+                        .font(ADLConsoleFont.body)
+                        .foregroundStyle(selectBinding.wrappedValue == nil ? ADLConsoleColor.inkMuted : ADLConsoleColor.ink)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                }
+                .padding(12)
+                .background(ADLConsoleColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                        .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+                )
             }
-            .pickerStyle(.menu)
 
         case .multiSelect:
             multiSelectControl
@@ -66,10 +98,49 @@ struct CaptureFieldControl: View {
                 displayedComponents: .date
             )
             .labelsHidden()
+            .padding(12)
+            .background(ADLConsoleColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                    .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+            )
 
         case .boolean:
-            Toggle(isOn: booleanBinding) {
-                EmptyView()
+            HStack(spacing: 8) {
+                Button {
+                    booleanBinding.wrappedValue = true
+                } label: {
+                    Text(t("Yes", "Oui"))
+                        .font(ADLConsoleFont.subheadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(booleanBinding.wrappedValue ? .white : ADLConsoleColor.navy)
+                        .background(booleanBinding.wrappedValue ? ADLConsoleColor.navy : ADLConsoleColor.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                                .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(ADLConsolePressStyle())
+
+                Button {
+                    booleanBinding.wrappedValue = false
+                } label: {
+                    Text(t("No", "Non"))
+                        .font(ADLConsoleFont.subheadline)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(!booleanBinding.wrappedValue ? .white : ADLConsoleColor.inkMuted)
+                        .background(!booleanBinding.wrappedValue ? ADLConsoleColor.navyMid : ADLConsoleColor.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                                .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+                        )
+                }
+                .buttonStyle(ADLConsolePressStyle())
             }
 
         case .photo:

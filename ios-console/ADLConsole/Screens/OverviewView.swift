@@ -105,15 +105,18 @@ struct OverviewView: View {
     private func tileGrid(_ summary: PlatformRecordSummary) -> some View {
         let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
         return LazyVGrid(columns: columns, spacing: 10) {
-            summaryTile(title: t("My captures", "Mes captures"), value: summary.total, color: ADLConsoleColor.navy, background: ADLConsoleColor.navyWash)
-            summaryTile(title: t("Today", "Aujourd'hui"), value: summary.submittedToday, color: ADLConsoleColor.terraDark, background: ADLConsoleColor.terraWash)
-            summaryTile(title: t("Approved", "Approuvées"), value: summary.approved, color: ADLConsoleColor.forestDark, background: ADLConsoleColor.forestWash)
-            summaryTile(title: t("Pending", "En attente"), value: summary.pendingReview, color: ADLConsoleColor.goldDark, background: ADLConsoleColor.goldWash)
+            summaryTile(title: t("My captures", "Mes captures"), value: summary.total, icon: "camera.fill", color: ADLConsoleColor.navy, background: ADLConsoleColor.navyWash)
+            summaryTile(title: t("Today", "Aujourd'hui"), value: summary.submittedToday, icon: "clock.fill", color: ADLConsoleColor.terraDark, background: ADLConsoleColor.terraWash)
+            summaryTile(title: t("Approved", "Approuvées"), value: summary.approved, icon: "checkmark.seal.fill", color: ADLConsoleColor.forestDark, background: ADLConsoleColor.forestWash)
+            summaryTile(title: t("Pending", "En attente"), value: summary.pendingReview, icon: "hourglass", color: ADLConsoleColor.goldDark, background: ADLConsoleColor.goldWash)
         }
     }
 
-    private func summaryTile(title: String, value: Int, color: Color, background: Color) -> some View {
+    private func summaryTile(title: String, value: Int, icon: String, color: Color, background: Color) -> some View {
         VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(color)
             Text("\(value)")
                 .font(ADLConsoleFont.largeTitle)
                 .foregroundStyle(color)
@@ -122,7 +125,7 @@ struct OverviewView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
         .background(background)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.statTile, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 

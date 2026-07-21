@@ -23,9 +23,10 @@ struct CompanyMapView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            content
-            floatingCaptureButton
+        ZStack {
+            mapLayer
+            overlayLayer
+            captureButton
         }
         .background(ADLConsoleColor.page)
         .task { await viewModel.load() }
@@ -40,24 +41,29 @@ struct CompanyMapView: View {
             captureSheet
         }
         .onChange(of: viewModel.annotations) { _, newAnnotations in
-            if !cameraFocused {
-                focusCamera(for: newAnnotations)
+            if !cameraFocused && !newAnnotations.isEmpty {
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    focusCamera(for: newAnnotations)
+                }
                 cameraFocused = true
             }
         }
     }
 
     @ViewBuilder
-    private var content: some View {
+    private var mapLayer: some View {
         switch viewModel.loadState {
         case .idle, .loading:
-            ProgressView()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .failed:
-            errorState
-        case .loaded:
-            if viewModel.annotations.isEmpty {
-                emptyState
+            if !cameraFocused {
+                ConsoleMapKitView(
+                    points: [],
+                    region: $region,
+                    selectedPoint: Binding(
+                        get: { viewModel.selectedPoint },
+                        set: { viewModel.selectedPoint = $0 }
+                    )
+                )
+                .ignoresSafeArea(edges: .bottom)
             } else {
                 ConsoleMapKitView(
                     points: viewModel.annotations,
@@ -69,7 +75,133 @@ struct CompanyMapView: View {
                 )
                 .ignoresSafeArea(edges: .bottom)
             }
+        case .failed:
+            errorState
+        case .loaded:
+            ConsoleMapKitView(
+                points: viewModel.annotations,
+                region: $region,
+                selectedPoint: Binding(
+                    get: { viewModel.selectedPoint },
+                    set: { viewModel.selectedPoint = $0 }
+                )
+            )
+            .ignoresSafeArea(edges: .bottom)
         }
+    }
+
+    @ViewBuilder
+    private var overlayLayer: some View {
+        VStack(spacing: 10) {
+            headerCard
+            if viewModel.loadState == .loading {
+                loadingPill
+            }
+            Spacer()
+            if viewModel.loadState == .loaded && viewModel.annotations.isEmpty {
+                emptyPill
+            }
+            if let selected = viewModel.selectedPoint {
+                actionBar(selected: selected)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 16)
+        .allowsHitTesting(true)
+    }
+
+    private var headerCard: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(ADLConsoleColor.terra)
+                Text("\(viewModel.annotations.count)")
+                    .font(ADLConsoleFont.headline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                Text(t("points", "points"))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(ADLConsoleColor.surface)
+            .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+
+            Spacer()
+
+            ADLConsoleDailyProgressWidget(
+                capturedToday: viewModel.capturedTodayCount,
+                dailyGoal: 5,
+                t: t
+            )
+            .frame(maxWidth: 200)
+            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+        }
+    }
+
+    private var loadingPill: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+            Text(t("Loading records", "Chargement des données"))
+                .font(ADLConsoleFont.caption)
+                .foregroundStyle(ADLConsoleColor.ink)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(ADLConsoleColor.surface)
+        .clipShape(Capsule())
+        .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+    }
+
+    private var emptyPill: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "location.viewfinder")
+                .font(.system(size: 14))
+                .foregroundStyle(ADLConsoleColor.terra)
+            Text(t("No points yet — tap + to capture", "Aucun point — appuyez sur + pour capturer"))
+                .font(ADLConsoleFont.caption)
+                .foregroundStyle(ADLConsoleColor.ink)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(ADLConsoleColor.surface)
+        .clipShape(Capsule())
+        .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+    }
+
+    private func actionBar(selected: CollapsedPlatformPoint) -> some View {
+        let title = selected.representative.recordTypeKey.replacingOccurrences(of: "_", with: " ").capitalized
+        return HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(ADLConsoleFont.subheadline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .lineLimit(1)
+                Text("\(selected.chainCount) \(t("updates", "mises à jour"))")
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+            }
+            Spacer()
+            Button {
+                beginUpdate(for: selected)
+            } label: {
+                Text(t("Update", "Mettre à jour"))
+                    .font(ADLConsoleFont.subheadline)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .foregroundStyle(.white)
+                    .background(ADLConsoleColor.navy)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(ADLConsolePressStyle())
+        }
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous))
+        .shadow(color: Color.black.opacity(0.12), radius: 14, y: 6)
     }
 
     private var errorState: some View {
@@ -80,21 +212,6 @@ struct CompanyMapView: View {
             ) {
                 Task { await viewModel.load() }
             }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var emptyState: some View {
-        ADLConsoleCard(padding: 24) {
-            ADLConsoleEmptyState(
-                systemImage: "map",
-                headline: t("No points on the map yet", "Aucun point sur la carte pour le moment"),
-                description: t(
-                    "Tap + to capture your company's first point.",
-                    "Appuyez sur + pour capturer le premier point de votre entreprise."
-                )
-            )
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -124,20 +241,26 @@ struct CompanyMapView: View {
         region = MKCoordinateRegion(center: center, span: span)
     }
 
-    private var floatingCaptureButton: some View {
-        Button {
-            beginNewCapture()
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 56, height: 56)
-                .background(ADLConsoleColor.terra)
-                .clipShape(Circle())
-                .shadow(color: ADLConsoleColor.terra.opacity(0.35), radius: 10, x: 0, y: 4)
+    private var captureButton: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                Button {
+                    beginNewCapture()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 56, height: 56)
+                        .background(ADLConsoleColor.terra)
+                        .clipShape(Circle())
+                        .shadow(color: Color.black.opacity(0.25), radius: 12, x: 0, y: 6)
+                }
+                .accessibilityLabel(t("Capture a record", "Capturer un enregistrement"))
+                .padding(20)
+            }
         }
-        .padding(20)
-        .accessibilityLabel(t("Capture a record", "Capturer un enregistrement"))
     }
 
     private func beginNewCapture() {

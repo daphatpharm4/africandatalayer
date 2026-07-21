@@ -11,25 +11,12 @@ extension Color {
     }
 }
 
-private func dynamic(_ light: UInt32, _ dark: UInt32) -> Color {
-    Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(hex: dark)
-            : UIColor(hex: light)
-    })
-}
-
-private extension UIColor {
-    convenience init(hex: UInt32) {
-        self.init(
-            red: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
-        )
-    }
-}
-
+/// Exact mirror of the brand tokens in `tailwind.config.js` used by the
+/// company console surfaces (navy authority, terra accent, forest success,
+/// gold achievement).
+///
+/// Surface tokens add warmth — pure `Color.white` feels clinical;
+/// a barely-tinted surface reads as premium and intentional.
 enum ADLConsoleColor {
     static let navy = Color(hex: 0x0f2b46)
     static let navyDark = Color(hex: 0x0b2236)
@@ -45,17 +32,20 @@ enum ADLConsoleColor {
     static let forestDark = Color(hex: 0x3a6145)
     static let forestWash = dynamic(0xeaf3ee, 0x0f1f14)
 
-    static let gold = Color(hex: 0xf4c317)
-    static let goldDark = dynamic(0xb45309, 0xf4c317)
-    static let goldWash = dynamic(0xfef9e7, 0x1f1a08)
+    static let gold = Color(hex: 0xf4c317)        // gold.DEFAULT
+    static let goldDark = Color(hex: 0xb45309)    // gold.dark (text on goldWash)
+    static let goldWash = Color(hex: 0xfef9e7)    // gold.wash
 
     static let danger = Color(hex: 0xb91c1c)
     static let dangerWash = dynamic(0xfef2f2, 0x1f0c0c)
 
-    static let ink = dynamic(0x0f1f2e, 0xe8edf2)
-    static let inkMuted = dynamic(0x5b6b7a, 0x8b9bab)
-    static let page = dynamic(0xf7f9fb, 0x0a0f14)
+    static let ink = Color(hex: 0x0f1f2e)
+    static let inkMuted = Color(hex: 0x5b6b7a)
+    static let page = Color(hex: 0xf7f9fb)
 
-    static let surface = dynamic(0xfdfefe, 0x111820)
-    static let surfaceElevated = dynamic(0xffffff, 0x161e28)
+    // MARK: - Surface tokens (warm white alternatives)
+    /// Card/surface background — barely warm off-white. Replaces raw Color.white.
+    static let surface = Color(hex: 0xfdfefe)
+    /// Elevated surface (hero cards, modals) — slightly more warm.
+    static let surfaceElevated = Color(hex: 0xffffff)
 }

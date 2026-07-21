@@ -99,9 +99,20 @@ final class ConsolePointAnnotationView: MKAnnotationView {
 
     private func configure() {
         guard let consoleAnnotation = annotation as? ConsolePointAnnotation else { return }
-        let hash = abs(consoleAnnotation.point.representative.recordTypeKey.hashValue)
-        layer.backgroundColor = Self.palette[hash % Self.palette.count].cgColor
+        let key = consoleAnnotation.point.representative.recordTypeKey
+        layer.backgroundColor = Self.palette[Self.stableIndex(for: key)].cgColor
         displayPriority = .defaultHigh
+    }
+
+    /// Deterministic (process-stable) palette index for a record type. Swift's
+    /// `String.hashValue` is seeded per launch, so a hash-based color would
+    /// change on every app start; a djb2 digest over the UTF-8 bytes keeps each
+    /// record type on the same brand color across launches and devices.
+    private static func stableIndex(for key: String) -> Int {
+        guard !palette.isEmpty else { return 0 }
+        var hash: UInt64 = 5381
+        for byte in key.utf8 { hash = (hash &* 33) &+ UInt64(byte) }
+        return Int(hash % UInt64(palette.count))
     }
 }
 

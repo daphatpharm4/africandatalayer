@@ -1,6 +1,15 @@
 import ConsoleModels
 import SwiftUI
 
+enum ADLConsoleRadius {
+    static let card: CGFloat = 20
+    static let hero: CGFloat = 24
+    static let button: CGFloat = 16
+    static let input: CGFloat = 14
+    static let statTile: CGFloat = 14
+    static let actionRow: CGFloat = 18
+}
+
 /// Standard console card — white surface, soft navy border, continuous corners.
 struct ADLConsoleCard<Content: View>: View {
     var padding: CGFloat = 0
@@ -13,9 +22,9 @@ struct ADLConsoleCard<Content: View>: View {
         .padding(padding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ADLConsoleColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous)
                 .stroke(ADLConsoleColor.navyBorder.opacity(0.9), lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
@@ -39,7 +48,7 @@ struct ADLConsoleHeroCard<Content: View>: View {
                 endPoint: .bottomTrailing
             )
         )
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.hero, style: .continuous))
         .shadow(color: ADLConsoleColor.navy.opacity(0.25), radius: 12, x: 0, y: 6)
     }
 }
@@ -74,7 +83,7 @@ struct ADLConsolePrimaryButton: View {
         }
         .background(isDisabled ? ADLConsoleColor.navy.opacity(0.45) : ADLConsoleColor.navy)
         .foregroundStyle(.white)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.button, style: .continuous))
         .disabled(isDisabled || isBusy)
         .buttonStyle(ADLConsolePressStyle())
     }
@@ -102,9 +111,9 @@ struct ADLConsoleSecondaryButton: View {
             .padding(.horizontal, 14)
             .foregroundStyle(tint)
             .background(ADLConsoleColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
                     .stroke(border, lineWidth: 1)
             )
         }
@@ -132,9 +141,9 @@ struct ADLConsoleDestructiveButton: View {
             .padding(.horizontal, 14)
             .foregroundStyle(ADLConsoleColor.danger)
             .background(ADLConsoleColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
                     .stroke(ADLConsoleColor.danger.opacity(0.45), lineWidth: 1)
             )
         }
@@ -265,9 +274,9 @@ struct ADLConsoleActionRow: View {
             }
             .padding(16)
             .background(ADLConsoleColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.actionRow, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: ADLConsoleRadius.actionRow, style: .continuous)
                     .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
             )
         }
@@ -283,9 +292,9 @@ struct ADLConsoleFieldChrome<Content: View>: View {
         content
             .padding(14)
             .background(ADLConsoleColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
                     .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
             )
     }
@@ -569,6 +578,120 @@ struct ADLConsoleMetadataRow: View {
             Text(value)
                 .font(ADLConsoleFont.footnote)
                 .foregroundStyle(ADLConsoleColor.ink)
+        }
+    }
+}
+
+struct ADLConsoleStatusBanner: View {
+    let message: String
+    var systemImage: String = "info.circle"
+    var tint: Color = ADLConsoleColor.navy
+    var background: Color = ADLConsoleColor.navyWash
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(tint)
+            Text(message)
+                .font(ADLConsoleFont.footnote)
+                .foregroundStyle(tint)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+    }
+}
+
+struct ADLConsoleDailyProgressWidget: View {
+    let capturedToday: Int
+    let dailyGoal: Int
+    var t: (String, String) -> String = { en, _ in en }
+
+    private var progress: Double {
+        dailyGoal > 0 ? min(Double(capturedToday) / Double(dailyGoal), 1.0) : 0
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .stroke(ADLConsoleColor.navyWash, lineWidth: 6)
+                    .frame(width: 52, height: 52)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        ADLConsoleColor.terra,
+                        style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                    )
+                    .frame(width: 52, height: 52)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeOut(duration: 0.6), value: progress)
+                Text("\(capturedToday)")
+                    .font(ADLConsoleFont.headline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(t("Today's progress", "Progrès du jour"))
+                    .font(ADLConsoleFont.subheadline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                if dailyGoal > 0 {
+                    let remaining = max(dailyGoal - capturedToday, 0)
+                    Text(
+                        remaining > 0
+                            ? "\(remaining) " + t("more to go", "encore à faire")
+                            : t("Goal reached!", "Objectif atteint!")
+                    )
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                }
+            }
+            Spacer()
+        }
+        .padding(14)
+        .background(ADLConsoleColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous)
+                .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+        )
+    }
+}
+
+struct ADLConsoleScreenHeader: View {
+    let title: String
+    var subtitle: String? = nil
+    var onBack: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let onBack {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(ADLConsoleColor.navy)
+                        .frame(width: 44, height: 44)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(ADLConsoleFont.headline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                if let subtitle {
+                    Text(subtitle)
+                        .font(ADLConsoleFont.caption)
+                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(ADLConsoleColor.surface)
+        .overlay(alignment: .bottom) {
+            Divider().overlay(ADLConsoleColor.navyBorder.opacity(0.4))
         }
     }
 }
