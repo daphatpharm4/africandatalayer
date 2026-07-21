@@ -13,6 +13,7 @@ struct CaptureView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: CaptureViewModel
     @State private var photoPickerItem: PhotosPickerItem?
+    @State private var showingCamera = false
 
     private var t: (String, String) -> String { appState.language.t }
 
@@ -161,45 +162,83 @@ struct CaptureView: View {
     }
 
     private var photoEvidenceRow: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
                 Text(t("Photos", "Photos"))
                     .font(ADLConsoleFont.subheadline)
                     .foregroundStyle(ADLConsoleColor.ink)
+                Spacer()
                 Text("\(viewModel.evidencePhotoRefs.count) " + t("captured", "capturées"))
-                    .font(ADLConsoleFont.footnote)
+                    .font(ADLConsoleFont.caption)
                     .foregroundStyle(ADLConsoleColor.inkMuted)
             }
-            Spacer()
-            PhotosPicker(selection: $photoPickerItem, matching: .images) {
-                Label(t("Add photo", "Ajouter une photo"), systemImage: "camera.fill")
-                    .font(ADLConsoleFont.subheadline)
-            }
-            .onChange(of: photoPickerItem) { _, newItem in
-                Task { await loadPickedPhoto(newItem) }
-            }
-        }
-    }
+            Button {
+                showingCamera = true
+            } label: {
+                ZStack {
+                    RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous)
+                        .stroke(
+                            viewModel.evidencePhotoRefs.isEmpty ? ADLConsoleColor.navyBorder : ADLConsoleColor.forestDark,
+                            style: StrokeStyle(lineWidth: viewModel.evidencePhotoRefs.isEmpty ? 2 : 2, dash: viewModel.evidencePhotoRefs.isEmpty ? [6, 4] : [])
+                        )
+                        .frame(height: 180)
+                        .frame(maxWidth: .infinity)
+                        .background(viewModel.evidencePhotoRefs.isEmpty ? ADLConsoleColor.navyWash.opacity(0.3) : ADLConsoleColor.forestWash.opacity(0.3))
 
-    private func loadPickedPhoto(_ item: PhotosPickerItem?) async {
-        guard let item, let data = try? await item.loadTransferable(type: Data.self) else { return }
-        let dataUrl = "data:image/jpeg;base64,\(data.base64EncodedString())"
-        await MainActor.run {
-            viewModel.addPhotoRef(dataUrl)
-            photoPickerItem = nil
+                    if viewModel.evidencePhotoRefs.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 28))
+                                .foregroundStyle(ADLConsoleColor.terra)
+                            Text(t("Tap to capture", "Appuyez pour capturer"))
+                                .font(ADLConsoleFont.subheadline)
+                                .foregroundStyle(ADLConsoleColor.inkMuted)
+                        }
+                    } else {
+                        HStack(spacing: 8) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(ADLConsoleColor.forestDark)
+                            Text(t("Photos captured — tap to add more", "Photos capturées — appuyez pour ajouter"))
+                                .font(ADLConsoleFont.caption)
+                                .foregroundStyle(ADLConsoleColor.forestDark)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .background(ADLConsoleColor.forestWash)
+                        .clipShape(Capsule())
+                    }
+                }
+            }
+            .buttonStyle(ADLConsolePressStyle())
+        }
+        .sheet(isPresented: $showingCamera) {
+            CameraCaptureView { imageData in
+                let dataUrl = "data:image/jpeg;base64,\(imageData.base64EncodedString())"
+                viewModel.addPhotoRef(dataUrl)
+            }
         }
     }
 
     private var gpsEvidenceRow: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(t("GPS location", "Position GPS"))
-                    .font(ADLConsoleFont.subheadline)
-                    .foregroundStyle(ADLConsoleColor.ink)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Image(systemName: viewModel.evidenceGps != nil ? "checkmark.circle.fill" : "location.fill")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(viewModel.evidenceGps != nil ? ADLConsoleColor.forestDark : ADLConsoleColor.inkMuted)
+                    Text(t("GPS location", "Position GPS"))
+                        .font(ADLConsoleFont.subheadline)
+                        .foregroundStyle(ADLConsoleColor.ink)
+                }
                 if let gps = viewModel.evidenceGps {
-                    Text(String(format: "%.5f, %.5f", gps.latitude, gps.longitude))
-                        .font(ADLConsoleFont.footnote)
-                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                    HStack(spacing: 6) {
+                        coordinateChip(label: "LAT", value: String(format: "%.5f", gps.latitude))
+                        coordinateChip(label: "LNG", value: String(format: "%.5f", gps.longitude))
+                        if let accuracy = gps.accuracyMeters {
+                            coordinateChip(label: "ACC", value: "±\(Int(accuracy))m")
+                        }
+                    }
                 } else if let error = viewModel.locationErrorMessage {
                     Text(error)
                         .font(ADLConsoleFont.footnote)
@@ -217,12 +256,30 @@ struct CaptureView: View {
                 if viewModel.isRequestingLocation {
                     ProgressView()
                 } else {
-                    Label(t("Capture GPS", "Capturer GPS"), systemImage: "location.fill")
-                        .font(ADLConsoleFont.subheadline)
+                    Label(
+                        viewModel.evidenceGps != nil ? t("Refresh GPS", "Actualiser GPS") : t("Capture GPS", "Capturer GPS"),
+                        systemImage: "location.fill"
+                    )
+                    .font(ADLConsoleFont.subheadline)
                 }
             }
             .disabled(viewModel.isRequestingLocation)
         }
+    }
+
+    private func coordinateChip(label: String, value: String) -> some View {
+        HStack(spacing: 3) {
+            Text(label)
+                .font(ADLConsoleFont.microLabel)
+                .foregroundStyle(ADLConsoleColor.inkMuted)
+            Text(value)
+                .font(ADLConsoleFont.caption)
+                .foregroundStyle(ADLConsoleColor.ink)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(ADLConsoleColor.navyWash)
+        .clipShape(Capsule())
     }
 
     private func evidenceErrorMessage(_ error: EvidenceError) -> String {

@@ -12,7 +12,7 @@ struct ConsoleShellView: View {
         VStack(spacing: 0) {
             header
             pillNav
-            controlsRow
+            syncBar
             Divider().overlay(ADLConsoleColor.navyBorder.opacity(0.6))
             screenBody
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -59,12 +59,51 @@ struct ConsoleShellView: View {
                             }
                         }
                     }
+                    Divider()
+                    Button {
+                        appState.toggleLanguage()
+                    } label: {
+                        Label(
+                            appState.language == .fr
+                                ? "Switch to English"
+                                : "Passer en français",
+                            systemImage: "globe"
+                        )
+                    }
+                    Button(role: .destructive) {
+                        appState.signOut()
+                    } label: {
+                        Label(appState.language.t("Sign out", "Se déconnecter"), systemImage: "rectangle.portrait.and.arrow.right")
+                    }
                 } label: {
                     Image(systemName: "chevron.down.circle.fill")
                         .font(.system(size: 22))
                         .foregroundStyle(ADLConsoleColor.navy.opacity(0.75))
                 }
                 .accessibilityLabel(appState.language.t("Organization", "Organisation"))
+            } else {
+                Menu {
+                    Button {
+                        appState.toggleLanguage()
+                    } label: {
+                        Label(
+                            appState.language == .fr
+                                ? "Switch to English"
+                                : "Passer en français",
+                            systemImage: "globe"
+                        )
+                    }
+                    Button(role: .destructive) {
+                        appState.signOut()
+                    } label: {
+                        Label(appState.language.t("Sign out", "Se déconnecter"), systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundStyle(ADLConsoleColor.navy.opacity(0.75))
+                }
+                .accessibilityLabel(appState.language.t("Menu", "Menu"))
             }
         }
         .padding(.horizontal, 16)
@@ -140,24 +179,19 @@ struct ConsoleShellView: View {
 
     // MARK: - Controls
 
-    private var controlsRow: some View {
-        HStack(spacing: 10) {
-            ADLConsoleSecondaryButton(
-                title: appState.language == .fr
-                    ? "FR · \(appState.language.t("Switch to English", "Passer en anglais"))"
-                    : "EN · \(appState.language.t("Switch to French", "Passer en français"))"
-            ) {
-                appState.toggleLanguage()
-            }
-            ADLConsoleDestructiveButton(
-                title: appState.language.t("Sign out", "Se déconnecter")
-            ) {
-                appState.signOut()
-            }
+    private var syncBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(ADLConsoleColor.forestDark)
+            Text(appState.language.t("Connected", "Connecté"))
+                .font(ADLConsoleFont.caption)
+                .foregroundStyle(ADLConsoleColor.forestDark)
+            Spacer()
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(ADLConsoleColor.surface)
+        .padding(.vertical, 7)
+        .background(ADLConsoleColor.forestWash)
     }
 
     // MARK: - Body

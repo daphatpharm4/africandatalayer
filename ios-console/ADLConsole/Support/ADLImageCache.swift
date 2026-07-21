@@ -14,7 +14,7 @@ enum ADLImageCache {
     }
 }
 
-final class ADLImageCacheImpl: Sendable {
+final class ADLImageCacheImpl: @unchecked Sendable {
     private let cache = NSCache<NSURL, UIImage>()
     private let session: URLSession
 
@@ -26,7 +26,7 @@ final class ADLImageCacheImpl: Sendable {
     }
 
     func image(for url: URL, targetSize: CGSize) async -> UIImage? {
-        let key = url.absoluteString as NSString
+        let key = url as NSURL
 
         if let cached = cache.object(forKey: key) {
             return cached
@@ -46,7 +46,8 @@ final class ADLImageCacheImpl: Sendable {
     }
 
     private func downsample(data: Data, to targetSize: CGSize) -> UIImage? {
-        let maxDimensionInPixels = max(targetSize.width, targetSize.height) * UIScreen.main.scale
+        let scale: CGFloat = 3.0
+        let maxDimensionInPixels = max(targetSize.width, targetSize.height) * scale
 
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,

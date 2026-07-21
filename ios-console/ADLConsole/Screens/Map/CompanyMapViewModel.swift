@@ -60,6 +60,15 @@ final class CompanyMapViewModel: ObservableObject {
         points.filter { $0.representative.evidence.gps != nil }
     }
 
+    var capturedTodayCount: Int {
+        let calendar = Calendar.current
+        return points.filter { point in
+            let iso = point.representative.evidence.capturedAt ?? point.representative.createdAt
+            guard let date = ADLConsoleDateFormatting.parse(iso) else { return false }
+            return calendar.isDate(date, inSameDayAs: Date())
+        }.count
+    }
+
     // MARK: - Load
 
     /// `view=platform_record_browse`, GET. Port of
