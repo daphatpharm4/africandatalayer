@@ -63,9 +63,12 @@ ios-console/
 
 ## Auth status
 
-Sign-in currently goes through `StubAuthService` (see the TODO in
-`ADLConsole/Auth/AuthService.swift`) — it validates input shape only and
-always succeeds. The real cookie-session handshake against
-`/api/auth/csrf` → `/api/auth/callback/credentials` → `/api/auth/session`
-(mirroring `lib/client/auth.ts`) is intentionally deferred to a later task
-that can validate against a live preview deployment.
+The app uses `NetworkAuthService` for production sign-in, which performs
+the full `@auth/core` credentials dance against the configured API base URL
+(`GET /api/auth/csrf` → `POST /api/auth/callback/credentials` → `GET
+/api/auth/session`, mirroring `lib/client/auth.ts`). The base URL is set by
+the active xcconfig (`Config/Debug.xcconfig`, `Config/Staging.xcconfig`, or
+`Config/Release.xcconfig`) — see "Building & testing" below.
+
+`StubAuthService` is used only in tests and SwiftUI previews as a fast,
+deterministic input-shape validator with no network activity.

@@ -2,8 +2,8 @@ import Foundation
 
 /// User payload extracted from `GET /api/auth/session`'s `{ user }`, mirroring
 /// the fields of `lib/client/auth.ts`'s `AuthSession.user` the console cares
-/// about (id/email/role/isAdmin — see the `TODO(real-cookie-handshake)` notes
-/// on `AppState.isAdlAdmin`/`makeMembersViewModel` this is meant to feed).
+/// about (id/email/role/isAdmin — used by `AppState.tryRestoreSession()` to
+/// derive `isAdlAdmin` and `viewerUserId` on app launch).
 struct AuthSessionUser: Equatable, Sendable {
     let id: String?
     let email: String?

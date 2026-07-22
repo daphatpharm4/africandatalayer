@@ -42,9 +42,9 @@ class AppState: ObservableObject {
     @Published private(set) var isSyncingRecordQueue = false
     /// Whether the signed-in user is an ADL platform admin (not an org
     /// role) — gates the `ONBOARDING` screen per `canAccessConsoleScreen`.
-    /// TODO(real-cookie-handshake): derive this from `GET /api/auth/session`
-    /// (`session.user.role === 'admin'`) once the real handshake lands; the
-    /// stub auth flow has no session payload to read it from yet.
+    /// Derived from `GET /api/auth/session` (`session.user.role === 'admin'`)
+    /// during `tryRestoreSession()`, or defaults to `false` for services
+    /// that do not provide a session restore.
     @Published var isAdlAdmin: Bool = false
 
     /// Exposed (not private) so screen views — e.g. `OverviewView` — can
@@ -145,10 +145,9 @@ class AppState: ObservableObject {
     }
 
     /// Builds a fresh `MembersViewModel` for `ConsoleShellView`'s MEMBERS
-    /// destination. `viewerUserId` mirrors `isAdlAdmin` above — the stub
-    /// auth flow has no session payload to read the signed-in user's id
-    /// from yet, so it stays `nil` until the real cookie handshake lands
-    /// (TODO(real-cookie-handshake), same as `isAdlAdmin`).
+    /// destination. `viewerUserId` is set from the session user's `id`
+    /// when available (via `tryRestoreSession()`), or defaults to `nil`
+    /// for services that do not provide a session restore.
     func makeMembersViewModel(organizationId: String) -> MembersViewModel {
         MembersViewModel(
             apiClient: apiClient,

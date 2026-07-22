@@ -129,10 +129,8 @@ Before the build can be submitted for review, fill in on
       confirm the answer if it does ask.
 - [ ] **App Review notes / demo account** — ADL Console is a
       login-gated B2B tool (org members only, no public sign-up
-      flow). Reviewers cannot get in without credentials. Once the
-      real auth handshake lands (see `README.md`'s "Auth status"
-      section — sign-in currently goes through `StubAuthService` and
-      does not hit a live backend yet), this step needs:
+      flow). Reviewers cannot get in without credentials. This step
+      needs:
       - [ ] `TODO (human, Apple account + platform access)` — create
             a standing demo organization + reviewer member account
             against the real platform auth (`/api/auth/csrf` →
@@ -153,15 +151,13 @@ Before the build can be submitted for review, fill in on
    (Advertising Identifier: **No**, since this app has no ad SDK).
 3. Submit for review.
 
-## Notes for future task authors
+## Notes
 
-- This task (Task 8) is config-only — no new features, no signing, no
-  upload. Everything above steps 1 (bump build number, already wired
-  via `project.yml`) is a human-in-the-loop step requiring an Apple
-  Developer account, and was deliberately left as `TODO` per the task
-  brief's isolation rules.
 - If `project.yml`, `Assets.xcassets`, or any file under `ADLConsole/`
   changes, re-run `xcodegen generate` and commit the regenerated
   `.xcodeproj` alongside the source change — this repo's convention
   (see `README.md`) is to commit the generated project, not regenerate
   it in CI.
+- Configuring signing, archiving, uploading, and App Store Connect
+  metadata are human-in-the-loop steps requiring an Apple Developer
+  account and are documented above.

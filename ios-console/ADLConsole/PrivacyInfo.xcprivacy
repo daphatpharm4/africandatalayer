@@ -7,10 +7,11 @@
 	Platform console — declarations below map to what THIS app actually
 	does (not copied from the agent app's manifest):
 
-	  * Auth/AuthService.swift — email/password sign-in against the
-	    platform's org-scoped account system (StubAuthService today; the
-	    real cookie-session handshake lands in a later task, same account
-	    model). -> EmailAddress.
+	  * Auth/NetworkAuthService.swift — email/password sign-in against the
+	    platform's org-scoped account system via the `@auth/core` credentials
+	    dance (`GET /api/auth/csrf` → `POST /api/auth/callback/credentials`
+	    → `GET /api/auth/session`), sharing the same `URLSession` cookie jar
+	    as `PlatformAPIClient`. -> EmailAddress.
 	  * Screens/Capture + Support/LocationService.swift — CoreLocation
 	    when-in-use GPS fix (kCLLocationAccuracyBest) attached as evidence
 	    to a captured record; if the user has restricted the app to
@@ -97,11 +98,8 @@
 		</dict>
 	</array>
 	<!--
-	The offline draft queue currently uses FileRecordQueueStore, but the
-	statically linked ConsoleForms package also contains
-	UserDefaultsRecordQueueStore. Declare CA92.1 for that app-private
-	UserDefaults access so the linked binary's required-reason API usage is
-	covered even when the alternative store is not instantiated.
+	App-private UserDefaults access via ConsoleForms.UserDefaultsRecordQueueStore
+	(declared for required-reason API coverage).
 	-->
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>

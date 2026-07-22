@@ -77,15 +77,12 @@ protocol AuthLocalSessionClearing: Sendable {
     func clearLocalSession()
 }
 
-/// STUB, not the real native auth integration — kept around (and wired to
-/// `AppState` in tests/previews) purely as a fast, deterministic input-shape
-/// validator. The real handshake against @auth/core's credentials provider —
-/// `GET /api/auth/csrf` → `POST /api/auth/callback/credentials` → `GET
-/// /api/auth/session`, sharing `URLSession.shared`'s cookie jar with
-/// `URLSessionPlatformTransport` — now lives in `NetworkAuthService.swift`
-/// (see also `AuthTransport.swift` for its injectable transport seam). This
-/// stub validates input shape only (non-empty, syntactically-plausible
-/// email) and always succeeds.
+/// Fast, deterministic stub for tests and previews — validates input shape
+/// (non-empty, syntactically-plausible email) and always succeeds, with no
+/// network activity. The production implementation is `NetworkAuthService`
+/// (see `AuthTransport.swift` for its injectable transport seam), which
+/// performs the full `@auth/core` credentials dance against the configured
+/// API base URL.
 struct StubAuthService: AuthServiceProtocol {
     func signIn(email: String, password: String) async throws {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)
