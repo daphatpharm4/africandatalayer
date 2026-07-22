@@ -104,7 +104,8 @@ final class CompanyMapViewModelTests: XCTestCase {
                 transport: StatusOverrideTransport(inner: transport, view: "platform_record_browse", statusCode: 503)
             ),
             organizationId: "org-1",
-            language: .en
+            language: .en,
+            offlineCache: InMemoryConsoleOfflineCache()
         )
 
         await viewModel.load()

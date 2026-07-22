@@ -12,7 +12,7 @@ enum ReauthenticationReason: Equatable, Sendable {
 enum SessionAvailability: Equatable, Sendable {
     case restoring
     case onlineVerified(user: AuthSessionUser)
-    case offlineAuthorized(expiresAt: Date)
+    case offlineAuthorized(snapshot: WorkspaceSnapshot)
     case reauthenticationRequired(reason: ReauthenticationReason)
     case signedOut
 }

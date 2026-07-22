@@ -95,6 +95,11 @@ final class CaptureViewModel: ObservableObject {
     private let fraudMetadataProvider: CaptureFraudMetadataProviding
     private var photoMetadataByRef: [String: PlatformRecordEvidence.PhotoMetadata] = [:]
     private let mediaStore: CaptureMediaStoreProtocol
+    private let durableCoordinator: CaptureCoordinator?
+    private let ownerUserID: String?
+    private let onDurableRecordPersisted: (@MainActor (String) async -> Void)?
+    private let creationAllowed: @MainActor () -> Bool
+    private var pendingMedia: [String: CaptureIntentMedia] = [:]
     private static let enrichMaxDistanceMeters: Double = 250
 
     init(
@@ -109,6 +114,10 @@ final class CaptureViewModel: ObservableObject {
         onQueueSnapshotChanged: (@MainActor (RecordQueueSnapshot?) -> Void)? = nil,
         fraudMetadataProvider: CaptureFraudMetadataProviding = NativeCaptureFraudMetadataProvider(),
         mediaStore: CaptureMediaStoreProtocol = InMemoryCaptureMediaStore(),
+        durableCoordinator: CaptureCoordinator? = nil,
+        ownerUserID: String? = nil,
+        onDurableRecordPersisted: (@MainActor (String) async -> Void)? = nil,
+        creationAllowed: @escaping @MainActor () -> Bool = { true },
         now: @escaping () -> Date = { Date() }
     ) {
         self.apiClient = apiClient
@@ -122,6 +131,10 @@ final class CaptureViewModel: ObservableObject {
         self.onQueueSnapshotChanged = onQueueSnapshotChanged
         self.fraudMetadataProvider = fraudMetadataProvider
         self.mediaStore = mediaStore
+        self.durableCoordinator = durableCoordinator
+        self.ownerUserID = ownerUserID
+        self.onDurableRecordPersisted = onDurableRecordPersisted
+        self.creationAllowed = creationAllowed
         self.now = now
     }
 
@@ -290,6 +303,8 @@ final class CaptureViewModel: ObservableObject {
         evidenceGps = nil
         evidencePhotoRefs = []
         photoMetadataByRef = [:]
+        pendingMedia = [:]
+        attachmentViewStates = []
         evidenceNotes = ""
         nearbyPoints = nil
         nearbyPointsErrorMessage = nil
@@ -361,6 +376,43 @@ final class CaptureViewModel: ObservableObject {
         )
         attachmentViewStates.append(viewState)
         return attachment
+    }
+
+    @discardableResult
+    func preparePhoto(_ data: Data, placement: CaptureAttachmentPlacement) throws -> String {
+        guard let image = UIImage(data: data) else {
+            throw CaptureAttachmentPickerError.imageProcessingFailed
+        }
+        let prepared = try CaptureMediaPreparer.prepare(image)
+        let localID = UUID().uuidString
+        let placementValue: String
+        switch placement {
+        case .recordEvidence: placementValue = "recordEvidence"
+        case .schemaField(let key): placementValue = "schemaField:\(key)"
+        }
+        pendingMedia[localID] = CaptureIntentMedia(prepared: prepared, placement: placementValue)
+        attachmentViewStates.append(CaptureAttachmentViewState(
+            thumbnail: data,
+            placement: placement,
+            byteCount: prepared.data.count,
+            localID: localID
+        ))
+        return localID
+    }
+
+    func preparePhotoDataURL(_ dataURL: String, placement: CaptureAttachmentPlacement) throws -> String {
+        guard let marker = dataURL.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: marker)...])) else {
+            throw CaptureAttachmentPickerError.imageProcessingFailed
+        }
+        return try preparePhoto(data, placement: placement)
+    }
+
+    func removePreparedPhoto(localID: String) {
+        pendingMedia[localID] = nil
+        attachmentViewStates.removeAll { $0.localID == localID }
+        evidencePhotoRefs.removeAll { $0 == localID }
+        photoMetadataByRef[localID] = nil
     }
 
     func removePhoto(localID: String) async throws {
@@ -464,6 +516,13 @@ final class CaptureViewModel: ObservableObject {
     /// right away (offline, retryable server error) stays safely queued —
     /// `submitState` reflects that as `.queuedPendingSync`, not `.failed`.
     func submit() async {
+        guard creationAllowed() else {
+            submitState = .failed(language.t(
+                "This action requires a verified session.",
+                "Cette action nécessite une session vérifiée."
+            ))
+            return
+        }
         guard let recordType = selectedRecordType, let projectOption = selectedProjectOption else {
             submitState = .failed(language.t("Choose a project and record type first.", "Choisissez d'abord un projet et un type d'enregistrement."))
             return
@@ -500,6 +559,37 @@ final class CaptureViewModel: ObservableObject {
             clientExif: fraudMetadataProvider.clientExif(gps: evidenceGps, capturedAt: capturedAt),
             gpsIntegrity: fraudMetadataProvider.gpsIntegrity(gps: evidenceGps, capturedAt: capturedAtDate)
         )
+
+        if let durableCoordinator, let ownerUserID {
+            do {
+                // Persist the complete, already-validated submission envelope.
+                // Encoding only `data` here would silently drop GPS, notes,
+                // fraud metadata, capture time, and point enrichment while the
+                // record waits for a later sync.
+                let fieldValuesData = try JSONEncoder().encode(draft)
+                guard let fieldValuesJSON = String(data: fieldValuesData, encoding: .utf8) else {
+                    throw CaptureAttachmentPickerError.storageFailed
+                }
+                let intent = CaptureIntent(
+                    projectID: projectOption.project.id,
+                    schemaVersionID: projectOption.schemaVersion.id,
+                    recordTypeKey: recordType.key,
+                    fieldValuesJSON: fieldValuesJSON,
+                    ownerUserID: ownerUserID,
+                    organizationID: organizationId,
+                    media: Array(pendingMedia.values)
+                )
+                let localID = try await durableCoordinator.persist(intent)
+                resetDraftValues(resetSubmitState: false)
+                pendingMedia = [:]
+                attachmentViewStates = []
+                submitState = .queuedPendingSync
+                await onDurableRecordPersisted?(localID)
+            } catch {
+                submitState = .failed(String(describing: error))
+            }
+            return
+        }
 
         let enqueuedId: String
         do {

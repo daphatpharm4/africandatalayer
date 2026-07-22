@@ -42,6 +42,7 @@ final class PendingWorkViewModel: ObservableObject {
     @Published var discardConfirmationItem: PendingItem?
     @Published private(set) var isExporting = false
     @Published private(set) var isRetrying = false
+    @Published private(set) var exportText: String?
 
     let language: ConsoleLanguage
 
@@ -49,26 +50,31 @@ final class PendingWorkViewModel: ObservableObject {
     private let mediaStore: CaptureMediaStoreProtocol
     private let ownerUserID: String
     private let organizationID: String
+    private let capabilityAllowed: @MainActor (OfflineCapability) -> Bool
 
     init(
         ledger: RecordLedgerProtocol,
         mediaStore: CaptureMediaStoreProtocol,
         ownerUserID: String,
         organizationID: String,
-        language: ConsoleLanguage
+        language: ConsoleLanguage,
+        capabilityAllowed: @escaping @MainActor (OfflineCapability) -> Bool = { _ in true }
     ) {
         self.ledger = ledger
         self.mediaStore = mediaStore
         self.ownerUserID = ownerUserID
         self.organizationID = organizationID
         self.language = language
+        self.capabilityAllowed = capabilityAllowed
     }
 
     func loadItems() async {
         viewState = .loading
         do {
             let records = try await ledger.records(ownerUserID: ownerUserID, organizationID: organizationID)
-            let items = records.map { record in
+            let items = records
+                .filter { $0.state != .acknowledged && $0.state != .discarded }
+                .map { record in
                 PendingItem(
                     id: record.localID,
                     recordTypeKey: record.recordTypeKey,
@@ -89,6 +95,7 @@ final class PendingWorkViewModel: ObservableObject {
     }
 
     func requestDiscard(_ item: PendingItem) {
+        guard capabilityAllowed(.discardPendingRecord) else { return }
         discardConfirmationItem = item
     }
 
@@ -97,6 +104,7 @@ final class PendingWorkViewModel: ObservableObject {
     }
 
     func confirmDiscard() async {
+        guard capabilityAllowed(.discardPendingRecord) else { return }
         guard let item = discardConfirmationItem else { return }
         discardConfirmationItem = nil
         guard item.state.isRecoverable else { return }
@@ -110,23 +118,30 @@ final class PendingWorkViewModel: ObservableObject {
     }
 
     func retryItem(_ item: PendingItem) async {
+        guard capabilityAllowed(.retryPendingRecord) else { return }
         guard item.state == .retryScheduled || item.state == .pending else { return }
         isRetrying = true
         do {
-            try await ledger.recordRetry(
-                localID: item.id,
-                error: LedgerError(.network, code: "manual-retry", safeMessage: "Manual retry"),
-                nextAttemptAt: Date()
-            )
+            try await ledger.scheduleImmediateRetry(localID: item.id)
         } catch {}
         isRetrying = false
         await loadItems()
     }
 
-    func exportItems() {
+    func exportItems() async {
+        guard capabilityAllowed(.exportPendingRecord) else { return }
         isExporting = true
-        // System share sheet integration — placeholder triggers external call
-        isExporting = false
+        defer { isExporting = false }
+        guard let records = try? await ledger.records(ownerUserID: ownerUserID, organizationID: organizationID) else {
+            exportText = nil
+            return
+        }
+        let recoverable = records.filter { $0.state.isRecoverable }
+        guard let data = try? JSONEncoder().encode(recoverable) else {
+            exportText = nil
+            return
+        }
+        exportText = String(data: data, encoding: .utf8)
     }
 
     private static func classifyError(_ record: LedgerRecord) -> PendingError? {

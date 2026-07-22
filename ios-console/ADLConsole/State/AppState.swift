@@ -1,6 +1,7 @@
 import ConsoleAPI
 import ConsoleForms
 import ConsoleModels
+import ConsolePersistence
 import ConsoleState
 import Foundation
 
@@ -30,6 +31,10 @@ class AppState: ObservableObject {
     @Published private(set) var sessionState: SessionState = .unknown
     @Published private(set) var isAuthenticating: Bool = false
     @Published private(set) var authErrorMessage: String?
+    @Published private(set) var sessionAvailability: SessionAvailability = .restoring
+    @Published private(set) var currentUserID: String?
+    @Published private(set) var connectivityState: ConnectivityState = .requiresConnection
+    @Published private(set) var recordLedgerSnapshot: RecordLedgerSnapshot?
 
     @Published private(set) var organizations: [PlatformOrganizationMembership] = []
     @Published private(set) var organization: PlatformOrganization?
@@ -60,19 +65,41 @@ class AppState: ObservableObject {
     let recordQueue: RecordQueue
     private let locationServiceFactory: () -> LocationServiceProtocol?
     private let offlineCache: ConsoleOfflineCacheProtocol
+    private let recordLedger: RecordLedger?
+    private let workspaceRepository: (any WorkspaceRepositoryProtocol)?
+    private let mediaStore: (any CaptureMediaStoreProtocol)?
+    private let sessionRepository: SessionRepository?
+    private let connectivityMonitor: (any ConnectivityMonitoring)?
+    private var connectivityTask: Task<Void, Never>?
+    private var syncEngines: [String: SyncEngine] = [:]
+    private let legacyQueueStore: (any RecordQueueStore)?
+    private var migratedWorkspaceKeys: Set<String> = []
+    private var runtimeDisabledForUITest = false
 
     init(
         apiClient: PlatformAPIClient,
         authService: AuthServiceProtocol,
         recordQueue: RecordQueue = AppState.makeDefaultRecordQueue(),
         locationServiceFactory: @escaping () -> LocationServiceProtocol? = { CoreLocationService() },
-        offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache()
+        offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache(),
+        recordLedger: RecordLedger? = nil,
+        workspaceRepository: (any WorkspaceRepositoryProtocol)? = nil,
+        mediaStore: (any CaptureMediaStoreProtocol)? = nil,
+        sessionRepository: SessionRepository? = nil,
+        connectivityMonitor: (any ConnectivityMonitoring)? = nil,
+        legacyQueueStore: (any RecordQueueStore)? = nil
     ) {
         self.apiClient = apiClient
         self.authService = authService
         self.recordQueue = recordQueue
         self.locationServiceFactory = locationServiceFactory
         self.offlineCache = offlineCache
+        self.recordLedger = recordLedger
+        self.workspaceRepository = workspaceRepository
+        self.mediaStore = mediaStore
+        self.sessionRepository = sessionRepository
+        self.connectivityMonitor = connectivityMonitor
+        self.legacyQueueStore = legacyQueueStore
     }
 
     private static func makeDefaultRecordQueue() -> RecordQueue {
@@ -94,7 +121,13 @@ class AppState: ObservableObject {
         attachPointId: String? = nil,
         attachPointGps: FormGpsValue? = nil
     ) -> CaptureViewModel {
-        CaptureViewModel(
+        let coordinator: CaptureCoordinator?
+        if let recordLedger, let mediaStore, currentUserID != nil {
+            coordinator = CaptureCoordinator(mediaStore: mediaStore, ledger: recordLedger)
+        } else {
+            coordinator = nil
+        }
+        return CaptureViewModel(
             apiClient: apiClient,
             organizationId: organizationId,
             queue: recordQueue,
@@ -105,6 +138,15 @@ class AppState: ObservableObject {
             offlineCache: offlineCache,
             onQueueSnapshotChanged: { [weak self] snapshot in
                 self?.recordQueueSnapshot = snapshot
+            },
+            mediaStore: mediaStore ?? InMemoryCaptureMediaStore(),
+            durableCoordinator: coordinator,
+            ownerUserID: currentUserID,
+            onDurableRecordPersisted: { [weak self] _ in
+                await self?.triggerDurableSync(.recordPersisted)
+            },
+            creationAllowed: { [weak self] in
+                self?.allowsOfflineCapability(.createLocalRecord) ?? false
             }
         )
     }
@@ -120,6 +162,22 @@ class AppState: ObservableObject {
         )
     }
 
+    func makePendingWorkViewModel() -> PendingWorkViewModel? {
+        guard let recordLedger, let mediaStore, let currentUserID, let organizationID = organization?.id else {
+            return nil
+        }
+        return PendingWorkViewModel(
+            ledger: recordLedger,
+            mediaStore: mediaStore,
+            ownerUserID: currentUserID,
+            organizationID: organizationID,
+            language: language,
+            capabilityAllowed: { [weak self] capability in
+                self?.allowsOfflineCapability(capability) ?? false
+            }
+        )
+    }
+
     /// Builds a fresh `ReviewQueueViewModel` wired to this `AppState`'s
     /// shared `apiClient`/`language` — the factory `ConsoleShellView` calls
     /// to construct `ReviewQueueView`'s `@StateObject`, mirroring
@@ -129,7 +187,10 @@ class AppState: ObservableObject {
             apiClient: apiClient,
             organizationId: organizationId,
             viewerRole: role ?? .viewer,
-            language: language
+            language: language,
+            mutationAllowed: { [weak self] in
+                self?.allowsOfflineCapability(.reviewMutation) ?? false
+            }
         )
     }
 
@@ -140,7 +201,10 @@ class AppState: ObservableObject {
             apiClient: apiClient,
             organizationId: organizationId,
             role: role ?? .viewer,
-            language: language
+            language: language,
+            mutationAllowed: { [weak self] in
+                self?.allowsOfflineCapability(.administrationMutation) ?? false
+            }
         )
     }
 
@@ -155,7 +219,10 @@ class AppState: ObservableObject {
             viewerRole: role ?? .viewer,
             viewerUserId: nil,
             viewerIsAdlAdmin: isAdlAdmin,
-            language: language
+            language: language,
+            mutationAllowed: { [weak self] in
+                self?.allowsOfflineCapability(.administrationMutation) ?? false
+            }
         )
     }
 
@@ -167,7 +234,10 @@ class AppState: ObservableObject {
         SchemaBuilderViewModel(
             apiClient: apiClient,
             projectId: projectId,
-            language: language
+            language: language,
+            mutationAllowed: { [weak self] in
+                self?.allowsOfflineCapability(.administrationMutation) ?? false
+            }
         )
     }
 
@@ -179,8 +249,20 @@ class AppState: ObservableObject {
             organizationId: organizationId,
             organization: organization,
             role: role ?? .viewer,
-            language: language
+            language: language,
+            mutationAllowed: { [weak self] in
+                self?.allowsOfflineCapability(.administrationMutation) ?? false
+            }
         )
+    }
+
+    private func allowsOfflineCapability(_ capability: OfflineCapability) -> Bool {
+        // Lightweight/test auth services do not expose SessionRepository's
+        // richer restore result. Their successful sign-in is still an online
+        // verified session for capability purposes.
+        if sessionRepository == nil, isAuthenticated { return true }
+        guard let role else { return false }
+        return OfflineRolePolicy().allows(capability, role: role, session: sessionAvailability)
     }
 
     /// Destinations visible in the current role's nav — thin pass-through to
@@ -204,9 +286,13 @@ class AppState: ObservableObject {
         authErrorMessage = nil
         do {
             try await authService.signIn(email: email, password: password)
-            isAuthenticated = true
-            sessionState = .authenticated
-            await loadOrganizations()
+            if let sessionRepository {
+                await apply(await sessionRepository.restore())
+            } else {
+                isAuthenticated = true
+                sessionState = .authenticated
+                await loadOrganizations()
+            }
         } catch let error as AuthServiceError {
             authErrorMessage = error.message(language)
             isAuthenticated = false
@@ -220,6 +306,7 @@ class AppState: ObservableObject {
     }
 
     func signOut() {
+        let ownerUserID = currentUserID
         isAuthenticated = false
         sessionState = .unauthenticated
         organizations = []
@@ -228,12 +315,18 @@ class AppState: ObservableObject {
         route = ConsoleRoute(screen: .loading)
         organizationsLoadState = .idle
         authErrorMessage = nil
+        currentUserID = nil
+        sessionAvailability = .signedOut
         // Synchronously wipe the local cookie jar so restoreSession() on the
         // next app launch returns nil even if the async server call below is
         // killed before it completes.
-        if let localClearing = authService as? AuthLocalSessionClearing {
-            localClearing.clearLocalSession()
+        if sessionRepository != nil {
+            Task { [sessionRepository] in
+                await sessionRepository?.signOut(ownerUserID: ownerUserID)
+            }
+            return
         }
+        if let localClearing = authService as? AuthLocalSessionClearing { localClearing.clearLocalSession() }
         // Best-effort server-side invalidation — failure is swallowed because
         // the local cookie is already gone.
         if let signingOut = authService as? AuthSigningOut {
@@ -252,6 +345,7 @@ class AppState: ObservableObject {
             let memberships = try await apiClient.listMyOrganizations()
             organizations = memberships
             try? offlineCache.saveOrganizations(memberships)
+            await persistWorkspaceSnapshots(memberships)
             if let first = memberships.first {
                 selectOrganization(organizationId: first.organization.id)
             } else {
@@ -282,6 +376,11 @@ class AppState: ObservableObject {
         organization = membership.organization
         role = membership.role
         route = consoleLandingRoute(role: membership.role)
+        if let currentUserID {
+            sessionRepository?.selectIdentity(ownerUserID: currentUserID, organizationID: organizationId)
+        }
+        Task { await refreshDurableRuntime() }
+        Task { await migrateLegacyQueueIfNeeded() }
     }
 
     func navigate(to newRoute: ConsoleRoute) {
@@ -343,6 +442,50 @@ class AppState: ObservableObject {
     func seedPreviewOrganizationsLoadState(_ loadState: LoadState) {
         organizationsLoadState = loadState
     }
+
+    func configureForUITest(role roleValue: String, locale: String, connectivity: String) {
+        runtimeDisabledForUITest = true
+        let resolvedRole = PlatformRole(rawValue: roleValue) ?? .collector
+        let organization = PlatformOrganization(
+            id: "ui-test-org",
+            name: "ADL Field Operations",
+            slug: "ui-test",
+            logoUrl: nil,
+            accentColor: nil,
+            createdAt: "2026-01-01T00:00:00Z"
+        )
+        language = locale == "fr" ? .fr : .en
+        currentUserID = "ui-test-user"
+        organizations = [PlatformOrganizationMembership(organization: organization, role: resolvedRole)]
+        self.organization = organization
+        role = resolvedRole
+        isAuthenticated = true
+        sessionState = .authenticated
+        organizationsLoadState = .loaded
+        route = consoleLandingRoute(role: resolvedRole)
+        connectivityState = connectivity == "offline" ? .unsatisfied : .satisfied
+        recordLedgerSnapshot = RecordLedgerSnapshot(
+            pending: 0,
+            sending: 0,
+            retrying: 0,
+            blocked: 0,
+            acknowledgedThisSession: 0
+        )
+        sessionAvailability = connectivity == "offline"
+            ? .offlineAuthorized(snapshot: .fixture(
+                ownerUserID: "ui-test-user",
+                organizationID: organization.id,
+                role: resolvedRole,
+                verifiedAt: Date(),
+                expiresAt: Date().addingTimeInterval(AuthorizationClock.window)
+            ))
+            : .onlineVerified(user: AuthSessionUser(
+                id: "ui-test-user",
+                email: "collector@example.test",
+                role: roleValue,
+                isAdmin: false
+            ))
+    }
     #endif
 
     // MARK: - Session restore (cookie-based)
@@ -358,6 +501,11 @@ class AppState: ObservableObject {
 
         sessionState = .restoring
 
+        if let sessionRepository {
+            await apply(await sessionRepository.restore())
+            return
+        }
+
         guard let sessionRestorer = authService as? AuthSessionRestoring else {
             sessionState = .unauthenticated
             if route.screen == .loading {
@@ -370,6 +518,8 @@ class AppState: ObservableObject {
 
         switch result {
         case .authenticated(let user):
+            currentUserID = user.id
+            sessionAvailability = .onlineVerified(user: user)
             isAuthenticated = true
             sessionState = .authenticated
             if let role = user.role, role == "admin" {
@@ -383,6 +533,7 @@ class AppState: ObservableObject {
             }
 
         case .noSession, .unauthorized:
+            sessionAvailability = .reauthenticationRequired(reason: .unauthorized)
             isAuthenticated = false
             sessionState = .unauthenticated
             if route.screen == .loading {
@@ -390,11 +541,147 @@ class AppState: ObservableObject {
             }
 
         case .unavailable:
+            sessionAvailability = .reauthenticationRequired(reason: .authorizationExpired)
             isAuthenticated = false
             sessionState = .unauthenticated
             if route.screen == .loading {
                 route = ConsoleRoute(screen: .authRequired)
             }
+        }
+    }
+
+    func startRuntime() {
+        guard !runtimeDisabledForUITest else { return }
+        guard connectivityTask == nil, let connectivityMonitor else { return }
+        connectivityMonitor.start()
+        connectivityState = connectivityMonitor.state
+        connectivityTask = Task { [weak self, connectivityMonitor] in
+            for await state in connectivityMonitor.stateStream {
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    self?.connectivityState = state
+                }
+                if state == .satisfied {
+                    await self?.triggerDurableSync(.reconnected)
+                }
+            }
+        }
+    }
+
+    func handleForeground() async {
+        await triggerDurableSync(.foreground)
+        await tryRestoreSession()
+    }
+
+    private func apply(_ availability: SessionAvailability) async {
+        sessionAvailability = availability
+        switch availability {
+        case .onlineVerified(let user):
+            currentUserID = user.id
+            isAuthenticated = true
+            sessionState = .authenticated
+            isAdlAdmin = (user.isAdmin ?? false) || user.role == "admin"
+            await loadOrganizations()
+        case .offlineAuthorized(let snapshot):
+            guard let organization = try? JSONDecoder().decode(PlatformOrganization.self, from: snapshot.organizationJSON) else {
+                sessionAvailability = .reauthenticationRequired(reason: .identityMismatch)
+                isAuthenticated = false
+                sessionState = .unauthenticated
+                route = ConsoleRoute(screen: .authRequired)
+                return
+            }
+            currentUserID = snapshot.ownerUserID
+            let membership = PlatformOrganizationMembership(organization: organization, role: snapshot.role)
+            organizations = [membership]
+            self.organization = organization
+            role = snapshot.role
+            organizationsLoadState = .loaded
+            isAuthenticated = true
+            sessionState = .authenticated
+            route = consoleLandingRoute(role: snapshot.role)
+            await refreshDurableRuntime()
+        case .reauthenticationRequired:
+            isAuthenticated = false
+            sessionState = .unauthenticated
+            route = ConsoleRoute(screen: .authRequired)
+        case .restoring:
+            sessionState = .restoring
+        case .signedOut:
+            isAuthenticated = false
+            sessionState = .unauthenticated
+        }
+    }
+
+    private func persistWorkspaceSnapshots(_ memberships: [PlatformOrganizationMembership]) async {
+        guard let currentUserID, let workspaceRepository else { return }
+        let now = Date()
+        for membership in memberships {
+            guard let organizationJSON = try? JSONEncoder().encode(membership.organization) else { continue }
+            let snapshot = WorkspaceSnapshot(
+                ownerUserID: currentUserID,
+                organizationID: membership.organization.id,
+                role: membership.role,
+                verifiedAt: now,
+                expiresAt: now.addingTimeInterval(AuthorizationClock.window),
+                verifiedSystemUptime: ProcessInfo.processInfo.systemUptime,
+                organizationJSON: organizationJSON,
+                projectsJSON: Data("[]".utf8),
+                publishedSchemasJSON: Data("[]".utf8),
+                locale: language == .fr ? "fr" : "en",
+                isLocked: false
+            )
+            try? await workspaceRepository.save(snapshot)
+        }
+    }
+
+    private func durableSyncEngine(organizationID: String) -> SyncEngine? {
+        guard let recordLedger, let mediaStore, let currentUserID else { return nil }
+        if let engine = syncEngines[organizationID] { return engine }
+        let adapter = ExistingPayloadSubmissionAdapter(
+            ledger: recordLedger,
+            mediaStore: mediaStore,
+            apiClient: apiClient,
+            attachmentLoader: { [recordLedger] localID in
+                try await recordLedger.attachments(localID: localID)
+            }
+        )
+        let engine = SyncEngine(
+            ledger: recordLedger,
+            submitter: adapter,
+            mediaStore: mediaStore,
+            ownerUserID: currentUserID,
+            organizationID: organizationID
+        )
+        syncEngines[organizationID] = engine
+        return engine
+    }
+
+    func triggerDurableSync(_ trigger: SyncTrigger) async {
+        guard connectivityState == .satisfied, let organizationID = organization?.id else { return }
+        await durableSyncEngine(organizationID: organizationID)?.trigger(trigger)
+        await refreshDurableRuntime()
+    }
+
+    func refreshDurableRuntime() async {
+        guard let recordLedger, let currentUserID, let organizationID = organization?.id else { return }
+        recordLedgerSnapshot = try? await recordLedger.snapshot(ownerUserID: currentUserID, organizationID: organizationID)
+    }
+
+    private func migrateLegacyQueueIfNeeded() async {
+        guard let legacyQueueStore, let recordLedger, let mediaStore,
+              let currentUserID, let organizationID = organization?.id else { return }
+        let key = "\(currentUserID)/\(organizationID)"
+        guard !migratedWorkspaceKeys.contains(key) else { return }
+        let migrator = LegacyQueueMigrator(
+            legacyStore: legacyQueueStore,
+            ledger: recordLedger,
+            ownerUserID: currentUserID,
+            organizationID: organizationID,
+            mediaStore: mediaStore
+        )
+        if (await migrator.migrate()).isComplete {
+            migratedWorkspaceKeys.insert(key)
+            await refreshDurableRuntime()
         }
     }
 }

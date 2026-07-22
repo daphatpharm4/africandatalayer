@@ -80,7 +80,6 @@ final class CaptureMediaStore: CaptureMediaStoreProtocol, @unchecked Sendable {
     }
 
     func discard(recordLocalID: String) async throws {
-        let pattern = "*/\(recordLocalID)/*"
         let enumerator = fileManager.enumerator(at: baseURL, includingPropertiesForKeys: nil)
         while let fileURL = enumerator?.nextObject() as? URL {
             guard fileURL.pathComponents.contains(recordLocalID) else { continue }
@@ -128,7 +127,7 @@ final class InMemoryCaptureMediaStore: CaptureMediaStoreProtocol, @unchecked Sen
     private let lock = OSAllocatedUnfairLock()
 
     func stage(_ media: PreparedCaptureMedia, ownerUserID: String, organizationID: String, recordLocalID: String) async throws -> LedgerAttachment {
-        try lock.withLock {
+        lock.withLock {
             let path = "\(ownerUserID)/\(organizationID)/\(recordLocalID)"
             var recordMedia = storage[path] ?? [:]
             let ordinal = recordMedia.count
@@ -172,12 +171,14 @@ final class InMemoryCaptureMediaStore: CaptureMediaStoreProtocol, @unchecked Sen
     func removeAcknowledged(recordLocalID: String) async throws {}
 
     func discard(recordLocalID: String) async throws {
-        try lock.withLock {
+        lock.withLock {
             let keysToRemove = storage.keys.filter { $0.hasSuffix("/\(recordLocalID)") }
             for key in keysToRemove {
-                for (mediaKey, media) in storage[key] ?? [:] {
-                    let relativePath = "\(key)/\(mediaKey).jpg"
-                    resolvedData.removeValue(forKey: relativePath)
+                if let recordMedia = storage[key] {
+                    for mediaKey in recordMedia.keys {
+                        let relativePath = "\(key)/\(mediaKey).jpg"
+                        resolvedData.removeValue(forKey: relativePath)
+                    }
                 }
                 storage.removeValue(forKey: key)
             }

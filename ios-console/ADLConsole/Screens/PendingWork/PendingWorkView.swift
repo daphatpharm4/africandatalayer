@@ -112,6 +112,9 @@ struct PendingWorkView: View {
                     Button(t("Discard", "Supprimer"), role: .destructive) {
                         viewModel.requestDiscard(item)
                     }
+                    Button(t("Prepare export", "Préparer l’export")) {
+                        Task { await viewModel.exportItems() }
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .font(.title3)
@@ -119,6 +122,14 @@ struct PendingWorkView: View {
             }
         }
         .padding(.vertical, 4)
+        .overlay(alignment: .bottomTrailing) {
+            if let exportText = viewModel.exportText {
+                ShareLink(item: exportText) {
+                    Label(t("Share export", "Partager l’export"), systemImage: "square.and.arrow.up")
+                        .font(.caption)
+                }
+            }
+        }
     }
 
     private func stateBadge(_ state: RecordState) -> some View {

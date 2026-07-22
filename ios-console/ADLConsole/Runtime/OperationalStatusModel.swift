@@ -27,8 +27,8 @@ extension OperationalStatus {
             return .pending(count: ledger.pending + ledger.sending + ledger.retrying)
         }
         switch session {
-        case .offlineAuthorized(let expiresAt):
-            return .offline(expiresAt: expiresAt)
+        case .offlineAuthorized(let snapshot):
+            return .offline(expiresAt: snapshot.expiresAt)
         case .restoring, .reauthenticationRequired:
             return .connecting
         case .signedOut:

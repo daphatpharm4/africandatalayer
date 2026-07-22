@@ -19,6 +19,15 @@ public final class RecordDatabase: Sendable {
         return try RecordDatabase(queue, skipMigration: true)
     }
 
+    public static func at(_ url: URL) throws -> RecordDatabase {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let pool = try DatabasePool(path: url.path, configuration: fileConfiguration)
+        return try RecordDatabase(pool)
+    }
+
     public static let migrator: DatabaseMigrator = {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("record-ledger-v1") { db in

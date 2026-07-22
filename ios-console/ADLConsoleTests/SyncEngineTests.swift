@@ -20,9 +20,11 @@ final class SyncEngineTests: XCTestCase {
         let engine = makeEngine(ledger: ledger, submitter: submitter)
 
         await engine.trigger(.manual)
-        try await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(submitter.callCount, 1)
+        let submitted = try await ledger.record(localID: "r1")
+        XCTAssertEqual(submitted?.state, .acknowledged)
+        XCTAssertEqual(submitted?.serverRecordID, "server-r1")
     }
 
     func testPermanentErrorBlocksRecord() async throws {
@@ -43,16 +45,17 @@ final class SyncEngineTests: XCTestCase {
 
 final class MockRecordSubmitter: RecordSubmitting, @unchecked Sendable {
     private(set) var callCount = 0
-    var results: [Result<Void, RecordSubmitError>] = []
+    var results: [Result<String, SyncSubmissionError>] = []
 
-    func submit(_ record: LedgerRecord) async throws {
+    func submit(_ record: LedgerRecord) async throws -> String {
         callCount += 1
         if callCount <= results.count {
             let result = results[callCount - 1]
             switch result {
-            case .success: return
+            case .success(let serverID): return serverID
             case .failure(let error): throw error
             }
         }
+        return "server-\(record.localID)"
     }
 }

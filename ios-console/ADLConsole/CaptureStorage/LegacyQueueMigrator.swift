@@ -1,5 +1,6 @@
 import ConsoleForms
 import ConsolePersistence
+import CryptoKit
 import Foundation
 
 enum LegacyQueueMigrationResult: Equatable, Sendable {
@@ -33,17 +34,20 @@ final class LegacyQueueMigrator {
     private let ledger: RecordLedgerProtocol
     private let ownerUserID: String
     private let organizationID: String
+    private let mediaStore: any CaptureMediaStoreProtocol
 
     init(
         legacyStore: RecordQueueStore,
         ledger: RecordLedgerProtocol,
         ownerUserID: String,
-        organizationID: String
+        organizationID: String,
+        mediaStore: any CaptureMediaStoreProtocol = InMemoryCaptureMediaStore()
     ) {
         self.legacyStore = legacyStore
         self.ledger = ledger
         self.ownerUserID = ownerUserID
         self.organizationID = organizationID
+        self.mediaStore = mediaStore
     }
 
     func migrate() async -> LegacyQueueMigrationResult {
@@ -58,8 +62,20 @@ final class LegacyQueueMigrator {
             return .success(importedCount: 0)
         }
 
-        var importedCount = 0
-        var errors: [String] = []
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        guard let sourceData = try? encoder.encode(legacyItems) else {
+            return .failed(reason: "Could not fingerprint the legacy queue")
+        }
+        let sourceSHA256 = SHA256.hash(data: sourceData).map { String(format: "%02x", $0) }.joined()
+        if (try? await ledger.migrationSourceSHA256(name: "legacy-record-queue-v1")) == sourceSHA256 {
+            try? archiveSource()
+            return .success(importedCount: 0)
+        }
+
+        var imports: [LedgerImportItem] = []
+        var stagedRecordIDs: [String] = []
 
         for item in legacyItems {
             let fieldValuesJSON: String
@@ -70,8 +86,11 @@ final class LegacyQueueMigrator {
                 fieldValuesJSON = "{}"
             }
 
+            // Preserve the original idempotency key as the durable local ID so
+            // a response-lost legacy submission cannot be duplicated.
+            let localID = item.idempotencyKey
             let record = LedgerRecord(
-                localID: item.id,
+                localID: localID,
                 ownerUserID: ownerUserID,
                 organizationID: organizationID,
                 projectID: item.draft.projectId,
@@ -88,35 +107,52 @@ final class LegacyQueueMigrator {
                 updatedAt: item.updatedAt
             )
 
-            let attachment = item.draft.photoRefs.enumerated().map { index, ref in
-                LedgerAttachment(
-                    recordLocalID: item.id,
-                    placement: "recordEvidence",
-                    ordinal: index,
-                    relativePath: ref,
-                    sha256: ref,
-                    mimeType: "image/jpeg",
-                    pixelWidth: nil,
-                    pixelHeight: nil,
-                    byteCount: 0,
-                    createdAt: item.createdAt
-                )
-            }
-
             do {
-                try await ledger.insert(record, attachments: attachment)
-                importedCount += 1
+                var attachments: [LedgerAttachment] = []
+                for ref in item.draft.photoRefs {
+                    guard let comma = ref.firstIndex(of: ","), ref.hasPrefix("data:image/"),
+                          let data = Data(base64Encoded: String(ref[ref.index(after: comma)...])) else {
+                        throw LegacyQueueMigratorError.decodeFailed("Invalid photo data for \(item.id)")
+                    }
+                    let prepared = try CaptureMediaPreparer.prepareData(data)
+                    let attachment = try await mediaStore.stage(
+                        prepared,
+                        ownerUserID: ownerUserID,
+                        organizationID: organizationID,
+                        recordLocalID: localID
+                    )
+                    attachments.append(attachment)
+                }
+                stagedRecordIDs.append(localID)
+                imports.append(LedgerImportItem(record: record, attachments: attachments))
             } catch {
-                errors.append("Failed to insert record \(item.id): \(error.localizedDescription)")
+                for recordID in stagedRecordIDs { try? await mediaStore.discard(recordLocalID: recordID) }
+                return .failed(reason: "Could not prepare legacy record \(item.id): \(error.localizedDescription)")
             }
         }
 
-        if errors.isEmpty {
-            return .success(importedCount: importedCount)
-        } else if importedCount > 0 {
-            return .partial(importedCount: importedCount, errors: errors)
+        do {
+            try await ledger.importAtomically(
+                imports,
+                migration: LedgerMigrationReceipt(
+                    name: "legacy-record-queue-v1",
+                    sourceSHA256: sourceSHA256,
+                    importedCount: imports.count
+                )
+            )
+            try archiveSource()
+            return .success(importedCount: imports.count)
+        } catch {
+            for recordID in stagedRecordIDs { try? await mediaStore.discard(recordLocalID: recordID) }
+            return .failed(reason: "Legacy migration rolled back: \(error.localizedDescription)")
+        }
+    }
+
+    private func archiveSource() throws {
+        if let archivingStore = legacyStore as? any LegacyQueueArchivingStore {
+            try archivingStore.archiveAfterMigration()
         } else {
-            return .failed(reason: errors.joined(separator: "; "))
+            try legacyStore.save([])
         }
     }
 

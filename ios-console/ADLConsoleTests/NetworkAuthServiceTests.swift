@@ -188,6 +188,14 @@ final class NetworkAuthServiceTests: XCTestCase {
         XCTAssertEqual(result, .unauthorized)
     }
 
+    func testRestoreSessionReturnsUnauthorizedOn403() async {
+        let transport = MockAuthTransport(responses: [.json(#"{}"#, statusCode: 403)])
+        let service = makeService(transport: transport)
+
+        let result = await service.restoreSession()
+        XCTAssertEqual(result, .unauthorized)
+    }
+
     func testRestoreSessionReturnsTransportUnavailableOnError() async {
         let transport = MockAuthTransport()
         transport.shouldThrow = true

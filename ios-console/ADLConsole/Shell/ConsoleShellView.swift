@@ -9,6 +9,7 @@ struct ConsoleShellView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var isAppSettingsPresented = false
+    @State private var isPendingWorkPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -32,6 +33,11 @@ struct ConsoleShellView: View {
                     viewModel: appState.makeSchemaBuilderViewModel(projectId: projectId),
                     onDismiss: { appState.navigate(to: ConsoleRoute(screen: .projects)) }
                 )
+            }
+        }
+        .sheet(isPresented: $isPendingWorkPresented) {
+            if let viewModel = appState.makePendingWorkViewModel() {
+                NavigationStack { PendingWorkView(viewModel: viewModel) }
             }
         }
         .task(id: appState.route.screen) {
@@ -208,10 +214,13 @@ struct ConsoleShellView: View {
     // MARK: - Controls
 
     private var syncBar: some View {
-        let snapshot = appState.recordQueueSnapshot
-        let pending = snapshot.map { $0.pending + $0.syncing } ?? 0
-        let failed = snapshot?.failed ?? 0
-        let total = snapshot?.total ?? 0
+        let legacySnapshot = appState.recordQueueSnapshot
+        let durableSnapshot = appState.recordLedgerSnapshot
+        let pending = durableSnapshot.map { $0.pending + $0.sending + $0.retrying }
+            ?? legacySnapshot.map { $0.pending + $0.syncing } ?? 0
+        let failed = durableSnapshot?.blocked ?? legacySnapshot?.failed ?? 0
+        let total = durableSnapshot.map { $0.pending + $0.sending + $0.retrying + $0.blocked }
+            ?? legacySnapshot?.total ?? 0
         let hasQueuedWork = total > 0
         let tint = failed > 0 ? ADLConsoleColor.danger : (hasQueuedWork ? ADLConsoleColor.terraDark : ADLConsoleColor.forestDark)
         let background = failed > 0 ? ADLConsoleColor.dangerWash : (hasQueuedWork ? ADLConsoleColor.terraWash : ADLConsoleColor.forestWash)
@@ -225,9 +234,26 @@ struct ConsoleShellView: View {
                 .foregroundStyle(tint)
                 .monospacedDigit()
             Spacer()
+            if total > 0, appState.recordLedgerSnapshot != nil {
+                Button {
+                    isPendingWorkPresented = true
+                } label: {
+                    Image(systemName: "tray.full")
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(ADLConsolePressStyle())
+                .foregroundStyle(tint)
+                .accessibilityLabel(appState.language.t("Open pending work", "Ouvrir le travail en attente"))
+            }
             if hasQueuedWork {
                 Button {
-                    Task { await appState.syncRecordQueue() }
+                    Task {
+                        if appState.recordLedgerSnapshot != nil {
+                            await appState.triggerDurableSync(.manual)
+                        } else {
+                            await appState.syncRecordQueue()
+                        }
+                    }
                 } label: {
                     if appState.isSyncingRecordQueue {
                         ProgressView()
@@ -251,6 +277,9 @@ struct ConsoleShellView: View {
     }
 
     private func syncBarText(pending: Int, failed: Int, total: Int) -> String {
+        if appState.connectivityState != .satisfied {
+            return appState.language.t("Offline", "Hors ligne")
+        }
         if appState.isSyncingRecordQueue {
             return appState.language.t("Syncing queued records", "Synchronisation des relevés")
         }

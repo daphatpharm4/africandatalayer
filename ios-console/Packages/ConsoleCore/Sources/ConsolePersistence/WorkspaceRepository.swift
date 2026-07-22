@@ -45,7 +45,7 @@ public final class WorkspaceRepository: WorkspaceRepositoryProtocol {
     }
 
     public func load(ownerUserID: String, organizationID: String) async throws -> WorkspaceSnapshot? {
-        try await database.reader.read { db in
+        try database.reader.read { db in
             try Row.fetchOne(db, sql: """
                 SELECT * FROM workspace_snapshots
                 WHERE owner_user_id = ? AND organization_id = ?
@@ -54,7 +54,7 @@ public final class WorkspaceRepository: WorkspaceRepositoryProtocol {
     }
 
     public func loadUnlocked(ownerUserID: String, organizationID: String) async throws -> WorkspaceSnapshot? {
-        try await database.reader.read { db in
+        try database.reader.read { db in
             try Row.fetchOne(db, sql: """
                 SELECT * FROM workspace_snapshots
                 WHERE owner_user_id = ? AND organization_id = ? AND is_locked = 0
@@ -63,7 +63,7 @@ public final class WorkspaceRepository: WorkspaceRepositoryProtocol {
     }
 
     public func loadAnyUnlocked() async throws -> WorkspaceSnapshot? {
-        try await database.reader.read { db in
+        try database.reader.read { db in
             try Row.fetchOne(db, sql: """
                 SELECT * FROM workspace_snapshots WHERE is_locked = 0
                 """)
@@ -103,7 +103,7 @@ public final class WorkspaceRepository: WorkspaceRepositoryProtocol {
     }
 
     public func loadRoleSurface(_ surface: String, ownerUserID: String, organizationID: String) async throws -> Data? {
-        try await database.reader.read { db in
+        try database.reader.read { db in
             try Row.fetchOne(db, sql: """
                 SELECT payload FROM role_surface_caches
                 WHERE surface = ? AND owner_user_id = ? AND organization_id = ?

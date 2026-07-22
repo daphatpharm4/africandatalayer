@@ -1,5 +1,6 @@
 import ConsoleForms
 import ConsoleModels
+import PhotosUI
 import SwiftUI
 
 /// Renders exactly one SwiftUI control for a `FormFieldDescriptor`, dispatching
@@ -11,6 +12,10 @@ struct CaptureFieldControl: View {
     let language: ConsoleLanguage
     @Binding var value: FormFieldInput
     let error: FormFieldError?
+    var onPhotoSelected: ((Data, String) async throws -> String)? = nil
+    var onPhotoCleared: ((String) -> Void)? = nil
+    @State private var photoPickerItem: PhotosPickerItem?
+    @State private var photoError: String?
 
     private var t: (String, String) -> String { language.t }
 
@@ -236,15 +241,46 @@ struct CaptureFieldControl: View {
 
     private var photoFieldControl: some View {
         let ref: String? = { if case .photo(let value) = value { return value }; return nil }()
-        return HStack {
-            Text(ref == nil ? t("No photo attached", "Aucune photo jointe") : t("Photo attached", "Photo jointe"))
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.inkMuted)
-            Spacer()
-            Button(ref == nil ? t("Attach", "Joindre") : t("Clear", "Effacer")) {
-                value = .photo(ref == nil ? "field-photo-\(descriptor.key)-\(UUID().uuidString.prefix(8))" : nil)
+        let attachLabel = language.t("Attach", "Joindre")
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(ref == nil ? t("No photo attached", "Aucune photo jointe") : t("Photo attached", "Photo jointe"))
+                    .font(ADLConsoleFont.footnote)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                Spacer()
+                if let ref {
+                    Button(t("Clear", "Effacer")) {
+                        onPhotoCleared?(ref)
+                        value = .photo(nil)
+                    }
+                } else {
+                    PhotosPicker(selection: $photoPickerItem, matching: .images) {
+                        Text(attachLabel)
+                    }
+                }
             }
             .font(ADLConsoleFont.footnote)
+            if let photoError {
+                Text(photoError)
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.danger)
+            }
+        }
+        .onChange(of: photoPickerItem) { _, item in
+            guard let item, let onPhotoSelected else { return }
+            Task { @MainActor in
+                do {
+                    guard let data = try await item.loadTransferable(type: Data.self) else {
+                        throw CaptureAttachmentPickerError.imageProcessingFailed
+                    }
+                    value = .photo(try await onPhotoSelected(data, descriptor.key))
+                    photoError = nil
+                } catch {
+                    value = .photo(nil)
+                    photoError = t("Could not attach this photo.", "Impossible de joindre cette photo.")
+                }
+                photoPickerItem = nil
+            }
         }
     }
 

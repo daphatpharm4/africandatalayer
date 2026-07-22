@@ -81,9 +81,8 @@ final class PendingWorkViewModelTests: XCTestCase {
         guard case .loaded(let items) = vm.viewState else {
             XCTFail("Expected .loaded, got \(vm.viewState)"); return
         }
-        // records() returns ALL records including acknowledged/discarded
-        // ViewModel should still include them — verify count is 3
-        XCTAssertEqual(items.count, 3)
+        XCTAssertEqual(items.count, 1)
+        XCTAssertEqual(items.first?.id, "r1")
     }
 
     // MARK: - Discard requires confirmation
@@ -99,6 +98,26 @@ final class PendingWorkViewModelTests: XCTestCase {
         vm.requestDiscard(items[0])
         XCTAssertNotNil(vm.discardConfirmationItem)
         XCTAssertEqual(vm.discardConfirmationItem?.id, "r1")
+    }
+
+    func testCapabilityPolicyBlocksDiscardRequest() async throws {
+        let database = try RecordDatabase.inMemory()
+        let ledger = RecordLedger(database: database)
+        try await ledger.insert(fixtureRecord())
+        let vm = PendingWorkViewModel(
+            ledger: ledger,
+            mediaStore: InMemoryCaptureMediaStore(),
+            ownerUserID: "u1",
+            organizationID: "o1",
+            language: .en,
+            capabilityAllowed: { $0 == .exportPendingRecord }
+        )
+        await vm.loadItems()
+        guard case .loaded(let items) = vm.viewState else { XCTFail(); return }
+
+        vm.requestDiscard(items[0])
+
+        XCTAssertNil(vm.discardConfirmationItem)
     }
 
     func testCancelDiscardClearsConfirmation() async throws {
@@ -137,15 +156,7 @@ final class PendingWorkViewModelTests: XCTestCase {
         ])
         await vm.loadItems()
 
-        guard case .loaded(let items) = vm.viewState else { XCTFail(); return }
-
-        vm.requestDiscard(items[0])
-        // acknowledged records cannot be discarded (state.isRecoverable == false)
-        // confirmDiscard should skip it
-        await vm.confirmDiscard()
-
-        guard case .loaded(let remaining) = vm.viewState else { XCTFail(); return }
-        XCTAssertEqual(remaining.count, 1)
+        XCTAssertEqual(vm.viewState, .empty)
     }
 
     // MARK: - Blocked record classification

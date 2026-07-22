@@ -44,6 +44,8 @@ ios/App/App/public/
 keystore.properties
 # Added by code-review-graph
 .code-review-graph/
+graphify-out/
+.opencode/skills/impeccable/
 .worktrees/
 .superpowers/
 

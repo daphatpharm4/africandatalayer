@@ -12,7 +12,15 @@ struct SyncProgress: Equatable, Sendable {
 }
 
 protocol RecordSubmitting: Sendable {
-    func submit(_ record: LedgerRecord) async throws
+    func submit(_ record: LedgerRecord) async throws -> String
+}
+
+enum SyncSubmissionError: Error, Equatable, Sendable {
+    case retryable(code: String, message: String)
+    case authentication(code: String, message: String)
+    case authorization(code: String, message: String)
+    case validation(code: String, message: String)
+    case storage(code: String, message: String)
 }
 
 actor SyncEngine {
@@ -21,6 +29,7 @@ actor SyncEngine {
     private let mediaStore: any CaptureMediaStoreProtocol
     private let ownerUserID: String
     private let organizationID: String
+    private let jitter: @Sendable (TimeInterval) -> TimeInterval
     private var drainTask: Task<Void, Never>?
 
     init(
@@ -28,18 +37,28 @@ actor SyncEngine {
         submitter: any RecordSubmitting,
         mediaStore: any CaptureMediaStoreProtocol,
         ownerUserID: String,
-        organizationID: String
+        organizationID: String,
+        jitter: @escaping @Sendable (TimeInterval) -> TimeInterval = { delay in
+            delay * Double.random(in: 0.8...1.2)
+        }
     ) {
         self.ledger = ledger
         self.submitter = submitter
         self.mediaStore = mediaStore
         self.ownerUserID = ownerUserID
         self.organizationID = organizationID
+        self.jitter = jitter
     }
 
-    func trigger(_ trigger: SyncTrigger) {
-        guard drainTask == nil else { return }
-        drainTask = Task { await drain(); drainTask = nil }
+    func trigger(_ trigger: SyncTrigger) async {
+        if let drainTask {
+            await drainTask.value
+            return
+        }
+        let task = Task { await drain() }
+        drainTask = task
+        await task.value
+        drainTask = nil
     }
 
     private func drain() async {
@@ -47,25 +66,32 @@ actor SyncEngine {
             if Task.isCancelled { break }
             let now = Date()
             do {
-                try await submitter.submit(record)
-                try await ledger.recordAcknowledgement(localID: record.localID, serverRecordID: record.localID, acknowledgedAt: now)
-                try await mediaStore.discard(recordLocalID: record.localID)
-            } catch let error as RecordSubmitError {
+                let serverRecordID = try await submitter.submit(record)
+                try await ledger.recordAcknowledgement(localID: record.localID, serverRecordID: serverRecordID, acknowledgedAt: now)
+                try await mediaStore.removeAcknowledged(recordLocalID: record.localID)
+            } catch let error as SyncSubmissionError {
                 switch error {
-                case .retryable:
-                    let ledgerError = LedgerError(.network, code: "retryable", safeMessage: error.localizedDescription)
-                    let nextAttempt = now.addingTimeInterval(min(30, pow(2, Double(record.automaticAttemptCount + 1))))
-                    try? await ledger.recordRetry(localID: record.localID, error: ledgerError, nextAttemptAt: nextAttempt)
-                    break
-                case .permanent:
-                    let ledgerError = LedgerError(.unknown, code: "permanent", safeMessage: error.localizedDescription)
-                    try? await ledger.recordBlock(localID: record.localID, state: .blockedStorage, error: ledgerError)
+                case .retryable(let code, let message):
+                    let ledgerError = LedgerError(.network, code: code, safeMessage: message)
+                    let baseDelay = min(300, pow(2, Double(record.automaticAttemptCount + 1)))
+                    try? await ledger.recordRetry(localID: record.localID, error: ledgerError, nextAttemptAt: now.addingTimeInterval(jitter(baseDelay)))
+                    return
+                case .authentication(let code, let message):
+                    try? await ledger.recordBlock(localID: record.localID, state: .blockedAuthentication, error: LedgerError(.authentication, code: code, safeMessage: message))
+                    return
+                case .authorization(let code, let message):
+                    try? await ledger.recordBlock(localID: record.localID, state: .blockedAuthorization, error: LedgerError(.authorization, code: code, safeMessage: message))
+                    return
+                case .validation(let code, let message):
+                    try? await ledger.recordBlock(localID: record.localID, state: .blockedValidation, error: LedgerError(.validation, code: code, safeMessage: message))
+                case .storage(let code, let message):
+                    try? await ledger.recordBlock(localID: record.localID, state: .blockedStorage, error: LedgerError(.storage, code: code, safeMessage: message))
                 }
             } catch {
                 let ledgerError = LedgerError(.unknown, code: "unknown", safeMessage: error.localizedDescription)
                 let nextAttempt = now.addingTimeInterval(30)
                 try? await ledger.recordRetry(localID: record.localID, error: ledgerError, nextAttemptAt: nextAttempt)
-                break
+                return
             }
         }
     }

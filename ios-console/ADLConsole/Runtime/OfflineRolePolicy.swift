@@ -1,8 +1,8 @@
 import ConsoleModels
 import Foundation
 
-enum OfflineCapability: Sendable {
-    case createLocalRecord, inspectPendingRecord, exportPendingRecord, discardPendingRecord
+enum OfflineCapability: Equatable, Sendable {
+    case createLocalRecord, inspectPendingRecord, exportPendingRecord, discardPendingRecord, retryPendingRecord
     case inspectCachedReview, reviewMutation
     case inspectCachedAdministration, administrationMutation
 }
@@ -17,7 +17,7 @@ struct OfflineRolePolicy: Sendable {
             switch role {
             case .collector:
                 switch capability {
-                case .createLocalRecord, .inspectPendingRecord, .exportPendingRecord, .discardPendingRecord:
+                case .createLocalRecord, .inspectPendingRecord, .exportPendingRecord, .discardPendingRecord, .retryPendingRecord:
                     return true
                 default:
                     return false

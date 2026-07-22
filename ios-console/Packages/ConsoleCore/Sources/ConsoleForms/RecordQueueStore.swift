@@ -13,6 +13,10 @@ public protocol RecordQueueStore: Sendable {
     func save(_ items: [RecordQueueItem]) throws
 }
 
+public protocol LegacyQueueArchivingStore: RecordQueueStore {
+    func archiveAfterMigration() throws
+}
+
 /// Test/preview double — holds the queue in memory for the lifetime of the
 /// process. Thread-safe via a simple lock since `RecordQueue` (an actor)
 /// already serializes access to its store, but this makes the type safe to
@@ -42,7 +46,7 @@ public final class InMemoryRecordQueueStore: RecordQueueStore, @unchecked Sendab
 /// the app points this at a file inside its app-support/caches directory so
 /// queued drafts (including any not-yet-uploaded photo refs) survive a
 /// relaunch, same durability guarantee IndexedDB gives the web queue.
-public final class FileRecordQueueStore: RecordQueueStore, @unchecked Sendable {
+public final class FileRecordQueueStore: LegacyQueueArchivingStore, @unchecked Sendable {
     private let fileURL: URL
     private let lock = NSLock()
 
@@ -68,6 +72,17 @@ public final class FileRecordQueueStore: RecordQueueStore, @unchecked Sendable {
             withIntermediateDirectories: true
         )
         try data.write(to: fileURL, options: .atomic)
+    }
+
+    public func archiveAfterMigration() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        var backupURL = fileURL.appendingPathExtension("migrated-backup")
+        if FileManager.default.fileExists(atPath: backupURL.path) {
+            backupURL = fileURL.appendingPathExtension("migrated-backup-\(Int(Date().timeIntervalSince1970))")
+        }
+        try FileManager.default.moveItem(at: fileURL, to: backupURL)
     }
 
     private static let encoder: JSONEncoder = {

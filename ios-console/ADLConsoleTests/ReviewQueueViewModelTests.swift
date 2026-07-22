@@ -104,6 +104,21 @@ final class ReviewQueueViewModelTests: XCTestCase {
 
     // MARK: - Approve
 
+    func testOfflineReviewPolicyBlocksDecisionBeforeNetwork() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = ReviewQueueViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            language: .en,
+            mutationAllowed: { false }
+        )
+
+        XCTAssertFalse(viewModel.canMutate)
+        let approved = await viewModel.approve("rec-1")
+        XCTAssertFalse(approved)
+        XCTAssertTrue(transport.requests(forView: "platform_record_review").isEmpty)
+    }
+
     func testApproveCallsReviewPlatformRecordWithApprovePayloadAndRemovesItem() async {
         let transport = RoutingMockPlatformTransport()
         transport.setResponse(listResponse(["rec-1", "rec-2"]), forView: "platform_record_list")

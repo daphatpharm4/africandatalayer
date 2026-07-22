@@ -20,10 +20,14 @@ final class SessionRepositoryTests: XCTestCase {
         if let snapshot {
             try await workspaceRepo.save(snapshot)
         }
+        let identityStore = InMemorySessionIdentityStore(identity: snapshot.map {
+            SessionIdentity(ownerUserID: $0.ownerUserID, organizationID: $0.organizationID)
+        })
         return SessionRepository(
             authService: auth,
             workspaceRepository: workspaceRepo,
             clock: AuthorizationClock(),
+            identityStore: identityStore,
             now: { now },
             systemUptime: { systemUptime }
         )
@@ -57,10 +61,10 @@ final class SessionRepositoryTests: XCTestCase {
 
         let result = await repository.restore()
 
-        guard case .offlineAuthorized(let expiresAt) = result else {
+        guard case .offlineAuthorized(let snapshot) = result else {
             return XCTFail("Expected .offlineAuthorized, got \(result)")
         }
-        XCTAssertEqual(expiresAt.timeIntervalSince1970, AuthorizationClock.window)
+        XCTAssertEqual(snapshot.expiresAt.timeIntervalSince1970, AuthorizationClock.window)
     }
 
     func testExpiryAndClockRollbackRequireReauthentication() async throws {
@@ -100,7 +104,7 @@ final class SessionRepositoryTests: XCTestCase {
 
         let result = await repository.restore()
 
-        XCTAssertEqual(result, .reauthenticationRequired(reason: .authorizationExpired))
+        XCTAssertEqual(result, .reauthenticationRequired(reason: .identityMismatch))
     }
 }
 

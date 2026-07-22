@@ -39,14 +39,23 @@ final class CaptureCoordinator {
         let now = Date()
 
         var attachments: [LedgerAttachment] = []
-        for mediaItem in intent.media {
-            let attachment = try await mediaStore.stage(
-                mediaItem.prepared,
-                ownerUserID: intent.ownerUserID,
-                organizationID: intent.organizationID,
-                recordLocalID: localID
-            )
-            attachments.append(attachment)
+        do {
+            for mediaItem in intent.media {
+                var attachment = try await mediaStore.stage(
+                    mediaItem.prepared,
+                    ownerUserID: intent.ownerUserID,
+                    organizationID: intent.organizationID,
+                    recordLocalID: localID
+                )
+                attachment.placement = mediaItem.placement
+                attachments.append(attachment)
+            }
+        } catch let error as CaptureMediaStoreError {
+            try? await mediaStore.discard(recordLocalID: localID)
+            throw CaptureCoordinatorError.mediaStoreFailure(error)
+        } catch {
+            try? await mediaStore.discard(recordLocalID: localID)
+            throw CaptureCoordinatorError.mediaStoreFailure(.fileSystemFailure(String(describing: error)))
         }
 
         let record = LedgerRecord(
@@ -65,8 +74,10 @@ final class CaptureCoordinator {
         do {
             try await ledger.insert(record, attachments: attachments)
         } catch let error as RecordLedgerError {
+            try? await mediaStore.discard(recordLocalID: localID)
             throw CaptureCoordinatorError.ledgerFailure(error)
         } catch {
+            try? await mediaStore.discard(recordLocalID: localID)
             throw CaptureCoordinatorError.ledgerFailure(.invalidTransition)
         }
 

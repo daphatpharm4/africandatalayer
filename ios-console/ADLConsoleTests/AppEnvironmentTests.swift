@@ -75,7 +75,7 @@ final class AppEnvironmentTests: XCTestCase {
             "CFBundleShortVersionString": "1.0.0",
             "CFBundleVersion": "42"
         ])
-        let dependencies = AppDependencies(environment: environment)
+        let dependencies = try AppDependencies(environment: environment)
         XCTAssertEqual(dependencies.baseURL, environment.apiBaseURL)
         XCTAssertEqual(dependencies.session.configuration.timeoutIntervalForRequest, 30)
     }

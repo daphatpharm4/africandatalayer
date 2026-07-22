@@ -74,7 +74,7 @@ final class LegacyQueueMigratorTests: XCTestCase {
 
         _ = await migrator.migrate()
 
-        let record = try await ledger.record(localID: "l1")
+        let record = try await ledger.record(localID: "ik-l1")
         XCTAssertEqual(record?.projectID, "proj-42")
         XCTAssertEqual(record?.recordTypeKey, "pharmacy")
         XCTAssertEqual(record?.state, .pending)
@@ -87,7 +87,7 @@ final class LegacyQueueMigratorTests: XCTestCase {
 
         _ = await migrator.migrate()
 
-        let record = try await ledger.record(localID: "l1")
+        let record = try await ledger.record(localID: "ik-l1")
         XCTAssertEqual(record?.state, .retryScheduled)
     }
 
@@ -98,7 +98,7 @@ final class LegacyQueueMigratorTests: XCTestCase {
 
         _ = await migrator.migrate()
 
-        let record = try await ledger.record(localID: "l1")
+        let record = try await ledger.record(localID: "ik-l1")
         XCTAssertEqual(record?.state, .acknowledged)
     }
 
@@ -128,14 +128,9 @@ final class LegacyQueueMigratorTests: XCTestCase {
         let remaining = try store.load()
         XCTAssertEqual(remaining.count, 2)
 
-        // Partial success — l1 was imported, l2 failed
-        if case .partial(let count, _) = result {
-            XCTAssertEqual(count, 1)
-        } else if case .failed = result {
-            // Also acceptable — depends on error handling
-        } else {
-            XCTFail("Expected partial or failed, got \(result)")
-        }
+        guard case .failed = result else { return XCTFail("Expected atomic failure, got \(result)") }
+        let importedRecords = try await ledger.records(ownerUserID: "u1", organizationID: "o1")
+        XCTAssertTrue(importedRecords.isEmpty)
     }
 }
 
@@ -153,6 +148,13 @@ private final class FailingRecordLedger: RecordLedgerProtocol {
             throw RecordLedgerError.invalidTransition
         }
         try await inner.insert(record, attachments: attachments)
+    }
+
+    func importAtomically(_ items: [LedgerImportItem], migration: LedgerMigrationReceipt?) async throws {
+        if items.contains(where: { $0.record.localID == failOnLocalID || $0.record.localID == "ik-\(failOnLocalID)" }) {
+            throw RecordLedgerError.invalidTransition
+        }
+        try await inner.importAtomically(items, migration: migration)
     }
 
     func record(localID: String) async throws -> LedgerRecord? {

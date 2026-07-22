@@ -5,7 +5,7 @@
 **Branch:** `feat/ios-console-public-launch-m0-m4`
 **Base:** `main` (merged via `817bae0`)
 **Trigger:** Six bounded delivery plans for the ADL Console first public App Store release
-**Total:** 26 commits, 515 files changed, ~278K insertions across all six plans
+**Scope after review remediation:** 161 files changed, 8,752 insertions and 231 deletions from planning base `25a4f7b`. The accidental Opencode skill bundle, Graphify output, and duplicate `* 2.swift`/font files from `1dd7657` were removed.
 
 ### Plans Executed (in order)
 
@@ -185,7 +185,7 @@ enum AuthSessionRestoreResult: Equatable, Sendable {
 - `WorkspaceRepository` (final class, GRDB-backed):
   - Owner+org composite primary key
   - `lock/unlock` for sign-out isolation
-  - `loadAnyUnlocked()` — returns first unlocked snapshot (used by `SessionRepository` when user ID is unknown at restore time)
+  - `loadAnyUnlocked()` — retained for repository tooling, but no longer used to authorize an offline session
   - `role_surface_caches` table for per-role cached views (review/admin surfaces)
 
 **`ConsolePersistence/RecordDatabase.swift`**:
@@ -214,9 +214,10 @@ enum SessionAvailability {
 - `restore()` — calls `authService.restoreSession()`, then:
   - `.authenticated` → `.onlineVerified`
   - `.noSession/.unauthorized` → `.reauthenticationRequired`
-  - `.unavailable` → tries `workspaceRepository.loadAnyUnlocked()` + clock validity check
+  - `.unavailable` (transport or 5xx only) → loads the exact saved owner/organization identity and checks that snapshot's clock validity
+  - all 4xx responses, including 403, fail closed and require re-authentication
+- Persists the selected owner/organization identity separately so offline restore never guesses across users
 - Injected `now` and `systemUptime` closures for testability
-- See also `WorkspaceRepository.loadAnyUnlocked()` added in this commit for the "user might not be known yet" path
 
 ### Task 4: Connectivity + Sync Engine (`20d52be`)
 
@@ -233,10 +234,10 @@ enum SessionAvailability {
 **`Runtime/SyncEngine.swift`**:
 - `actor SyncEngine` — single-drain loop: `trigger()` coalesces (dedup if drainTask != nil)
 - `drain()` — claims oldest due record via `ledger.claimNextDue()`, submits via `RecordSubmitting`, then:
-  - Success → `recordAcknowledgement()` + media discard
-  - `Retryable` error → `recordRetry()` with exponential backoff `min(30, 2^(attempt+1))`
-  - `Permanent` error → `recordBlock()` as `blockedStorage`
-- `RecordSubmitting` protocol (currently `RecordSubmitting.submit(_:)`, no return value—places record in pending state and delegates to submitter)
+  - Success → records the real server ID in `recordAcknowledgement()` + media discard
+  - Retryable transport/5xx → exponential backoff with jitter
+  - Authentication/authorization/validation/storage → the matching blocked state
+- `RecordSubmitting.submit(_:)` returns the server record ID, keeping the engine decoupled from `PlatformAPIClient` without fabricating acknowledgements
 
 ### Task 5: Offline Role Policy (`0b8e4a3`)
 
@@ -354,42 +355,41 @@ enum OperationalStatus {
 - `CaptureMediaStore` uses `OSAllocatedUnfairLock` internally rather than actor isolation because file I/O is not async and actors would create priority inversion risk
 - `WorkspaceRepository` and `RecordLedger` are deliberately not actors—they delegate to `DatabaseWriter` which already provides serialized access
 
-### Why `loadAnyUnlocked()` on WorkspaceRepository?
-At session restore time, the app may not yet know the user's identity (it's being determined from the auth restore result). `loadAnyUnlocked()` returns the first unlocked snapshot so the availability check can proceed without requiring the owner user ID.
+### Why offline restore requires an exact saved identity
+Authorizing the first unlocked snapshot can cross user/workspace boundaries on a shared device. The runtime now persists the selected owner/organization identity separately and calls `loadUnlocked(ownerUserID:organizationID:)`; a missing or mismatched identity fails closed.
 
 ### Why the `RecordSubmitting` protocol on SyncEngine?
 Keeps the sync engine decoupled from `PlatformAPIClient`—tests inject a mock that simulates network failures without needing real HTTP.
 
 ### Error classification on SyncEngine
-- `RecordSubmitError.retryable` → exponential backoff (transport/5xx errors)
-- `RecordSubmitError.permanent` → block immediately (400/409/422 validation errors, checksum failures)
-- The engine currently wraps all non-explicit errors as retryable failsafe
+- transport/5xx → exponential backoff with jitter
+- 401 → `blockedAuthentication`
+- 403 → `blockedAuthorization`
+- 400/409/422 → `blockedValidation`
+- checksum or durable-media failure → `blockedStorage`
 
 ---
 
-## 8. Gaps / Known Issues / Not Yet Wired
+## 8. Review Remediation Status
 
-### M1 Gaps (things the plan says should be wired but aren't yet):
+Completed after the initial handover:
 
-1. **View model policy checks**: `OfflineRolePolicy` is defined but NOT yet checked in `CaptureViewModel`, `ReviewQueueViewModel`, `ProjectsViewModel`, `MembersViewModel`, `SchemaBuilderViewModel`, or `SettingsViewModel`. Mutation entry points still call the API without checking `allows()` first.
+- `AppState` now constructs and publishes the durable session/connectivity/ledger runtime, triggers sync on record persistence, foreground, reconnect, and manual retry, and signs out through `SessionRepository` so the owner workspace is locked.
+- `OfflineRolePolicy` is enforced at Capture, Pending Work, Review, Projects, Members, Schema, and Settings mutation entry points; tests assert that blocked actions make no network call.
+- Capture stages real selected photos and atomically persists a complete `RecordDraft` envelope, preserving GPS, notes, point enrichment, capture time, device, EXIF, and integrity metadata through delayed sync.
+- Legacy migration is hash-journaled, atomic, preserves idempotency keys, validates/stages media, and archives the source only after commit.
+- Notification storage defaults off and permission is requested only after the explicit Settings toggle.
+- Debug/Staging/Release use an explicit `Info.plist`; the configuration keys were verified in a launched simulator build.
 
-2. **AppState integration**: `SessionRepository`, `OperationalStatusModel`, `SyncEngine`, and `ConnectivityMonitor` are defined but NOT yet wired into `AppState`. The existing `AppState` still uses the old `tryRestoreSession()` pattern and doesn't publish `SessionAvailability` or `OperationalStatus`.
+Still open:
 
-3. **SyncEngine not triggered from lifecycle**: No `scenePhase` → `.foreground` trigger, no `reconnected` trigger from `ConnectivityMonitor`, no `recordPersisted` trigger from `CaptureCoordinator`.
+1. **Background refresh**: `com.africandatalayer.console.sync-refresh` is not registered with `BGTaskScheduler`; foreground/reconnect/record-persisted/manual triggers are active.
+2. **Legacy cache retirement**: `ConsoleOfflineCache` still backs non-authoritative read caches while `WorkspaceRepository` is the authorization source.
+3. **Telemetry lifecycle**: `OSLogTelemetryClient` and `MetricKitReporter` exist but are not yet attached to the production runtime lifecycle.
 
-4. **Background refresh task not registered**: `com.africandatalayer.console.sync-refresh` BGTaskScheduler registration not added.
+### Structural note
 
-5. **Notification opt-in not wired**: `@AppStorage("notificationsEnabled")` exists but permission request is not wired to settings toggle. Plan says "default off, request only from explicit action."
-
-6. **ConsoleOfflineCache retirement**: The plan specifies removing `ConsoleOfflineCache.swift` and migrating to `WorkspaceRepository`. Not done yet—needs to happen when `AppState.loadOrganizations()` is updated to use workspace snapshots.
-
-7. **Sign-out not using SessionRepository**: `AppState.signOut()` still clears cookies directly via `clearLocalSession()` rather than going through `SessionRepository.signOut()` which also locks workspace.
-
-### Pre-existing issues (not introduced by this work):
-
-- `CaptureCoordinator.swift` is at `Screens/Capture/` not `CaptureStorage/`—inconsistent directory structure
-- Several `XCUITest` UI test files reference deleted or renamed views
-- The project has no `xcconfig` files—build configuration is entirely in `project.yml` and `project.pbxproj`
+- `CaptureCoordinator.swift` remains at `Screens/Capture/` rather than `CaptureStorage/`; this is organization-only and does not affect runtime behavior.
 
 ---
 
@@ -606,27 +606,19 @@ d0d6777 refactor: preserve auth restore outcomes                    # M1-T1
 14c78b5 feat: add durable record database                           # M0-T1
 ```
 
-## 14. Remaining Gaps (not yet wired from any plan)
+## 14. Remaining Gaps
 
-1. **M1 View model policy checks**: `OfflineRolePolicy` defined but NOT checked in Capture/Review/Projects/Members/Schema/Settings VMs
-2. **M1 AppState integration**: `SessionRepository`, `SyncEngine`, `ConnectivityMonitor`, `OperationalStatusModel` standalone, not wired into published state
-3. **M1 Sync triggers**: No scenePhase/foreground/reconnected/recordPersisted wiring to `SyncEngine.trigger()`
-4. **M1 Background refresh**: `com.africandatalayer.console.sync-refresh` BGTaskScheduler not registered
-5. **M1 Notification opt-in**: `@AppStorage("notificationsEnabled")` exists but permission request not wired to settings toggle
-6. **M1 ConsoleOfflineCache retirement**: Still used by `AppState.loadOrganizations()`; should migrate to `WorkspaceRepository`
-7. **M2 Telemetry wiring**: `OSLogTelemetryClient` and `MetricKitReporter` created but not wired into AppState/SyncEngine lifecycle
-8. **M2 UI test robustness**: `RoleJourneyUITests` is scaffold; needs seeded data and accessibility identifier assertions to pass reliably
-9. **M3 Screenshots**: `capture_app_store_screenshots.sh` is stub; actual images need XCUITest capture + `simctl io` processing
-10. **M3/M4 TestFlight/submission**: Documents are ready but human action required in App Store Connect
+1. **M1 Background refresh**: `com.africandatalayer.console.sync-refresh` is not registered.
+2. **M1 Legacy cache retirement**: `ConsoleOfflineCache` remains for read caching; authorization uses owner-scoped `WorkspaceRepository` snapshots.
+3. **M2 Telemetry wiring**: `OSLogTelemetryClient` and `MetricKitReporter` are not wired into the runtime lifecycle.
+4. **M3 Screenshots**: the capture script remains a stub; final store assets still need the release capture workflow.
+5. **M3/M4 TestFlight/submission**: documents are ready, but App Store Connect actions remain human-controlled.
 
 ## 15. Risks for Code Review
 
 1. **`@unchecked Sendable` on `CaptureMediaStore` and `ConnectivityMonitor`**: Manually safe via `OSAllocatedUnfairLock` and dispatch queues, but compiler can't verify
 2. **`SyncEngine` actor drain has limited cancellation**: `Task.isCancelled` inside while-loop is the only exit path
-3. **`SessionRepository.loadAnyUnlocked()` returns first snapshot regardless of user identity** — two users on same device could see each other's workspace. Mitigated by sign-out `lock()`
-4. **`claimNextDue()` uses `LIMIT 1`**: Two writers could select the same row (atomic `updateChanges` prevents double-claim but wastes a round trip)
-5. **`LegacyQueueMigrator` does not remove legacy JSON files** after migration
-6. **`CaptureMediaStore.discard()` uses `FileManager.enumerator`** — O(n) with record count. Consider tracking directories in a map
-7. **Environment validation uses `fatalError`** in `ADLConsoleApp.init()` on misconfiguration — by design, but means a build configuration mistake prevents the app from launching at all
-8. **No in-app telemetry/MetricKit wiring yet** — telemetry infrastructure exists but not connected to production lifecycle
-9. **xcconfig `$()` URL escaping** — the `://` in xcconfig files uses `$()` to avoid comment parsing: `https:/$()/www.app...` — fragile if copied without the escape
+3. **`claimNextDue()` uses `LIMIT 1`**: two writers can contend for the same row (the atomic transition prevents a double claim but may waste a round trip).
+4. **`CaptureMediaStore.discard()` enumerates record directories** — O(n) with record count.
+5. **No in-app telemetry/MetricKit wiring yet** — telemetry infrastructure exists but is not connected to the production lifecycle.
+6. **xcconfig `$()` URL escaping** — the `://` in xcconfig files uses `$()` to avoid comment parsing: `https:/$()/www.app...`; copying it without the escape breaks the value.

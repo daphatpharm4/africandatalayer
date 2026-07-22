@@ -77,7 +77,9 @@ struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSignin
             let (data, response) = try await transport.send(request)
             let statusCode = response.statusCode
             guard (200..<300).contains(statusCode) else {
-                if statusCode == 401 { return .unauthorized }
+                // A reachable server rejecting the request is an authorization
+                // result, not an outage. Never unlock cached data for a 4xx.
+                if (400..<500).contains(statusCode) { return .unauthorized }
                 return .unavailable(.server(status: statusCode))
             }
             guard let decoded = try? JSONDecoder().decode(SessionResponse.self, from: data),

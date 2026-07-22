@@ -497,7 +497,13 @@ struct CaptureView: View {
                             get: { viewModel.value(for: descriptor.key) },
                             set: { viewModel.setValue($0, for: descriptor.key) }
                         ),
-                        error: viewModel.lastValidation?.error(for: descriptor.key)
+                        error: viewModel.lastValidation?.error(for: descriptor.key),
+                        onPhotoSelected: { data, key in
+                            try viewModel.preparePhoto(data, placement: .schemaField(key))
+                        },
+                        onPhotoCleared: { localID in
+                            viewModel.removePreparedPhoto(localID: localID)
+                        }
                     )
                 }
             }
@@ -601,8 +607,16 @@ struct CaptureView: View {
             CameraCaptureView { result in
                 switch result {
                 case .success(let dataURL):
-                    photoErrorMessage = nil
-                    viewModel.addPhotoRef(dataURL, metadata: viewModel.metadataForCapturedPhoto(dataURL))
+                    do {
+                        let localID = try viewModel.preparePhotoDataURL(dataURL, placement: .recordEvidence)
+                        photoErrorMessage = nil
+                        viewModel.addPhotoRef(localID, metadata: viewModel.metadataForCapturedPhoto(dataURL))
+                    } catch {
+                        photoErrorMessage = t(
+                            "This photo could not be prepared for upload. Take another photo and try again.",
+                            "Cette photo n'a pas pu être préparée. Prenez une autre photo et réessayez."
+                        )
+                    }
                 case .failure:
                     photoErrorMessage = t(
                         "This photo could not be prepared for upload. Take another photo and try again.",

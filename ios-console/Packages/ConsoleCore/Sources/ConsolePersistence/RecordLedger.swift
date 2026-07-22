@@ -7,17 +7,54 @@ public enum RecordLedgerError: Error, Equatable {
     case notRecoverable
 }
 
+public struct LedgerImportItem: Sendable {
+    public let record: LedgerRecord
+    public let attachments: [LedgerAttachment]
+
+    public init(record: LedgerRecord, attachments: [LedgerAttachment]) {
+        self.record = record
+        self.attachments = attachments
+    }
+}
+
+public struct LedgerMigrationReceipt: Sendable {
+    public let name: String
+    public let sourceSHA256: String
+    public let importedCount: Int
+
+    public init(name: String, sourceSHA256: String, importedCount: Int) {
+        self.name = name
+        self.sourceSHA256 = sourceSHA256
+        self.importedCount = importedCount
+    }
+}
+
 public protocol RecordLedgerProtocol: Sendable {
     func insert(_ record: LedgerRecord, attachments: [LedgerAttachment]) async throws
+    func importAtomically(_ items: [LedgerImportItem], migration: LedgerMigrationReceipt?) async throws
+    func migrationSourceSHA256(name: String) async throws -> String?
     func record(localID: String) async throws -> LedgerRecord?
     func records(ownerUserID: String, organizationID: String) async throws -> [LedgerRecord]
+    func attachments(localID: String) async throws -> [LedgerAttachment]
     func claimNextDue(ownerUserID: String, organizationID: String) async throws -> LedgerRecord?
     func recordRetry(localID: String, error: LedgerError, nextAttemptAt: Date) async throws
+    func scheduleImmediateRetry(localID: String) async throws
     func recordBlock(localID: String, state: RecordState, error: LedgerError) async throws
     func recordAcknowledgement(localID: String, serverRecordID: String, acknowledgedAt: Date) async throws
     func discard(localID: String, discardedAt: Date) async throws
     func recoverInterruptedSends() async throws
     func snapshot(ownerUserID: String, organizationID: String) async throws -> RecordLedgerSnapshot
+}
+
+public extension RecordLedgerProtocol {
+    func importAtomically(_ items: [LedgerImportItem], migration: LedgerMigrationReceipt? = nil) async throws {
+        for item in items { try await insert(item.record, attachments: item.attachments) }
+    }
+    func migrationSourceSHA256(name: String) async throws -> String? { nil }
+    func attachments(localID: String) async throws -> [LedgerAttachment] { [] }
+    func scheduleImmediateRetry(localID: String) async throws {
+        throw RecordLedgerError.notRecoverable
+    }
 }
 
 public final class RecordLedger: RecordLedgerProtocol {
@@ -38,6 +75,31 @@ public final class RecordLedger: RecordLedgerProtocol {
         }
     }
 
+    public func importAtomically(_ items: [LedgerImportItem], migration: LedgerMigrationReceipt? = nil) async throws {
+        try await database.writer.write { db in
+            for item in items {
+                try item.record.insert(db)
+                for attachment in item.attachments { try attachment.insert(db) }
+            }
+            if let migration {
+                try db.execute(
+                    sql: "INSERT OR REPLACE INTO queue_migrations (name, executed_at, source_sha256, imported_count) VALUES (?, ?, ?, ?)",
+                    arguments: [migration.name, self.now(), migration.sourceSHA256, migration.importedCount]
+                )
+            }
+        }
+    }
+
+    public func migrationSourceSHA256(name: String) async throws -> String? {
+        try await database.reader.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT source_sha256 FROM queue_migrations WHERE name = ?",
+                arguments: [name]
+            )
+        }
+    }
+
     public func record(localID: String) async throws -> LedgerRecord? {
         try await database.reader.read { db in
             try LedgerRecord.filter(Column("local_id") == localID).fetchOne(db)
@@ -49,6 +111,15 @@ public final class RecordLedger: RecordLedgerProtocol {
             try LedgerRecord
                 .filter(Column("owner_user_id") == ownerUserID && Column("organization_id") == organizationID)
                 .order(Column("created_at").asc)
+                .fetchAll(db)
+        }
+    }
+
+    public func attachments(localID: String) async throws -> [LedgerAttachment] {
+        try await database.reader.read { db in
+            try LedgerAttachment
+                .filter(Column("record_local_id") == localID)
+                .order(Column("placement").asc, Column("ordinal").asc)
                 .fetchAll(db)
         }
     }
@@ -90,6 +161,25 @@ public final class RecordLedger: RecordLedgerProtocol {
                 r.lastErrorCode = error.code
                 r.lastErrorSafeMessage = error.safeMessage
                 r.updatedAt = self.now()
+            }
+        }
+    }
+
+    public func scheduleImmediateRetry(localID: String) async throws {
+        try await database.writer.write { db in
+            guard var record = try LedgerRecord.fetchOne(db, key: localID) else {
+                throw RecordLedgerError.recordNotFound
+            }
+            guard record.state.isRecoverable, record.state != .sending else {
+                throw RecordLedgerError.invalidTransition
+            }
+            try record.updateChanges(db) { value in
+                value.state = .pending
+                value.nextAttemptAt = nil
+                value.lastErrorClassification = nil
+                value.lastErrorCode = nil
+                value.lastErrorSafeMessage = nil
+                value.updatedAt = self.now()
             }
         }
     }

@@ -153,7 +153,7 @@
 		0163C413B012BCBEB864086B /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
 		031FC650E637FA153AF3C596 /* ADLConsoleColor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleColor.swift; sourceTree = "<group>"; };
 		038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
-		08D7784C42D75445E370C4B8 /* ADLConsoleTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADLConsoleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		08D7784C42D75445E370C4B8 /* ADLConsoleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ADLConsoleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0948CE2D0955F7887148B0A9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		09FBB6CCE00606B24486881C /* AppStoreScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotTests.swift; sourceTree = "<group>"; };
 		0BB287A00F74C5A03AC0888C /* MetricKitReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricKitReporterTests.swift; sourceTree = "<group>"; };
@@ -188,7 +188,7 @@
 		4320DDD4943A7125EDC2D253 /* ConsoleOfflineCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOfflineCache.swift; sourceTree = "<group>"; };
 		452FCB9914E96A757ACF579D /* CompanyMapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanyMapViewModel.swift; sourceTree = "<group>"; };
 		49681E86F2B2B7454EE5AAAE /* SyncEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngineTests.swift; sourceTree = "<group>"; };
-		4D93389A6CE0B0F2D2B52241 /* ADLConsoleUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADLConsoleUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4D93389A6CE0B0F2D2B52241 /* ADLConsoleUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ADLConsoleUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4E8852EC3D1A6BDBD97D8428 /* UITestSeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UITestSeed.swift; sourceTree = "<group>"; };
 		4F3255C7F11087BF2EF60657 /* InvitationOnboardingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InvitationOnboardingTests.swift; sourceTree = "<group>"; };
 		5094894D20B5243DEAC98A67 /* AuthorizationClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizationClock.swift; sourceTree = "<group>"; };
@@ -200,7 +200,7 @@
 		5FEE7697CEC97984307504BF /* SyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngine.swift; sourceTree = "<group>"; };
 		6762B91F0FC04480CD5D38D5 /* OperationalStatusModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationalStatusModel.swift; sourceTree = "<group>"; };
 		68682D6319039E661D9D69F7 /* SchemaBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderView.swift; sourceTree = "<group>"; };
-		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6F726B02DE492CE310DF6F6C /* OfflineRolePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineRolePolicyTests.swift; sourceTree = "<group>"; };
 		70B6F55BA6240B36E2E03C3E /* CaptureCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCoordinatorTests.swift; sourceTree = "<group>"; };
 		73208963E99B28107F30FE43 /* TelemetryPrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryPrivacyTests.swift; sourceTree = "<group>"; };
@@ -246,7 +246,7 @@
 		CDA356BFA8DEACC0D49A4DFD /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		CF89EE969F1884F273796C39 /* MembersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersViewModel.swift; sourceTree = "<group>"; };
 		D11DA660AE3456559B18F002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
-		D9135E7C767659E8968D7D57 /* ADLConsole.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ADLConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		D9135E7C767659E8968D7D57 /* ADLConsole.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADLConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleApp.swift; sourceTree = "<group>"; };
 		D9C5756D198653BA9FC365D2 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		D9D6C5D4CABBA873B7D166C1 /* MembersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersView.swift; sourceTree = "<group>"; };
@@ -712,7 +712,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					0D1C6CCBB7BFF4F265639828 = {
 						TestTargetID = 3BD52F0E32332B245942869F;
@@ -985,6 +985,7 @@
 				ADL_API_BASE_URL = "https://www.app.africandatalayer.com";
 				ADL_BUILD_CHANNEL = production;
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1018,6 +1019,7 @@
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1038,6 +1040,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -1069,6 +1072,7 @@
 				ADL_API_BASE_URL = "https://www.app.africandatalayer.com";
 				ADL_BUILD_CHANNEL = production;
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1102,6 +1106,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1115,6 +1120,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
@@ -1128,8 +1134,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6AC36NWFGP;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ADL_API_BASE_URL = "$(ADL_API_BASE_URL)";
 				INFOPLIST_KEY_ADL_BUILD_CHANNEL = "$(ADL_BUILD_CHANNEL)";
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
@@ -1159,8 +1167,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6AC36NWFGP;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ADL_API_BASE_URL = "$(ADL_API_BASE_URL)";
 				INFOPLIST_KEY_ADL_BUILD_CHANNEL = "$(ADL_BUILD_CHANNEL)";
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
@@ -1209,8 +1219,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 6AC36NWFGP;
 				ENABLE_PREVIEWS = YES;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_ADL_API_BASE_URL = "$(ADL_API_BASE_URL)";
 				INFOPLIST_KEY_ADL_BUILD_CHANNEL = "$(ADL_BUILD_CHANNEL)";
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
@@ -1239,6 +1251,7 @@
 				ADL_API_BASE_URL = "https://www.app.africandatalayer.com";
 				ADL_BUILD_CHANNEL = production;
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
@@ -1272,6 +1285,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1285,6 +1299,7 @@
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;

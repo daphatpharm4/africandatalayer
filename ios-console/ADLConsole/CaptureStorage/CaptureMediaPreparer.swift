@@ -24,7 +24,9 @@ struct CaptureMediaPreparer {
         var scale = min(1, Self.maxDimension / longestSide)
         var quality = Self.initialQuality
 
-        while scale * longestSide >= Self.minDimension {
+        // Small, valid source images must still be encoded once. The minimum
+        // dimension only limits further down-scaling of oversized payloads.
+        repeat {
             let targetSize = CGSize(
                 width: max(1, (originalSize.width * scale).rounded()),
                 height: max(1, (originalSize.height * scale).rounded())
@@ -51,9 +53,14 @@ struct CaptureMediaPreparer {
             } else {
                 scale *= 0.82
             }
-        }
+        } while scale * longestSide >= Self.minDimension
 
         throw CaptureMediaPreparerError.tooLarge
+    }
+
+    static func prepareData(_ data: Data) throws -> PreparedCaptureMedia {
+        guard let image = UIImage(data: data) else { throw CaptureMediaPreparerError.invalidImage }
+        return try prepare(image)
     }
 
     private static func normalizedImage(_ image: UIImage) -> UIImage {

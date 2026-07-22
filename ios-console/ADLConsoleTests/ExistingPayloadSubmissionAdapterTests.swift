@@ -110,6 +110,55 @@ final class ExistingPayloadSubmissionAdapterTests: XCTestCase {
         XCTAssertTrue(photo.hasPrefix("data:image/jpeg;base64,"))
     }
 
+    func testSubmitPreservesDurableEvidenceAndPointEnvelope() async throws {
+        let database = try RecordDatabase.inMemory()
+        let ledger = RecordLedger(database: database)
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+        let capturedTransport = CapturingTransport(inner: transport)
+        let draft = RecordDraft(
+            projectId: "proj-1",
+            schemaVersionId: "sv-1",
+            recordTypeKey: "pharmacy",
+            data: ["name": .string("Acme")],
+            gps: FormGpsValue(latitude: 3.86, longitude: 11.52, accuracyMeters: 8),
+            notes: "Front entrance verified",
+            pointId: "point-42",
+            capturedAt: "2026-07-22T12:00:00Z",
+            device: .init(deviceId: "device-1", platform: "iOS")
+        )
+        let envelope = String(data: try JSONEncoder().encode(draft), encoding: .utf8)!
+        try await ledger.insert(LedgerRecord(
+            localID: "local-envelope",
+            ownerUserID: "u1",
+            organizationID: "o1",
+            projectID: "proj-1",
+            schemaVersionID: "sv-1",
+            recordTypeKey: "pharmacy",
+            fieldValuesJSON: envelope,
+            state: .pending,
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0)
+        ))
+
+        let adapter = makeAdapter(
+            transport: capturedTransport,
+            ledger: ledger,
+            mediaStore: InMemoryCaptureMediaStore(),
+            attachmentLoader: { _ in [] }
+        )
+
+        _ = try await adapter.submit(localID: "local-envelope")
+
+        let sentBody = try XCTUnwrap(capturedTransport.lastBody)
+        let decoded = try JSONDecoder().decode(SubmitBody.self, from: sentBody)
+        XCTAssertEqual(decoded.pointId, "point-42")
+        XCTAssertEqual(decoded.evidence.notes, "Front entrance verified")
+        XCTAssertEqual(decoded.evidence.gps?.latitude, 3.86)
+        XCTAssertEqual(decoded.evidence.capturedAt, "2026-07-22T12:00:00Z")
+        XCTAssertEqual(decoded.evidence.device?.deviceId, "device-1")
+    }
+
     func testSubmitThrowsOnMissingRecord() async throws {
         let database = try RecordDatabase.inMemory()
         let ledger = RecordLedger(database: database)
@@ -152,24 +201,22 @@ final class ExistingPayloadSubmissionAdapterTests: XCTestCase {
         try await ledger.insert(record)
 
         let mediaStore = InMemoryCaptureMediaStore()
-        let tamperedAttachment = LedgerAttachment(
-            recordLocalID: "local-3",
-            placement: "recordEvidence",
-            ordinal: 0,
-            relativePath: "u1/o1/local-3/0.jpg",
-            sha256: "bad-checksum",
-            mimeType: "image/jpeg",
-            pixelWidth: nil,
-            pixelHeight: nil,
-            byteCount: 0,
-            createdAt: Date()
+        let validData = Data("photo-data".utf8)
+        let validHash = SHA256.hash(data: validData).map { String(format: "%02x", $0) }.joined()
+        var tamperedAttachment = try await mediaStore.stage(
+            PreparedCaptureMedia(data: validData, mimeType: "image/jpeg", sha256: validHash, pixelWidth: 10, pixelHeight: 10),
+            ownerUserID: "u1",
+            organizationID: "o1",
+            recordLocalID: "local-3"
         )
+        tamperedAttachment.sha256 = "bad-checksum"
+        let capturedTamperedAttachment = tamperedAttachment
 
         let adapter = makeAdapter(
             transport: transport,
             ledger: ledger,
             mediaStore: mediaStore,
-            attachmentLoader: { _ in [tamperedAttachment] }
+            attachmentLoader: { _ in [capturedTamperedAttachment] }
         )
 
         do {
@@ -199,7 +246,14 @@ private final class CapturingTransport: PlatformTransport, @unchecked Sendable {
 
 private struct SubmitBody: Decodable {
     struct Evidence: Decodable {
+        struct GPS: Decodable { var latitude: Double }
+        struct Device: Decodable { var deviceId: String? }
         var photos: [String]
+        var gps: GPS?
+        var notes: String?
+        var capturedAt: String?
+        var device: Device?
     }
     var evidence: Evidence
+    var pointId: String?
 }

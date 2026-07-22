@@ -38,18 +38,26 @@ final class ProjectsViewModel: ObservableObject {
 
     private let apiClient: PlatformAPIClient
     private let organizationId: String
+    private let mutationAllowed: @MainActor () -> Bool
 
-    init(apiClient: PlatformAPIClient, organizationId: String, role: PlatformRole, language: ConsoleLanguage) {
+    init(
+        apiClient: PlatformAPIClient,
+        organizationId: String,
+        role: PlatformRole,
+        language: ConsoleLanguage,
+        mutationAllowed: @escaping @MainActor () -> Bool = { true }
+    ) {
         self.apiClient = apiClient
         self.organizationId = organizationId
         self.role = role
         self.language = language
+        self.mutationAllowed = mutationAllowed
     }
 
     // MARK: - Derived state
 
     /// Port of `ConsoleApp.tsx`'s `canManage` prop passed into `ProjectsScreen`.
-    var canManage: Bool { role == .manager || role == .owner }
+    var canManage: Bool { (role == .manager || role == .owner) && mutationAllowed() }
 
     /// Port of the create button's `disabled` expression, inverted:
     /// `!(newName.trim().length === 0 || (coverageScope !== 'worldwide' &&
