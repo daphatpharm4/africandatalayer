@@ -151,6 +151,17 @@ Before the build can be submitted for review, fill in on
    (Advertising Identifier: **No**, since this app has no ad SDK).
 3. Submit for review.
 
+## M3 TestFlight Gate
+
+See `docs/app-store/v1/testflight-plan.md` and `docs/release/evidence/m3-testflight.md`.
+
+- **Build:** com.africandatalayer.console 1.0.0 (1)
+- **Internal TestFlight:** Completed across all roles
+- **External Invited TestFlight:** 7 consecutive days, all PASS, zero Sev-1/Sev-2
+- **Decision:** GO
+
+Configuration at time of gate: `TARGETED_DEVICE_FAMILY=1` (iPhone only).
+
 ## Notes
 
 - If `project.yml`, `Assets.xcassets`, or any file under `ADLConsole/`
