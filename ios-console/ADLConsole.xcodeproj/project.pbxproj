@@ -36,6 +36,7 @@
 		3770CC2042DBC9B0E9244A46 /* CaptureMediaPreparerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD1829FAC802540453948783 /* CaptureMediaPreparerTests.swift */; };
 		39B0C777678422B3F0B80E9C /* CaptureAttachmentPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E51A2E83645779E8C6E8352 /* CaptureAttachmentPicker.swift */; };
 		4017F3A41331A89E89D6F37C /* LegacyQueueMigrator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 820F4939451AA0D3FA8B97B6 /* LegacyQueueMigrator.swift */; };
+		4804533F33A3D7C7CCB5B5C7 /* OperationalStatusModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6762B91F0FC04480CD5D38D5 /* OperationalStatusModel.swift */; };
 		48A95F47E5AA8ABEB53ABBC8 /* PendingWorkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1888A33AE5F578D70B5AFD2 /* PendingWorkViewModel.swift */; };
 		4E82A80AA100CE69F32B39AE /* CaptureMediaStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A59DEF4491FA4780EEFEE3AD /* CaptureMediaStoreTests.swift */; };
 		4ECA79CD250C5043F5176A3B /* NetworkAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CACFA70EDDCDD5576EA766D6 /* NetworkAuthService.swift */; };
@@ -93,6 +94,7 @@
 		E1CF2F958B5171D1F5FB514F /* CompanyMapViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34325F59345EC6D0063AFCB1 /* CompanyMapViewModelTests.swift */; };
 		E853BE4A2E970C4441CE2A38 /* PlatformRoleRank.swift in Sources */ = {isa = PBXBuildFile; fileRef = E21B3462FA21737C21B9E40B /* PlatformRoleRank.swift */; };
 		EAEF5251DA0F9F2EE88CC3F0 /* ConsoleMapKitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30CAF5446BFE144A551EEF6A /* ConsoleMapKitView.swift */; };
+		EBA62C0540707D569D6AC622 /* OperationalStatusModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 853AEBAC635CE2A65C3FE4EE /* OperationalStatusModelTests.swift */; };
 		EE32DCD2A658A85B96A1DC9C /* CaptureViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */; };
 		EE437C6B773D7FD1BA05CC91 /* CaptureMediaPreparer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7C04F0FF6FDC011E017D969 /* CaptureMediaPreparer.swift */; };
 		EFB7EC28633C8CF256CCCC98 /* CaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF20BD775A3750BC88BAC553 /* CaptureView.swift */; };
@@ -153,6 +155,7 @@
 		5466134B1E28B26BFB511D6C /* ReviewRecordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRecordDetailView.swift; sourceTree = "<group>"; };
 		5D11F8A6812A531550ABB39E /* CaptureMediaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMediaStore.swift; sourceTree = "<group>"; };
 		5FEE7697CEC97984307504BF /* SyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngine.swift; sourceTree = "<group>"; };
+		6762B91F0FC04480CD5D38D5 /* OperationalStatusModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationalStatusModel.swift; sourceTree = "<group>"; };
 		68682D6319039E661D9D69F7 /* SchemaBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderView.swift; sourceTree = "<group>"; };
 		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		6F726B02DE492CE310DF6F6C /* OfflineRolePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineRolePolicyTests.swift; sourceTree = "<group>"; };
@@ -160,6 +163,7 @@
 		7DDB4F5FF96EC8981E97573B /* SchemaBuilderViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderViewModelTests.swift; sourceTree = "<group>"; };
 		7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformErrorMessage.swift; sourceTree = "<group>"; };
 		820F4939451AA0D3FA8B97B6 /* LegacyQueueMigrator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyQueueMigrator.swift; sourceTree = "<group>"; };
+		853AEBAC635CE2A65C3FE4EE /* OperationalStatusModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationalStatusModelTests.swift; sourceTree = "<group>"; };
 		8AEB59475DCD55068CE81EBB /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOverviewContentTests.swift; sourceTree = "<group>"; };
 		8E3DCFB6C09C0E4F22739D3A /* ADLImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLImageCache.swift; sourceTree = "<group>"; };
@@ -267,6 +271,7 @@
 				30AD6F052C32EFB5860F539B /* MockPlatformTransport.swift */,
 				B34CD969F94FB035DF8D1FE1 /* NetworkAuthServiceTests.swift */,
 				6F726B02DE492CE310DF6F6C /* OfflineRolePolicyTests.swift */,
+				853AEBAC635CE2A65C3FE4EE /* OperationalStatusModelTests.swift */,
 				2A30E05A78D80046966F14D6 /* PendingWorkViewModelTests.swift */,
 				125A4B1EC86659B789FE0581 /* ProjectsViewModelTests.swift */,
 				EDF9DB7FBF20596C75C1163B /* ReviewQueueViewModelTests.swift */,
@@ -330,6 +335,7 @@
 			children = (
 				B28B06A57E28DE0710D16E4B /* ConnectivityMonitor.swift */,
 				BA19128BF86D0078C1DB2A01 /* OfflineRolePolicy.swift */,
+				6762B91F0FC04480CD5D38D5 /* OperationalStatusModel.swift */,
 				5FEE7697CEC97984307504BF /* SyncEngine.swift */,
 			);
 			path = Runtime;
@@ -640,6 +646,7 @@
 				B194063E7256E4218CDD9B61 /* MembersViewModel.swift in Sources */,
 				4ECA79CD250C5043F5176A3B /* NetworkAuthService.swift in Sources */,
 				240231EAACC22FEF37CB3A16 /* OfflineRolePolicy.swift in Sources */,
+				4804533F33A3D7C7CCB5B5C7 /* OperationalStatusModel.swift in Sources */,
 				B29261771D33EF2F48604E9A /* OverviewView.swift in Sources */,
 				5A62B5E3B15C3385730EACE2 /* PendingWorkView.swift in Sources */,
 				48A95F47E5AA8ABEB53ABBC8 /* PendingWorkViewModel.swift in Sources */,
@@ -683,6 +690,7 @@
 				8E168C953966EE6D95CD487A /* MockPlatformTransport.swift in Sources */,
 				054C479A8C0C3BA2DE76C06E /* NetworkAuthServiceTests.swift in Sources */,
 				B301C612D097BE6E32EBBAE3 /* OfflineRolePolicyTests.swift in Sources */,
+				EBA62C0540707D569D6AC622 /* OperationalStatusModelTests.swift in Sources */,
 				F225022F5B22369549AB2FAD /* PendingWorkViewModelTests.swift in Sources */,
 				A9B70719C75007C48C805E9F /* ProjectsViewModelTests.swift in Sources */,
 				B3D6E1BB325A39D6D1F935A8 /* ReviewQueueViewModelTests.swift in Sources */,
