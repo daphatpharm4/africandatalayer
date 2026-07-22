@@ -24,7 +24,7 @@ final class RecordModelTests: XCTestCase {
             photos: ["https://example.com/a.jpg"],
             notes: "Looks good",
             capturedAt: "2026-01-01T00:00:00.000Z",
-            device: PlatformRecordEvidence.Device(platform: "android", userAgent: "Mozilla/5.0", language: "fr"),
+            device: PlatformRecordEvidence.Device(deviceId: "device-1", platform: "android", userAgent: "Mozilla/5.0", language: "fr"),
             photoMetadata: [
                 PlatformRecordEvidence.PhotoMetadata(
                     mimeType: "image/jpeg",
@@ -34,11 +34,35 @@ final class RecordModelTests: XCTestCase {
                     height: 1920,
                     capturedAt: "2026-01-01T00:00:00.000Z"
                 )
-            ]
+            ],
+            clientExif: PlatformRecordEvidence.ClientExif(
+                latitude: 4.05,
+                longitude: 9.71,
+                capturedAt: "2026-01-01T00:00:00.000Z",
+                deviceMake: "Apple",
+                deviceModel: "iPhone"
+            ),
+            gpsIntegrity: PlatformRecordEvidence.GpsIntegrity(
+                mockLocationDetected: false,
+                mockLocationMethod: nil,
+                hasAccelerometerData: true,
+                hasGyroscopeData: true,
+                accelerometerSampleCount: 12,
+                motionDetectedDuringCapture: true,
+                gpsAccuracyMeters: 10,
+                networkType: nil,
+                gpsTimestamp: 1_767_225_600_000,
+                deviceTimestamp: 1_767_225_600_050,
+                timeDeltaMs: 50
+            )
         )
         let data = try JSONEncoder().encode(evidence)
         let decoded = try JSONDecoder().decode(PlatformRecordEvidence.self, from: data)
         XCTAssertEqual(decoded, evidence)
+        let raw = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let gpsIntegrity = try XCTUnwrap(raw["gpsIntegrity"] as? [String: Any])
+        XCTAssertTrue(gpsIntegrity.keys.contains("mockLocationMethod"))
+        XCTAssertTrue(gpsIntegrity.keys.contains("networkType"))
     }
 
     func testPlatformRecordEvidenceDecodesFromMinimalFixture() throws {
@@ -51,6 +75,8 @@ final class RecordModelTests: XCTestCase {
         XCTAssertNil(decoded.notes)
         XCTAssertNil(decoded.device)
         XCTAssertNil(decoded.photoMetadata)
+        XCTAssertNil(decoded.clientExif)
+        XCTAssertNil(decoded.gpsIntegrity)
     }
 
     func testPlatformRecordRoundTripAndFixture() throws {

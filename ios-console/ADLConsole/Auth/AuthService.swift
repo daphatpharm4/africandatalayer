@@ -51,6 +51,14 @@ protocol AuthSigningOut: Sendable {
     func signOut() async throws
 }
 
+/// Optional capability for auth services that can synchronously clear
+/// client-side session state (cookies, tokens) on sign-out. Called before
+/// the async server-side signout so the cookie jar is empty even if the
+/// server call never completes (e.g. app killed immediately after logout).
+protocol AuthLocalSessionClearing: Sendable {
+    func clearLocalSession()
+}
+
 /// STUB, not the real native auth integration — kept around (and wired to
 /// `AppState` in tests/previews) purely as a fast, deterministic input-shape
 /// validator. The real handshake against @auth/core's credentials provider —

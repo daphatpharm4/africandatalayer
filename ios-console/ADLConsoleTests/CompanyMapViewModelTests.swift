@@ -116,6 +116,42 @@ final class CompanyMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.loadErrorMessage, message)
     }
 
+    func testLoadFallsBackToCachedApprovedRecordsWhenOffline() async {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(Data("{\"error\":\"offline\"}".utf8), forView: "platform_record_browse")
+        let cachedRecord = PlatformRecord(
+            id: "cached-root",
+            projectId: "proj-1",
+            organizationId: "org-1",
+            schemaVersionId: "schema-1",
+            recordTypeKey: "pharmacy",
+            data: ["name": .string("Cached Pharmacy")],
+            evidence: PlatformRecordEvidence(
+                gps: PlatformRecordGps(latitude: 4.05, longitude: 9.7),
+                photos: []
+            ),
+            status: .approved,
+            capturedBy: "user-1",
+            createdAt: "2026-07-18T10:00:00Z"
+        )
+        let cache = InMemoryConsoleOfflineCache(approvedRecordsByOrganizationId: ["org-1": [cachedRecord]])
+        let viewModel = CompanyMapViewModel(
+            apiClient: PlatformAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                transport: StatusOverrideTransport(inner: transport, view: "platform_record_browse", statusCode: 503)
+            ),
+            organizationId: "org-1",
+            language: .en,
+            offlineCache: cache
+        )
+
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.loadState, .loaded)
+        XCTAssertEqual(viewModel.points.map(\.rootId), ["cached-root"])
+        XCTAssertEqual(viewModel.annotations.count, 1)
+    }
+
     // MARK: - Annotations (map-placeable subset)
 
     func testAnnotationsExcludePointsWithNoGpsOnTheirRepresentative() async {

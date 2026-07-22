@@ -1,4 +1,4 @@
-import type { PointOperatorSignalState, SubmissionDetails } from "./types.js";
+import type { ClientExifData, GpsIntegrityReport, PointOperatorSignalState, SubmissionDetails } from "./types.js";
 
 export type PlatformRole = "owner" | "manager" | "reviewer" | "collector" | "viewer";
 export interface BilingualLabel { en: string; fr: string }
@@ -49,6 +49,7 @@ export interface PlatformRecordEvidence {
   notes?: string;
   capturedAt?: string;
   device?: {
+    deviceId?: string;
     platform?: string;
     userAgent?: string;
     language?: string;
@@ -61,6 +62,8 @@ export interface PlatformRecordEvidence {
     height?: number;
     capturedAt?: string;
   }>;
+  clientExif?: ClientExifData | null;
+  gpsIntegrity?: GpsIntegrityReport;
 }
 export interface PlatformRecord {
   id: string;

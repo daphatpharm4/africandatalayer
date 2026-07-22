@@ -43,8 +43,12 @@ struct CaptureView: View {
         }
         .background(ADLConsoleColor.page)
         .task {
+            viewModel.startFraudMetadataCapture()
             await viewModel.loadProjects()
             await viewModel.refreshQueueSnapshot()
+        }
+        .onDisappear {
+            viewModel.stopFraudMetadataCapture()
         }
     }
 
@@ -295,6 +299,8 @@ struct CaptureView: View {
 
                 if let attachedPoint = viewModel.attachedPoint {
                     attachedPointRow(attachedPoint)
+                } else if let preAttachPointId = viewModel.preAttachPointId {
+                    preAttachedPointRow(pointId: preAttachPointId)
                 } else if let nearbyPoints = viewModel.nearbyPoints {
                     nearbyPointResults(nearbyPoints)
                 } else {
@@ -354,6 +360,45 @@ struct CaptureView: View {
                 Text(pointStalenessLabel(point.updatedAt))
                     .font(ADLConsoleFont.caption)
                     .foregroundStyle(ADLConsoleColor.forestDark.opacity(0.78))
+            }
+
+            Spacer()
+
+            Button {
+                viewModel.clearAttachedPoint()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(ADLConsolePressStyle())
+            .foregroundStyle(ADLConsoleColor.forestDark)
+            .accessibilityLabel(t("Remove attached point", "Retirer le point associé"))
+        }
+        .padding(12)
+        .background(ADLConsoleColor.forestWash)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+        .adlShadowBorder()
+    }
+
+    private func preAttachedPointRow(pointId: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "mappin.circle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(ADLConsoleColor.forestDark)
+                .frame(width: 44, height: 44)
+                .background(ADLConsoleColor.forestWash)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(t("Point selected from map", "Point sélectionné depuis la carte"))
+                    .font(ADLConsoleFont.headline)
+                    .foregroundStyle(ADLConsoleColor.forestDark)
+                    .lineLimit(1)
+                Text(pointId)
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.forestDark.opacity(0.78))
+                    .lineLimit(1)
             }
 
             Spacer()
@@ -557,7 +602,7 @@ struct CaptureView: View {
                 switch result {
                 case .success(let dataURL):
                     photoErrorMessage = nil
-                    viewModel.addPhotoRef(dataURL)
+                    viewModel.addPhotoRef(dataURL, metadata: viewModel.metadataForCapturedPhoto(dataURL))
                 case .failure:
                     photoErrorMessage = t(
                         "This photo could not be prepared for upload. Take another photo and try again.",

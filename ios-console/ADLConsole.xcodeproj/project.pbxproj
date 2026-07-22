@@ -14,6 +14,8 @@
 		0E87C0811873EC7972A5D8BB /* PlatformErrorMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */; };
 		0E895F093A7BE1E2B2779695 /* ADLConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */; };
 		10DF95A9868106CB366B2EA2 /* MembersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D6C5D4CABBA873B7D166C1 /* MembersView.swift */; };
+		16B490953010A4B10087FC7B /* ConsoleOfflineCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B490943010A4B10087FC7B /* ConsoleOfflineCache.swift */; };
+		16B490973010AA6C0087FC7B /* CaptureFraudMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16B490963010AA6C0087FC7B /* CaptureFraudMetadata.swift */; };
 		1959BE4002E4245900F84ABF /* ConsoleState in Frameworks */ = {isa = PBXBuildFile; productRef = 4F924DAF268789C0063BB4B1 /* ConsoleState */; };
 		1DB18EBE187A5B76D144BF13 /* ConsoleLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */; };
 		1E4DD29642B027C4C300BF13 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C8174F752CBAF952089B73 /* SettingsViewModel.swift */; };
@@ -101,6 +103,8 @@
 		125A4B1EC86659B789FE0581 /* ProjectsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsViewModelTests.swift; sourceTree = "<group>"; };
 		137CDD290590B44073DE24FE /* AuthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthView.swift; sourceTree = "<group>"; };
 		13EB8A729DC236F9773C5D26 /* CaptureFieldControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFieldControl.swift; sourceTree = "<group>"; };
+		16B490943010A4B10087FC7B /* ConsoleOfflineCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOfflineCache.swift; sourceTree = "<group>"; };
+		16B490963010AA6C0087FC7B /* CaptureFraudMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFraudMetadata.swift; sourceTree = "<group>"; };
 		1F9535029D531EAE8D0C3949 /* ADLConsoleFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleFont.swift; sourceTree = "<group>"; };
 		1FEE64E1EAEE853AD153842F /* ProjectsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsViewModel.swift; sourceTree = "<group>"; };
 		23B06FDC3BBAD29D1989BD12 /* ConsoleOverviewContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOverviewContent.swift; sourceTree = "<group>"; };
@@ -351,6 +355,8 @@
 				D9C5756D198653BA9FC365D2 /* LocationService.swift */,
 				7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */,
 				E21B3462FA21737C21B9E40B /* PlatformRoleRank.swift */,
+				16B490943010A4B10087FC7B /* ConsoleOfflineCache.swift */,
+				16B490963010AA6C0087FC7B /* CaptureFraudMetadata.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -506,6 +512,7 @@
 				EE32DCD2A658A85B96A1DC9C /* CaptureViewModel.swift in Sources */,
 				D9F748E5FD3982E80BB90089 /* CompanyMapView.swift in Sources */,
 				238688E2CA2AABE4C6E0C39D /* CompanyMapViewModel.swift in Sources */,
+				16B490973010AA6C0087FC7B /* CaptureFraudMetadata.swift in Sources */,
 				834CB398D6E50E6B3F7BC28F /* CompanyPointDetailView.swift in Sources */,
 				FC14385E46894E0B48410FAE /* ConsoleDestinations.swift in Sources */,
 				1DB18EBE187A5B76D144BF13 /* ConsoleLanguage.swift in Sources */,
@@ -518,6 +525,7 @@
 				B194063E7256E4218CDD9B61 /* MembersViewModel.swift in Sources */,
 				4ECA79CD250C5043F5176A3B /* NetworkAuthService.swift in Sources */,
 				B29261771D33EF2F48604E9A /* OverviewView.swift in Sources */,
+				16B490953010A4B10087FC7B /* ConsoleOfflineCache.swift in Sources */,
 				A99D0F268043A22BD063AE82 /* PlaceholderScreenView.swift in Sources */,
 				0E87C0811873EC7972A5D8BB /* PlatformErrorMessage.swift in Sources */,
 				E853BE4A2E970C4441CE2A38 /* PlatformRoleRank.swift in Sources */,

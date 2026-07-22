@@ -18,11 +18,13 @@ public struct PlatformRecordEvidence: Codable, Equatable, Sendable {
     /// Mirrors the anonymous `device?: { platform?; userAgent?; language? }`
     /// object type nested in `PlatformRecordEvidence`.
     public struct Device: Codable, Equatable, Sendable {
+        public var deviceId: String?
         public var platform: String?
         public var userAgent: String?
         public var language: String?
 
-        public init(platform: String? = nil, userAgent: String? = nil, language: String? = nil) {
+        public init(deviceId: String? = nil, platform: String? = nil, userAgent: String? = nil, language: String? = nil) {
+            self.deviceId = deviceId
             self.platform = platform
             self.userAgent = userAgent
             self.language = language
@@ -60,12 +62,108 @@ public struct PlatformRecordEvidence: Codable, Equatable, Sendable {
         }
     }
 
+    /// Mirrors `ClientExifData` in `shared/types.ts`; attached as an explicit
+    /// client fallback because the console recompresses photos before upload.
+    public struct ClientExif: Codable, Equatable, Sendable {
+        public var latitude: Double?
+        public var longitude: Double?
+        public var capturedAt: String?
+        public var deviceMake: String?
+        public var deviceModel: String?
+
+        public init(
+            latitude: Double? = nil,
+            longitude: Double? = nil,
+            capturedAt: String? = nil,
+            deviceMake: String? = nil,
+            deviceModel: String? = nil
+        ) {
+            self.latitude = latitude
+            self.longitude = longitude
+            self.capturedAt = capturedAt
+            self.deviceMake = deviceMake
+            self.deviceModel = deviceModel
+        }
+    }
+
+    /// Mirrors `GpsIntegrityReport` in `shared/types.ts`.
+    public struct GpsIntegrity: Codable, Equatable, Sendable {
+        public var mockLocationDetected: Bool
+        public var mockLocationMethod: String?
+        public var hasAccelerometerData: Bool
+        public var hasGyroscopeData: Bool
+        public var accelerometerSampleCount: Int
+        public var motionDetectedDuringCapture: Bool
+        public var gpsAccuracyMeters: Double?
+        public var networkType: String?
+        public var gpsTimestamp: Int?
+        public var deviceTimestamp: Int
+        public var timeDeltaMs: Int?
+
+        public init(
+            mockLocationDetected: Bool,
+            mockLocationMethod: String? = nil,
+            hasAccelerometerData: Bool,
+            hasGyroscopeData: Bool,
+            accelerometerSampleCount: Int,
+            motionDetectedDuringCapture: Bool,
+            gpsAccuracyMeters: Double? = nil,
+            networkType: String? = nil,
+            gpsTimestamp: Int? = nil,
+            deviceTimestamp: Int,
+            timeDeltaMs: Int? = nil
+        ) {
+            self.mockLocationDetected = mockLocationDetected
+            self.mockLocationMethod = mockLocationMethod
+            self.hasAccelerometerData = hasAccelerometerData
+            self.hasGyroscopeData = hasGyroscopeData
+            self.accelerometerSampleCount = accelerometerSampleCount
+            self.motionDetectedDuringCapture = motionDetectedDuringCapture
+            self.gpsAccuracyMeters = gpsAccuracyMeters
+            self.networkType = networkType
+            self.gpsTimestamp = gpsTimestamp
+            self.deviceTimestamp = deviceTimestamp
+            self.timeDeltaMs = timeDeltaMs
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case mockLocationDetected
+            case mockLocationMethod
+            case hasAccelerometerData
+            case hasGyroscopeData
+            case accelerometerSampleCount
+            case motionDetectedDuringCapture
+            case gpsAccuracyMeters
+            case networkType
+            case gpsTimestamp
+            case deviceTimestamp
+            case timeDeltaMs
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(mockLocationDetected, forKey: .mockLocationDetected)
+            try container.encodeNilOrValue(mockLocationMethod, forKey: .mockLocationMethod)
+            try container.encode(hasAccelerometerData, forKey: .hasAccelerometerData)
+            try container.encode(hasGyroscopeData, forKey: .hasGyroscopeData)
+            try container.encode(accelerometerSampleCount, forKey: .accelerometerSampleCount)
+            try container.encode(motionDetectedDuringCapture, forKey: .motionDetectedDuringCapture)
+            try container.encodeNilOrValue(gpsAccuracyMeters, forKey: .gpsAccuracyMeters)
+            try container.encodeNilOrValue(networkType, forKey: .networkType)
+            try container.encodeNilOrValue(gpsTimestamp, forKey: .gpsTimestamp)
+            try container.encode(deviceTimestamp, forKey: .deviceTimestamp)
+            try container.encodeNilOrValue(timeDeltaMs, forKey: .timeDeltaMs)
+        }
+    }
+
     public var gps: PlatformRecordGps?
     public var photos: [String]
     public var notes: String?
     public var capturedAt: String?
     public var device: Device?
     public var photoMetadata: [PhotoMetadata]?
+    public var clientExif: ClientExif?
+    public var gpsIntegrity: GpsIntegrity?
 
     public init(
         gps: PlatformRecordGps? = nil,
@@ -73,7 +171,9 @@ public struct PlatformRecordEvidence: Codable, Equatable, Sendable {
         notes: String? = nil,
         capturedAt: String? = nil,
         device: Device? = nil,
-        photoMetadata: [PhotoMetadata]? = nil
+        photoMetadata: [PhotoMetadata]? = nil,
+        clientExif: ClientExif? = nil,
+        gpsIntegrity: GpsIntegrity? = nil
     ) {
         self.gps = gps
         self.photos = photos
@@ -81,6 +181,18 @@ public struct PlatformRecordEvidence: Codable, Equatable, Sendable {
         self.capturedAt = capturedAt
         self.device = device
         self.photoMetadata = photoMetadata
+        self.clientExif = clientExif
+        self.gpsIntegrity = gpsIntegrity
+    }
+}
+
+private extension KeyedEncodingContainer {
+    mutating func encodeNilOrValue<T: Encodable>(_ value: T?, forKey key: Key) throws {
+        if let value {
+            try encode(value, forKey: key)
+        } else {
+            try encodeNil(forKey: key)
+        }
     }
 }
 

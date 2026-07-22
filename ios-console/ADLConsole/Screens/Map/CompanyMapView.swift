@@ -20,6 +20,7 @@ struct CompanyMapView: View {
     )
     @State private var isCapturePresented = false
     @State private var captureAttachPointId: String?
+    @State private var captureAttachPointGps: FormGpsValue?
     @State private var cameraFocused = false
     @State private var displayMode: DisplayMode = .map
 
@@ -498,12 +499,16 @@ struct CompanyMapView: View {
 
     private func beginNewCapture() {
         captureAttachPointId = nil
+        captureAttachPointGps = nil
         isCapturePresented = true
     }
 
     private func beginUpdate(for collapsedPoint: CollapsedPlatformPoint) {
         viewModel.clearSelection()
         captureAttachPointId = collapsedPoint.rootId
+        captureAttachPointGps = collapsedPoint.representative.evidence.gps.map {
+            FormGpsValue(latitude: $0.latitude, longitude: $0.longitude, accuracyMeters: $0.accuracyMeters)
+        }
         isCapturePresented = true
     }
 
@@ -514,7 +519,8 @@ struct CompanyMapView: View {
                 CaptureView(
                     viewModel: appState.makeCaptureViewModel(
                         organizationId: organizationId,
-                        attachPointId: captureAttachPointId
+                        attachPointId: captureAttachPointId,
+                        attachPointGps: captureAttachPointGps
                     )
                 )
                 .navigationTitle(

@@ -24,7 +24,7 @@ struct AuthSessionUser: Equatable, Sendable {
 /// step 2 is automatically replayed by `URLSessionPlatformTransport`'s later
 /// `PlatformAPIClient` calls — no manual cookie plumbing on either side (see
 /// `AuthTransport.swift`).
-struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSigningOut {
+struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSigningOut, AuthLocalSessionClearing {
     private let baseURL: URL
     private let transport: AuthTransport
 
@@ -90,6 +90,17 @@ struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSignin
         let (_, response) = try await send(request)
         guard (200..<300).contains(response.statusCode) else {
             throw AuthServiceError.network("Sign-out failed (\(response.statusCode)).")
+        }
+    }
+
+    /// Removes all cookies for `baseURL` from the shared cookie jar so that
+    /// `restoreSession()` on the next app launch returns `nil` even if the
+    /// server-side signout request never completed.
+    func clearLocalSession() {
+        let storage = HTTPCookieStorage.shared
+        let cookies = storage.cookies(for: baseURL) ?? []
+        for cookie in cookies {
+            storage.deleteCookie(cookie)
         }
     }
 

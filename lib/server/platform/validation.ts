@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gpsIntegritySchema } from "../validation.js";
 
 const uuid = z.string().uuid();
 const SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{1,38}[a-z0-9]$/;
@@ -83,6 +84,20 @@ export const schemaPublishSchema = z.object({
   projectId: uuid,
 });
 
+const platformGpsIntegritySchema = gpsIntegritySchema.transform((value) => ({
+  mockLocationDetected: value.mockLocationDetected,
+  mockLocationMethod: value.mockLocationMethod ?? null,
+  hasAccelerometerData: value.hasAccelerometerData,
+  hasGyroscopeData: value.hasGyroscopeData,
+  accelerometerSampleCount: value.accelerometerSampleCount,
+  motionDetectedDuringCapture: value.motionDetectedDuringCapture,
+  gpsAccuracyMeters: value.gpsAccuracyMeters ?? null,
+  networkType: value.networkType ?? null,
+  gpsTimestamp: value.gpsTimestamp ?? null,
+  deviceTimestamp: value.deviceTimestamp,
+  timeDeltaMs: value.timeDeltaMs ?? null,
+}));
+
 export const recordCreateSchema = z.object({
   projectId: uuid,
   schemaVersionId: uuid,
@@ -99,6 +114,7 @@ export const recordCreateSchema = z.object({
     notes: z.string().trim().max(2_000).optional(),
     capturedAt: z.string().datetime().optional(),
     device: z.object({
+      deviceId: z.string().trim().max(128).optional(),
       platform: z.string().trim().max(120).optional(),
       userAgent: z.string().trim().max(500).optional(),
       language: z.string().trim().max(40).optional(),
@@ -111,6 +127,14 @@ export const recordCreateSchema = z.object({
       height: z.number().int().positive().max(20_000).optional(),
       capturedAt: z.string().datetime().optional(),
     })).max(10).optional(),
+    clientExif: z.object({
+      latitude: z.number().finite().nullable().optional(),
+      longitude: z.number().finite().nullable().optional(),
+      capturedAt: z.string().datetime().nullable().optional(),
+      deviceMake: z.string().trim().max(120).nullable().optional(),
+      deviceModel: z.string().trim().max(120).nullable().optional(),
+    }).nullable().optional(),
+    gpsIntegrity: platformGpsIntegritySchema.optional(),
   }),
 }).superRefine((value, context) => {
   if (value.pointId && !value.evidence.gps) {

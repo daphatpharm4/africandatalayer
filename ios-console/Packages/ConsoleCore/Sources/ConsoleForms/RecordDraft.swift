@@ -18,6 +18,10 @@ public struct RecordDraft: Codable, Equatable, Sendable {
     public var notes: String?
     public var pointId: String?
     public var capturedAt: String
+    public var device: PlatformRecordEvidence.Device?
+    public var photoMetadata: [PlatformRecordEvidence.PhotoMetadata]?
+    public var clientExif: PlatformRecordEvidence.ClientExif?
+    public var gpsIntegrity: PlatformRecordEvidence.GpsIntegrity?
 
     public init(
         projectId: String,
@@ -28,7 +32,11 @@ public struct RecordDraft: Codable, Equatable, Sendable {
         gps: FormGpsValue? = nil,
         notes: String? = nil,
         pointId: String? = nil,
-        capturedAt: String
+        capturedAt: String,
+        device: PlatformRecordEvidence.Device? = nil,
+        photoMetadata: [PlatformRecordEvidence.PhotoMetadata]? = nil,
+        clientExif: PlatformRecordEvidence.ClientExif? = nil,
+        gpsIntegrity: PlatformRecordEvidence.GpsIntegrity? = nil
     ) {
         self.projectId = projectId
         self.schemaVersionId = schemaVersionId
@@ -39,5 +47,9 @@ public struct RecordDraft: Codable, Equatable, Sendable {
         self.notes = notes
         self.pointId = pointId
         self.capturedAt = capturedAt
+        self.device = device
+        self.photoMetadata = photoMetadata
+        self.clientExif = clientExif
+        self.gpsIntegrity = gpsIntegrity
     }
 }

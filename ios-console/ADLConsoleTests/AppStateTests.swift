@@ -12,11 +12,13 @@ import XCTest
 final class AppStateTests: XCTestCase {
     private func makeAppState(
         transport: MockPlatformTransport,
-        authService: MockAuthService
+        authService: MockAuthService,
+        offlineCache: ConsoleOfflineCacheProtocol = InMemoryConsoleOfflineCache()
     ) -> AppState {
         AppState(
             apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
-            authService: authService
+            authService: authService,
+            offlineCache: offlineCache
         )
     }
 
@@ -88,6 +90,34 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(state.role)
         XCTAssertNil(state.organization)
         XCTAssertEqual(state.route, ConsoleRoute(screen: .join))
+    }
+
+    func testSignInFallsBackToCachedOrganizationsWhenOffline() async {
+        let transport = MockPlatformTransport()
+        transport.statusCode = 503
+        transport.responseData = Data("{\"error\":\"offline\"}".utf8)
+        let auth = MockAuthService()
+        let cachedMembership = PlatformOrganizationMembership(
+            organization: PlatformOrganization(
+                id: "org-cached",
+                name: "Cached Org",
+                slug: "cached",
+                logoUrl: nil,
+                accentColor: nil,
+                createdAt: "2026-01-01T00:00:00.000Z"
+            ),
+            role: .collector
+        )
+        let cache = InMemoryConsoleOfflineCache(organizations: [cachedMembership])
+        let state = makeAppState(transport: transport, authService: auth, offlineCache: cache)
+
+        await state.signIn(email: "collector@acme.test", password: "hunter2")
+
+        XCTAssertTrue(state.isAuthenticated)
+        XCTAssertEqual(state.organizationsLoadState, .loaded)
+        XCTAssertEqual(state.organization?.id, "org-cached")
+        XCTAssertEqual(state.role, .collector)
+        XCTAssertEqual(state.route, ConsoleRoute(screen: .map))
     }
 
     // MARK: - Sign-in failure

@@ -38,6 +38,8 @@ class AppState: ObservableObject {
     @Published var organizationsLoadState: LoadState = .idle
 
     @Published var language: ConsoleLanguage = .en
+    @Published private(set) var recordQueueSnapshot: RecordQueueSnapshot?
+    @Published private(set) var isSyncingRecordQueue = false
     /// Whether the signed-in user is an ADL platform admin (not an org
     /// role) — gates the `ONBOARDING` screen per `canAccessConsoleScreen`.
     /// TODO(real-cookie-handshake): derive this from `GET /api/auth/session`
@@ -57,17 +59,20 @@ class AppState: ObservableObject {
     /// Support; tests inject an in-memory store via `init`.
     let recordQueue: RecordQueue
     private let locationServiceFactory: () -> LocationServiceProtocol?
+    private let offlineCache: ConsoleOfflineCacheProtocol
 
     init(
         apiClient: PlatformAPIClient,
         authService: AuthServiceProtocol,
         recordQueue: RecordQueue = AppState.makeDefaultRecordQueue(),
-        locationServiceFactory: @escaping () -> LocationServiceProtocol? = { CoreLocationService() }
+        locationServiceFactory: @escaping () -> LocationServiceProtocol? = { CoreLocationService() },
+        offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache()
     ) {
         self.apiClient = apiClient
         self.authService = authService
         self.recordQueue = recordQueue
         self.locationServiceFactory = locationServiceFactory
+        self.offlineCache = offlineCache
     }
 
     private static func makeDefaultRecordQueue() -> RecordQueue {
@@ -84,14 +89,23 @@ class AppState: ObservableObject {
     /// floating "+" is used, it is `nil` (a fresh point); when "Update this
     /// point" is used, it is the tapped point's `CollapsedPlatformPoint.rootId`,
     /// so the new capture joins that point's chain instead of starting one.
-    func makeCaptureViewModel(organizationId: String, attachPointId: String? = nil) -> CaptureViewModel {
+    func makeCaptureViewModel(
+        organizationId: String,
+        attachPointId: String? = nil,
+        attachPointGps: FormGpsValue? = nil
+    ) -> CaptureViewModel {
         CaptureViewModel(
             apiClient: apiClient,
             organizationId: organizationId,
             queue: recordQueue,
             language: language,
             locationService: locationServiceFactory(),
-            attachPointId: attachPointId
+            attachPointId: attachPointId,
+            attachPointGps: attachPointGps,
+            offlineCache: offlineCache,
+            onQueueSnapshotChanged: { [weak self] snapshot in
+                self?.recordQueueSnapshot = snapshot
+            }
         )
     }
 
@@ -101,7 +115,8 @@ class AppState: ObservableObject {
         CompanyMapViewModel(
             apiClient: apiClient,
             organizationId: organizationId,
-            language: language
+            language: language,
+            offlineCache: offlineCache
         )
     }
 
@@ -214,9 +229,14 @@ class AppState: ObservableObject {
         route = ConsoleRoute(screen: .loading)
         organizationsLoadState = .idle
         authErrorMessage = nil
-        // Invalidate the server-side session cookie so restoreSession() on next
-        // launch doesn't silently re-authenticate. Best-effort — a failure here
-        // doesn't affect the already-cleared local state.
+        // Synchronously wipe the local cookie jar so restoreSession() on the
+        // next app launch returns nil even if the async server call below is
+        // killed before it completes.
+        if let localClearing = authService as? AuthLocalSessionClearing {
+            localClearing.clearLocalSession()
+        }
+        // Best-effort server-side invalidation — failure is swallowed because
+        // the local cookie is already gone.
         if let signingOut = authService as? AuthSigningOut {
             Task { try? await signingOut.signOut() }
         }
@@ -232,6 +252,7 @@ class AppState: ObservableObject {
         do {
             let memberships = try await apiClient.listMyOrganizations()
             organizations = memberships
+            try? offlineCache.saveOrganizations(memberships)
             if let first = memberships.first {
                 selectOrganization(organizationId: first.organization.id)
             } else {
@@ -241,7 +262,16 @@ class AppState: ObservableObject {
             }
             organizationsLoadState = .loaded
         } catch {
-            organizationsLoadState = .failed(String(describing: error))
+            let cachedMemberships = (try? offlineCache.loadOrganizations()) ?? []
+            if !cachedMemberships.isEmpty {
+                organizations = cachedMemberships
+                if let first = cachedMemberships.first {
+                    selectOrganization(organizationId: first.organization.id)
+                }
+                organizationsLoadState = .loaded
+            } else {
+                organizationsLoadState = .failed(String(describing: error))
+            }
         }
     }
 
@@ -257,6 +287,57 @@ class AppState: ObservableObject {
 
     func navigate(to newRoute: ConsoleRoute) {
         route = newRoute
+    }
+
+    func refreshRecordQueueSnapshot() async {
+        recordQueueSnapshot = try? await recordQueue.snapshot()
+    }
+
+    func syncRecordQueue() async {
+        guard !isSyncingRecordQueue else { return }
+        isSyncingRecordQueue = true
+        let summary = await recordQueue.sync { [apiClient] draft, idempotencyKey in
+            try await Self.submitRecordDraft(draft, idempotencyKey: idempotencyKey, apiClient: apiClient)
+        }
+        recordQueueSnapshot = try? await recordQueue.snapshot()
+        if summary.remaining == 0, recordQueueSnapshot == nil {
+            recordQueueSnapshot = RecordQueueSnapshot(pending: 0, syncing: 0, failed: 0, total: 0, syncedThisSession: summary.syncedIds.count)
+        }
+        isSyncingRecordQueue = false
+    }
+
+    private static func submitRecordDraft(
+        _ draft: RecordDraft,
+        idempotencyKey: String,
+        apiClient: PlatformAPIClient
+    ) async throws {
+        do {
+            _ = try await apiClient.createPlatformRecord(
+                projectId: draft.projectId,
+                schemaVersionId: draft.schemaVersionId,
+                recordTypeKey: draft.recordTypeKey,
+                data: draft.data,
+                evidence: PlatformRecordEvidence(
+                    gps: draft.gps.map {
+                        PlatformRecordGps(latitude: $0.latitude, longitude: $0.longitude, accuracyMeters: $0.accuracyMeters)
+                    },
+                    photos: draft.photoRefs,
+                    notes: draft.notes,
+                    capturedAt: draft.capturedAt,
+                    device: draft.device,
+                    photoMetadata: draft.photoMetadata,
+                    clientExif: draft.clientExif,
+                    gpsIntegrity: draft.gpsIntegrity
+                ),
+                idempotencyKey: idempotencyKey,
+                pointId: draft.pointId
+            )
+        } catch let error as PlatformAPIError {
+            if error.status == -1 || (500..<600).contains(error.status) {
+                throw RecordSubmitError.retryable(error.message)
+            }
+            throw RecordSubmitError.permanent(error.message)
+        }
     }
 
     #if DEBUG
