@@ -367,27 +367,30 @@ class AppState: ObservableObject {
             return
         }
 
-        if let user = await sessionRestorer.restoreSession() {
-            // We have a valid session cookie — consider the user authenticated.
+        let result = await sessionRestorer.restoreSession()
+
+        switch result {
+        case .authenticated(let user):
             isAuthenticated = true
             sessionState = .authenticated
-            // Opportunistically reflect admin role if present until the TODO(real-cookie-handshake)
-            // work promotes this into first-class state.
             if let role = user.role, role == "admin" {
                 isAdlAdmin = true
             }
-            // If we haven't loaded orgs for this session yet, do it now.
             if organizationsLoadState == .idle || organizations.isEmpty {
                 await loadOrganizations()
             }
-            // If there are no organizations, `loadOrganizations()` already routes to JOIN.
-            // Otherwise `selectOrganization` applies the role-aware landing route
-            // (collector -> map, reviewer -> review, owner/manager -> overview).
             if route.screen == .loading || route.screen == .authRequired {
                 route = role.map(consoleLandingRoute(role:)) ?? ConsoleRoute(screen: .overview)
             }
-        } else {
-            // No session to restore — ensure the shell knows auth is required.
+
+        case .noSession, .unauthorized:
+            isAuthenticated = false
+            sessionState = .unauthenticated
+            if route.screen == .loading {
+                route = ConsoleRoute(screen: .authRequired)
+            }
+
+        case .unavailable:
             isAuthenticated = false
             sessionState = .unauthenticated
             if route.screen == .loading {

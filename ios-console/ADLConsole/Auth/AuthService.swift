@@ -37,10 +37,28 @@ protocol AuthServiceProtocol: Sendable {
     func signIn(email: String, password: String) async throws
 }
 
+/// Distinguishes the kind of unavailability so the session repository can
+/// decide whether to fall back to cached workspace data.
+enum AuthUnavailability: Equatable, Sendable {
+    case transport
+    case server(status: Int)
+}
+
+/// Typed result for session restoration — preserves the distinction between
+/// "no session exists", "session is invalid/expired", "the server is
+/// reachable but returned a non-2xx status", and "the transport itself
+/// failed (network unavailable)".
+enum AuthSessionRestoreResult: Equatable, Sendable {
+    case authenticated(AuthSessionUser)
+    case noSession
+    case unauthorized
+    case unavailable(AuthUnavailability)
+}
+
 /// Optional capability for auth services that can check an existing persisted
 /// session, such as the cookie-backed network implementation.
 protocol AuthSessionRestoring: Sendable {
-    func restoreSession() async -> AuthSessionUser?
+    func restoreSession() async -> AuthSessionRestoreResult
 }
 
 /// Optional capability for auth services that can invalidate a server-side

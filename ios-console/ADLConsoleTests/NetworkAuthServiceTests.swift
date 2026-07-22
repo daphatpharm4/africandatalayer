@@ -74,7 +74,7 @@ final class NetworkAuthServiceTests: XCTestCase {
         ])
         let service = makeService(transport: transport)
 
-        await XCTAssertThrowsErrorAsync(try await service.signIn(email: "wrong@acme.test", password: "bad")) { error in
+        await XCTAssertThrowsErrorAsync({ try await service.signIn(email: "wrong@acme.test", password: "bad") }) { error in
             XCTAssertEqual(error as? AuthServiceError, .invalidCredentials)
         }
         // The session GET must not fire once the callback signals a credentials error.
@@ -85,7 +85,7 @@ final class NetworkAuthServiceTests: XCTestCase {
         let transport = MockAuthTransport()
         let service = makeService(transport: transport)
 
-        await XCTAssertThrowsErrorAsync(try await service.signIn(email: "owner@acme.test", password: "")) { error in
+        await XCTAssertThrowsErrorAsync({ try await service.signIn(email: "owner@acme.test", password: "") }) { error in
             XCTAssertEqual(error as? AuthServiceError, .invalidCredentials)
         }
         XCTAssertTrue(transport.capturedRequests.isEmpty)
@@ -100,7 +100,7 @@ final class NetworkAuthServiceTests: XCTestCase {
         ])
         let service = makeService(transport: transport)
 
-        await XCTAssertThrowsErrorAsync(try await service.signIn(email: "owner@acme.test", password: "hunter2")) { error in
+        await XCTAssertThrowsErrorAsync({ try await service.signIn(email: "owner@acme.test", password: "hunter2") }) { error in
             guard case .network = error as? AuthServiceError else {
                 XCTFail("Expected .network, got \(error)")
                 return
@@ -116,7 +116,7 @@ final class NetworkAuthServiceTests: XCTestCase {
         ])
         let service = makeService(transport: transport)
 
-        await XCTAssertThrowsErrorAsync(try await service.signIn(email: "owner@acme.test", password: "hunter2")) { error in
+        await XCTAssertThrowsErrorAsync({ try await service.signIn(email: "owner@acme.test", password: "hunter2") }) { error in
             guard case .network = error as? AuthServiceError else {
                 XCTFail("Expected .network, got \(error)")
                 return
@@ -132,32 +132,90 @@ final class NetworkAuthServiceTests: XCTestCase {
         ])
         let service = makeService(transport: transport)
 
-        let user = await service.restoreSession()
+        let result = await service.restoreSession()
 
+        guard case .authenticated(let user) = result else {
+            return XCTFail("Expected .authenticated, got \(result)")
+        }
         XCTAssertEqual(user, AuthSessionUser(id: "user-1", email: "owner@acme.test", role: "admin", isAdmin: true))
         XCTAssertEqual(transport.lastRequest?.url?.path, "/api/auth/session")
     }
 
-    func testRestoreSessionReturnsNilWhenSessionHasNoUser() async {
+    func testRestoreSessionReturnsNoSessionWhenUserNull() async {
         let transport = MockAuthTransport(responses: [
             .json(#"{"user":null}"#),
         ])
         let service = makeService(transport: transport)
 
-        let user = await service.restoreSession()
+        let result = await service.restoreSession()
 
-        XCTAssertNil(user)
+        XCTAssertEqual(result, .noSession)
     }
 
-    func testRestoreSessionReturnsNilOnServerError() async {
+    func testRestoreSessionReturnsNoSessionWhenEmptyJson() async {
+        let transport = MockAuthTransport(responses: [
+            .json(#"{}"#),
+        ])
+        let service = makeService(transport: transport)
+
+        let result = await service.restoreSession()
+
+        XCTAssertEqual(result, .noSession)
+    }
+
+    func testRestoreSessionReturnsServerUnavailableOn500() async {
         let transport = MockAuthTransport(responses: [
             .json(#"{"error":"nope"}"#, statusCode: 500),
         ])
         let service = makeService(transport: transport)
 
-        let user = await service.restoreSession()
+        let result = await service.restoreSession()
 
-        XCTAssertNil(user)
+        guard case .unavailable(.server(let status)) = result else {
+            return XCTFail("Expected .unavailable(.server), got \(result)")
+        }
+        XCTAssertEqual(status, 500)
+    }
+
+    func testRestoreSessionReturnsUnauthorizedOn401() async {
+        let transport = MockAuthTransport(responses: [
+            .json(#"{}"#, statusCode: 401),
+        ])
+        let service = makeService(transport: transport)
+
+        let result = await service.restoreSession()
+
+        XCTAssertEqual(result, .unauthorized)
+    }
+
+    func testRestoreSessionReturnsTransportUnavailableOnError() async {
+        let transport = MockAuthTransport()
+        transport.shouldThrow = true
+        let service = makeService(transport: transport)
+
+        let result = await service.restoreSession()
+
+        XCTAssertEqual(result, .unavailable(.transport))
+    }
+
+    func testRestoreClassifiesServerAndUnauthorized() async {
+        let transport = MockAuthTransport(responses: [
+            .json(#"{}"#, statusCode: 503),
+        ])
+        let service = makeService(transport: transport)
+
+        guard case .unavailable(.server(let status)) = await service.restoreSession() else {
+            return XCTFail("Expected .unavailable(.server)")
+        }
+        XCTAssertEqual(status, 503)
+
+        let transport2 = MockAuthTransport(responses: [
+            .json(#"{}"#, statusCode: 401),
+        ])
+        let service2 = makeService(transport: transport2)
+
+        let result2 = await service2.restoreSession()
+        XCTAssertEqual(result2, .unauthorized)
     }
 
     // MARK: - Sign-out

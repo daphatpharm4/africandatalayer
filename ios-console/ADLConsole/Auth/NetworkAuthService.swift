@@ -65,12 +65,29 @@ struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSignin
     // network-backed `AppState.signOut()`). Wiring either into `AppState`'s
     // published state is out of scope for this task per the brief.
 
-    /// `GET /api/auth/session` — returns the signed-in user if a session
-    /// cookie is already present (e.g. app relaunch), or `nil` if not present
-    /// or the request fails. Mirrors `getSession()` in `lib/client/auth.ts`,
-    /// including its "swallow errors, return nil" behavior.
-    func restoreSession() async -> AuthSessionUser? {
-        (try? await fetchSessionUser()) ?? nil
+    /// `GET /api/auth/session` — returns a typed result that distinguishes
+    /// "authenticated", "no session", "session expired/unauthorized", and
+    /// "transport/server unavailable". Uses `transport.send()` directly
+    /// (instead of the error-wrapping `self.send()`) so that HTTP status
+    /// codes for non-2xx responses are preserved and transport errors are
+    /// not swallowed into a generic `AuthServiceError.network`.
+    func restoreSession() async -> AuthSessionRestoreResult {
+        do {
+            let request = URLRequest(url: baseURL.appendingPathComponent("api/auth/session"))
+            let (data, response) = try await transport.send(request)
+            let statusCode = response.statusCode
+            guard (200..<300).contains(statusCode) else {
+                if statusCode == 401 { return .unauthorized }
+                return .unavailable(.server(status: statusCode))
+            }
+            guard let decoded = try? JSONDecoder().decode(SessionResponse.self, from: data),
+                  let sessionUser = decoded.user else {
+                return .noSession
+            }
+            return .authenticated(AuthSessionUser(id: sessionUser.id, email: sessionUser.email, role: sessionUser.role, isAdmin: sessionUser.isAdmin))
+        } catch {
+            return .unavailable(.transport)
+        }
     }
 
     /// `POST /api/auth/signout` — mirrors `signOut()` in `lib/client/auth.ts`.

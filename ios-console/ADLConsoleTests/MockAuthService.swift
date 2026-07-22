@@ -12,7 +12,7 @@ final class MockAuthService: AuthServiceProtocol, AuthSessionRestoring, @uncheck
     }
 
     var behavior: Behavior = .succeed
-    var restoredUser: AuthSessionUser?
+    var restoredResult: AuthSessionRestoreResult?
     private(set) var signInCallCount = 0
     private(set) var restoreSessionCallCount = 0
     private(set) var lastEmail: String?
@@ -30,8 +30,8 @@ final class MockAuthService: AuthServiceProtocol, AuthSessionRestoring, @uncheck
         }
     }
 
-    func restoreSession() async -> AuthSessionUser? {
+    func restoreSession() async -> AuthSessionRestoreResult {
         restoreSessionCallCount += 1
-        return restoredUser
+        return restoredResult ?? .noSession
     }
 }

@@ -220,7 +220,7 @@ final class AppStateTests: XCTestCase {
         ]}
         """.utf8)
         let auth = MockAuthService()
-        auth.restoredUser = AuthSessionUser(id: "user-1", email: "collector@acme.test", role: nil, isAdmin: false)
+        auth.restoredResult = .authenticated(AuthSessionUser(id: "user-1", email: "collector@acme.test", role: nil, isAdmin: false))
         let state = makeAppState(transport: transport, authService: auth)
 
         XCTAssertFalse(state.isAuthenticated)
