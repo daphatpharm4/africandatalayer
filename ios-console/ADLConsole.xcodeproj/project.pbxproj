@@ -17,6 +17,7 @@
 		109D12C53085688AC9835D7A /* SyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49681E86F2B2B7454EE5AAAE /* SyncEngineTests.swift */; };
 		10DF95A9868106CB366B2EA2 /* MembersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D6C5D4CABBA873B7D166C1 /* MembersView.swift */; };
 		114A4385E08BCE8EB00C1A20 /* SessionRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEDA9923CA560C9B02CA6AE /* SessionRepositoryTests.swift */; };
+		136F6A1495FAB38428A978BD /* ConfigurationErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB5D8A32F2DF9BC38F6778F /* ConfigurationErrorView.swift */; };
 		1959BE4002E4245900F84ABF /* ConsoleState in Frameworks */ = {isa = PBXBuildFile; productRef = 4F924DAF268789C0063BB4B1 /* ConsoleState */; };
 		1DB18EBE187A5B76D144BF13 /* ConsoleLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */; };
 		1E4DD29642B027C4C300BF13 /* SettingsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25C8174F752CBAF952089B73 /* SettingsViewModel.swift */; };
@@ -57,6 +58,7 @@
 		849B13AE9BA976F1A22E896E /* ADLConsoleColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031FC650E637FA153AF3C596 /* ADLConsoleColor.swift */; };
 		87FE738BF3E2FB3F986B1BEB /* ADLLogoMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F68854CA5FCE5B9B62C5FD3 /* ADLLogoMark.swift */; };
 		8A2B607C80C944A54ACFFCA4 /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2728581F0B52FEB36FC2E696 /* AppSettingsView.swift */; };
+		8B7A3C9B3D18745B43929E9A /* AppDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD107D441F52EE0F4E4C3709 /* AppDependencies.swift */; };
 		8E168C953966EE6D95CD487A /* MockPlatformTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30AD6F052C32EFB5860F539B /* MockPlatformTransport.swift */; };
 		8E9FAEE9B941530B2F50ECA5 /* MockAuthTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E57D6FC6D409D104085995 /* MockAuthTransport.swift */; };
 		93D803FD9E74C10C412BD7E3 /* ConsoleModels in Frameworks */ = {isa = PBXBuildFile; productRef = 90BE175E7AD2329A5C613935 /* ConsoleModels */; };
@@ -126,6 +128,7 @@
 		038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
 		08D7784C42D75445E370C4B8 /* ADLConsoleTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADLConsoleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0948CE2D0955F7887148B0A9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		0EB5D8A32F2DF9BC38F6778F /* ConfigurationErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationErrorView.swift; sourceTree = "<group>"; };
 		0FFEAB3969E7318AF2F3D2F3 /* StubAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubAuthServiceTests.swift; sourceTree = "<group>"; };
 		117E5B7585C54D2CA50E3A62 /* ConsoleDestinations.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleDestinations.swift; sourceTree = "<group>"; };
 		125A4B1EC86659B789FE0581 /* ProjectsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsViewModelTests.swift; sourceTree = "<group>"; };
@@ -204,6 +207,7 @@
 		D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleApp.swift; sourceTree = "<group>"; };
 		D9C5756D198653BA9FC365D2 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
 		D9D6C5D4CABBA873B7D166C1 /* MembersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersView.swift; sourceTree = "<group>"; };
+		DD107D441F52EE0F4E4C3709 /* AppDependencies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDependencies.swift; sourceTree = "<group>"; };
 		DD1829FAC802540453948783 /* CaptureMediaPreparerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMediaPreparerTests.swift; sourceTree = "<group>"; };
 		DF20BD775A3750BC88BAC553 /* CaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureView.swift; sourceTree = "<group>"; };
 		E21B3462FA21737C21B9E40B /* PlatformRoleRank.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlatformRoleRank.swift; sourceTree = "<group>"; };
@@ -434,7 +438,9 @@
 		AC2E260074058ECE77BD4870 /* Configuration */ = {
 			isa = PBXGroup;
 			children = (
+				DD107D441F52EE0F4E4C3709 /* AppDependencies.swift */,
 				9DA59868B5F2C703ED049F40 /* AppEnvironment.swift */,
+				0EB5D8A32F2DF9BC38F6778F /* ConfigurationErrorView.swift */,
 			);
 			path = Configuration;
 			sourceTree = "<group>";
@@ -641,6 +647,7 @@
 				ACBA096578E554C6B9AC66A0 /* ADLConsoleFont.swift in Sources */,
 				31DE52917509EC0120DBBC59 /* ADLImageCache.swift in Sources */,
 				87FE738BF3E2FB3F986B1BEB /* ADLLogoMark.swift in Sources */,
+				8B7A3C9B3D18745B43929E9A /* AppDependencies.swift in Sources */,
 				60C79732FF835BFCBB7E37A7 /* AppEnvironment.swift in Sources */,
 				8A2B607C80C944A54ACFFCA4 /* AppSettingsView.swift in Sources */,
 				09477BD669DBB16183AA17D1 /* AppState.swift in Sources */,
@@ -660,6 +667,7 @@
 				D9F748E5FD3982E80BB90089 /* CompanyMapView.swift in Sources */,
 				238688E2CA2AABE4C6E0C39D /* CompanyMapViewModel.swift in Sources */,
 				834CB398D6E50E6B3F7BC28F /* CompanyPointDetailView.swift in Sources */,
+				136F6A1495FAB38428A978BD /* ConfigurationErrorView.swift in Sources */,
 				C4A7E3F26FB921BFBD631C7A /* ConnectivityMonitor.swift in Sources */,
 				FC14385E46894E0B48410FAE /* ConsoleDestinations.swift in Sources */,
 				1DB18EBE187A5B76D144BF13 /* ConsoleLanguage.swift in Sources */,

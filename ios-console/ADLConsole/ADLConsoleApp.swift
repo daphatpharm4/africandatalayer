@@ -1,23 +1,36 @@
 import ConsoleAPI
 import SwiftUI
 
-/// Base URL for the Data Ops Platform API this console talks to. Points at
-/// the production ADL deployment; a later task should make this
-/// build-config-driven (e.g. a debug scheme pointed at a preview
-/// deployment).
-private let consoleAPIBaseURL = URL(string: "https://www.app.africandatalayer.com")!
-
 @main
 struct ADLConsoleApp: App {
-    @StateObject private var appState = AppState(
-        apiClient: PlatformAPIClient(baseURL: consoleAPIBaseURL),
-        authService: NetworkAuthService(baseURL: consoleAPIBaseURL)
-    )
+    @State private var configurationError: String?
+    @StateObject private var appState: AppState
+
+    init() {
+        do {
+            let environment = try AppEnvironment.load()
+            let dependencies = AppDependencies(environment: environment)
+            _appState = StateObject(wrappedValue: AppState(
+                apiClient: dependencies.apiClient,
+                authService: dependencies.authService
+            ))
+        } catch {
+            _configurationError = State(initialValue: "ADL Console is not configured for this build.")
+            _appState = StateObject(wrappedValue: AppState(
+                apiClient: PlatformAPIClient(baseURL: URL(string: "about:blank")!),
+                authService: NetworkAuthService(baseURL: URL(string: "about:blank")!)
+            ))
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(appState)
+            if let message = configurationError {
+                ConfigurationErrorView(message: message)
+            } else {
+                RootView()
+                    .environmentObject(appState)
+            }
         }
     }
 }

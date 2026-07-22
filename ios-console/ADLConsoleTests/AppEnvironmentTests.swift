@@ -67,4 +67,16 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertEqual(env.telemetryPrefix, "com.africandatalayer.console.debug")
     }
 
+    func testProductionAppDependenciesShareEnvironment() throws {
+        let environment = try AppEnvironment.load(info: [
+            "ADL_BUILD_CHANNEL": "production",
+            "ADL_API_BASE_URL": "https://www.app.africandatalayer.com",
+            "CFBundleIdentifier": "com.africandatalayer.console",
+            "CFBundleShortVersionString": "1.0.0",
+            "CFBundleVersion": "42"
+        ])
+        let dependencies = AppDependencies(environment: environment)
+        XCTAssertEqual(dependencies.baseURL, environment.apiBaseURL)
+        XCTAssertEqual(dependencies.session.configuration.timeoutIntervalForRequest, 30)
+    }
 }
