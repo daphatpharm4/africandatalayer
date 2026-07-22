@@ -4,6 +4,9 @@ import ConsoleModels
 import ConsolePersistence
 import CryptoKit
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Drives `CaptureView` — the collector's schema-driven record-capture flow.
 /// Every field-engine/validation/queue decision is delegated to the pure

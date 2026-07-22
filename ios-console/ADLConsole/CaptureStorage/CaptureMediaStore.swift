@@ -1,6 +1,7 @@
 import ConsolePersistence
 import CryptoKit
 import Foundation
+import os
 
 struct PreparedCaptureMedia: Equatable, Sendable {
     let data: Data
@@ -26,7 +27,7 @@ protocol CaptureMediaStoreProtocol: Sendable {
     func quarantine(_ attachment: LedgerAttachment, reason: String) async throws
 }
 
-final class CaptureMediaStore: CaptureMediaStoreProtocol {
+final class CaptureMediaStore: CaptureMediaStoreProtocol, @unchecked Sendable {
     private let fileManager: FileManager
     private let baseURL: URL
 
@@ -120,77 +121,77 @@ final class CaptureMediaStore: CaptureMediaStoreProtocol {
     }
 }
 
-final class InMemoryCaptureMediaStore: CaptureMediaStoreProtocol {
+final class InMemoryCaptureMediaStore: CaptureMediaStoreProtocol, @unchecked Sendable {
     private var storage: [String: [String: PreparedCaptureMedia]] = [:]
     private var attachments: [String: [LedgerAttachment]] = [:]
     private var resolvedData: [String: Data] = [:]
-    private let lock = NSLock()
+    private let lock = OSAllocatedUnfairLock()
 
     func stage(_ media: PreparedCaptureMedia, ownerUserID: String, organizationID: String, recordLocalID: String) async throws -> LedgerAttachment {
-        lock.lock()
-        defer { lock.unlock() }
-        let path = "\(ownerUserID)/\(organizationID)/\(recordLocalID)"
-        var recordMedia = storage[path] ?? [:]
-        let ordinal = recordMedia.count
-        let key = "\(ordinal)"
-        recordMedia[key] = media
-        storage[path] = recordMedia
+        try lock.withLock {
+            let path = "\(ownerUserID)/\(organizationID)/\(recordLocalID)"
+            var recordMedia = storage[path] ?? [:]
+            let ordinal = recordMedia.count
+            let key = "\(ordinal)"
+            recordMedia[key] = media
+            storage[path] = recordMedia
 
-        let attachment = LedgerAttachment(
-            recordLocalID: recordLocalID,
-            placement: "recordEvidence",
-            ordinal: ordinal,
-            relativePath: "\(path)/\(key).jpg",
-            sha256: media.sha256,
-            mimeType: media.mimeType,
-            pixelWidth: media.pixelWidth,
-            pixelHeight: media.pixelHeight,
-            byteCount: media.data.count,
-            createdAt: Date()
-        )
-        resolvedData[attachment.relativePath] = media.data
-        var recordAttachments = attachments[recordLocalID] ?? []
-        recordAttachments.append(attachment)
-        attachments[recordLocalID] = recordAttachments
-        return attachment
+            let attachment = LedgerAttachment(
+                recordLocalID: recordLocalID,
+                placement: "recordEvidence",
+                ordinal: ordinal,
+                relativePath: "\(path)/\(key).jpg",
+                sha256: media.sha256,
+                mimeType: media.mimeType,
+                pixelWidth: media.pixelWidth,
+                pixelHeight: media.pixelHeight,
+                byteCount: media.data.count,
+                createdAt: Date()
+            )
+            resolvedData[attachment.relativePath] = media.data
+            var recordAttachments = attachments[recordLocalID] ?? []
+            recordAttachments.append(attachment)
+            attachments[recordLocalID] = recordAttachments
+            return attachment
+        }
     }
 
     func resolve(_ attachment: LedgerAttachment) async throws -> Data {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let data = resolvedData[attachment.relativePath] else {
-            throw CaptureMediaStoreError.attachmentNotFound
+        try lock.withLock {
+            guard let data = resolvedData[attachment.relativePath] else {
+                throw CaptureMediaStoreError.attachmentNotFound
+            }
+            let checksum = SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
+            guard checksum == attachment.sha256 else {
+                throw CaptureMediaStoreError.checksumMismatch(expected: attachment.sha256, actual: checksum)
+            }
+            return data
         }
-        let checksum = SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
-        guard checksum == attachment.sha256 else {
-            throw CaptureMediaStoreError.checksumMismatch(expected: attachment.sha256, actual: checksum)
-        }
-        return data
     }
 
     func removeAcknowledged(recordLocalID: String) async throws {}
 
     func discard(recordLocalID: String) async throws {
-        lock.lock()
-        defer { lock.unlock() }
-        let keysToRemove = storage.keys.filter { $0.hasSuffix("/\(recordLocalID)") }
-        for key in keysToRemove {
-            for (mediaKey, media) in storage[key] ?? [:] {
-                let relativePath = "\(key)/\(mediaKey).jpg"
-                resolvedData.removeValue(forKey: relativePath)
+        try lock.withLock {
+            let keysToRemove = storage.keys.filter { $0.hasSuffix("/\(recordLocalID)") }
+            for key in keysToRemove {
+                for (mediaKey, media) in storage[key] ?? [:] {
+                    let relativePath = "\(key)/\(mediaKey).jpg"
+                    resolvedData.removeValue(forKey: relativePath)
+                }
+                storage.removeValue(forKey: key)
             }
-            storage.removeValue(forKey: key)
+            attachments.removeValue(forKey: recordLocalID)
         }
-        attachments.removeValue(forKey: recordLocalID)
     }
 
     func quarantine(_ attachment: LedgerAttachment, reason: String) async throws {}
 
     #if DEBUG
     func allStagedAttachments() -> [LedgerAttachment] {
-        lock.lock()
-        defer { lock.unlock() }
-        return attachments.values.flatMap { $0 }
+        lock.withLock {
+            attachments.values.flatMap { $0 }
+        }
     }
     #endif
 }

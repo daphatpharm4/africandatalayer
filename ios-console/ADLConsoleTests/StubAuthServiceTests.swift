@@ -8,14 +8,14 @@ import XCTest
 final class StubAuthServiceTests: XCTestCase {
     func testRejectsEmptyPassword() async {
         let service = StubAuthService()
-        await XCTAssertThrowsErrorAsync(try await service.signIn(email: "a@b.com", password: "")) { error in
+        await XCTAssertThrowsErrorAsync({ try await service.signIn(email: "a@b.com", password: "") }) { error in
             XCTAssertEqual(error as? AuthServiceError, .invalidCredentials)
         }
     }
 
-    func testRejectsMalformedEmail() async {
+    func testInvalidEmailFormatThrowsInvalidCredentials() async {
         let service = StubAuthService()
-        await XCTAssertThrowsErrorAsync(try await service.signIn(email: "not-an-email", password: "hunter2")) { error in
+        await XCTAssertThrowsErrorAsync({ try await service.signIn(email: "not-an-email", password: "hunter2") }) { error in
             XCTAssertEqual(error as? AuthServiceError, .invalidCredentials)
         }
     }
@@ -30,8 +30,8 @@ final class StubAuthServiceTests: XCTestCase {
 /// Small async-throwing assertion helper — XCTest's `XCTAssertThrowsError`
 /// has no async overload as of this Swift toolchain.
 func XCTAssertThrowsErrorAsync<T>(
-    _ expression: @autoclosure () async throws -> T,
-    _ errorHandler: (Error) -> Void = { _ in },
+    _ expression: @Sendable () async throws -> T,
+    _ errorHandler: @Sendable (Error) -> Void = { _ in },
     file: StaticString = #filePath,
     line: UInt = #line
 ) async {

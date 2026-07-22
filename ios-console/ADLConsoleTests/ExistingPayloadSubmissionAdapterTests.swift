@@ -23,7 +23,7 @@ final class ExistingPayloadSubmissionAdapterTests: XCTestCase {
     """.utf8)
 
     private func makeAdapter(
-        transport: RoutingMockPlatformTransport,
+        transport: PlatformTransport,
         ledger: RecordLedgerProtocol,
         mediaStore: CaptureMediaStoreProtocol,
         attachmentLoader: @escaping @Sendable (String) async throws -> [LedgerAttachment]

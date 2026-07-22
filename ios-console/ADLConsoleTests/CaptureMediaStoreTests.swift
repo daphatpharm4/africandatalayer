@@ -110,7 +110,7 @@ final class CaptureMediaStoreTests: XCTestCase {
         let media = makePreparedMedia()
 
         let attachment = try await store.stage(media, ownerUserID: "u1", organizationID: "o1", recordLocalID: "r1")
-        XCTAssertNoThrow(try await store.resolve(attachment))
+        _ = try await store.resolve(attachment)
 
         try await store.discard(recordLocalID: "r1")
 
@@ -131,7 +131,7 @@ final class CaptureMediaStoreTests: XCTestCase {
 
         try await store.discard(recordLocalID: "r1")
 
-        XCTAssertNoThrow(try await store.resolve(att2))
+        _ = try await store.resolve(att2)
         do {
             _ = try await store.resolve(att1)
             XCTFail("r1 should be discarded")

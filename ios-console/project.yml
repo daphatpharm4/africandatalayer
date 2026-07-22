@@ -51,6 +51,8 @@ targets:
         product: ConsoleState
       - package: ConsoleCore
         product: ConsoleForms
+      - package: ConsoleCore
+        product: ConsolePersistence
 
   ADLConsoleTests:
     type: bundle.unit-test

@@ -7,11 +7,11 @@ final class PendingWorkViewModelTests: XCTestCase {
     private func makeViewModel(
         records: [LedgerRecord] = [],
         ledger: RecordLedgerProtocol? = nil
-    ) async throws -> (PendingWorkViewModel, RecordLedger) {
+    ) async throws -> (PendingWorkViewModel, RecordLedgerProtocol) {
         let database = try RecordDatabase.inMemory()
         let recordLedger = ledger ?? RecordLedger(database: database)
         for record in records {
-            try await recordLedger.insert(record)
+            try await recordLedger.insert(record, attachments: [])
         }
         let mediaStore = InMemoryCaptureMediaStore()
         let vm = PendingWorkViewModel(
