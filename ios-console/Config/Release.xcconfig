@@ -1,0 +1,4 @@
+// Release.xcconfig — production App Store build
+ADL_BUILD_CHANNEL = production
+ADL_API_BASE_URL = https:/$()/www.app.africandatalayer.com
+PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.console
