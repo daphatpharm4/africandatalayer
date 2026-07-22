@@ -53,6 +53,24 @@ final class ProjectsViewModelTests: XCTestCase {
         XCTAssertFalse(makeViewModel(transport: transport, role: .viewer).canManage)
     }
 
+    func testOfflineAdministrationPolicyBlocksCreateBeforeNetwork() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = ProjectsViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            role: .manager,
+            language: .en,
+            mutationAllowed: { false }
+        )
+        viewModel.newName = "Offline project"
+        viewModel.coverageLabel = "Douala"
+
+        XCTAssertFalse(viewModel.canManage)
+        let created = await viewModel.create()
+        XCTAssertFalse(created)
+        XCTAssertTrue(transport.requests(forView: "platform_project_create").isEmpty)
+    }
+
     // MARK: - Load
 
     func testLoadPopulatesProjects() async {

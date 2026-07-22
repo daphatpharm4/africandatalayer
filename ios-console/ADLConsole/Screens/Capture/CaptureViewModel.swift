@@ -1,7 +1,12 @@
 import ConsoleAPI
 import ConsoleForms
 import ConsoleModels
+import ConsolePersistence
+import CryptoKit
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Drives `CaptureView` — the collector's schema-driven record-capture flow.
 /// Every field-engine/validation/queue decision is delegated to the pure
@@ -74,6 +79,8 @@ final class CaptureViewModel: ObservableObject {
     @Published private(set) var isLoadingNearbyPoints = false
     @Published private(set) var nearbyPointsErrorMessage: String?
     @Published private(set) var attachedPoint: PlatformNearbyPoint?
+    @Published private(set) var preAttachPointId: String?
+    @Published private(set) var attachmentViewStates: [CaptureAttachmentViewState] = []
 
     let language: ConsoleLanguage
 
@@ -82,7 +89,18 @@ final class CaptureViewModel: ObservableObject {
     private let queue: RecordQueue
     private let locationService: LocationServiceProtocol?
     private let now: () -> Date
-    private let initialAttachPointId: String?
+    private let attachPointGps: FormGpsValue?
+    private let offlineCache: ConsoleOfflineCacheProtocol
+    private let onQueueSnapshotChanged: (@MainActor (RecordQueueSnapshot?) -> Void)?
+    private let fraudMetadataProvider: CaptureFraudMetadataProviding
+    private var photoMetadataByRef: [String: PlatformRecordEvidence.PhotoMetadata] = [:]
+    private let mediaStore: CaptureMediaStoreProtocol
+    private let durableCoordinator: CaptureCoordinator?
+    private let ownerUserID: String?
+    private let onDurableRecordPersisted: (@MainActor (String) async -> Void)?
+    private let creationAllowed: @MainActor () -> Bool
+    private var pendingMedia: [String: CaptureIntentMedia] = [:]
+    private static let enrichMaxDistanceMeters: Double = 250
 
     init(
         apiClient: PlatformAPIClient,
@@ -91,6 +109,15 @@ final class CaptureViewModel: ObservableObject {
         language: ConsoleLanguage,
         locationService: LocationServiceProtocol? = nil,
         attachPointId: String? = nil,
+        attachPointGps: FormGpsValue? = nil,
+        offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache(),
+        onQueueSnapshotChanged: (@MainActor (RecordQueueSnapshot?) -> Void)? = nil,
+        fraudMetadataProvider: CaptureFraudMetadataProviding = NativeCaptureFraudMetadataProvider(),
+        mediaStore: CaptureMediaStoreProtocol = InMemoryCaptureMediaStore(),
+        durableCoordinator: CaptureCoordinator? = nil,
+        ownerUserID: String? = nil,
+        onDurableRecordPersisted: (@MainActor (String) async -> Void)? = nil,
+        creationAllowed: @escaping @MainActor () -> Bool = { true },
         now: @escaping () -> Date = { Date() }
     ) {
         self.apiClient = apiClient
@@ -98,7 +125,16 @@ final class CaptureViewModel: ObservableObject {
         self.queue = queue
         self.language = language
         self.locationService = locationService
-        self.initialAttachPointId = attachPointId
+        self.preAttachPointId = attachPointId
+        self.attachPointGps = attachPointGps
+        self.offlineCache = offlineCache
+        self.onQueueSnapshotChanged = onQueueSnapshotChanged
+        self.fraudMetadataProvider = fraudMetadataProvider
+        self.mediaStore = mediaStore
+        self.durableCoordinator = durableCoordinator
+        self.ownerUserID = ownerUserID
+        self.onDurableRecordPersisted = onDurableRecordPersisted
+        self.creationAllowed = creationAllowed
         self.now = now
     }
 
@@ -128,7 +164,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     private var submitAttachPointId: String? {
-        attachedPoint?.pointId ?? initialAttachPointId
+        attachedPoint?.pointId ?? preAttachPointId
     }
 
     var captureProgress: CaptureProgress {
@@ -193,6 +229,10 @@ final class CaptureViewModel: ObservableObject {
                 return options.sorted { $0.project.name.localizedCaseInsensitiveCompare($1.project.name) == .orderedAscending }
             }
             projectOptions = options
+            try? offlineCache.saveProjectOptions(
+                options.map { CachedProjectOption(project: $0.project, schemaVersion: $0.schemaVersion) },
+                organizationId: organizationId
+            )
             if selectedProjectId == nil {
                 selectedProjectId = options.first?.id
             }
@@ -201,7 +241,20 @@ final class CaptureViewModel: ObservableObject {
             }
             loadState = .loaded
         } catch {
-            loadState = .failed(String(describing: error))
+            let cachedOptions = ((try? offlineCache.loadProjectOptions(organizationId: organizationId)) ?? [])
+                .map { ProjectOption(project: $0.project, schemaVersion: $0.schemaVersion) }
+            if !cachedOptions.isEmpty {
+                projectOptions = cachedOptions
+                if selectedProjectId == nil {
+                    selectedProjectId = cachedOptions.first?.id
+                }
+                if selectedRecordTypeKey == nil {
+                    selectedRecordTypeKey = recordTypes.first?.key
+                }
+                loadState = .loaded
+            } else {
+                loadState = .failed(String(describing: error))
+            }
         }
     }
 
@@ -224,6 +277,7 @@ final class CaptureViewModel: ObservableObject {
 
     func refreshQueueSnapshot() async {
         queueSnapshot = try? await queue.snapshot()
+        onQueueSnapshotChanged?(queueSnapshot)
     }
 
     func selectProject(_ projectId: String) {
@@ -248,10 +302,14 @@ final class CaptureViewModel: ObservableObject {
         values = [:]
         evidenceGps = nil
         evidencePhotoRefs = []
+        photoMetadataByRef = [:]
+        pendingMedia = [:]
+        attachmentViewStates = []
         evidenceNotes = ""
         nearbyPoints = nil
         nearbyPointsErrorMessage = nil
         attachedPoint = nil
+        preAttachPointId = nil
         lastValidation = nil
         if resetSubmitState {
             submitState = .idle
@@ -273,12 +331,93 @@ final class CaptureViewModel: ObservableObject {
 
     // MARK: - Evidence capture
 
-    func addPhotoRef(_ ref: String) {
+    func startFraudMetadataCapture() {
+        fraudMetadataProvider.startCapture()
+    }
+
+    func stopFraudMetadataCapture() {
+        fraudMetadataProvider.stopCapture()
+    }
+
+    func addPhotoRef(_ ref: String, metadata: PlatformRecordEvidence.PhotoMetadata? = nil) {
         evidencePhotoRefs.append(ref)
+        if let metadata {
+            photoMetadataByRef[ref] = metadata
+        }
+    }
+
+    func metadataForCapturedPhoto(_ ref: String) -> PlatformRecordEvidence.PhotoMetadata? {
+        let capturedAt = ISO8601DateFormatter().string(from: now())
+        return fraudMetadataProvider.photoMetadata(for: ref, capturedAt: capturedAt)
     }
 
     func removePhotoRef(_ ref: String) {
         evidencePhotoRefs.removeAll { $0 == ref }
+        photoMetadataByRef[ref] = nil
+    }
+
+    func addPhoto(_ data: Data, placement: CaptureAttachmentPlacement) async throws -> LedgerAttachment {
+        guard let image = UIImage(data: data) else {
+            throw CaptureAttachmentPickerError.imageProcessingFailed
+        }
+        let prepared = try CaptureMediaPreparer.prepare(image)
+        let recordLocalID = UUID().uuidString
+        let attachment = try await mediaStore.stage(
+            prepared,
+            ownerUserID: "pending",
+            organizationID: organizationId,
+            recordLocalID: recordLocalID
+        )
+        let viewState = CaptureAttachmentViewState(
+            thumbnail: data,
+            placement: placement,
+            byteCount: data.count,
+            localID: recordLocalID
+        )
+        attachmentViewStates.append(viewState)
+        return attachment
+    }
+
+    @discardableResult
+    func preparePhoto(_ data: Data, placement: CaptureAttachmentPlacement) throws -> String {
+        guard let image = UIImage(data: data) else {
+            throw CaptureAttachmentPickerError.imageProcessingFailed
+        }
+        let prepared = try CaptureMediaPreparer.prepare(image)
+        let localID = UUID().uuidString
+        let placementValue: String
+        switch placement {
+        case .recordEvidence: placementValue = "recordEvidence"
+        case .schemaField(let key): placementValue = "schemaField:\(key)"
+        }
+        pendingMedia[localID] = CaptureIntentMedia(prepared: prepared, placement: placementValue)
+        attachmentViewStates.append(CaptureAttachmentViewState(
+            thumbnail: data,
+            placement: placement,
+            byteCount: prepared.data.count,
+            localID: localID
+        ))
+        return localID
+    }
+
+    func preparePhotoDataURL(_ dataURL: String, placement: CaptureAttachmentPlacement) throws -> String {
+        guard let marker = dataURL.firstIndex(of: ","),
+              let data = Data(base64Encoded: String(dataURL[dataURL.index(after: marker)...])) else {
+            throw CaptureAttachmentPickerError.imageProcessingFailed
+        }
+        return try preparePhoto(data, placement: placement)
+    }
+
+    func removePreparedPhoto(localID: String) {
+        pendingMedia[localID] = nil
+        attachmentViewStates.removeAll { $0.localID == localID }
+        evidencePhotoRefs.removeAll { $0 == localID }
+        photoMetadataByRef[localID] = nil
+    }
+
+    func removePhoto(localID: String) async throws {
+        attachmentViewStates.removeAll { $0.localID == localID }
+        try await mediaStore.discard(recordLocalID: localID)
     }
 
     func requestLocation() async {
@@ -334,6 +473,7 @@ final class CaptureViewModel: ObservableObject {
 
     func attach(to point: PlatformNearbyPoint) {
         attachedPoint = point
+        preAttachPointId = nil
         nearbyPoints = nil
         nearbyPointsErrorMessage = nil
         if evidenceGps == nil {
@@ -346,6 +486,7 @@ final class CaptureViewModel: ObservableObject {
 
     func clearAttachedPoint() {
         attachedPoint = nil
+        preAttachPointId = nil
     }
 
     // MARK: - Validation
@@ -375,6 +516,13 @@ final class CaptureViewModel: ObservableObject {
     /// right away (offline, retryable server error) stays safely queued —
     /// `submitState` reflects that as `.queuedPendingSync`, not `.failed`.
     func submit() async {
+        guard creationAllowed() else {
+            submitState = .failed(language.t(
+                "This action requires a verified session.",
+                "Cette action nécessite une session vérifiée."
+            ))
+            return
+        }
         guard let recordType = selectedRecordType, let projectOption = selectedProjectOption else {
             submitState = .failed(language.t("Choose a project and record type first.", "Choisissez d'abord un projet et un type d'enregistrement."))
             return
@@ -386,9 +534,16 @@ final class CaptureViewModel: ObservableObject {
             return
         }
 
+        guard await validateAttachedPointProximityIfNeeded() else {
+            return
+        }
+
         submitState = .submitting
 
         let data = FormValidator.recordData(recordType: recordType, values: values)
+        let capturedAtDate = now()
+        let capturedAt = ISO8601DateFormatter().string(from: capturedAtDate)
+        let photoMetadata = evidencePhotoRefs.compactMap { photoMetadataByRef[$0] }
         let draft = RecordDraft(
             projectId: projectOption.project.id,
             schemaVersionId: projectOption.schemaVersion.id,
@@ -398,8 +553,43 @@ final class CaptureViewModel: ObservableObject {
             gps: evidenceGps,
             notes: evidenceNotes.isEmpty ? nil : evidenceNotes,
             pointId: submitAttachPointId,
-            capturedAt: ISO8601DateFormatter().string(from: now())
+            capturedAt: capturedAt,
+            device: fraudMetadataProvider.device(language: language),
+            photoMetadata: photoMetadata.isEmpty ? nil : photoMetadata,
+            clientExif: fraudMetadataProvider.clientExif(gps: evidenceGps, capturedAt: capturedAt),
+            gpsIntegrity: fraudMetadataProvider.gpsIntegrity(gps: evidenceGps, capturedAt: capturedAtDate)
         )
+
+        if let durableCoordinator, let ownerUserID {
+            do {
+                // Persist the complete, already-validated submission envelope.
+                // Encoding only `data` here would silently drop GPS, notes,
+                // fraud metadata, capture time, and point enrichment while the
+                // record waits for a later sync.
+                let fieldValuesData = try JSONEncoder().encode(draft)
+                guard let fieldValuesJSON = String(data: fieldValuesData, encoding: .utf8) else {
+                    throw CaptureAttachmentPickerError.storageFailed
+                }
+                let intent = CaptureIntent(
+                    projectID: projectOption.project.id,
+                    schemaVersionID: projectOption.schemaVersion.id,
+                    recordTypeKey: recordType.key,
+                    fieldValuesJSON: fieldValuesJSON,
+                    ownerUserID: ownerUserID,
+                    organizationID: organizationId,
+                    media: Array(pendingMedia.values)
+                )
+                let localID = try await durableCoordinator.persist(intent)
+                resetDraftValues(resetSubmitState: false)
+                pendingMedia = [:]
+                attachmentViewStates = []
+                submitState = .queuedPendingSync
+                await onDurableRecordPersisted?(localID)
+            } catch {
+                submitState = .failed(String(describing: error))
+            }
+            return
+        }
 
         let enqueuedId: String
         do {
@@ -421,6 +611,7 @@ final class CaptureViewModel: ObservableObject {
             try await Self.submitDraft(draft, idempotencyKey: idempotencyKey, apiClient: apiClient)
         }
         queueSnapshot = try? await queue.snapshot()
+        onQueueSnapshotChanged?(queueSnapshot)
 
         if summary.syncedIds.contains(enqueuedId) {
             resetDraftValues(resetSubmitState: false)
@@ -432,6 +623,40 @@ final class CaptureViewModel: ObservableObject {
             // the draft is safe and `SyncStatusBar`-equivalent UI can retry.
             submitState = .queuedPendingSync
         }
+    }
+
+    private func validateAttachedPointProximityIfNeeded() async -> Bool {
+        guard submitAttachPointId != nil, let attachPointGps else { return true }
+        if evidenceGps == nil {
+            await requestLocation()
+        }
+        guard let captureGps = evidenceGps else {
+            submitState = .failed(language.t(
+                "Capture GPS before updating an existing point.",
+                "Capturez la position GPS avant de mettre à jour un point existant."
+            ))
+            return false
+        }
+        let distance = Self.distanceMeters(from: captureGps, to: attachPointGps)
+        guard distance <= Self.enrichMaxDistanceMeters else {
+            submitState = .failed(language.t(
+                "You are too far from this point to update it. Move within \(Int(Self.enrichMaxDistanceMeters))m and refresh GPS.",
+                "Vous êtes trop loin de ce point pour le mettre à jour. Approchez-vous à moins de \(Int(Self.enrichMaxDistanceMeters)) m et actualisez le GPS."
+            ))
+            return false
+        }
+        return true
+    }
+
+    private static func distanceMeters(from start: FormGpsValue, to end: FormGpsValue) -> Double {
+        let earthRadiusMeters = 6_371_000.0
+        let startLatitude = start.latitude * .pi / 180
+        let endLatitude = end.latitude * .pi / 180
+        let latitudeDelta = (end.latitude - start.latitude) * .pi / 180
+        let longitudeDelta = (end.longitude - start.longitude) * .pi / 180
+        let a = sin(latitudeDelta / 2) * sin(latitudeDelta / 2)
+            + cos(startLatitude) * cos(endLatitude) * sin(longitudeDelta / 2) * sin(longitudeDelta / 2)
+        return earthRadiusMeters * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
 
     /// Wires one `RecordDraft` to `PlatformAPIClient.createPlatformRecord`,
@@ -458,7 +683,11 @@ final class CaptureViewModel: ObservableObject {
                     },
                     photos: draft.photoRefs,
                     notes: draft.notes,
-                    capturedAt: draft.capturedAt
+                    capturedAt: draft.capturedAt,
+                    device: draft.device,
+                    photoMetadata: draft.photoMetadata,
+                    clientExif: draft.clientExif,
+                    gpsIntegrity: draft.gpsIntegrity
                 ),
                 idempotencyKey: idempotencyKey,
                 pointId: draft.pointId

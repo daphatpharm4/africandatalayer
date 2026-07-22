@@ -2,8 +2,8 @@ import Foundation
 
 /// User payload extracted from `GET /api/auth/session`'s `{ user }`, mirroring
 /// the fields of `lib/client/auth.ts`'s `AuthSession.user` the console cares
-/// about (id/email/role/isAdmin — see the `TODO(real-cookie-handshake)` notes
-/// on `AppState.isAdlAdmin`/`makeMembersViewModel` this is meant to feed).
+/// about (id/email/role/isAdmin — used by `AppState.tryRestoreSession()` to
+/// derive `isAdlAdmin` and `viewerUserId` on app launch).
 struct AuthSessionUser: Equatable, Sendable {
     let id: String?
     let email: String?
@@ -24,7 +24,7 @@ struct AuthSessionUser: Equatable, Sendable {
 /// step 2 is automatically replayed by `URLSessionPlatformTransport`'s later
 /// `PlatformAPIClient` calls — no manual cookie plumbing on either side (see
 /// `AuthTransport.swift`).
-struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSigningOut {
+struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSigningOut, AuthLocalSessionClearing {
     private let baseURL: URL
     private let transport: AuthTransport
 
@@ -65,12 +65,31 @@ struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSignin
     // network-backed `AppState.signOut()`). Wiring either into `AppState`'s
     // published state is out of scope for this task per the brief.
 
-    /// `GET /api/auth/session` — returns the signed-in user if a session
-    /// cookie is already present (e.g. app relaunch), or `nil` if not present
-    /// or the request fails. Mirrors `getSession()` in `lib/client/auth.ts`,
-    /// including its "swallow errors, return nil" behavior.
-    func restoreSession() async -> AuthSessionUser? {
-        (try? await fetchSessionUser()) ?? nil
+    /// `GET /api/auth/session` — returns a typed result that distinguishes
+    /// "authenticated", "no session", "session expired/unauthorized", and
+    /// "transport/server unavailable". Uses `transport.send()` directly
+    /// (instead of the error-wrapping `self.send()`) so that HTTP status
+    /// codes for non-2xx responses are preserved and transport errors are
+    /// not swallowed into a generic `AuthServiceError.network`.
+    func restoreSession() async -> AuthSessionRestoreResult {
+        do {
+            let request = URLRequest(url: baseURL.appendingPathComponent("api/auth/session"))
+            let (data, response) = try await transport.send(request)
+            let statusCode = response.statusCode
+            guard (200..<300).contains(statusCode) else {
+                // A reachable server rejecting the request is an authorization
+                // result, not an outage. Never unlock cached data for a 4xx.
+                if (400..<500).contains(statusCode) { return .unauthorized }
+                return .unavailable(.server(status: statusCode))
+            }
+            guard let decoded = try? JSONDecoder().decode(SessionResponse.self, from: data),
+                  let sessionUser = decoded.user else {
+                return .noSession
+            }
+            return .authenticated(AuthSessionUser(id: sessionUser.id, email: sessionUser.email, role: sessionUser.role, isAdmin: sessionUser.isAdmin))
+        } catch {
+            return .unavailable(.transport)
+        }
     }
 
     /// `POST /api/auth/signout` — mirrors `signOut()` in `lib/client/auth.ts`.
@@ -90,6 +109,17 @@ struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSignin
         let (_, response) = try await send(request)
         guard (200..<300).contains(response.statusCode) else {
             throw AuthServiceError.network("Sign-out failed (\(response.statusCode)).")
+        }
+    }
+
+    /// Removes all cookies for `baseURL` from the shared cookie jar so that
+    /// `restoreSession()` on the next app launch returns `nil` even if the
+    /// server-side signout request never completed.
+    func clearLocalSession() {
+        let storage = HTTPCookieStorage.shared
+        let cookies = storage.cookies(for: baseURL) ?? []
+        for cookie in cookies {
+            storage.deleteCookie(cookie)
         }
     }
 

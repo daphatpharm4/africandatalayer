@@ -13,7 +13,7 @@ import ConsoleModels
 struct RootView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.scenePhase) private var scenePhase
-    @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
+    @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = false
     @AppStorage("hasCompletedADLOnboarding") private var hasCompletedOnboarding: Bool = false
     @AppStorage("shouldReplayADLOnboardingSplash") private var shouldReplayOnboardingSplash: Bool = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -94,11 +94,12 @@ struct RootView: View {
         .animation(.default, value: appState.isAuthenticated)
         .animation(.default, value: appState.organizationsLoadState)
         .task { await showFirstRunSplashIfNeeded() }
+        .task { appState.startRuntime() }
         .task { await restoreSessionIfNeeded() }
         .task { if notificationsEnabled { requestNotificationAuthorizationIfNeeded() } }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
-                Task { await restoreSessionIfNeeded() }
+                Task { await appState.handleForeground() }
             }
         }
         .onChange(of: notificationsEnabled) { _, isOn in

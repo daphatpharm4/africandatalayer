@@ -1,0 +1,4 @@
+// Debug.xcconfig — local development against localhost
+ADL_BUILD_CHANNEL = debug
+ADL_API_BASE_URL = http:/$()/127.0.0.1:4173
+PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.console.debug

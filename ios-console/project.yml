@@ -5,6 +5,16 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+settings:
+  base:
+    ADL_BUILD_CHANNEL: production
+    ADL_API_BASE_URL: https://www.app.africandatalayer.com
+
+configs:
+  Debug: debug
+  Staging: release
+  Release: release
+
 packages:
   ConsoleCore:
     path: Packages/ConsoleCore
@@ -18,30 +28,27 @@ targets:
       - path: ADLConsole
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.africandatalayer.console
         SWIFT_VERSION: "6.0"
-        TARGETED_DEVICE_FAMILY: "1,2"
+        TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_ADL_BUILD_CHANNEL: "$(ADL_BUILD_CHANNEL)"
+        INFOPLIST_KEY_ADL_API_BASE_URL: "$(ADL_API_BASE_URL)"
         INFOPLIST_KEY_CFBundleDisplayName: ADL Console
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: true
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
-        # No custom/proprietary encryption — only standard HTTPS/TLS via
-        # URLSession — so the App Store Connect export-compliance question
-        # is answered "No" ahead of time and upload isn't blocked on it.
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
-        # Collector capture (task 5): photo evidence + GPS evidence usage
-        # strings. Camera + photo library cover both a direct camera capture
-        # and a PhotosUI library pick; location is when-in-use only — capture
-        # never needs background location.
         INFOPLIST_KEY_NSCameraUsageDescription: "ADL Console uses your camera to attach photo evidence to a captured record."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "ADL Console lets you attach a photo from your library as evidence for a captured record."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "ADL Console uses your location to attach a GPS fix as evidence for a captured record."
+    configFiles:
+      Debug: Config/Debug.xcconfig
+      Staging: Config/Staging.xcconfig
+      Release: Config/Release.xcconfig
     dependencies:
       - package: ConsoleCore
         product: ConsoleModels
@@ -51,6 +58,21 @@ targets:
         product: ConsoleState
       - package: ConsoleCore
         product: ConsoleForms
+      - package: ConsoleCore
+        product: ConsolePersistence
+
+  ADLConsoleUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ADLConsoleUITests
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - target: ADLConsole
 
   ADLConsoleTests:
     type: bundle.unit-test
@@ -62,6 +84,10 @@ targets:
       base:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: true
+    configFiles:
+      Debug: Config/Debug.xcconfig
+      Staging: Config/Staging.xcconfig
+      Release: Config/Release.xcconfig
     dependencies:
       - target: ADLConsole
       - package: ConsoleCore
@@ -74,16 +100,50 @@ targets:
         product: ConsoleForms
 
 schemes:
-  ADLConsole:
+  ADLConsole-Debug:
     build:
       targets:
         ADLConsole: all
         ADLConsoleTests: [test]
+        ADLConsoleUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - ADLConsoleTests
+        - ADLConsoleUITests
+    archive:
+      config: Debug
+
+  ADLConsole-Staging:
+    build:
+      targets:
+        ADLConsole: all
+        ADLConsoleTests: [test]
+        ADLConsoleUITests: [test]
+    run:
+      config: Staging
+    test:
+      config: Staging
+      targets:
+        - ADLConsoleTests
+        - ADLConsoleUITests
+    archive:
+      config: Staging
+
+  ADLConsole:
+    build:
+      targets:
+        ADLConsole: all
+        ADLConsoleTests: [test]
+        ADLConsoleUITests: [test]
+    run:
+      config: Release
+    test:
+      config: Debug
+      targets:
+        - ADLConsoleTests
+        - ADLConsoleUITests
     archive:
       config: Release

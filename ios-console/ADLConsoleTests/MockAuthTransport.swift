@@ -18,6 +18,8 @@ final class MockAuthTransport: AuthTransport, @unchecked Sendable {
 
     private(set) var capturedRequests: [URLRequest] = []
     private var responses: [Stub]
+    var shouldThrow: Bool = false
+    var throwError: Error = URLError(.notConnectedToInternet)
 
     init(responses: [Stub] = []) {
         self.responses = responses
@@ -26,6 +28,7 @@ final class MockAuthTransport: AuthTransport, @unchecked Sendable {
     var lastRequest: URLRequest? { capturedRequests.last }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        if shouldThrow { throw throwError }
         capturedRequests.append(request)
         let stub = responses.isEmpty ? Stub(statusCode: 200, data: Data("{}".utf8)) : responses.removeFirst()
         let response = HTTPURLResponse(

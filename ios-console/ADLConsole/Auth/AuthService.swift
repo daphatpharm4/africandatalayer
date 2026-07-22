@@ -37,10 +37,28 @@ protocol AuthServiceProtocol: Sendable {
     func signIn(email: String, password: String) async throws
 }
 
+/// Distinguishes the kind of unavailability so the session repository can
+/// decide whether to fall back to cached workspace data.
+enum AuthUnavailability: Equatable, Sendable {
+    case transport
+    case server(status: Int)
+}
+
+/// Typed result for session restoration — preserves the distinction between
+/// "no session exists", "session is invalid/expired", "the server is
+/// reachable but returned a non-2xx status", and "the transport itself
+/// failed (network unavailable)".
+enum AuthSessionRestoreResult: Equatable, Sendable {
+    case authenticated(AuthSessionUser)
+    case noSession
+    case unauthorized
+    case unavailable(AuthUnavailability)
+}
+
 /// Optional capability for auth services that can check an existing persisted
 /// session, such as the cookie-backed network implementation.
 protocol AuthSessionRestoring: Sendable {
-    func restoreSession() async -> AuthSessionUser?
+    func restoreSession() async -> AuthSessionRestoreResult
 }
 
 /// Optional capability for auth services that can invalidate a server-side
@@ -51,15 +69,20 @@ protocol AuthSigningOut: Sendable {
     func signOut() async throws
 }
 
-/// STUB, not the real native auth integration — kept around (and wired to
-/// `AppState` in tests/previews) purely as a fast, deterministic input-shape
-/// validator. The real handshake against @auth/core's credentials provider —
-/// `GET /api/auth/csrf` → `POST /api/auth/callback/credentials` → `GET
-/// /api/auth/session`, sharing `URLSession.shared`'s cookie jar with
-/// `URLSessionPlatformTransport` — now lives in `NetworkAuthService.swift`
-/// (see also `AuthTransport.swift` for its injectable transport seam). This
-/// stub validates input shape only (non-empty, syntactically-plausible
-/// email) and always succeeds.
+/// Optional capability for auth services that can synchronously clear
+/// client-side session state (cookies, tokens) on sign-out. Called before
+/// the async server-side signout so the cookie jar is empty even if the
+/// server call never completes (e.g. app killed immediately after logout).
+protocol AuthLocalSessionClearing: Sendable {
+    func clearLocalSession()
+}
+
+/// Fast, deterministic stub for tests and previews — validates input shape
+/// (non-empty, syntactically-plausible email) and always succeeds, with no
+/// network activity. The production implementation is `NetworkAuthService`
+/// (see `AuthTransport.swift` for its injectable transport seam), which
+/// performs the full `@auth/core` credentials dance against the configured
+/// API base URL.
 struct StubAuthService: AuthServiceProtocol {
     func signIn(email: String, password: String) async throws {
         let trimmed = email.trimmingCharacters(in: .whitespacesAndNewlines)

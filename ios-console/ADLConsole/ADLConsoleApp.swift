@@ -1,23 +1,52 @@
 import ConsoleAPI
 import SwiftUI
 
-/// Base URL for the Data Ops Platform API this console talks to. Points at
-/// the production ADL deployment; a later task should make this
-/// build-config-driven (e.g. a debug scheme pointed at a preview
-/// deployment).
-private let consoleAPIBaseURL = URL(string: "https://www.app.africandatalayer.com")!
-
 @main
 struct ADLConsoleApp: App {
-    @StateObject private var appState = AppState(
-        apiClient: PlatformAPIClient(baseURL: consoleAPIBaseURL),
-        authService: NetworkAuthService(baseURL: consoleAPIBaseURL)
-    )
+    @State private var configurationError: String?
+    @StateObject private var appState: AppState
+
+    init() {
+        do {
+            let environment = try AppEnvironment.load()
+            let dependencies = try AppDependencies(environment: environment)
+            let state = AppState(
+                apiClient: dependencies.apiClient,
+                authService: dependencies.authService,
+                recordLedger: dependencies.recordLedger,
+                workspaceRepository: dependencies.workspaceRepository,
+                mediaStore: dependencies.mediaStore,
+                sessionRepository: dependencies.sessionRepository,
+                connectivityMonitor: dependencies.connectivityMonitor,
+                legacyQueueStore: dependencies.legacyQueueStore
+            )
+            #if DEBUG
+            if let role = UserDefaults.standard.string(forKey: "uiTestRole") {
+                state.configureForUITest(
+                    role: role,
+                    locale: UserDefaults.standard.string(forKey: "uiTestLocale") ?? "en",
+                    connectivity: UserDefaults.standard.string(forKey: "uiTestConnectivity") ?? "online"
+                )
+            }
+            #endif
+            _appState = StateObject(wrappedValue: state)
+        } catch {
+            _configurationError = State(initialValue: "ADL Console is not configured for this build.")
+            _appState = StateObject(wrappedValue: AppState(
+                apiClient: PlatformAPIClient(baseURL: URL(string: "about:blank")!),
+                authService: NetworkAuthService(baseURL: URL(string: "about:blank")!)
+            ))
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(appState)
+            if let message = configurationError {
+                ConfigurationErrorView(message: message)
+            } else {
+                RootView()
+                    .environmentObject(appState)
+            }
         }
     }
 }

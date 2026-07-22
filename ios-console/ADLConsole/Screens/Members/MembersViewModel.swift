@@ -70,6 +70,7 @@ final class MembersViewModel: ObservableObject {
 
     private let apiClient: PlatformAPIClient
     private let organizationId: String
+    private let mutationAllowed: @MainActor () -> Bool
 
     init(
         apiClient: PlatformAPIClient,
@@ -77,7 +78,8 @@ final class MembersViewModel: ObservableObject {
         viewerRole: PlatformRole,
         viewerUserId: String? = nil,
         viewerIsAdlAdmin: Bool = false,
-        language: ConsoleLanguage
+        language: ConsoleLanguage,
+        mutationAllowed: @escaping @MainActor () -> Bool = { true }
     ) {
         self.apiClient = apiClient
         self.organizationId = organizationId
@@ -85,25 +87,27 @@ final class MembersViewModel: ObservableObject {
         self.viewerUserId = viewerUserId
         self.viewerIsAdlAdmin = viewerIsAdlAdmin
         self.language = language
+        self.mutationAllowed = mutationAllowed
     }
 
     // MARK: - Derived state
 
     var isOwner: Bool { viewerRole == .owner }
+    var canMutate: Bool { mutationAllowed() }
 
     /// Port of `roleAtLeast(viewerRole, "manager")` gating the "Invite
     /// someone" card.
-    var canInvite: Bool { PlatformRoleRank.atLeast(viewerRole, .manager) }
+    var canInvite: Bool { canMutate && PlatformRoleRank.atLeast(viewerRole, .manager) }
 
     func isSelf(_ userId: String) -> Bool { viewerUserId != nil && userId == viewerUserId }
 
     /// Port of the `<select>`'s visibility+disable rule: shown only when
     /// `isOwner`, disabled when the row is the viewer themselves.
-    func canEditRole(for member: PlatformMembership) -> Bool { isOwner && !isSelf(member.userId) }
+    func canEditRole(for member: PlatformMembership) -> Bool { canMutate && isOwner && !isSelf(member.userId) }
 
     /// Port of the remove button's visibility+disable rule: shown only when
     /// `isOwner`, disabled when the row is the viewer themselves.
-    func canRemove(_ member: PlatformMembership) -> Bool { isOwner && !isSelf(member.userId) }
+    func canRemove(_ member: PlatformMembership) -> Bool { canMutate && isOwner && !isSelf(member.userId) }
 
     /// Port of the role `<option>` list assembly (see rule 5 above).
     func roleOptions(for member: PlatformMembership) -> [PlatformRole] {
@@ -124,7 +128,7 @@ final class MembersViewModel: ObservableObject {
     /// Port of `!accepted && roleAtLeast(viewerRole, 'manager')` gating the
     /// revoke button on a pending invite row.
     func canRevokeInvite(_ invite: PlatformInvite) -> Bool {
-        invite.acceptedAt == nil && PlatformRoleRank.atLeast(viewerRole, .manager)
+        canMutate && invite.acceptedAt == nil && PlatformRoleRank.atLeast(viewerRole, .manager)
     }
 
     private var ownerCount: Int { members?.filter { $0.role == .owner }.count ?? 0 }
@@ -160,7 +164,7 @@ final class MembersViewModel: ObservableObject {
     /// (rule 4) and a defensive owner/self guard (rules 1, 3) not present as
     /// function-level checks on the web but consistent with its UI gating.
     func changeRole(userId: String, role: PlatformRole) async {
-        guard isOwner, !isSelf(userId) else { return }
+        guard canMutate, isOwner, !isSelf(userId) else { return }
         guard let member = members?.first(where: { $0.userId == userId }) else { return }
         if role != .owner && isLastOwner(member) {
             rowError = lastOwnerMessage(language: language)
@@ -192,7 +196,7 @@ final class MembersViewModel: ObservableObject {
     /// `window.confirm` prompt is a view-layer concern, not ported here),
     /// plus the pre-emptive last-owner guard (rule 4).
     func remove(userId: String) async {
-        guard isOwner, !isSelf(userId) else { return }
+        guard canMutate, isOwner, !isSelf(userId) else { return }
         guard let member = members?.first(where: { $0.userId == userId }) else { return }
         if isLastOwner(member) {
             rowError = lastOwnerMessage(language: language)
@@ -215,6 +219,7 @@ final class MembersViewModel: ObservableObject {
     /// }`. Port of `handleInvite`.
     @discardableResult
     func invite() async -> Bool {
+        guard canInvite else { return false }
         let email = inviteEmail.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !email.isEmpty else { return false }
         inviteError = nil
@@ -237,6 +242,7 @@ final class MembersViewModel: ObservableObject {
     /// Port of `handleRevokeInvite`'s network call + local-state update (the
     /// `window.confirm` prompt is a view-layer concern, not ported here).
     func revokeInvite(_ invite: PlatformInvite) async {
+        guard canRevokeInvite(invite) else { return }
         inviteError = nil
         revokingInviteId = invite.id
         defer { revokingInviteId = nil }

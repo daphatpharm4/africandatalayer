@@ -77,6 +77,7 @@ final class ReviewQueueViewModel: ObservableObject {
 
     private let apiClient: PlatformAPIClient
     private let organizationId: String
+    private let mutationAllowed: @MainActor () -> Bool
 
     struct NotificationAudience: Identifiable, Equatable {
         var id: String
@@ -85,11 +86,18 @@ final class ReviewQueueViewModel: ObservableObject {
         var roles: [PlatformRole]
     }
 
-    init(apiClient: PlatformAPIClient, organizationId: String, viewerRole: PlatformRole = .reviewer, language: ConsoleLanguage) {
+    init(
+        apiClient: PlatformAPIClient,
+        organizationId: String,
+        viewerRole: PlatformRole = .reviewer,
+        language: ConsoleLanguage,
+        mutationAllowed: @escaping @MainActor () -> Bool = { true }
+    ) {
         self.apiClient = apiClient
         self.organizationId = organizationId
         self.viewerRole = viewerRole
         self.language = language
+        self.mutationAllowed = mutationAllowed
         self.selectedNotificationAudienceId = Self.notificationAudiences(for: viewerRole, language: language).first?.id
     }
 
@@ -115,8 +123,10 @@ final class ReviewQueueViewModel: ObservableObject {
     }
 
     var canSendNotifications: Bool {
-        !notificationAudiences.isEmpty
+        canMutate && !notificationAudiences.isEmpty
     }
+
+    var canMutate: Bool { mutationAllowed() }
 
     var isNotificationValid: Bool {
         selectedNotificationAudience != nil
@@ -218,7 +228,7 @@ final class ReviewQueueViewModel: ObservableObject {
 
     @discardableResult
     func sendNotification() async -> Bool {
-        guard let audience = selectedNotificationAudience, isNotificationValid else { return false }
+        guard canMutate, let audience = selectedNotificationAudience, isNotificationValid else { return false }
         let title = notificationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = notificationBody.trimmingCharacters(in: .whitespacesAndNewlines)
         notificationError = nil
@@ -248,7 +258,8 @@ final class ReviewQueueViewModel: ObservableObject {
     /// copy — an empty/whitespace-only note is sent as `nil`, not `""`.
     @discardableResult
     func approve(_ recordId: String, reviewNotes: String? = nil) async -> Bool {
-        await decide(recordId, status: .approved, reviewNotes: nonEmpty(reviewNotes))
+        guard canMutate else { return false }
+        return await decide(recordId, status: .approved, reviewNotes: nonEmpty(reviewNotes))
     }
 
     /// Port of `decide(recordId, 'rejected')`, including the web screen's
@@ -257,6 +268,7 @@ final class ReviewQueueViewModel: ObservableObject {
     /// ("Add a rejection reason before rejecting this record.").
     @discardableResult
     func reject(_ recordId: String, reason: String) async -> Bool {
+        guard canMutate else { return false }
         guard let trimmed = nonEmpty(reason) else {
             itemErrors[recordId] = language.t(
                 "Add a rejection reason before rejecting this record.",
@@ -279,6 +291,7 @@ final class ReviewQueueViewModel: ObservableObject {
     /// the number of records that were successfully approved.
     @discardableResult
     func approveSelected() async -> Int {
+        guard canMutate else { return 0 }
         isBulkBusy = true
         defer { isBulkBusy = false }
         var succeededCount = 0
@@ -295,6 +308,7 @@ final class ReviewQueueViewModel: ObservableObject {
     /// status, reviewNotes }` — see the type doc above for why success
     /// removes the record instead of replacing it in place.
     private func decide(_ recordId: String, status: PlatformRecordReviewStatus, reviewNotes: String?) async -> Bool {
+        guard canMutate else { return false }
         busyRecordId = recordId
         itemErrors[recordId] = nil
         defer { busyRecordId = nil }

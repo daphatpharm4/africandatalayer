@@ -23,7 +23,14 @@ let package = Package(
         .library(
             name: "ConsoleForms",
             targets: ["ConsoleForms"]
+        ),
+        .library(
+            name: "ConsolePersistence",
+            targets: ["ConsolePersistence"]
         )
+    ],
+    dependencies: [
+        .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.10.0")
     ],
     targets: [
         .target(
@@ -45,6 +52,14 @@ let package = Package(
             dependencies: ["ConsoleModels"],
             path: "Sources/ConsoleForms"
         ),
+        .target(
+            name: "ConsolePersistence",
+            dependencies: [
+                "ConsoleModels",
+                .product(name: "GRDB", package: "GRDB.swift")
+            ],
+            path: "Sources/ConsolePersistence"
+        ),
         .testTarget(
             name: "ConsoleModelsTests",
             dependencies: ["ConsoleModels"],
@@ -64,6 +79,11 @@ let package = Package(
             name: "ConsoleFormsTests",
             dependencies: ["ConsoleForms", "ConsoleModels"],
             path: "Tests/ConsoleFormsTests"
+        ),
+        .testTarget(
+            name: "ConsolePersistenceTests",
+            dependencies: ["ConsolePersistence", "ConsoleModels"],
+            path: "Tests/ConsolePersistenceTests"
         )
     ]
 )

@@ -1,0 +1,16 @@
+{
+  "localizations": {
+    "en-US": {
+      "name": "ADL Console: Data Ops",
+      "subtitle": "Capture, review, manage data",
+      "keywords": "field data,infrastructure,mapping,audit,review,offline,Africa,operations,GIS,evidence",
+      "description": "Turn field observations into trustworthy data operations.\n\nCOLLECT\nCapture structured infrastructure observations with GPS and photo evidence. Keep pending work recoverable when connectivity is interrupted and see exactly when data is pending, syncing, blocked, or up to date.\n\nREVIEW\nInspect submitted evidence, focus on records that need attention, and make authorized review decisions with clear quality context.\n\nMANAGE\nOrganize projects and published schemas, manage invited members and roles, and keep operational access aligned with your organization.\n\nADL Console is available only to invited members of an African Data Layer organization. The app does not create public accounts or organizations. Contact your organization administrator or ADL Support if you need access.\n\nAvailable in English and French. Privacy and support information is accessible before sign-in."
+    },
+    "fr-FR": {
+      "name": "ADL Console : Data Ops",
+      "subtitle": "Capturez, révisez, gérez",
+      "keywords": "données terrain,infrastructure,cartographie,audit,révision,hors ligne,Afrique,SIG,preuves",
+      "description": "Transformez les observations terrain en opérations de données fiables.\n\nCOLLECTER\nSaisissez des observations structurées avec preuves GPS et photo. Conservez le travail en attente lorsque la connexion est interrompue et voyez clairement si les données sont en attente, en synchronisation, bloquées ou à jour.\n\nRÉVISER\nExaminez les preuves soumises, concentrez-vous sur les relevés qui nécessitent une action et prenez des décisions autorisées avec un contexte qualité clair.\n\nGÉRER\nOrganisez les projets et schémas publiés, gérez les membres invités et leurs rôles, et alignez les accès opérationnels de votre organisation.\n\nADL Console est réservé aux membres invités d'une organisation African Data Layer. L'application ne crée pas de compte public ni d'organisation. Contactez votre administrateur ou l'assistance ADL pour demander un accès.\n\nDisponible en anglais et en français. Les informations de confidentialité et d'assistance sont accessibles avant la connexion."
+    }
+  }
+}

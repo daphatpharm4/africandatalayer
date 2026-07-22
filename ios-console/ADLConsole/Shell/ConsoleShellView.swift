@@ -9,6 +9,7 @@ struct ConsoleShellView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
     @State private var isAppSettingsPresented = false
+    @State private var isPendingWorkPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,6 +34,14 @@ struct ConsoleShellView: View {
                     onDismiss: { appState.navigate(to: ConsoleRoute(screen: .projects)) }
                 )
             }
+        }
+        .sheet(isPresented: $isPendingWorkPresented) {
+            if let viewModel = appState.makePendingWorkViewModel() {
+                NavigationStack { PendingWorkView(viewModel: viewModel) }
+            }
+        }
+        .task(id: appState.route.screen) {
+            await appState.refreshRecordQueueSnapshot()
         }
     }
 
@@ -205,18 +214,88 @@ struct ConsoleShellView: View {
     // MARK: - Controls
 
     private var syncBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "checkmark.circle.fill")
+        let legacySnapshot = appState.recordQueueSnapshot
+        let durableSnapshot = appState.recordLedgerSnapshot
+        let pending = durableSnapshot.map { $0.pending + $0.sending + $0.retrying }
+            ?? legacySnapshot.map { $0.pending + $0.syncing } ?? 0
+        let failed = durableSnapshot?.blocked ?? legacySnapshot?.failed ?? 0
+        let total = durableSnapshot.map { $0.pending + $0.sending + $0.retrying + $0.blocked }
+            ?? legacySnapshot?.total ?? 0
+        let hasQueuedWork = total > 0
+        let tint = failed > 0 ? ADLConsoleColor.danger : (hasQueuedWork ? ADLConsoleColor.terraDark : ADLConsoleColor.forestDark)
+        let background = failed > 0 ? ADLConsoleColor.dangerWash : (hasQueuedWork ? ADLConsoleColor.terraWash : ADLConsoleColor.forestWash)
+
+        return HStack(spacing: 8) {
+            Image(systemName: appState.isSyncingRecordQueue ? "arrow.triangle.2.circlepath" : (hasQueuedWork ? "icloud.and.arrow.up.fill" : "checkmark.circle.fill"))
                 .font(.system(size: 13))
-                .foregroundStyle(ADLConsoleColor.forestDark)
-            Text(appState.language.t("Connected", "Connecté"))
+                .foregroundStyle(tint)
+            Text(syncBarText(pending: pending, failed: failed, total: total))
                 .font(ADLConsoleFont.caption)
-                .foregroundStyle(ADLConsoleColor.forestDark)
+                .foregroundStyle(tint)
+                .monospacedDigit()
             Spacer()
+            if total > 0, appState.recordLedgerSnapshot != nil {
+                Button {
+                    isPendingWorkPresented = true
+                } label: {
+                    Image(systemName: "tray.full")
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(ADLConsolePressStyle())
+                .foregroundStyle(tint)
+                .accessibilityLabel(appState.language.t("Open pending work", "Ouvrir le travail en attente"))
+            }
+            if hasQueuedWork {
+                Button {
+                    Task {
+                        if appState.recordLedgerSnapshot != nil {
+                            await appState.triggerDurableSync(.manual)
+                        } else {
+                            await appState.syncRecordQueue()
+                        }
+                    }
+                } label: {
+                    if appState.isSyncingRecordQueue {
+                        ProgressView()
+                            .scaleEffect(0.72)
+                            .frame(width: 28, height: 28)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(width: 28, height: 28)
+                    }
+                }
+                .disabled(appState.isSyncingRecordQueue)
+                .buttonStyle(ADLConsolePressStyle())
+                .foregroundStyle(tint)
+                .accessibilityLabel(appState.language.t("Sync queued records", "Synchroniser les relevés en attente"))
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 7)
-        .background(ADLConsoleColor.forestWash)
+        .background(background)
+    }
+
+    private func syncBarText(pending: Int, failed: Int, total: Int) -> String {
+        if appState.connectivityState != .satisfied {
+            return appState.language.t("Offline", "Hors ligne")
+        }
+        if appState.isSyncingRecordQueue {
+            return appState.language.t("Syncing queued records", "Synchronisation des relevés")
+        }
+        if failed > 0 {
+            return appState.language.t(
+                "\(pending) pending · \(failed) failed",
+                "\(pending) en attente · \(failed) échec(s)"
+            )
+        }
+        if total > 0 {
+            return appState.language.t(
+                "\(pending) saved offline",
+                "\(pending) enregistré(s) hors-ligne"
+            )
+        }
+        return appState.language.t("All records synced", "Tous les relevés sont synchronisés")
     }
 
     // MARK: - Body

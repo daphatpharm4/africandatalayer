@@ -36,11 +36,18 @@ final class CompanyMapViewModel: ObservableObject {
 
     private let apiClient: PlatformAPIClient
     private let organizationId: String
+    private let offlineCache: ConsoleOfflineCacheProtocol
 
-    init(apiClient: PlatformAPIClient, organizationId: String, language: ConsoleLanguage) {
+    init(
+        apiClient: PlatformAPIClient,
+        organizationId: String,
+        language: ConsoleLanguage,
+        offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache()
+    ) {
         self.apiClient = apiClient
         self.organizationId = organizationId
         self.language = language
+        self.offlineCache = offlineCache
     }
 
     // MARK: - Derived state
@@ -81,9 +88,16 @@ final class CompanyMapViewModel: ObservableObject {
         do {
             let records = try await apiClient.listApprovedPlatformRecords(organizationId: organizationId)
             points = PointChainGrouping.collapseRecordChains(records)
+            try? offlineCache.saveApprovedRecords(records, organizationId: organizationId)
             loadState = .loaded
         } catch {
-            loadState = .failed(loadFailureMessage(for: error))
+            let cachedRecords = (try? offlineCache.loadApprovedRecords(organizationId: organizationId)) ?? []
+            if !cachedRecords.isEmpty {
+                points = PointChainGrouping.collapseRecordChains(cachedRecords)
+                loadState = .loaded
+            } else {
+                loadState = .failed(loadFailureMessage(for: error))
+            }
         }
     }
 

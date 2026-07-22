@@ -16,7 +16,34 @@ final class RecordQueueStoreTests: XCTestCase {
                 gps: FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 12),
                 notes: "corner shop",
                 pointId: nil,
-                capturedAt: "2026-07-19T10:00:00Z"
+                capturedAt: "2026-07-19T10:00:00Z",
+                device: PlatformRecordEvidence.Device(deviceId: "device-1", platform: "ios", userAgent: "ADLConsoleTests", language: "en"),
+                photoMetadata: [
+                    PlatformRecordEvidence.PhotoMetadata(
+                        mimeType: "image/jpeg",
+                        originalBytes: 12,
+                        storedBytes: 10,
+                        width: 2,
+                        height: 2,
+                        capturedAt: "2026-07-19T10:00:00Z"
+                    )
+                ],
+                clientExif: PlatformRecordEvidence.ClientExif(
+                    latitude: 4.05,
+                    longitude: 9.7,
+                    capturedAt: "2026-07-19T10:00:00Z",
+                    deviceMake: "Apple",
+                    deviceModel: "iPhone"
+                ),
+                gpsIntegrity: PlatformRecordEvidence.GpsIntegrity(
+                    mockLocationDetected: false,
+                    hasAccelerometerData: true,
+                    hasGyroscopeData: true,
+                    accelerometerSampleCount: 3,
+                    motionDetectedDuringCapture: true,
+                    gpsAccuracyMeters: 12,
+                    deviceTimestamp: 1_784_476_800_000
+                )
             ),
             status: .failed,
             attempts: 2,

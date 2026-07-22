@@ -42,19 +42,22 @@ final class SettingsViewModel: ObservableObject {
 
     private let apiClient: PlatformAPIClient
     private let organizationId: String
+    private let mutationAllowed: @MainActor () -> Bool
 
     init(
         apiClient: PlatformAPIClient,
         organizationId: String,
         organization: PlatformOrganization,
         role: PlatformRole,
-        language: ConsoleLanguage
+        language: ConsoleLanguage,
+        mutationAllowed: @escaping @MainActor () -> Bool = { true }
     ) {
         self.apiClient = apiClient
         self.organizationId = organizationId
         self.organization = organization
         self.role = role
         self.language = language
+        self.mutationAllowed = mutationAllowed
         self.name = organization.name
         self.colorHex = organization.accentColor ?? Self.defaultAccent
     }
@@ -62,6 +65,7 @@ final class SettingsViewModel: ObservableObject {
     // MARK: - Derived state
 
     var isOwner: Bool { role == .owner }
+    var canMutate: Bool { mutationAllowed() }
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -103,7 +107,7 @@ final class SettingsViewModel: ObservableObject {
     /// `view=platform_org_update`, POST, `{ organizationId, name }`. Port of
     /// `handleSaveName`.
     func saveName() async {
-        guard isOwner, isNameDirty else { return }
+        guard canMutate, isOwner, isNameDirty else { return }
         nameError = nil
         nameBusy = true
         defer { nameBusy = false }
@@ -126,7 +130,7 @@ final class SettingsViewModel: ObservableObject {
     /// there — `dataURL` (the caller-supplied `data:` URL string, already
     /// base64-encoded) is checked against `maxLogoDataURLLength`.
     func uploadLogo(rawByteCount: Int, dataURL: String) async {
-        guard isOwner else { return }
+        guard canMutate, isOwner else { return }
         guard rawByteCount <= Self.maxLogoFileBytes else {
             logoError = logoSizeErrorMessage()
             return
@@ -149,7 +153,7 @@ final class SettingsViewModel: ObservableObject {
     /// `view=platform_org_update`, POST, `{ organizationId, clearLogo: true
     /// }`. Port of `handleRemoveLogo`.
     func removeLogo() async {
-        guard isOwner, organization.logoUrl != nil else { return }
+        guard canMutate, isOwner, organization.logoUrl != nil else { return }
         logoError = nil
         logoBusy = true
         defer { logoBusy = false }
@@ -170,7 +174,7 @@ final class SettingsViewModel: ObservableObject {
     /// `view=platform_org_update`, POST, `{ organizationId, accentColor }`.
     /// Port of `handleSaveColor`.
     func saveColor() async {
-        guard isOwner else { return }
+        guard canMutate, isOwner else { return }
         let trimmed = colorHex.trimmingCharacters(in: .whitespacesAndNewlines)
         guard Self.isValidHexColor(trimmed) else {
             colorError = language.t(

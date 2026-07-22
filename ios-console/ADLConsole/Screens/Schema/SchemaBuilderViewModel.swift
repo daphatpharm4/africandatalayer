@@ -61,11 +61,18 @@ final class SchemaBuilderViewModel: ObservableObject {
     let projectId: String
 
     private let apiClient: PlatformAPIClient
+    private let mutationAllowed: @MainActor () -> Bool
 
-    init(apiClient: PlatformAPIClient, projectId: String, language: ConsoleLanguage) {
+    init(
+        apiClient: PlatformAPIClient,
+        projectId: String,
+        language: ConsoleLanguage,
+        mutationAllowed: @escaping @MainActor () -> Bool = { true }
+    ) {
         self.apiClient = apiClient
         self.projectId = projectId
         self.language = language
+        self.mutationAllowed = mutationAllowed
     }
 
     // MARK: - Derived state
@@ -76,12 +83,12 @@ final class SchemaBuilderViewModel: ObservableObject {
 
     /// Gates the Save-draft button's `disabled` — see the type doc above for
     /// why this differs from `saveDraft()`'s own internal guard.
-    var canSave: Bool { isValid && isDirty && !isBusy }
+    var canSave: Bool { mutationAllowed() && isValid && isDirty && !isBusy }
 
     /// Gates the Publish button's `disabled` — identical condition set to
     /// `publish()`'s own internal guard (see the type doc above).
     var canPublish: Bool {
-        SchemaPublishGate.canPublish(hasSavedDraft: draft != nil, isDirty: isDirty, isValid: isValid, isBusy: isBusy)
+        mutationAllowed() && SchemaPublishGate.canPublish(hasSavedDraft: draft != nil, isDirty: isDirty, isValid: isValid, isBusy: isBusy)
     }
 
     var maxVersion: Int { versions.map(\.version).max() ?? 0 }
@@ -135,6 +142,7 @@ final class SchemaBuilderViewModel: ObservableObject {
     /// the Swift equivalent of `dispatch(action)` against the web's
     /// `builderReducer`. A no-op while `editor` hasn't loaded yet.
     func mutate(_ body: (inout SchemaEditorModel) -> Void) {
+        guard mutationAllowed() else { return }
         guard var editor else { return }
         body(&editor)
         self.editor = editor
@@ -171,7 +179,7 @@ final class SchemaBuilderViewModel: ObservableObject {
     /// `canSave`).
     @discardableResult
     func saveDraft() async -> Bool {
-        guard let editor, isValid, !isBusy else { return false }
+        guard mutationAllowed(), let editor, isValid, !isBusy else { return false }
         saveError = nil
         isBusy = true
         defer { isBusy = false }

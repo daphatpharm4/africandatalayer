@@ -7,7 +7,7 @@ struct AppSettingsView: View {
     @EnvironmentObject private var appState: AppState
 
     @AppStorage("highContrastEnabled") private var highContrastEnabled: Bool = false
-    @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = true
+    @AppStorage("notificationsEnabled") private var notificationsEnabled: Bool = false
     @AppStorage("smsNotificationsEnabled") private var smsNotificationsEnabled: Bool = false
     @AppStorage("hasCompletedADLOnboarding") private var hasCompletedOnboarding: Bool = false
     @AppStorage("shouldReplayADLOnboardingSplash") private var shouldReplayOnboardingSplash: Bool = false

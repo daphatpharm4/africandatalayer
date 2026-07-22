@@ -1,0 +1,4 @@
+// Staging.xcconfig — pre-release testing against staging
+ADL_BUILD_CHANNEL = staging
+ADL_API_BASE_URL = https:/$()/staging.app.africandatalayer.com
+PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.console.staging
