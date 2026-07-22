@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Copy,
   MapPin,
   Users,
   X,
@@ -1790,6 +1791,7 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                   const reviewFlags = Array.isArray(latestDetails.reviewFlags)
                     ? latestDetails.reviewFlags.filter((flag): flag is string => typeof flag === 'string' && flag.trim().length > 0)
                     : [];
+                  const semanticDuplicates = selectedGroup.latestEvent.semanticDuplicates ?? [];
                   const exifStatus = latestFraudCheck?.primaryPhoto?.exifStatus ?? null;
                   const exifMatch =
                     latestFraudCheck?.primaryPhoto
@@ -2010,6 +2012,50 @@ const AdminQueue: React.FC<Props> = ({ onBack, language }) => {
                                 >
                                   <AlertTriangle size={14} className="shrink-0" />
                                   {flag}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {semanticDuplicates.length > 0 && (
+                          <div className="rounded-2xl border border-navy-border bg-navy-wash p-4 space-y-3">
+                            <div className="flex items-center gap-2 text-navy">
+                              <Copy size={16} />
+                              <span className="micro-label">{t('Semantic duplicates', 'Doublons sémantiques')}</span>
+                            </div>
+                            <div className="space-y-2">
+                              {semanticDuplicates.map((match) => (
+                                <div
+                                  key={`${match.matchedEventId}-${match.ruleTriggered}`}
+                                  className="rounded-xl border border-navy-border bg-white px-3 py-2"
+                                >
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-sm font-bold text-navy">
+                                      {Math.round(match.similarity * 100)}% {t('match', 'similaire')}
+                                    </span>
+                                    <span
+                                      className={`rounded-full px-2 py-0.5 micro-label ${
+                                        match.decision === 'pending_review'
+                                          ? 'bg-terra-wash text-terra-dark'
+                                          : 'bg-gray-100 text-gray-500'
+                                      }`}
+                                    >
+                                      {match.decision === 'pending_review'
+                                        ? t('Held for review', 'Mis en revue')
+                                        : t('Logged', 'Journalisé')}
+                                    </span>
+                                  </div>
+                                  <div className="mt-1 text-[12px] font-medium text-gray-600">
+                                    {match.matchedCategory
+                                      ? getCategoryLabel(match.matchedCategory, language)
+                                      : t('Unknown vertical', 'Vertical inconnu')}
+                                    {' · '}
+                                    {formatDate(match.matchedCreatedAt, unavailableLabel, language)}
+                                  </div>
+                                  <div className="mt-0.5 font-mono text-[11px] text-gray-400">
+                                    {(match.matchedPointId ?? match.matchedEventId).slice(0, 24)}
+                                  </div>
                                 </div>
                               ))}
                             </div>

@@ -1,5 +1,8 @@
 import { createSign } from "node:crypto";
 import { query as dbQuery } from "./db.js";
+import { isMissingDbObjectError } from "./imageSimilarity.js";
+import type { SemanticDuplicateMatch, SubmissionCategory } from "../../shared/types.js";
+import { isValidCategory } from "../../shared/verticals.js";
 
 type QueryFn = typeof dbQuery;
 
@@ -291,4 +294,85 @@ export async function recordEmbeddingMatch(input: {
       input.decision,
     ],
   );
+}
+
+interface SemanticMatchRow {
+  event_id: string;
+  matched_event_id: string;
+  similarity: number;
+  model_version: string;
+  rule_triggered: string;
+  decision: string;
+  created_at: string;
+  last_seen_at: string;
+  matched_point_id: string | null;
+  matched_category: string | null;
+  matched_user_id: string | null;
+  matched_created_at: string | null;
+}
+
+/**
+ * Read the Stage B semantic near-duplicate evidence for a set of events, enriched
+ * with the matched event's point/category/author. Returns a map keyed by event id,
+ * each list ordered by descending similarity. Safe before Stage B is active: the
+ * source table is empty (or absent on un-migrated envs, handled here), so this
+ * returns an empty map and never throws for a missing table.
+ */
+export async function getSemanticDuplicateMatches(
+  eventIds: string[],
+): Promise<Map<string, SemanticDuplicateMatch[]>> {
+  const map = new Map<string, SemanticDuplicateMatch[]>();
+  const ids = Array.from(
+    new Set(eventIds.filter((id): id is string => typeof id === "string" && id.trim().length > 0)),
+  );
+  if (ids.length === 0) return map;
+
+  let result;
+  try {
+    result = await query<SemanticMatchRow>(
+      `SELECT m.event_id::text AS event_id,
+              m.matched_event_id::text AS matched_event_id,
+              m.similarity,
+              m.model_version,
+              m.rule_triggered,
+              m.decision,
+              m.created_at,
+              m.last_seen_at,
+              pe.point_id AS matched_point_id,
+              pe.category AS matched_category,
+              pe.user_id AS matched_user_id,
+              pe.created_at AS matched_created_at
+       FROM submission_image_similarity_matches m
+       LEFT JOIN point_events pe ON pe.id = m.matched_event_id
+       WHERE m.event_id = ANY($1::uuid[])
+       ORDER BY m.event_id, m.similarity DESC`,
+      [ids],
+    );
+  } catch (error) {
+    if (isMissingDbObjectError(error)) return map;
+    throw error;
+  }
+
+  for (const row of result.rows) {
+    const category: SubmissionCategory | null =
+      typeof row.matched_category === "string" && isValidCategory(row.matched_category)
+        ? (row.matched_category as SubmissionCategory)
+        : null;
+    const list = map.get(row.event_id) ?? [];
+    list.push({
+      matchedEventId: row.matched_event_id,
+      similarity: Number(row.similarity),
+      modelVersion: row.model_version,
+      ruleTriggered: row.rule_triggered,
+      decision: row.decision === "pending_review" ? "pending_review" : "logged",
+      createdAt: row.created_at,
+      lastSeenAt: row.last_seen_at,
+      matchedPointId: row.matched_point_id,
+      matchedCategory: category,
+      matchedUserId: row.matched_user_id,
+      matchedCreatedAt: row.matched_created_at,
+    });
+    map.set(row.event_id, list);
+  }
+  return map;
 }

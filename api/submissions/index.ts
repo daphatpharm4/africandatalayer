@@ -65,6 +65,7 @@ import {
 } from "../../lib/server/submissionFraud.js";
 import { createFraudAlert } from "../../lib/server/fraudAlerts.js";
 import { getTrustTier } from "../../lib/server/userTrust.js";
+import { getSemanticDuplicateMatches } from "../../lib/server/imageEmbeddings.js";
 import { stripServerOwnedSubmissionDetails } from "../../lib/server/submissionDetails.js";
 import { submissionInputSchema } from "../../lib/server/validation.js";
 import { BONAMOUSSADI_BOUNDS, isWithinBonamoussadi, isWithinCameroon, mapScopeBbox } from "../../shared/geofence.js";
@@ -535,6 +536,16 @@ async function buildAdminSubmissionEvents(events: PointEvent[]): Promise<AdminSu
       },
       fraudCheck,
     });
+  }
+
+  // Attach Stage B semantic near-duplicate evidence in one batched read. No-op
+  // (empty map) until Stage B is active, so this adds nothing while dormant.
+  const semanticByEvent = await getSemanticDuplicateMatches(output.map((item) => item.event.id));
+  if (semanticByEvent.size > 0) {
+    for (const item of output) {
+      const matches = semanticByEvent.get(item.event.id);
+      if (matches && matches.length > 0) item.semanticDuplicates = matches;
+    }
   }
 
   return output;
