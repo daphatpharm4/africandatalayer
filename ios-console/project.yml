@@ -61,6 +61,19 @@ targets:
       - package: ConsoleCore
         product: ConsolePersistence
 
+  ADLConsoleUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ADLConsoleUITests
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - target: ADLConsole
+
   ADLConsoleTests:
     type: bundle.unit-test
     platform: iOS
@@ -92,12 +105,14 @@ schemes:
       targets:
         ADLConsole: all
         ADLConsoleTests: [test]
+        ADLConsoleUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - ADLConsoleTests
+        - ADLConsoleUITests
     archive:
       config: Debug
 
@@ -106,12 +121,14 @@ schemes:
       targets:
         ADLConsole: all
         ADLConsoleTests: [test]
+        ADLConsoleUITests: [test]
     run:
       config: Staging
     test:
       config: Staging
       targets:
         - ADLConsoleTests
+        - ADLConsoleUITests
     archive:
       config: Staging
 
@@ -120,11 +137,13 @@ schemes:
       targets:
         ADLConsole: all
         ADLConsoleTests: [test]
+        ADLConsoleUITests: [test]
     run:
       config: Release
     test:
       config: Debug
       targets:
         - ADLConsoleTests
+        - ADLConsoleUITests
     archive:
       config: Release
