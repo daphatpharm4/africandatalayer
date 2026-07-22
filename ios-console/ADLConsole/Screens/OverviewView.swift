@@ -120,6 +120,7 @@ struct OverviewView: View {
             Text("\(value)")
                 .font(ADLConsoleFont.largeTitle)
                 .foregroundStyle(color)
+                .monospacedDigit()
             ADLConsoleMicroLabel(text: title, color: color.opacity(0.85))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -194,6 +195,7 @@ struct OverviewView: View {
     }
 
     private func loadSummary() async {
+        guard !isLoading, summary == nil else { return }
         isLoading = true
         loadError = nil
         do {

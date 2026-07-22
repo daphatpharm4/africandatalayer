@@ -76,7 +76,7 @@ struct MembersView: View {
             message: message,
             retryTitle: t("Try again", "Réessayer")
         ) {
-            Task { await viewModel.load() }
+            Task { await viewModel.load(force: true) }
         }
     }
 
@@ -129,7 +129,7 @@ struct MembersView: View {
             }
             .padding(20)
         }
-        .refreshable { await viewModel.load() }
+        .refreshable { await viewModel.load(force: true) }
     }
 
     // MARK: - Member row
@@ -145,6 +145,7 @@ struct MembersView: View {
                     Text("\(t("Member since", "Membre depuis")) \(ADLConsoleDateFormatting.mediumDate(member.createdAt))")
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .monospacedDigit()
                 }
                 Spacer()
 
@@ -183,7 +184,7 @@ struct MembersView: View {
                         memberPendingRemoval = member
                     } label: {
                         Image(systemName: "trash")
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                     }
                     .disabled(!viewModel.canRemove(member) || viewModel.rowBusyUserId == member.userId)
                     .accessibilityLabel(t("Remove member", "Retirer le membre"))
@@ -207,6 +208,7 @@ struct MembersView: View {
                     Text(inviteSubtitle(invite, accepted: accepted))
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .monospacedDigit()
                 }
                 Spacer()
                 Text((accepted ? t("Accepted", "Acceptée") : t("Pending", "En attente")).uppercased())
@@ -222,7 +224,7 @@ struct MembersView: View {
                         invitePendingRevoke = invite
                     } label: {
                         Image(systemName: "trash")
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                     }
                     .disabled(viewModel.revokingInviteId == invite.id)
                     .accessibilityLabel(t("Revoke invitation", "Révoquer l'invitation"))
@@ -284,7 +286,8 @@ struct MembersView: View {
                 ADLConsolePrimaryButton(
                     title: t("Send invite", "Envoyer l'invitation"),
                     isBusy: viewModel.isInviting,
-                    isDisabled: viewModel.isInviting || viewModel.inviteEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    isDisabled: viewModel.isInviting || viewModel.inviteEmail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                    pressAnimationEnabled: false
                 ) {
                     Task { await viewModel.invite() }
                 }

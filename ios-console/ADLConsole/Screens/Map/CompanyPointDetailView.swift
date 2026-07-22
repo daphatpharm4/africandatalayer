@@ -28,6 +28,10 @@ struct CompanyPointDetailView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    accentStripe
+                    if !collapsedPoint.photos.isEmpty {
+                        photoHero
+                    }
                     header
                     if collapsedPoint.chainCount > 1 {
                         chainCountBanner
@@ -54,6 +58,28 @@ struct CompanyPointDetailView: View {
         collapsedPoint.representative.recordTypeKey.replacingOccurrences(of: "_", with: " ").capitalized
     }
 
+    // MARK: - Accent stripe
+
+    private var accentStripe: some View {
+        ADLConsoleColor.gold
+            .frame(height: 4)
+            .clipShape(RoundedRectangle(cornerRadius: 2))
+    }
+
+    @ViewBuilder
+    private var photoHero: some View {
+        if let first = collapsedPoint.photos.first, let url = URL(string: first) {
+            ADLCachedAsyncImage(url: url, targetSize: CGSize(width: 400, height: 200)) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                ADLConsoleColor.navyWash
+            }
+            .frame(height: 200)
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.hero, style: .continuous))
+            .adlImageOutline(cornerRadius: ADLConsoleRadius.hero)
+        }
+    }
+
     // MARK: - Header
 
     private var header: some View {
@@ -69,6 +95,7 @@ struct CompanyPointDetailView: View {
                 )
                 .font(ADLConsoleFont.footnote)
                 .foregroundStyle(ADLConsoleColor.inkMuted)
+                .monospacedDigit()
             }
             .padding(16)
         }
@@ -78,6 +105,7 @@ struct CompanyPointDetailView: View {
         Text("\(collapsedPoint.chainCount) \(t("updates on this point", "mises à jour sur ce point"))")
             .font(ADLConsoleFont.subheadline)
             .foregroundStyle(ADLConsoleColor.inkMuted)
+            .monospacedDigit()
             .padding(.horizontal, 4)
     }
 
@@ -92,6 +120,7 @@ struct CompanyPointDetailView: View {
                     Text(ADLConsoleDateFormatting.mediumDateTime(record.evidence.capturedAt ?? record.createdAt))
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .monospacedDigit()
                 }
 
                 ForEach(sortedFields(record), id: \.key) { key, value in
@@ -144,6 +173,7 @@ struct CompanyPointDetailView: View {
             Text(gpsText(record))
                 .font(ADLConsoleFont.footnote)
                 .foregroundStyle(ADLConsoleColor.ink)
+                .monospacedDigit()
 
             if let notes = record.evidence.notes, !notes.isEmpty {
                 Text(notes)

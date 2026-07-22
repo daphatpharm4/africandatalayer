@@ -9,7 +9,7 @@ import Foundation
 /// the web console client. No external state library; plain
 /// `@Published`/`ObservableObject`, per CLAUDE.md.
 @MainActor
-final class AppState: ObservableObject {
+class AppState: ObservableObject {
     /// Coarse load status for the organizations fetch, surfaced by
     /// `RootView` while bootstrapping after a successful sign-in.
     enum LoadState: Equatable {
@@ -19,7 +19,15 @@ final class AppState: ObservableObject {
         case failed(String)
     }
 
+    enum SessionState: Equatable {
+        case unknown
+        case restoring
+        case authenticated
+        case unauthenticated
+    }
+
     @Published private(set) var isAuthenticated: Bool = false
+    @Published private(set) var sessionState: SessionState = .unknown
     @Published private(set) var isAuthenticating: Bool = false
     @Published private(set) var authErrorMessage: String?
 
@@ -27,7 +35,7 @@ final class AppState: ObservableObject {
     @Published private(set) var organization: PlatformOrganization?
     @Published private(set) var role: PlatformRole?
     @Published private(set) var route: ConsoleRoute = ConsoleRoute(screen: .loading)
-    @Published private(set) var organizationsLoadState: LoadState = .idle
+    @Published var organizationsLoadState: LoadState = .idle
 
     @Published var language: ConsoleLanguage = .en
     /// Whether the signed-in user is an ADL platform admin (not an org
@@ -105,6 +113,7 @@ final class AppState: ObservableObject {
         ReviewQueueViewModel(
             apiClient: apiClient,
             organizationId: organizationId,
+            viewerRole: role ?? .viewer,
             language: language
         )
     }
@@ -182,25 +191,35 @@ final class AppState: ObservableObject {
         do {
             try await authService.signIn(email: email, password: password)
             isAuthenticated = true
+            sessionState = .authenticated
             await loadOrganizations()
         } catch let error as AuthServiceError {
             authErrorMessage = error.message(language)
             isAuthenticated = false
+            sessionState = .unauthenticated
         } catch {
             authErrorMessage = AuthServiceError.network(String(describing: error)).message(language)
             isAuthenticated = false
+            sessionState = .unauthenticated
         }
         isAuthenticating = false
     }
 
     func signOut() {
         isAuthenticated = false
+        sessionState = .unauthenticated
         organizations = []
         organization = nil
         role = nil
         route = ConsoleRoute(screen: .loading)
         organizationsLoadState = .idle
         authErrorMessage = nil
+        // Invalidate the server-side session cookie so restoreSession() on next
+        // launch doesn't silently re-authenticate. Best-effort — a failure here
+        // doesn't affect the already-cleared local state.
+        if let signingOut = authService as? AuthSigningOut {
+            Task { try? await signingOut.signOut() }
+        }
     }
 
     /// Loads the signed-in user's organizations via `ConsoleAPI` and derives
@@ -238,5 +257,61 @@ final class AppState: ObservableObject {
 
     func navigate(to newRoute: ConsoleRoute) {
         route = newRoute
+    }
+
+    #if DEBUG
+    func seedPreviewOrganizationsLoadState(_ loadState: LoadState) {
+        organizationsLoadState = loadState
+    }
+    #endif
+
+    // MARK: - Session restore (cookie-based)
+
+    /// Attempts to restore an existing Auth.js cookie session at app start or
+    /// when returning to the foreground. If a user session is present, marks
+    /// the app as authenticated and ensures organizations are loaded; if not,
+    /// leaves the app unauthenticated without surfacing an error.
+    func tryRestoreSession() async {
+        guard !isAuthenticated, sessionState != .restoring else {
+            return
+        }
+
+        sessionState = .restoring
+
+        guard let sessionRestorer = authService as? AuthSessionRestoring else {
+            sessionState = .unauthenticated
+            if route.screen == .loading {
+                route = ConsoleRoute(screen: .authRequired)
+            }
+            return
+        }
+
+        if let user = await sessionRestorer.restoreSession() {
+            // We have a valid session cookie — consider the user authenticated.
+            isAuthenticated = true
+            sessionState = .authenticated
+            // Opportunistically reflect admin role if present until the TODO(real-cookie-handshake)
+            // work promotes this into first-class state.
+            if let role = user.role, role == "admin" {
+                isAdlAdmin = true
+            }
+            // If we haven't loaded orgs for this session yet, do it now.
+            if organizationsLoadState == .idle || organizations.isEmpty {
+                await loadOrganizations()
+            }
+            // If there are no organizations, `loadOrganizations()` already routes to JOIN.
+            // Otherwise `selectOrganization` applies the role-aware landing route
+            // (collector -> map, reviewer -> review, owner/manager -> overview).
+            if route.screen == .loading || route.screen == .authRequired {
+                route = role.map(consoleLandingRoute(role:)) ?? ConsoleRoute(screen: .overview)
+            }
+        } else {
+            // No session to restore — ensure the shell knows auth is required.
+            isAuthenticated = false
+            sessionState = .unauthenticated
+            if route.screen == .loading {
+                route = ConsoleRoute(screen: .authRequired)
+            }
+        }
     }
 }

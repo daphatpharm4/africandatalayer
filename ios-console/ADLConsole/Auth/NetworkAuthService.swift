@@ -24,7 +24,7 @@ struct AuthSessionUser: Equatable, Sendable {
 /// step 2 is automatically replayed by `URLSessionPlatformTransport`'s later
 /// `PlatformAPIClient` calls — no manual cookie plumbing on either side (see
 /// `AuthTransport.swift`).
-struct NetworkAuthService: AuthServiceProtocol {
+struct NetworkAuthService: AuthServiceProtocol, AuthSessionRestoring, AuthSigningOut {
     private let baseURL: URL
     private let transport: AuthTransport
 

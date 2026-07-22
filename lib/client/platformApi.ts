@@ -374,6 +374,23 @@ export async function reviewPlatformRecordRequest(
   return payload.record;
 }
 
+export interface PlatformNotificationBroadcastResponse {
+  sentCount: number;
+  skippedCount: number;
+  failedCount: number;
+}
+
+export async function sendNotificationBroadcastRequest(
+  input: { organizationId: string; targetRoles: PlatformRole[]; title: string; body: string },
+  deps?: PlatformApiDeps,
+): Promise<PlatformNotificationBroadcastResponse> {
+  return callPlatform<PlatformNotificationBroadcastResponse>(
+    "notification_broadcast",
+    { method: "POST", body: input },
+    deps,
+  );
+}
+
 export async function getMyPlatformRecordSummaryRequest(
   deps?: PlatformApiDeps,
 ): Promise<PlatformRecordSummary> {

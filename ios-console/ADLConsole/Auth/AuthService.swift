@@ -37,6 +37,20 @@ protocol AuthServiceProtocol: Sendable {
     func signIn(email: String, password: String) async throws
 }
 
+/// Optional capability for auth services that can check an existing persisted
+/// session, such as the cookie-backed network implementation.
+protocol AuthSessionRestoring: Sendable {
+    func restoreSession() async -> AuthSessionUser?
+}
+
+/// Optional capability for auth services that can invalidate a server-side
+/// session cookie (e.g. `POST /api/auth/signout`). Without this, logging out
+/// only clears local state — the cookie survives and `restoreSession()` on the
+/// next app launch re-authenticates the user silently.
+protocol AuthSigningOut: Sendable {
+    func signOut() async throws
+}
+
 /// STUB, not the real native auth integration — kept around (and wired to
 /// `AppState` in tests/previews) purely as a fast, deterministic input-shape
 /// validator. The real handshake against @auth/core's credentials provider —

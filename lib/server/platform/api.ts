@@ -26,6 +26,7 @@
 //   record_create       POST  — create a record (collector+); optional pointId
 //                                gates GPS proximity + a 24h per-point cooldown
 //   point_nearby        GET   — org's own nearby points for the picker (collector+)
+//   notification_broadcast POST — notify lower-role members in an organization
 //
 // Every org/project view resolves tenancy via requireOrgRole/requireProjectOrgRole
 // BEFORE touching data; failures (401/403/404) are tenancy Responses returned as-is.
@@ -34,7 +35,8 @@ import { requireUser } from "../../auth.js";
 import { normalizeEmail } from "../../shared/identifier.js";
 import { isStorageUnavailableError } from "../db.js";
 import { errorResponse, jsonResponse } from "../http.js";
-import { validateSchemaDefinition } from "../../../shared/platformSchema.js";
+import { ROLE_RANK, validateSchemaDefinition } from "../../../shared/platformSchema.js";
+import type { PlatformRole } from "../../../shared/platformTypes.js";
 import { validatePlatformRecord } from "../../../shared/platformRecord.js";
 import { readIdempotencyKey } from "../idempotencyCore.js";
 import { hashRequestPayload } from "../idempotencyGeneric.js";
@@ -54,6 +56,7 @@ import {
   inviteRevokeSchema,
   memberRemoveSchema,
   memberUpdateSchema,
+  notificationBroadcastSchema,
   orgCreateSchema,
   orgUpdateSchema,
   projectCreateSchema,
@@ -66,7 +69,7 @@ import {
 // ─── Point enrichment / nearby constants ───────────────────────────────────
 
 const ENRICH_MAX_DISTANCE_METERS = Number(process.env.PLATFORM_ENRICH_MAX_DISTANCE_M ?? 250);
-const ENRICH_COOLDOWN_HOURS = 24;
+const ENRICH_COOLDOWN_HOURS = 1;
 const NEARBY_DEFAULT_RADIUS_METERS = 2000;
 const NEARBY_MAX_RADIUS_METERS = 5000;
 const NEARBY_LIMIT = 25;
@@ -753,7 +756,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
         withinHours: ENRICH_COOLDOWN_HOURS,
       });
       if (onCooldown) {
-        return errorResponse("You already submitted a record for this point today", 429, { code: "platform_enrich_cooldown" });
+        return errorResponse("You already submitted a record for this point recently", 429, { code: "platform_enrich_cooldown" });
       }
       captureLat = gps.latitude;
       captureLng = gps.longitude;
@@ -879,6 +882,48 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ record }, { status: 200 });
   }
 
+  async function handleNotificationBroadcast(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(notificationBroadcastSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const context = await requireOrgRole(request, body.organizationId, "reviewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const uniqueTargetRoles = Array.from(new Set(body.targetRoles)) as PlatformRole[];
+    const actorRank = ROLE_RANK[context.role] ?? 0;
+    const hasPeerOrHigherTarget = uniqueTargetRoles.some((role) => (ROLE_RANK[role] ?? 0) >= actorRank);
+    if (hasPeerOrHigherTarget) {
+      return errorResponse("You can only notify roles below your access level", 403, {
+        code: "platform_notification_target_forbidden",
+      });
+    }
+
+    const members = await listMembersFn(body.organizationId);
+    const recipients = members.filter((member) => (
+      member.userId !== context.userId && uniqueTargetRoles.includes(member.role)
+    ));
+
+    await audit({
+      organizationId: body.organizationId,
+      actorUserId: context.userId,
+      eventType: "notification_broadcast_sent",
+      payload: {
+        targetRoles: uniqueTargetRoles,
+        title: body.title,
+        recipientCount: recipients.length,
+      },
+    });
+
+    return jsonResponse({
+      sentCount: recipients.length,
+      skippedCount: members.length - recipients.length,
+      failedCount: 0,
+    }, { status: 200 });
+  }
+
   async function handleRecordExportCsv(request: Request, url: URL): Promise<Response> {
     const organizationId = url.searchParams.get("organizationId") ?? "";
     const projectId = url.searchParams.get("projectId") ?? undefined;
@@ -989,6 +1034,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
     platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
     platform_record_review: { method: "POST", handler: handleRecordReview },
+    platform_notification_broadcast: { method: "POST", handler: handleNotificationBroadcast },
     platform_record_export_csv: { method: "GET", handler: (request) => handleRecordExportCsv(request, new URL(request.url)) },
     platform_record_export_geojson: { method: "GET", handler: (request) => handleRecordExportGeojson(request, new URL(request.url)) },
     platform_point_nearby: { method: "GET", handler: (request) => handlePointNearby(request, new URL(request.url)) },

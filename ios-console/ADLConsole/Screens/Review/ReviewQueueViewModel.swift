@@ -58,6 +58,12 @@ final class ReviewQueueViewModel: ObservableObject {
     @Published var selection: Set<String> = []
     @Published private(set) var busyRecordId: String?
     @Published private(set) var isBulkBusy: Bool = false
+    @Published var notificationTitle: String = ""
+    @Published var notificationBody: String = ""
+    @Published var selectedNotificationAudienceId: String?
+    @Published private(set) var isSendingNotification = false
+    @Published private(set) var notificationError: String?
+    @Published private(set) var notificationResult: PlatformNotificationBroadcastResponse?
 
     /// Per-record decision error, keyed by record id — set when that
     /// record's `approve`/`reject`/mass-approve attempt fails; cleared the
@@ -67,14 +73,24 @@ final class ReviewQueueViewModel: ObservableObject {
     @Published private(set) var itemErrors: [String: String] = [:]
 
     let language: ConsoleLanguage
+    let viewerRole: PlatformRole
 
     private let apiClient: PlatformAPIClient
     private let organizationId: String
 
-    init(apiClient: PlatformAPIClient, organizationId: String, language: ConsoleLanguage) {
+    struct NotificationAudience: Identifiable, Equatable {
+        var id: String
+        var title: String
+        var subtitle: String
+        var roles: [PlatformRole]
+    }
+
+    init(apiClient: PlatformAPIClient, organizationId: String, viewerRole: PlatformRole = .reviewer, language: ConsoleLanguage) {
         self.apiClient = apiClient
         self.organizationId = organizationId
+        self.viewerRole = viewerRole
         self.language = language
+        self.selectedNotificationAudienceId = Self.notificationAudiences(for: viewerRole, language: language).first?.id
     }
 
     // MARK: - Derived state
@@ -90,12 +106,81 @@ final class ReviewQueueViewModel: ObservableObject {
 
     func itemError(for recordId: String) -> String? { itemErrors[recordId] }
 
+    var notificationAudiences: [NotificationAudience] {
+        Self.notificationAudiences(for: viewerRole, language: language)
+    }
+
+    var selectedNotificationAudience: NotificationAudience? {
+        notificationAudiences.first { $0.id == selectedNotificationAudienceId }
+    }
+
+    var canSendNotifications: Bool {
+        !notificationAudiences.isEmpty
+    }
+
+    var isNotificationValid: Bool {
+        selectedNotificationAudience != nil
+            && !notificationTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !notificationBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private static func notificationAudiences(for role: PlatformRole, language: ConsoleLanguage) -> [NotificationAudience] {
+        let lowerRoles = [PlatformRole.manager, .reviewer, .collector, .viewer].filter { candidate in
+            (PlatformRoleRank.rank[role] ?? 0) > (PlatformRoleRank.rank[candidate] ?? 0)
+        }
+        guard !lowerRoles.isEmpty else { return [] }
+
+        var audiences: [NotificationAudience] = [
+            NotificationAudience(
+                id: "lower_roles",
+                title: language.t("All lower roles", "Tous les rôles inférieurs"),
+                subtitle: lowerRoles.map { roleLabel($0, language: language) }.joined(separator: ", "),
+                roles: lowerRoles
+            )
+        ]
+
+        if lowerRoles.contains(.collector) {
+            audiences.append(
+                NotificationAudience(
+                    id: "collectors",
+                    title: language.t("Collectors", "Collecteurs"),
+                    subtitle: language.t("Field contributors only", "Contributeurs terrain uniquement"),
+                    roles: [.collector]
+                )
+            )
+        }
+
+        for targetRole in lowerRoles where targetRole != .collector {
+            audiences.append(
+                NotificationAudience(
+                    id: targetRole.rawValue,
+                    title: roleLabel(targetRole, language: language),
+                    subtitle: language.t("Only this role", "Uniquement ce rôle"),
+                    roles: [targetRole]
+                )
+            )
+        }
+        return audiences
+    }
+
+    private static func roleLabel(_ role: PlatformRole, language: ConsoleLanguage) -> String {
+        switch role {
+        case .owner: return language.t("Owners", "Propriétaires")
+        case .manager: return language.t("Managers", "Managers")
+        case .reviewer: return language.t("Reviewers", "Réviseurs")
+        case .collector: return language.t("Collectors", "Collecteurs")
+        case .viewer: return language.t("Viewers", "Lecteurs")
+        }
+    }
+
     // MARK: - Load
 
     /// `view=platform_record_list`, GET, `organizationId` + `status=pending_review`.
     /// Port of `listPlatformRecordsRequest`/`PlatformAPIClient.listPlatformRecords`
     /// — see the type doc above for why `status` is supplied here.
-    func load() async {
+    func load(force: Bool = false) async {
+        guard force || loadState != .loading else { return }
+        guard force || loadState != .loaded else { return }
         loadState = .loading
         do {
             records = try await apiClient.listPlatformRecords(organizationId: organizationId, status: .pendingReview)
@@ -119,6 +204,41 @@ final class ReviewQueueViewModel: ObservableObject {
 
     func clearSelection() {
         selection.removeAll()
+    }
+
+    // MARK: - Notifications
+
+    func resetNotificationComposer() {
+        notificationTitle = ""
+        notificationBody = ""
+        selectedNotificationAudienceId = notificationAudiences.first?.id
+        notificationError = nil
+        notificationResult = nil
+    }
+
+    @discardableResult
+    func sendNotification() async -> Bool {
+        guard let audience = selectedNotificationAudience, isNotificationValid else { return false }
+        let title = notificationTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = notificationBody.trimmingCharacters(in: .whitespacesAndNewlines)
+        notificationError = nil
+        notificationResult = nil
+        isSendingNotification = true
+        defer { isSendingNotification = false }
+        do {
+            notificationResult = try await apiClient.sendNotificationBroadcast(
+                organizationId: organizationId,
+                targetRoles: audience.roles,
+                title: title,
+                body: body
+            )
+            notificationTitle = ""
+            notificationBody = ""
+            return true
+        } catch {
+            notificationError = describePlatformError(error, language: language)
+            return false
+        }
     }
 
     // MARK: - Decisions

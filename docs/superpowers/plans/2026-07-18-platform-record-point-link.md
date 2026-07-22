@@ -14,7 +14,7 @@
 
 - Collector's capture GPS is the existing `evidence.gps` field — **required when `pointId` is present** (spec's "captureLocation" maps to `evidence.gps`; no new API field). Server denormalizes it into `capture_lat`/`capture_lng` columns.
 - Proximity env var: `PLATFORM_ENRICH_MAX_DISTANCE_M`, default `250` (meters).
-- Cooldown: max 1 record per (collector, point, recordType) per **24 hours**.
+- Cooldown: max 1 record per (collector, point, recordType) per **1 hour**.
 - Error codes exactly: `platform_enrich_gps_required` (422), `platform_point_not_found` (409), `platform_enrich_too_far` (422), `platform_enrich_cooldown` (429).
 - Nearby endpoint: default radius `2000` m, max `5000` m, max `25` points, sorted by distance ascending.
 - Staleness: a point is "stale" when `updatedAt` older than **30 days**.
@@ -425,7 +425,7 @@ Expected: new tests FAIL (unknown deps ignored, no gate logic, unknown view 404/
 
 ```ts
 const ENRICH_MAX_DISTANCE_METERS = Number(process.env.PLATFORM_ENRICH_MAX_DISTANCE_M ?? 250);
-const ENRICH_COOLDOWN_HOURS = 24;
+const ENRICH_COOLDOWN_HOURS = 1;
 const NEARBY_DEFAULT_RADIUS_METERS = 2000;
 const NEARBY_MAX_RADIUS_METERS = 5000;
 const NEARBY_LIMIT = 25;
@@ -456,7 +456,7 @@ const NEARBY_LIMIT = 25;
         withinHours: ENRICH_COOLDOWN_HOURS,
       });
       if (onCooldown) {
-        return errorResponse("You already submitted a record for this point today", 429, { code: "platform_enrich_cooldown" });
+        return errorResponse("You already submitted a record for this point recently", 429, { code: "platform_enrich_cooldown" });
       }
       captureLat = gps.latitude;
       captureLng = gps.longitude;
@@ -718,7 +718,7 @@ const [nearbyError, setNearbyError] = useState('');
 
 4. Submit: pass `pointId: attachedPoint?.pointId` into the existing `createPlatformRecordRequest` call. On success, also reset `attachedPoint`/`nearbyPoints` alongside the existing reset logic. Map the new API error codes in the existing `PlatformApiError` handling to bilingual messages:
    - `platform_enrich_too_far` → `t('You are too far from this point. Move closer and retry.', 'Vous êtes trop loin de ce point. Rapprochez-vous et réessayez.')`
-   - `platform_enrich_cooldown` → `t('You already submitted for this point today.', 'Vous avez déjà soumis pour ce point aujourd’hui.')`
+   - `platform_enrich_cooldown` → `t('You already submitted for this point. Try again later.', 'Vous avez déjà soumis pour ce point. Réessayez plus tard.')`
    - `platform_point_not_found` → `t('This point no longer exists. Detach and submit as a new record.', 'Ce point n’existe plus. Détachez-le et soumettez un nouveau relevé.')`
 
 5. When `attachedPoint` set and GPS evidence missing, disable submit with hint `t('Capture GPS to attach a point', 'Capturez le GPS pour associer un point')` (server rejects otherwise).

@@ -74,7 +74,9 @@ final class CompanyMapViewModel: ObservableObject {
     /// `view=platform_record_browse`, GET. Port of
     /// `listApprovedPlatformRecordsRequest` + `collapseRecordChains`, mirroring
     /// `Home.tsx`'s `loadPoints` company-explore branch.
-    func load() async {
+    func load(force: Bool = false) async {
+        guard force || loadState != .loading else { return }
+        guard force || loadState != .loaded else { return }
         loadState = .loading
         do {
             let records = try await apiClient.listApprovedPlatformRecords(organizationId: organizationId)

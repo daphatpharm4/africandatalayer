@@ -211,6 +211,40 @@ final class PlatformAPIClientTests: XCTestCase {
         XCTAssertEqual(record.reviewNotes, "Looks good")
     }
 
+    func testSendNotificationBroadcastSendsTargetRolesAndDecodesCounts() async throws {
+        let transport = MockPlatformTransport()
+        transport.responseData = JSONFixture.data("""
+        {
+          "sentCount": 12,
+          "skippedCount": 2,
+          "failedCount": 1
+        }
+        """)
+        let client = PlatformAPIClient(baseURL: baseURL, transport: transport)
+
+        let result = try await client.sendNotificationBroadcast(
+            organizationId: "org_1",
+            targetRoles: [.reviewer, .collector],
+            title: "Route updated",
+            body: "Start with the Nairobi pilot route."
+        )
+
+        let request = try XCTUnwrap(transport.lastRequest)
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "platform_notification_broadcast")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Idempotency-Key"))
+
+        let body = try JSONFixture.bodyObject(request)
+        XCTAssertEqual(body["organizationId"] as? String, "org_1")
+        XCTAssertEqual(body["title"] as? String, "Route updated")
+        XCTAssertEqual(body["body"] as? String, "Start with the Nairobi pilot route.")
+        XCTAssertEqual(body["targetRoles"] as? [String], ["reviewer", "collector"])
+
+        XCTAssertEqual(result.sentCount, 12)
+        XCTAssertEqual(result.skippedCount, 2)
+        XCTAssertEqual(result.failedCount, 1)
+    }
+
     // MARK: - Bare-payload (non-envelope) responses: listOrgMembers, getSchema
 
     func testListOrgMembersDecodesBarePayloadWithMembersAndInvites() async throws {

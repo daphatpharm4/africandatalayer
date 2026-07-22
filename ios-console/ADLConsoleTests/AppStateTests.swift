@@ -49,6 +49,7 @@ final class AppStateTests: XCTestCase {
         await state.signIn(email: "owner@acme.test", password: "hunter2")
 
         XCTAssertTrue(state.isAuthenticated)
+        XCTAssertEqual(state.sessionState, .authenticated)
         XCTAssertFalse(state.isAuthenticating)
         XCTAssertNil(state.authErrorMessage)
         XCTAssertEqual(state.role, .owner)
@@ -100,6 +101,7 @@ final class AppStateTests: XCTestCase {
         await state.signIn(email: "wrong@acme.test", password: "bad")
 
         XCTAssertFalse(state.isAuthenticated)
+        XCTAssertEqual(state.sessionState, .unauthenticated)
         XCTAssertFalse(state.isAuthenticating)
         XCTAssertNotNil(state.authErrorMessage)
         XCTAssertNil(state.role)
@@ -151,6 +153,7 @@ final class AppStateTests: XCTestCase {
         state.signOut()
 
         XCTAssertFalse(state.isAuthenticated)
+        XCTAssertEqual(state.sessionState, .unauthenticated)
         XCTAssertNil(state.role)
         XCTAssertNil(state.organization)
         XCTAssertTrue(state.organizations.isEmpty)
@@ -175,5 +178,45 @@ final class AppStateTests: XCTestCase {
             Set(state.visibleDestinations.map(\.screen)),
             Set(ConsoleNavigation.visibleDestinations(role: .owner).map(\.screen))
         )
+    }
+
+    // MARK: - Session restore
+
+    func testRestoreSessionKeepsLoginHiddenUntilSessionIsResolvedAndLandsCollectorOnMap() async {
+        let transport = MockPlatformTransport()
+        transport.responseData = Data("""
+        {"organizations":[
+            {"id":"org-1","name":"Acme Co","slug":"acme","createdAt":"2026-01-01T00:00:00.000Z","role":"collector"}
+        ]}
+        """.utf8)
+        let auth = MockAuthService()
+        auth.restoredUser = AuthSessionUser(id: "user-1", email: "collector@acme.test", role: nil, isAdmin: false)
+        let state = makeAppState(transport: transport, authService: auth)
+
+        XCTAssertFalse(state.isAuthenticated)
+        XCTAssertEqual(state.sessionState, .unknown)
+
+        await state.tryRestoreSession()
+
+        XCTAssertTrue(state.isAuthenticated)
+        XCTAssertEqual(state.sessionState, .authenticated)
+        XCTAssertEqual(state.role, .collector)
+        XCTAssertEqual(state.route, ConsoleRoute(screen: .map))
+        XCTAssertEqual(auth.restoreSessionCallCount, 1)
+    }
+
+    func testRestoreSessionWithoutUserMarksAuthRequiredOnlyAfterResolution() async {
+        let transport = MockPlatformTransport()
+        let auth = MockAuthService()
+        let state = makeAppState(transport: transport, authService: auth)
+
+        XCTAssertEqual(state.sessionState, .unknown)
+
+        await state.tryRestoreSession()
+
+        XCTAssertFalse(state.isAuthenticated)
+        XCTAssertEqual(state.sessionState, .unauthenticated)
+        XCTAssertEqual(state.route, ConsoleRoute(screen: .authRequired))
+        XCTAssertTrue(transport.capturedRequests.isEmpty)
     }
 }

@@ -109,7 +109,8 @@ final class SchemaBuilderViewModel: ObservableObject {
     /// `draft.definition ?? published.definition ?? { recordTypes:
     /// [emptyRecordType(0)] }` (`SchemaEditorModel.empty()`), matching
     /// `SchemaBuilderEditor`'s `editorInitial`.
-    func load() async {
+    func load(force: Bool = false) async {
+        guard force || editor == nil else { return }
         editor = nil
         loadError = nil
         saveError = nil

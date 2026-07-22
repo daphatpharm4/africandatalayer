@@ -254,6 +254,7 @@ struct CaptureFieldControl: View {
             Text(gps.map { String(format: "%.5f, %.5f", $0.latitude, $0.longitude) } ?? t("Not captured", "Non capturée"))
                 .font(ADLConsoleFont.footnote)
                 .foregroundStyle(ADLConsoleColor.inkMuted)
+                .monospacedDigit()
             Spacer()
         }
     }

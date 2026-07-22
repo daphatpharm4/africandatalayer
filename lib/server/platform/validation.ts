@@ -136,3 +136,10 @@ export const recordReviewSchema = z.object({
     });
   }
 });
+
+export const notificationBroadcastSchema = z.object({
+  organizationId: uuid,
+  targetRoles: z.array(z.enum(["manager", "reviewer", "collector", "viewer"])).min(1).max(4),
+  title: z.string().trim().min(2).max(100),
+  body: z.string().trim().min(2).max(500),
+});

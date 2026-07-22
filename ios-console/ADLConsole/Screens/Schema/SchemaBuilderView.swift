@@ -98,7 +98,7 @@ struct SchemaBuilderView: View {
             message: message,
             retryTitle: t("Try again", "Réessayer")
         ) {
-            Task { await viewModel.load() }
+            Task { await viewModel.load(force: true) }
         }
     }
 
@@ -108,6 +108,7 @@ struct SchemaBuilderView: View {
                 if let published = viewModel.published {
                     Text("\(t("Live schema: version", "Schéma actif : version")) \(published.version)")
                         .font(ADLConsoleFont.footnote)
+                        .monospacedDigit()
                         .foregroundStyle(ADLConsoleColor.inkMuted)
                 }
 
@@ -176,7 +177,7 @@ struct SchemaBuilderView: View {
             } label: {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 14))
-                    .frame(width: 28, height: 28)
+                    .frame(width: 44, height: 44)
             }
             .accessibilityLabel(t("Remove record type", "Supprimer le type"))
         }
@@ -265,7 +266,7 @@ struct SchemaBuilderView: View {
                     viewModel.mutate { $0.removeField(typeIndex: typeIndex, fieldIndex: fieldIndex) }
                 } label: {
                     Image(systemName: "trash")
-                        .frame(width: 36, height: 36)
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel(t("Remove field", "Supprimer le champ"))
                 Image(systemName: "chevron.right")
@@ -326,6 +327,7 @@ struct SchemaBuilderView: View {
                     ) {
                         Text("\(recordType.evidence.minPhotos)")
                             .font(ADLConsoleFont.subheadline)
+                            .monospacedDigit()
                     }
                     .fixedSize()
                 }
@@ -349,6 +351,7 @@ struct SchemaBuilderView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("\(t("Issues", "Problèmes")) (\(viewModel.issues.count))")
                             .font(ADLConsoleFont.microLabel)
+                            .monospacedDigit()
                             .foregroundStyle(ADLConsoleColor.danger)
                         ForEach(Array(viewModel.issues.enumerated()), id: \.offset) { _, issue in
                             Text("\(issue.path.isEmpty ? "(root)" : issue.path) — \(issue.message)")
@@ -425,6 +428,7 @@ struct SchemaBuilderView: View {
                         HStack {
                             Text("\(t("Version", "Version")) \(version.version)")
                                 .font(ADLConsoleFont.subheadline)
+                                .monospacedDigit()
                                 .foregroundStyle(ADLConsoleColor.ink)
                             Spacer()
                             Text(version.publishedAt ?? "")

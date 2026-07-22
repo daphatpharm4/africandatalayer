@@ -1,5 +1,6 @@
 import ConsoleForms
 import ConsoleModels
+import ConsoleState
 import PhotosUI
 import SwiftUI
 
@@ -14,6 +15,7 @@ struct CaptureView: View {
     @StateObject private var viewModel: CaptureViewModel
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var showingCamera = false
+    @State private var photoErrorMessage: String?
 
     private var t: (String, String) -> String { appState.language.t }
 
@@ -24,8 +26,10 @@ struct CaptureView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                fieldCommandCenter
                 pickerSection
                 if viewModel.selectedRecordType != nil {
+                    existingPointSection
                     fieldsSection
                     evidenceSection
                     submitSection
@@ -38,7 +42,175 @@ struct CaptureView: View {
             .padding(20)
         }
         .background(ADLConsoleColor.page)
-        .task { await viewModel.loadProjects() }
+        .task {
+            await viewModel.loadProjects()
+            await viewModel.refreshQueueSnapshot()
+        }
+    }
+
+    // MARK: - Field command center
+
+    private var fieldCommandCenter: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ADLConsoleHeroCard {
+                VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ADLConsoleMicroLabel(
+                            text: appState.organization?.name ?? "ADL",
+                            color: Color.white.opacity(0.68)
+                        )
+                        Text(t("Today in the field", "Aujourd'hui sur le terrain"))
+                            .font(ADLConsoleFont.title)
+                            .foregroundStyle(.white)
+                        Text(t(
+                            "Capture verified infrastructure records, attach evidence, and keep useful updates moving.",
+                            "Capturez des données d'infrastructure vérifiées, ajoutez les justificatifs et faites avancer les mises à jour utiles."
+                        ))
+                        .font(ADLConsoleFont.footnote)
+                        .foregroundStyle(Color.white.opacity(0.82))
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    HStack(spacing: 8) {
+                        commandMetric(
+                            value: "\(viewModel.projectOptions.count)",
+                            label: t("active projects", "projets actifs"),
+                            systemImage: "folder.fill"
+                        )
+                        commandMetric(
+                            value: "\(totalRecordTypes)",
+                            label: t("record types", "types de données"),
+                            systemImage: "list.bullet.rectangle.fill"
+                        )
+                        commandMetric(
+                            value: "\(viewModel.queueSnapshot?.total ?? 0)",
+                            label: t("queued", "en attente"),
+                            systemImage: "tray.and.arrow.up.fill"
+                        )
+                    }
+
+                    HStack(spacing: 10) {
+                        Button {
+                            appState.navigate(to: ConsoleRoute(screen: .map))
+                        } label: {
+                            Label(t("Open map capture", "Ouvrir la carte"), systemImage: "map.fill")
+                                .font(ADLConsoleFont.subheadline)
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 46)
+                                .foregroundStyle(ADLConsoleColor.navy)
+                                .background(.white)
+                                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.button, style: .continuous))
+                        }
+                        .buttonStyle(ADLConsolePressStyle())
+
+                        Button {
+                            appState.navigate(to: ConsoleRoute(screen: .projects))
+                        } label: {
+                            Image(systemName: "folder.fill")
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 46, height: 46)
+                                .foregroundStyle(.white)
+                                .background(Color.white.opacity(0.16))
+                                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.button, style: .continuous))
+                        }
+                        .buttonStyle(ADLConsolePressStyle())
+                        .accessibilityLabel(t("View projects", "Voir les projets"))
+                    }
+                }
+            }
+
+            if let selectedRecordType = viewModel.selectedRecordType {
+                selectedMissionStrip(selectedRecordType)
+                captureProgressCard
+            }
+        }
+    }
+
+    private var totalRecordTypes: Int {
+        viewModel.projectOptions.reduce(0) { $0 + $1.schemaVersion.definition.recordTypes.count }
+    }
+
+    private func commandMetric(value: String, label: String, systemImage: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.78))
+            Text(value)
+                .font(ADLConsoleFont.headline)
+                .foregroundStyle(.white)
+                .monospacedDigit()
+            Text(label)
+                .font(ADLConsoleFont.caption)
+                .foregroundStyle(Color.white.opacity(0.72))
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(Color.white.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private func selectedMissionStrip(_ recordType: PlatformRecordType) -> some View {
+        HStack(spacing: 10) {
+            Label(viewModel.selectedProjectOption?.project.name ?? t("Selected project", "Projet sélectionné"), systemImage: "location.north.line.fill")
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            missionRequirementPill(
+                text: recordType.evidence.gpsRequired ? t("GPS required", "GPS requis") : t("GPS optional", "GPS optionnel"),
+                systemImage: "location.fill",
+                color: recordType.evidence.gpsRequired ? ADLConsoleColor.terraDark : ADLConsoleColor.inkMuted
+            )
+            missionRequirementPill(
+                text: "\(recordType.evidence.minPhotos) " + t("photos", "photos"),
+                systemImage: "camera.fill",
+                color: recordType.evidence.minPhotos > 0 ? ADLConsoleColor.forestDark : ADLConsoleColor.inkMuted
+            )
+        }
+        .font(ADLConsoleFont.caption)
+        .foregroundStyle(ADLConsoleColor.ink)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(ADLConsoleColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+        .adlShadowBorder()
+    }
+
+    private func missionRequirementPill(text: String, systemImage: String, color: Color) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(ADLConsoleFont.caption)
+            .foregroundStyle(color)
+            .monospacedDigit()
+    }
+
+    private var captureProgressCard: some View {
+        let progress = viewModel.captureProgress
+        return ADLConsoleCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ADLConsoleMicroLabel(text: t("Record readiness", "Préparation du relevé"))
+                        Text(progress.total == 0
+                             ? t("Optional details only", "Détails optionnels uniquement")
+                             : t("\(progress.completed) of \(progress.total) required items complete", "\(progress.completed) sur \(progress.total) éléments requis complétés"))
+                        .font(ADLConsoleFont.caption)
+                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .monospacedDigit()
+                    }
+                    Spacer()
+                    Text("\(progress.percent)%")
+                        .font(ADLConsoleFont.headline)
+                        .foregroundStyle(progress.fraction >= 1 ? ADLConsoleColor.forestDark : ADLConsoleColor.navy)
+                        .monospacedDigit()
+                }
+
+                ProgressView(value: progress.fraction)
+                    .tint(progress.fraction >= 1 ? ADLConsoleColor.forestDark : ADLConsoleColor.gold)
+                    .accessibilityLabel(t("Record capture progress", "Progression de la capture"))
+                    .accessibilityValue("\(progress.percent)%")
+            }
+            .padding(14)
+        }
     }
 
     // MARK: - Project / record type picker
@@ -107,6 +279,167 @@ struct CaptureView: View {
 
     // MARK: - Dynamic fields
 
+    private var existingPointSection: some View {
+        ADLConsoleCard {
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    ADLConsoleMicroLabel(text: t("Existing point", "Point existant"))
+                    Text(t(
+                        "Attach this record to a point your company already tracks.",
+                        "Associez ce relevé à un point déjà suivi par votre entreprise."
+                    ))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if let attachedPoint = viewModel.attachedPoint {
+                    attachedPointRow(attachedPoint)
+                } else if let nearbyPoints = viewModel.nearbyPoints {
+                    nearbyPointResults(nearbyPoints)
+                } else {
+                    Button {
+                        Task { await viewModel.loadNearbyPoints() }
+                    } label: {
+                        HStack(spacing: 8) {
+                            if viewModel.isLoadingNearbyPoints {
+                                ProgressView()
+                                    .scaleEffect(0.82)
+                            } else {
+                                Image(systemName: "mappin.and.ellipse")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
+                            Text(viewModel.isLoadingNearbyPoints
+                                 ? t("Looking for nearby points...", "Recherche de points à proximité...")
+                                 : t("Attach to existing point", "Associer à un point existant"))
+                            .font(ADLConsoleFont.subheadline)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 48)
+                    }
+                    .disabled(viewModel.isLoadingNearbyPoints)
+                    .buttonStyle(ADLConsolePressStyle())
+                    .foregroundStyle(ADLConsoleColor.navy)
+                    .background(ADLConsoleColor.navyWash)
+                    .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                }
+
+                if let message = viewModel.nearbyPointsErrorMessage {
+                    ADLConsoleStatusBanner(
+                        message: message,
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: ADLConsoleColor.danger,
+                        background: ADLConsoleColor.dangerWash
+                    )
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private func attachedPointRow(_ point: PlatformNearbyPoint) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "mappin.circle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(ADLConsoleColor.forestDark)
+                .frame(width: 44, height: 44)
+                .background(ADLConsoleColor.forestWash)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(point.name ?? point.category)
+                    .font(ADLConsoleFont.headline)
+                    .foregroundStyle(ADLConsoleColor.forestDark)
+                    .lineLimit(1)
+                Text(pointStalenessLabel(point.updatedAt))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.forestDark.opacity(0.78))
+            }
+
+            Spacer()
+
+            Button {
+                viewModel.clearAttachedPoint()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .bold))
+                    .frame(width: 44, height: 44)
+            }
+            .buttonStyle(ADLConsolePressStyle())
+            .foregroundStyle(ADLConsoleColor.forestDark)
+            .accessibilityLabel(t("Remove attached point", "Retirer le point associé"))
+        }
+        .padding(12)
+        .background(ADLConsoleColor.forestWash)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+        .adlShadowBorder()
+    }
+
+    private func nearbyPointResults(_ points: [PlatformNearbyPoint]) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if points.isEmpty {
+                Text(t("No points nearby", "Aucun point à proximité"))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(ADLConsoleColor.navyWash)
+                    .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+            } else {
+                ForEach(points, id: \.pointId) { point in
+                    Button {
+                        viewModel.attach(to: point)
+                    } label: {
+                        nearbyPointRow(point)
+                    }
+                    .buttonStyle(ADLConsolePressStyle())
+                }
+            }
+
+            Button {
+                Task { await viewModel.loadNearbyPoints() }
+            } label: {
+                Label(t("Refresh", "Actualiser"), systemImage: "arrow.clockwise")
+                    .font(ADLConsoleFont.caption)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+            }
+            .disabled(viewModel.isLoadingNearbyPoints)
+            .buttonStyle(ADLConsolePressStyle())
+            .foregroundStyle(ADLConsoleColor.navy)
+        }
+    }
+
+    private func nearbyPointRow(_ point: PlatformNearbyPoint) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(point.name ?? point.category)
+                    .font(ADLConsoleFont.subheadline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .lineLimit(1)
+                ADLConsoleMicroLabel(text: point.category)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 5) {
+                Text(formatDistanceMeters(point.distanceMeters))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .monospacedDigit()
+                Text(pointStalenessLabel(point.updatedAt))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                    .lineLimit(1)
+            }
+        }
+        .padding(12)
+        .frame(minHeight: 52)
+        .background(ADLConsoleColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+        .adlShadowBorder()
+    }
+
     private var fieldsSection: some View {
         ADLConsoleCard {
             VStack(alignment: .leading, spacing: 16) {
@@ -135,6 +468,12 @@ struct CaptureView: View {
                 ADLConsoleMicroLabel(text: t("Evidence", "Preuves"))
 
                 photoEvidenceRow
+                if let photoErrorMessage {
+                    Text(photoErrorMessage)
+                        .font(ADLConsoleFont.footnote)
+                        .foregroundStyle(ADLConsoleColor.danger)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 gpsEvidenceRow
 
                 if viewModel.evidenceRules?.notesRequired == true {
@@ -171,12 +510,13 @@ struct CaptureView: View {
                 Text("\(viewModel.evidencePhotoRefs.count) " + t("captured", "capturées"))
                     .font(ADLConsoleFont.caption)
                     .foregroundStyle(ADLConsoleColor.inkMuted)
+                    .monospacedDigit()
             }
             Button {
                 showingCamera = true
             } label: {
                 ZStack {
-                    RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous)
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .stroke(
                             viewModel.evidencePhotoRefs.isEmpty ? ADLConsoleColor.navyBorder : ADLConsoleColor.forestDark,
                             style: StrokeStyle(lineWidth: viewModel.evidencePhotoRefs.isEmpty ? 2 : 2, dash: viewModel.evidencePhotoRefs.isEmpty ? [6, 4] : [])
@@ -213,9 +553,17 @@ struct CaptureView: View {
             .buttonStyle(ADLConsolePressStyle())
         }
         .sheet(isPresented: $showingCamera) {
-            CameraCaptureView { imageData in
-                let dataUrl = "data:image/jpeg;base64,\(imageData.base64EncodedString())"
-                viewModel.addPhotoRef(dataUrl)
+            CameraCaptureView { result in
+                switch result {
+                case .success(let dataURL):
+                    photoErrorMessage = nil
+                    viewModel.addPhotoRef(dataURL)
+                case .failure:
+                    photoErrorMessage = t(
+                        "This photo could not be prepared for upload. Take another photo and try again.",
+                        "Cette photo n'a pas pu être préparée. Prenez une autre photo et réessayez."
+                    )
+                }
             }
         }
     }
@@ -275,11 +623,34 @@ struct CaptureView: View {
             Text(value)
                 .font(ADLConsoleFont.caption)
                 .foregroundStyle(ADLConsoleColor.ink)
+                .monospacedDigit()
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(ADLConsoleColor.navyWash)
         .clipShape(Capsule())
+    }
+
+    private func formatDistanceMeters(_ meters: Double) -> String {
+        if meters >= 1_000 {
+            return String(format: "%.1f km", meters / 1_000)
+        }
+        return "\(Int(meters.rounded())) m"
+    }
+
+    private func pointStalenessLabel(_ isoString: String) -> String {
+        guard let date = ADLConsoleDateFormatting.parse(isoString) else {
+            return t("Tracked point", "Point suivi")
+        }
+
+        let days = max(0, Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0)
+        if days == 0 {
+            return t("Updated today", "Mis à jour aujourd'hui")
+        }
+        if days == 1 {
+            return t("Updated yesterday", "Mis à jour hier")
+        }
+        return t("\(days) days since update", "\(days) jours depuis la mise à jour")
     }
 
     private func evidenceErrorMessage(_ error: EvidenceError) -> String {
@@ -308,7 +679,8 @@ struct CaptureView: View {
             ADLConsolePrimaryButton(
                 title: submitButtonTitle,
                 isBusy: viewModel.submitState == .submitting,
-                isDisabled: viewModel.submitState == .submitting
+                isDisabled: viewModel.submitState == .submitting,
+                pressAnimationEnabled: false
             ) {
                 Task { await viewModel.submit() }
             }
@@ -326,21 +698,33 @@ struct CaptureView: View {
         case .idle, .submitting:
             EmptyView()
         case .invalid:
-            Text(t("Fix the highlighted fields before submitting.", "Corrigez les champs surlignés avant de soumettre."))
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.danger)
+            ADLConsoleStatusBanner(
+                message: t("Fix the highlighted fields before submitting.", "Corrigez les champs surlignés avant de soumettre."),
+                systemImage: "exclamationmark.triangle.fill",
+                tint: ADLConsoleColor.danger,
+                background: ADLConsoleColor.dangerWash
+            )
         case .synced:
-            Text(t("Record submitted.", "Enregistrement soumis."))
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.forestDark)
+            ADLConsoleStatusBanner(
+                message: t("Record submitted.", "Enregistrement soumis."),
+                systemImage: "checkmark.circle.fill",
+                tint: ADLConsoleColor.forestDark,
+                background: ADLConsoleColor.forestWash
+            )
         case .queuedPendingSync:
-            Text(t("Saved offline — will sync automatically.", "Enregistré hors-ligne — se synchronisera automatiquement."))
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.terraDark)
+            ADLConsoleStatusBanner(
+                message: t("Saved offline — will sync automatically.", "Enregistré hors-ligne — se synchronisera automatiquement."),
+                systemImage: "icloud.and.arrow.up.fill",
+                tint: ADLConsoleColor.terraDark,
+                background: ADLConsoleColor.terraWash
+            )
         case .failed(let message):
-            Text(message)
-                .font(ADLConsoleFont.footnote)
-                .foregroundStyle(ADLConsoleColor.danger)
+            ADLConsoleStatusBanner(
+                message: message,
+                systemImage: "xmark.circle.fill",
+                tint: ADLConsoleColor.danger,
+                background: ADLConsoleColor.dangerWash
+            )
         }
     }
 }

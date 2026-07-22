@@ -28,6 +28,7 @@ struct AuthView: View {
                             : "EN · \(t("Switch to French", "Passer en français"))")
                             .font(ADLConsoleFont.subheadline)
                             .foregroundStyle(ADLConsoleColor.inkMuted)
+                            .frame(minHeight: 44)
                     }
                     .padding(.bottom, 12)
                 }
@@ -61,21 +62,20 @@ struct AuthView: View {
     }
 
     private var brandHeader: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: "shield.lefthalf.filled")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(ADLConsoleColor.gold)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("African Data Layer")
-                        .font(ADLConsoleFont.headline)
-                        .foregroundStyle(ADLConsoleColor.navy)
-                    ADLConsoleMicroLabel(text: t("Company Console", "Console Entreprise"), color: ADLConsoleColor.inkMuted)
-                }
+        HStack(spacing: 14) {
+            Image("BrandLogo")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 40, height: 40)
+                .adlImageOutline(cornerRadius: 8)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("African Data Layer")
+                    .font(ADLConsoleFont.headline)
+                    .foregroundStyle(ADLConsoleColor.navy)
+                ADLConsoleMicroLabel(text: t("Company Console", "Console Entreprise"), color: ADLConsoleColor.inkMuted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 4)
     }
 
     private var signInCard: some View {
@@ -152,6 +152,7 @@ struct AuthView: View {
                             } label: {
                                 Image(systemName: isPasswordVisible ? "eye.slash" : "eye")
                                     .foregroundStyle(ADLConsoleColor.inkMuted)
+                                    .frame(width: 44, height: 44)
                             }
                             .accessibilityLabel(t("Toggle password visibility", "Basculer la visibilité du mot de passe"))
                         }
@@ -168,7 +169,8 @@ struct AuthView: View {
                     title: t("Open company console", "Ouvrir la console entreprise"),
                     systemImage: "shield.checkered",
                     isBusy: appState.isAuthenticating,
-                    isDisabled: email.isEmpty || password.isEmpty
+                    isDisabled: email.isEmpty || password.isEmpty,
+                    pressAnimationEnabled: false
                 ) {
                     Task { await appState.signIn(email: email, password: password) }
                 }
@@ -185,12 +187,8 @@ struct AuthView: View {
             .padding(20)
             .background(ADLConsoleColor.surface)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 10)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous))
+        .adlShadowBorder()
     }
 }
 

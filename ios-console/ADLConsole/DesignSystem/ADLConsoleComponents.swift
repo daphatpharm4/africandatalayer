@@ -2,15 +2,15 @@ import ConsoleModels
 import SwiftUI
 
 enum ADLConsoleRadius {
-    static let card: CGFloat = 20
+    static let card: CGFloat = 16
     static let hero: CGFloat = 24
     static let button: CGFloat = 16
     static let input: CGFloat = 14
     static let statTile: CGFloat = 14
-    static let actionRow: CGFloat = 18
+    static let actionRow: CGFloat = 16
 }
 
-/// Standard console card — white surface, soft navy border, continuous corners.
+/// Standard console card: white surface, shadow-border depth, continuous corners.
 struct ADLConsoleCard<Content: View>: View {
     var padding: CGFloat = 0
     @ViewBuilder var content: Content
@@ -23,11 +23,7 @@ struct ADLConsoleCard<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(ADLConsoleColor.surface)
         .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous)
-                .stroke(ADLConsoleColor.navyBorder.opacity(0.9), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        .adlShadowBorder()
     }
 }
 
@@ -59,6 +55,7 @@ struct ADLConsolePrimaryButton: View {
     var systemImage: String? = nil
     var isBusy: Bool = false
     var isDisabled: Bool = false
+    var pressAnimationEnabled: Bool = true
     let action: () -> Void
 
     var body: some View {
@@ -85,7 +82,7 @@ struct ADLConsolePrimaryButton: View {
         .foregroundStyle(.white)
         .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.button, style: .continuous))
         .disabled(isDisabled || isBusy)
-        .buttonStyle(ADLConsolePressStyle())
+        .buttonStyle(ADLConsolePressStyle(isEnabled: pressAnimationEnabled))
     }
 }
 
@@ -112,10 +109,7 @@ struct ADLConsoleSecondaryButton: View {
             .foregroundStyle(tint)
             .background(ADLConsoleColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
-                    .stroke(border, lineWidth: 1)
-            )
+            .adlShadowBorder()
         }
         .buttonStyle(ADLConsolePressStyle())
     }
@@ -142,21 +136,19 @@ struct ADLConsoleDestructiveButton: View {
             .foregroundStyle(ADLConsoleColor.danger)
             .background(ADLConsoleColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
-                    .stroke(ADLConsoleColor.danger.opacity(0.45), lineWidth: 1)
-            )
+            .adlShadowBorder()
         }
         .buttonStyle(ADLConsolePressStyle())
     }
 }
 
 struct ADLConsolePressStyle: ButtonStyle {
+    var isEnabled: Bool = true
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.92 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(isEnabled && configuration.isPressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -171,7 +163,7 @@ struct ADLConsoleChipStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 14)
-            .frame(minHeight: 36)
+            .frame(minHeight: 44)
             .foregroundStyle(filled ? .white : tinted)
             .background(filled ? fillColor : Color.clear)
             .clipShape(Capsule())
@@ -179,9 +171,8 @@ struct ADLConsoleChipStyle: ButtonStyle {
                 Capsule()
                     .stroke(filled ? Color.clear : tinted.opacity(0.45), lineWidth: 1)
             )
-            .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -275,10 +266,7 @@ struct ADLConsoleActionRow: View {
             .padding(16)
             .background(ADLConsoleColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.actionRow, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: ADLConsoleRadius.actionRow, style: .continuous)
-                    .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
-            )
+            .adlShadowBorder()
         }
         .buttonStyle(ADLConsolePressStyle())
     }
@@ -293,10 +281,7 @@ struct ADLConsoleFieldChrome<Content: View>: View {
             .padding(14)
             .background(ADLConsoleColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
-                    .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
-            )
+            .adlShadowBorder()
     }
 }
 
@@ -558,6 +543,7 @@ struct ADLConsolePhotoGrid: View {
                     }
                     .frame(height: 90)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .adlImageOutline(cornerRadius: 12)
                     .accessibilityLabel("Evidence photo \(index + 1) of \(photoURLs.count)")
                 }
             }
@@ -578,6 +564,7 @@ struct ADLConsoleMetadataRow: View {
             Text(value)
                 .font(ADLConsoleFont.footnote)
                 .foregroundStyle(ADLConsoleColor.ink)
+                .monospacedDigit()
         }
     }
 }
@@ -632,6 +619,7 @@ struct ADLConsoleDailyProgressWidget: View {
                 Text("\(capturedToday)")
                     .font(ADLConsoleFont.headline)
                     .foregroundStyle(ADLConsoleColor.ink)
+                    .monospacedDigit()
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(t("Today's progress", "Progrès du jour"))
@@ -646,6 +634,7 @@ struct ADLConsoleDailyProgressWidget: View {
                     )
                     .font(ADLConsoleFont.caption)
                     .foregroundStyle(ADLConsoleColor.inkMuted)
+                    .monospacedDigit()
                 }
             }
             Spacer()
@@ -653,10 +642,7 @@ struct ADLConsoleDailyProgressWidget: View {
         .padding(14)
         .background(ADLConsoleColor.surface)
         .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous)
-                .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
-        )
+        .adlShadowBorder()
     }
 }
 
@@ -693,5 +679,43 @@ struct ADLConsoleScreenHeader: View {
         .overlay(alignment: .bottom) {
             Divider().overlay(ADLConsoleColor.navyBorder.opacity(0.4))
         }
+    }
+}
+
+private struct ADLShadowBorderModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content
+                .shadow(color: Color.white.opacity(0.08), radius: 0, x: 0, y: 0)
+        } else {
+            content
+                .shadow(color: Color.black.opacity(0.06), radius: 0, x: 0, y: 0)
+                .shadow(color: Color.black.opacity(0.06), radius: 2, x: 0, y: 1)
+                .shadow(color: Color.black.opacity(0.04), radius: 4, x: 0, y: 2)
+        }
+    }
+}
+
+private struct ADLImageOutlineModifier: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+    let cornerRadius: CGFloat
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.10), lineWidth: 1)
+        }
+    }
+}
+
+extension View {
+    func adlShadowBorder() -> some View {
+        modifier(ADLShadowBorderModifier())
+    }
+
+    func adlImageOutline(cornerRadius: CGFloat) -> some View {
+        modifier(ADLImageOutlineModifier(cornerRadius: cornerRadius))
     }
 }

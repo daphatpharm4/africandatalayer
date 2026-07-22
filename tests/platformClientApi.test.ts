@@ -24,6 +24,7 @@ import {
   listApprovedPlatformRecordsRequest,
   reviewPlatformRecordRequest,
   nearbyPlatformPointsRequest,
+  sendNotificationBroadcastRequest,
 } from "../lib/client/platformApi.ts";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -317,6 +318,28 @@ test("record review client lists and decides company records", async () => {
   const result = await reviewPlatformRecordRequest({ organizationId: "org-1", recordId: "r1", status: "approved" }, { fetchFn: review.fetchFn });
   assert.equal(result.status, "approved");
   assert.equal(review.calls[0].url, "/api/user?view=platform_record_review");
+});
+
+test("sendNotificationBroadcastRequest posts target roles and returns counts", async () => {
+  const payload = { sentCount: 4, skippedCount: 2, failedCount: 0 };
+  const stub = stubFetch(() => jsonResponse(payload));
+
+  const result = await sendNotificationBroadcastRequest({
+    organizationId: "org-1",
+    targetRoles: ["collector", "viewer"],
+    title: "Route updated",
+    body: "Start with the Nairobi pilot.",
+  }, { fetchFn: stub.fetchFn });
+
+  assert.deepEqual(result, payload);
+  assert.equal(stub.calls[0].url, "/api/user?view=platform_notification_broadcast");
+  assert.equal(stub.calls[0].init?.method, "POST");
+  assert.deepEqual(JSON.parse(stub.calls[0].init?.body as string), {
+    organizationId: "org-1",
+    targetRoles: ["collector", "viewer"],
+    title: "Route updated",
+    body: "Start with the Nairobi pilot.",
+  });
 });
 
 test("saveSchemaDraftRequest throws PlatformApiError with issues on 422", async () => {

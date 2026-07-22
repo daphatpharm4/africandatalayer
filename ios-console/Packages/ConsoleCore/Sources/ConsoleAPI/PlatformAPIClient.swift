@@ -440,6 +440,26 @@ public struct PlatformAPIClient: Sendable {
         return envelope.record
     }
 
+    /// `view=platform_notification_broadcast`, POST. Sends an operational
+    /// notification to members whose roles are included in `targetRoles`.
+    public func sendNotificationBroadcast(
+        organizationId: String,
+        targetRoles: [PlatformRole],
+        title: String,
+        body: String
+    ) async throws -> PlatformNotificationBroadcastResponse {
+        struct Body: Encodable {
+            var organizationId: String
+            var targetRoles: [PlatformRole]
+            var title: String
+            var body: String
+        }
+        let bodyData = try JSONEncoder().encode(
+            Body(organizationId: organizationId, targetRoles: targetRoles, title: title, body: body)
+        )
+        return try await callPlatform("notification_broadcast", method: .post, bodyData: bodyData)
+    }
+
     private struct RecordSummaryEnvelope: Decodable {
         var summary: PlatformRecordSummary
     }

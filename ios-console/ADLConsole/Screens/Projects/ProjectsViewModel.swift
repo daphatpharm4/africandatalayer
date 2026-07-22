@@ -67,7 +67,8 @@ final class ProjectsViewModel: ObservableObject {
 
     /// `view=platform_project_list`, GET, `organizationId`. Port of
     /// `listProjectsRequest`/`PlatformAPIClient.listProjects`.
-    func load() async {
+    func load(force: Bool = false) async {
+        guard force || projects == nil else { return }
         projects = nil
         loadError = nil
         do {

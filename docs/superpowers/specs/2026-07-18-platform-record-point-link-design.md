@@ -33,7 +33,7 @@ New migration `supabase/migrations/20260721_platform_record_point_link.sql`:
 
 1. Point exists and is active in the projection store → else `409` (`platform_point_not_found`)
 2. **Proximity:** capture GPS within `PLATFORM_ENRICH_MAX_DISTANCE_M` (env var, default `250`) meters of the point location → else `422` (`platform_enrich_too_far`). Reuse haversine/GPS helpers (`lib/server/gpsValidation.ts`).
-3. **Cooldown:** max 1 record per (collector, point, recordType) per 24h → else `429` (`platform_enrich_cooldown`)
+3. **Cooldown:** max 1 record per (collector, point, recordType) per 1h → else `429` (`platform_enrich_cooldown`)
 4. Existing rate limiting and idempotency unchanged
 
 `evidence.gps` is required when `pointId` is present (enforced at both the Zod schema and the handler); optional otherwise per the record type's evidence rules. Audit payload for `record_created` includes `pointId`.

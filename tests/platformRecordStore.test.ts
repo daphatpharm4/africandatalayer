@@ -93,12 +93,12 @@ test("hasRecentRecordForPoint returns the EXISTS result", async () => {
     return { rows: [{ present: true }], rowCount: 1 };
   };
   const result = await hasRecentRecordForPoint(
-    { organizationId: "o1", pointId: "pt_1", capturedBy: "u1", recordTypeKey: "audit", withinHours: 24 },
+    { organizationId: "o1", pointId: "pt_1", capturedBy: "u1", recordTypeKey: "audit", withinHours: 1 },
     { queryFn: queryFn as any },
   );
   assert.equal(result, true);
   assert.match(calls[0].text, /point_id = \$2/);
-  assert.ok(calls[0].values.includes(24));
+  assert.ok(calls[0].values.includes(1));
 });
 
 test("listRecords filters by pointId when provided", async () => {

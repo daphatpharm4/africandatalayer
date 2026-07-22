@@ -5,6 +5,12 @@ import MapKit
 import SwiftUI
 
 final class ConsoleCachedTileOverlay: MKTileOverlay {
+    // Wrap a non-Sendable value so it can be captured in a @Sendable closure.
+    // We ensure safety by only invoking it on the main actor below.
+    private struct UncheckedSendable<T>: @unchecked Sendable {
+        let value: T
+    }
+
     private let session: URLSession = {
         let cfg = URLSessionConfiguration.default
         cfg.requestCachePolicy = .returnCacheDataElseLoad
@@ -13,12 +19,24 @@ final class ConsoleCachedTileOverlay: MKTileOverlay {
     }()
 
     override func loadTile(at path: MKTileOverlayPath, result: @escaping (Data?, Error?) -> Void) {
-        let request = URLRequest(url: url(forTilePath: path),
-                                 cachePolicy: .returnCacheDataElseLoad,
-                                 timeoutInterval: 20)
-        session.dataTask(with: request) { data, _, error in
-            result(data, error)
-        }.resume()
+        let request = URLRequest(
+            url: url(forTilePath: path),
+            cachePolicy: .returnCacheDataElseLoad,
+            timeoutInterval: 20
+        )
+
+        // Wrap the non-Sendable completion so we can capture it in the @Sendable URLSession closure.
+        let sendableResult = UncheckedSendable(value: result)
+        let task = session.dataTask(with: request) { data, _, error in
+            Task { @MainActor in
+                if let error = error {
+                    sendableResult.value(nil, error)
+                } else {
+                    sendableResult.value(data, nil)
+                }
+            }
+        }
+        task.resume()
     }
 }
 
@@ -26,6 +44,21 @@ final class ConsoleCachedTileOverlay: MKTileOverlay {
 final class ConsoleMapHolder {
     static let shared = ConsoleMapHolder()
     var mapView: MKMapView?
+
+    func warmUp(region: MKCoordinateRegion = .adlDefaultWarmUpRegion) {
+        guard mapView == nil else { return }
+
+        let mapView = MKMapView(frame: CGRect(x: 0, y: 0, width: 320, height: 320))
+        mapView.mapType = .standard
+        mapView.pointOfInterestFilter = .excludingAll
+        mapView.showsCompass = true
+        mapView.showsScale = true
+        mapView.showsUserLocation = true
+        mapView.setRegion(region, animated: false)
+        mapView.addConsoleTileOverlay()
+
+        self.mapView = mapView
+    }
 }
 
 final class ConsolePointAnnotation: NSObject, MKAnnotation {
@@ -135,12 +168,7 @@ struct ConsoleMapKitView: UIViewRepresentable {
         mapView.showsScale = true
         mapView.showsUserLocation = true
         mapView.setRegion(region, animated: false)
-
-        let cartoTiles = ConsoleCachedTileOverlay(
-            urlTemplate: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"
-        )
-        cartoTiles.canReplaceMapContent = true
-        mapView.addOverlay(cartoTiles, level: .aboveLabels)
+        mapView.addConsoleTileOverlay()
 
         ConsoleMapHolder.shared.mapView = mapView
         return mapView
@@ -216,6 +244,25 @@ struct ConsoleMapKitView: UIViewRepresentable {
             }
             return MKOverlayRenderer(overlay: overlay)
         }
+    }
+}
+
+extension MKCoordinateRegion {
+    static let adlDefaultWarmUpRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 4.0887, longitude: 9.7403),
+        span: MKCoordinateSpan(latitudeDelta: 0.018, longitudeDelta: 0.018)
+    )
+}
+
+private extension MKMapView {
+    func addConsoleTileOverlay() {
+        guard overlays.contains(where: { $0 is ConsoleCachedTileOverlay }) == false else { return }
+
+        let cartoTiles = ConsoleCachedTileOverlay(
+            urlTemplate: "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"
+        )
+        cartoTiles.canReplaceMapContent = true
+        addOverlay(cartoTiles, level: .aboveLabels)
     }
 }
 

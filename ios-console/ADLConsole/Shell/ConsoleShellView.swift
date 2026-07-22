@@ -7,6 +7,8 @@ import SwiftUI
 /// org header · horizontal pill tabs · language / sign-out · content.
 struct ConsoleShellView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isAppSettingsPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,6 +20,12 @@ struct ConsoleShellView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(ADLConsoleColor.page.ignoresSafeArea())
+        .fullScreenCover(isPresented: $isAppSettingsPresented) {
+            NavigationStack {
+                AppSettingsView()
+                    .environmentObject(appState)
+            }
+        }
         .fullScreenCover(isPresented: schemaBuilderPresented) {
             if let projectId = appState.route.projectId, canAccessSchemaBuilder {
                 SchemaBuilderView(
@@ -70,6 +78,11 @@ struct ConsoleShellView: View {
                             systemImage: "globe"
                         )
                     }
+                    Button {
+                        isAppSettingsPresented = true
+                    } label: {
+                        Label(appState.language.t("Settings", "Paramètres"), systemImage: "gearshape")
+                    }
                     Button(role: .destructive) {
                         appState.signOut()
                     } label: {
@@ -79,6 +92,7 @@ struct ConsoleShellView: View {
                     Image(systemName: "chevron.down.circle.fill")
                         .font(.system(size: 22))
                         .foregroundStyle(ADLConsoleColor.navy.opacity(0.75))
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel(appState.language.t("Organization", "Organisation"))
             } else {
@@ -93,6 +107,11 @@ struct ConsoleShellView: View {
                             systemImage: "globe"
                         )
                     }
+                    Button {
+                        isAppSettingsPresented = true
+                    } label: {
+                        Label(appState.language.t("Settings", "Paramètres"), systemImage: "gearshape")
+                    }
                     Button(role: .destructive) {
                         appState.signOut()
                     } label: {
@@ -102,6 +121,7 @@ struct ConsoleShellView: View {
                     Image(systemName: "ellipsis.circle.fill")
                         .font(.system(size: 22))
                         .foregroundStyle(ADLConsoleColor.navy.opacity(0.75))
+                        .frame(width: 44, height: 44)
                 }
                 .accessibilityLabel(appState.language.t("Menu", "Menu"))
             }
@@ -125,7 +145,7 @@ struct ConsoleShellView: View {
             }
             .frame(width: 40, height: 40)
             .clipShape(Circle())
-            .overlay(Circle().stroke(ADLConsoleColor.navyBorder, lineWidth: 1))
+            .overlay(Circle().stroke(avatarOutlineColor, lineWidth: 1))
         } else {
             avatarFallback
         }
@@ -147,6 +167,11 @@ struct ConsoleShellView: View {
                 .foregroundStyle(.white)
         }
         .frame(width: 40, height: 40)
+        .overlay(Circle().stroke(avatarOutlineColor, lineWidth: 1))
+    }
+
+    private var avatarOutlineColor: Color {
+        colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.10)
     }
 
     // MARK: - Pill nav

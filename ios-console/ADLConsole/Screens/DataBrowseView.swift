@@ -27,7 +27,7 @@ struct DataBrowseView: View {
         }
         .background(ADLConsoleColor.page)
         .task { await load() }
-        .refreshable { await load() }
+        .refreshable { await load(force: true) }
         .sheet(item: $detailRecord) { record in
             ReviewRecordDetailView(record: record, language: appState.language)
         }
@@ -48,7 +48,7 @@ struct DataBrowseView: View {
             title: t("Refresh data", "Actualiser les données"),
             systemImage: "arrow.clockwise"
         ) {
-            Task { await load() }
+            Task { await load(force: true) }
         }
     }
 
@@ -69,7 +69,7 @@ struct DataBrowseView: View {
                             .foregroundStyle(ADLConsoleColor.danger)
                     }
                     Button(t("Try again", "Réessayer")) {
-                        Task { await load() }
+                        Task { await load(force: true) }
                     }
                     .font(ADLConsoleFont.subheadline)
                     .foregroundStyle(ADLConsoleColor.navy)
@@ -132,10 +132,13 @@ struct DataBrowseView: View {
                     Text("\(record.capturedBy) · \(ADLConsoleDateFormatting.mediumDateTime(record.createdAt))")
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .monospacedDigit()
                         .lineLimit(1)
                     HStack(spacing: 14) {
                         Label("\(record.evidence.photos.count) \(t("photos", "photos"))", systemImage: "camera")
+                            .monospacedDigit()
                         Label("\(record.data.count) \(t("fields", "champs"))", systemImage: "list.bullet.rectangle")
+                            .monospacedDigit()
                         Label(t("Inspect", "Inspecter"), systemImage: "eye")
                     }
                     .font(ADLConsoleFont.footnote)
@@ -146,7 +149,8 @@ struct DataBrowseView: View {
         .buttonStyle(ADLConsolePressStyle())
     }
 
-    private func load() async {
+    private func load(force: Bool = false) async {
+        guard force || records.isEmpty else { return }
         isLoading = true
         errorMessage = nil
         do {

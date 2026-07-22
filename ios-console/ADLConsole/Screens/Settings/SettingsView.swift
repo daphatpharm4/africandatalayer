@@ -12,6 +12,7 @@ import SwiftUI
 ///
 /// `DeleteAccountPanel` (account deletion) is intentionally not ported — see
 /// `SettingsViewModel`'s doc comment for why it's out of this task's scope.
+@MainActor
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel: SettingsViewModel
@@ -74,7 +75,8 @@ struct SettingsView: View {
                     ADLConsolePrimaryButton(
                         title: t("Save name", "Enregistrer le nom"),
                         isBusy: viewModel.nameBusy,
-                        isDisabled: viewModel.nameBusy || !viewModel.isNameDirty
+                        isDisabled: viewModel.nameBusy || !viewModel.isNameDirty,
+                        pressAnimationEnabled: false
                     ) {
                         Task { await viewModel.saveName() }
                     }
@@ -98,10 +100,19 @@ struct SettingsView: View {
 
                     if viewModel.isOwner {
                         VStack(spacing: 8) {
+                            // Precompute the label title on the main actor to avoid isolation warnings in the label closure
+                            let logoButtonTitle: String = {
+                                if viewModel.logoBusy {
+                                    return t("Uploading…", "Téléversement…")
+                                } else {
+                                    return t("Upload logo", "Téléverser un logo")
+                                }
+                            }()
+
                             PhotosPicker(selection: $pickedLogoItem, matching: .images) {
                                 HStack(spacing: 6) {
                                     Image(systemName: "photo.badge.plus")
-                                    Text(viewModel.logoBusy ? t("Uploading…", "Téléversement…") : t("Upload logo", "Téléverser un logo"))
+                                    Text(logoButtonTitle)
                                 }
                                 .font(ADLConsoleFont.subheadline)
                                 .frame(maxWidth: .infinity)
@@ -150,6 +161,7 @@ struct SettingsView: View {
             }
             .frame(width: 64, height: 64)
             .clipShape(Circle())
+            .overlay(Circle().stroke(Color.primary.opacity(0.10), lineWidth: 1))
         } else {
             Circle()
                 .fill(
@@ -161,6 +173,7 @@ struct SettingsView: View {
                         .font(ADLConsoleFont.title2)
                         .foregroundStyle(.white)
                 )
+                .overlay(Circle().stroke(Color.primary.opacity(0.10), lineWidth: 1))
         }
     }
 
@@ -235,7 +248,8 @@ struct SettingsView: View {
                     ADLConsolePrimaryButton(
                         title: t("Save accent color", "Enregistrer la couleur d'accent"),
                         isBusy: viewModel.colorBusy,
-                        isDisabled: viewModel.colorBusy || !viewModel.isColorDirty
+                        isDisabled: viewModel.colorBusy || !viewModel.isColorDirty,
+                        pressAnimationEnabled: false
                     ) {
                         Task { await viewModel.saveColor() }
                     }

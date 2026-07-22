@@ -139,7 +139,8 @@ final class MembersViewModel: ObservableObject {
 
     /// `view=platform_org_members`, GET, `organizationId`. Port of
     /// `listOrgMembersRequest`/`PlatformAPIClient.listOrgMembers`.
-    func load() async {
+    func load(force: Bool = false) async {
+        guard force || members == nil || invites == nil else { return }
         members = nil
         invites = nil
         loadError = nil

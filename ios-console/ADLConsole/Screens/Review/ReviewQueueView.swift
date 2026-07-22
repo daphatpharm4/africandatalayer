@@ -16,6 +16,7 @@ struct ReviewQueueView: View {
     @State private var detailRecord: PlatformRecord?
     @State private var rejectingRecord: PlatformRecord?
     @State private var rejectReasonDraft = ""
+    @State private var isNotificationComposerPresented = false
 
     private var t: (String, String) -> String { appState.language.t }
     private var isWide: Bool { sizeClass == .regular }
@@ -38,6 +39,9 @@ struct ReviewQueueView: View {
         .sheet(item: $rejectingRecord) { record in
             rejectSheet(for: record)
         }
+        .sheet(isPresented: $isNotificationComposerPresented) {
+            notificationComposer
+        }
     }
 
     private var headerBar: some View {
@@ -59,7 +63,7 @@ struct ReviewQueueView: View {
                     title: t("Refresh data", "Actualiser les données"),
                     systemImage: "arrow.clockwise"
                 ) {
-                    Task { await viewModel.load() }
+                    Task { await viewModel.load(force: true) }
                 }
                 if !viewModel.records.isEmpty {
                     ADLConsoleSecondaryButton(
@@ -67,6 +71,15 @@ struct ReviewQueueView: View {
                     ) {
                         isSelectionMode.toggle()
                         if !isSelectionMode { viewModel.clearSelection() }
+                    }
+                }
+                if viewModel.canSendNotifications {
+                    ADLConsoleSecondaryButton(
+                        title: t("Notify", "Notifier"),
+                        systemImage: "bell.badge"
+                    ) {
+                        viewModel.resetNotificationComposer()
+                        isNotificationComposerPresented = true
                     }
                 }
             }
@@ -102,7 +115,7 @@ struct ReviewQueueView: View {
             message: viewModel.loadErrorMessage ?? t("Something went wrong.", "Une erreur est survenue."),
             retryTitle: t("Retry", "Réessayer")
         ) {
-            Task { await viewModel.load() }
+            Task { await viewModel.load(force: true) }
         }
     }
 
@@ -121,7 +134,7 @@ struct ReviewQueueView: View {
             }
             .padding(20)
         }
-        .refreshable { await viewModel.load() }
+        .refreshable { await viewModel.load(force: true) }
     }
 
     private var recordList: some View {
@@ -138,7 +151,7 @@ struct ReviewQueueView: View {
             .padding(20)
             .animation(.easeInOut(duration: 0.3), value: viewModel.records.map(\.id))
         }
-        .refreshable { await viewModel.load() }
+        .refreshable { await viewModel.load(force: true) }
     }
 
     // MARK: - Row
@@ -174,9 +187,12 @@ struct ReviewQueueView: View {
                         Text("\(record.capturedBy) · \(ADLConsoleDateFormatting.mediumDateTime(record.createdAt))")
                             .font(ADLConsoleFont.footnote)
                             .foregroundStyle(ADLConsoleColor.inkMuted)
+                            .monospacedDigit()
                         HStack(spacing: 12) {
                             Label("\(record.evidence.photos.count) \(t("photos", "photos"))", systemImage: "camera")
+                                .monospacedDigit()
                             Label("\(record.data.count) \(t("fields", "champs"))", systemImage: "list.bullet")
+                                .monospacedDigit()
                         }
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.inkMuted)
@@ -251,11 +267,13 @@ struct ReviewQueueView: View {
                 Text(t("\(viewModel.selection.count) selected", "\(viewModel.selection.count) sélectionnées"))
                     .font(ADLConsoleFont.subheadline)
                     .foregroundStyle(ADLConsoleColor.ink)
+                    .monospacedDigit()
                 Spacer()
                 ADLConsolePrimaryButton(
                     title: t("Approve selected", "Approuver la sélection"),
                     isBusy: viewModel.isBulkBusy,
-                    isDisabled: viewModel.isBulkBusy
+                    isDisabled: viewModel.isBulkBusy,
+                    pressAnimationEnabled: false
                 ) {
                     Task { await viewModel.approveSelected() }
                 }
@@ -269,7 +287,128 @@ struct ReviewQueueView: View {
         }
     }
 
+    // MARK: - Notification composer
+
+    private var notificationComposer: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    ADLConsoleSectionHeader(
+                        title: t("Send notification", "Envoyer une notification"),
+                        subtitle: t(
+                            "Send an operational message to roles below your access level.",
+                            "Envoyez un message opérationnel aux rôles inférieurs à votre niveau d'accès."
+                        )
+                    )
+
+                    ADLConsoleCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            ADLConsoleMicroLabel(text: t("Audience", "Audience"))
+                            ForEach(viewModel.notificationAudiences) { audience in
+                                Button {
+                                    viewModel.selectedNotificationAudienceId = audience.id
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: viewModel.selectedNotificationAudienceId == audience.id ? "checkmark.circle.fill" : "circle")
+                                            .font(.system(size: 20, weight: .semibold))
+                                            .foregroundStyle(viewModel.selectedNotificationAudienceId == audience.id ? ADLConsoleColor.navy : ADLConsoleColor.inkMuted)
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(audience.title)
+                                                .font(ADLConsoleFont.subheadline)
+                                                .foregroundStyle(ADLConsoleColor.ink)
+                                            Text(audience.subtitle)
+                                                .font(ADLConsoleFont.caption)
+                                                .foregroundStyle(ADLConsoleColor.inkMuted)
+                                                .lineLimit(2)
+                                        }
+                                        Spacer()
+                                    }
+                                    .frame(minHeight: 48)
+                                }
+                                .buttonStyle(ADLConsolePressStyle())
+                            }
+                        }
+                        .padding(16)
+                    }
+
+                    ADLConsoleCard {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ADLConsoleMicroLabel(text: t("Message", "Message"))
+                            TextField(t("Title", "Titre"), text: $viewModel.notificationTitle)
+                                .textInputAutocapitalization(.sentences)
+                                .padding(12)
+                                .background(ADLConsoleColor.page)
+                                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+
+                            TextEditor(text: $viewModel.notificationBody)
+                                .frame(minHeight: 120)
+                                .padding(8)
+                                .background(ADLConsoleColor.page)
+                                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                                .overlay(alignment: .topLeading) {
+                                    if viewModel.notificationBody.isEmpty {
+                                        Text(t("Message body", "Corps du message"))
+                                            .font(ADLConsoleFont.footnote)
+                                            .foregroundStyle(ADLConsoleColor.inkMuted)
+                                            .padding(.horizontal, 13)
+                                            .padding(.vertical, 16)
+                                            .allowsHitTesting(false)
+                                    }
+                                }
+                        }
+                        .padding(16)
+                    }
+
+                    if let result = viewModel.notificationResult {
+                        ADLConsoleStatusBanner(
+                            message: t(
+                                "Sent to \(result.sentCount). Skipped \(result.skippedCount), failed \(result.failedCount).",
+                                "Envoyé à \(result.sentCount). Ignoré \(result.skippedCount), échoué \(result.failedCount)."
+                            ),
+                            systemImage: "checkmark.circle.fill",
+                            tint: ADLConsoleColor.forestDark,
+                            background: ADLConsoleColor.forestWash
+                        )
+                    }
+
+                    if let notificationError = viewModel.notificationError {
+                        ADLConsoleStatusBanner(
+                            message: notificationError,
+                            systemImage: "exclamationmark.triangle.fill",
+                            tint: ADLConsoleColor.danger,
+                            background: ADLConsoleColor.dangerWash
+                        )
+                    }
+
+                    ADLConsolePrimaryButton(
+                        title: t("Send notification", "Envoyer la notification"),
+                        systemImage: "paperplane.fill",
+                        isBusy: viewModel.isSendingNotification,
+                        isDisabled: viewModel.isSendingNotification || !viewModel.isNotificationValid,
+                        pressAnimationEnabled: false
+                    ) {
+                        Task {
+                            if await viewModel.sendNotification() {
+                                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            }
+                        }
+                    }
+                }
+                .padding(20)
+            }
+            .background(ADLConsoleColor.page)
+            .navigationTitle(t("Notify roles", "Notifier les rôles"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(t("Close", "Fermer")) { isNotificationComposerPresented = false }
+                }
+            }
+        }
+    }
+
     // MARK: - Reject sheet
+
 
     private func rejectSheet(for record: PlatformRecord) -> some View {
         NavigationStack {
@@ -296,7 +435,8 @@ struct ReviewQueueView: View {
                 ADLConsolePrimaryButton(
                     title: t("Reject record", "Rejeter la donnée"),
                     isBusy: viewModel.busyRecordId == record.id,
-                    isDisabled: viewModel.busyRecordId == record.id
+                    isDisabled: viewModel.busyRecordId == record.id,
+                    pressAnimationEnabled: false
                 ) {
                     Task {
                         if await viewModel.reject(record.id, reason: rejectReasonDraft) {

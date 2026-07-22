@@ -286,6 +286,51 @@ test("member_update allows only ADL admins to promote another owner", async () =
   assert.equal(promoted[0].role, "owner");
 });
 
+test("notification_broadcast lets higher roles notify only lower-role members", async () => {
+  const audits: any[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "manager" as const, createdAt: "" }),
+    listMembersFn: async () => [
+      { organizationId: ORG.id, userId: OWNER.id, role: "manager" as const, createdAt: "" },
+      { organizationId: ORG.id, userId: "reviewer@acme.com", role: "reviewer" as const, createdAt: "" },
+      { organizationId: ORG.id, userId: "collector@acme.com", role: "collector" as const, createdAt: "" },
+      { organizationId: ORG.id, userId: "viewer@acme.com", role: "viewer" as const, createdAt: "" },
+    ],
+    writeAuditFn: async (event: any) => { audits.push(event); },
+  }));
+
+  const response = await handler(jsonPost("notification_broadcast", {
+    organizationId: ORG.id,
+    targetRoles: ["collector", "viewer"],
+    title: "Route updated",
+    body: "Start with the Nairobi pilot.",
+  }));
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { sentCount: 2, skippedCount: 2, failedCount: 0 });
+  assert.equal(audits[0].eventType, "notification_broadcast_sent");
+  assert.deepEqual(audits[0].payload.targetRoles, ["collector", "viewer"]);
+});
+
+test("notification_broadcast rejects peer or higher target roles", async () => {
+  let listed = false;
+  const handler = createPlatformHandler(baseDeps({
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "manager" as const, createdAt: "" }),
+    listMembersFn: async () => { listed = true; return []; },
+  }));
+
+  const response = await handler(jsonPost("notification_broadcast", {
+    organizationId: ORG.id,
+    targetRoles: ["manager"],
+    title: "Route updated",
+    body: "Start with the Nairobi pilot.",
+  }));
+
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "platform_notification_target_forbidden");
+  assert.equal(listed, false);
+});
+
 test("schema_draft_save returns 422 with issues for invalid definition", async () => {
   const handler = createPlatformHandler(baseDeps({
     getProjectFn: async () => ({ id: PROJECT_ID, organizationId: ORG.id, name: "p", status: "draft" as const, createdAt: "" }),

@@ -266,8 +266,8 @@ const PlatformCollectionFlow: React.FC<Props> = ({
         ));
       } else if (error instanceof PlatformApiError && error.code === 'platform_enrich_cooldown') {
         setErrorMessage(t(
-          'You already submitted for this point today.',
-          'Vous avez déjà soumis pour ce point aujourd’hui.',
+          'You already submitted for this point. Try again later.',
+          'Vous avez déjà soumis pour ce point. Réessayez plus tard.',
         ));
       } else if (error instanceof PlatformApiError && error.code === 'platform_point_not_found') {
         setErrorMessage(t(

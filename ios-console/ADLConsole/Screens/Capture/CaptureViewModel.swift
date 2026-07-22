@@ -16,7 +16,7 @@ final class CaptureViewModel: ObservableObject {
     /// a draft-only schema is not yet live for field capture, same rule the
     /// web field context (`collectablePlatformProjects` in
     /// `lib/client/platformFieldContext.ts`) applies.
-    struct ProjectOption: Identifiable, Equatable {
+    struct ProjectOption: Identifiable, Equatable, Sendable {
         var id: String { project.id }
         let project: PlatformProject
         let schemaVersion: PlatformSchemaVersion
@@ -41,6 +41,20 @@ final class CaptureViewModel: ObservableObject {
         case failed(String)
     }
 
+    struct CaptureProgress: Equatable {
+        var completed: Int
+        var total: Int
+
+        var fraction: Double {
+            guard total > 0 else { return 1 }
+            return min(max(Double(completed) / Double(total), 0), 1)
+        }
+
+        var percent: Int {
+            Int((fraction * 100).rounded())
+        }
+    }
+
     @Published private(set) var projectOptions: [ProjectOption] = []
     @Published var selectedProjectId: String?
     @Published var selectedRecordTypeKey: String?
@@ -56,6 +70,10 @@ final class CaptureViewModel: ObservableObject {
     @Published private(set) var queueSnapshot: RecordQueueSnapshot?
     @Published private(set) var isRequestingLocation = false
     @Published private(set) var locationErrorMessage: String?
+    @Published private(set) var nearbyPoints: [PlatformNearbyPoint]?
+    @Published private(set) var isLoadingNearbyPoints = false
+    @Published private(set) var nearbyPointsErrorMessage: String?
+    @Published private(set) var attachedPoint: PlatformNearbyPoint?
 
     let language: ConsoleLanguage
 
@@ -64,16 +82,7 @@ final class CaptureViewModel: ObservableObject {
     private let queue: RecordQueue
     private let locationService: LocationServiceProtocol?
     private let now: () -> Date
-
-    /// When set, every submitted `RecordDraft` carries this as its
-    /// `pointId` — the attach seam the company map's "Update this point" /
-    /// floating "+" flows use to link a fresh capture into an existing
-    /// point-chain instead of starting a new one. `nil` (the default) is the
-    /// ordinary "new point" capture flow unchanged from before this seam
-    /// existed. See `CollapsedPlatformPoint.rootId` (`ConsoleForms`) for the
-    /// value callers should pass here — the chain's root id, not necessarily
-    /// the representative record's own id.
-    private let attachPointId: String?
+    private let initialAttachPointId: String?
 
     init(
         apiClient: PlatformAPIClient,
@@ -89,7 +98,7 @@ final class CaptureViewModel: ObservableObject {
         self.queue = queue
         self.language = language
         self.locationService = locationService
-        self.attachPointId = attachPointId
+        self.initialAttachPointId = attachPointId
         self.now = now
     }
 
@@ -118,6 +127,42 @@ final class CaptureViewModel: ObservableObject {
         selectedRecordType?.evidence
     }
 
+    private var submitAttachPointId: String? {
+        attachedPoint?.pointId ?? initialAttachPointId
+    }
+
+    var captureProgress: CaptureProgress {
+        guard let recordType = selectedRecordType else {
+            return CaptureProgress(completed: 0, total: 0)
+        }
+
+        var completed = 0
+        var total = 0
+
+        for descriptor in descriptors where descriptor.required {
+            total += 1
+            if isComplete(value(for: descriptor.key)) {
+                completed += 1
+            }
+        }
+
+        let rules = recordType.evidence
+        if rules.gpsRequired {
+            total += 1
+            if evidenceGps != nil { completed += 1 }
+        }
+        if rules.minPhotos > 0 {
+            total += 1
+            if evidencePhotoRefs.count >= rules.minPhotos { completed += 1 }
+        }
+        if rules.notesRequired {
+            total += 1
+            if !evidenceNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { completed += 1 }
+        }
+
+        return CaptureProgress(completed: completed, total: total)
+    }
+
     // MARK: - Loading projects + schemas
 
     /// Loads every active project in the org with a published schema —
@@ -125,15 +170,27 @@ final class CaptureViewModel: ObservableObject {
     /// `lib/client/platformFieldContext.ts`. Selects the first project and
     /// its first record type by default so the form is immediately usable.
     func loadProjects() async {
+        guard loadState != .loading else { return }
+        guard loadState != .loaded || projectOptions.isEmpty else { return }
         loadState = .loading
         do {
             let projects = try await apiClient.listProjects(organizationId: organizationId)
-            var options: [ProjectOption] = []
-            for project in projects where project.status != .archived {
-                let schema = try await apiClient.getSchema(projectId: project.id)
-                if let published = schema.published {
-                    options.append(ProjectOption(project: project, schemaVersion: published))
+            let activeProjects = projects.filter { $0.status != .archived }
+            let apiClient = apiClient
+            let options = try await withThrowingTaskGroup(of: ProjectOption?.self) { group in
+                for project in activeProjects {
+                    group.addTask {
+                        let schema = try await apiClient.getSchema(projectId: project.id)
+                        guard let published = schema.published else { return nil }
+                        return ProjectOption(project: project, schemaVersion: published)
+                    }
                 }
+
+                var options: [ProjectOption] = []
+                for try await option in group {
+                    if let option { options.append(option) }
+                }
+                return options.sorted { $0.project.name.localizedCaseInsensitiveCompare($1.project.name) == .orderedAscending }
             }
             projectOptions = options
             if selectedProjectId == nil {
@@ -146,6 +203,27 @@ final class CaptureViewModel: ObservableObject {
         } catch {
             loadState = .failed(String(describing: error))
         }
+    }
+
+    private func isComplete(_ input: FormFieldInput) -> Bool {
+        switch input {
+        case .text(let value), .numberText(let value), .date(let value):
+            return !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .select(let value):
+            return value != nil
+        case .multiSelect(let values):
+            return !values.isEmpty
+        case .boolean:
+            return true
+        case .photo(let ref):
+            return ref?.isEmpty == false
+        case .gps(let gps):
+            return gps != nil
+        }
+    }
+
+    func refreshQueueSnapshot() async {
+        queueSnapshot = try? await queue.snapshot()
     }
 
     func selectProject(_ projectId: String) {
@@ -171,6 +249,9 @@ final class CaptureViewModel: ObservableObject {
         evidenceGps = nil
         evidencePhotoRefs = []
         evidenceNotes = ""
+        nearbyPoints = nil
+        nearbyPointsErrorMessage = nil
+        attachedPoint = nil
         lastValidation = nil
         if resetSubmitState {
             submitState = .idle
@@ -215,6 +296,56 @@ final class CaptureViewModel: ObservableObject {
             locationErrorMessage = LocationServiceError.unavailable.message(language)
         }
         isRequestingLocation = false
+    }
+
+    func loadNearbyPoints() async {
+        guard let projectOption = selectedProjectOption else {
+            nearbyPointsErrorMessage = language.t("Choose a project first.", "Choisissez d'abord un projet.")
+            return
+        }
+
+        isLoadingNearbyPoints = true
+        nearbyPointsErrorMessage = nil
+        do {
+            if evidenceGps == nil {
+                await requestLocation()
+            }
+            guard let gps = evidenceGps else {
+                nearbyPointsErrorMessage = locationErrorMessage ?? language.t(
+                    "Capture GPS before looking for nearby points.",
+                    "Capturez la position GPS avant de chercher les points proches."
+                )
+                isLoadingNearbyPoints = false
+                return
+            }
+            nearbyPoints = try await apiClient.nearbyPlatformPoints(
+                projectId: projectOption.project.id,
+                latitude: gps.latitude,
+                longitude: gps.longitude
+            )
+        } catch {
+            nearbyPointsErrorMessage = language.t(
+                "Could not load nearby points.",
+                "Impossible de charger les points à proximité."
+            )
+        }
+        isLoadingNearbyPoints = false
+    }
+
+    func attach(to point: PlatformNearbyPoint) {
+        attachedPoint = point
+        nearbyPoints = nil
+        nearbyPointsErrorMessage = nil
+        if evidenceGps == nil {
+            evidenceGps = FormGpsValue(
+                latitude: point.location.latitude,
+                longitude: point.location.longitude
+            )
+        }
+    }
+
+    func clearAttachedPoint() {
+        attachedPoint = nil
     }
 
     // MARK: - Validation
@@ -266,7 +397,7 @@ final class CaptureViewModel: ObservableObject {
             photoRefs: evidencePhotoRefs,
             gps: evidenceGps,
             notes: evidenceNotes.isEmpty ? nil : evidenceNotes,
-            pointId: attachPointId,
+            pointId: submitAttachPointId,
             capturedAt: ISO8601DateFormatter().string(from: now())
         )
 

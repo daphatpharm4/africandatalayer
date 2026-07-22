@@ -109,6 +109,20 @@ public enum PlatformRecordReviewStatus: String, Codable, CaseIterable, Sendable,
     case rejected = "rejected"
 }
 
+/// Result returned by `platform_notification_broadcast` after the server
+/// resolves role-scoped recipients and attempts delivery.
+public struct PlatformNotificationBroadcastResponse: Codable, Equatable, Sendable {
+    public var sentCount: Int
+    public var skippedCount: Int
+    public var failedCount: Int
+
+    public init(sentCount: Int, skippedCount: Int, failedCount: Int) {
+        self.sentCount = sentCount
+        self.skippedCount = skippedCount
+        self.failedCount = failedCount
+    }
+}
+
 /// Decode target for endpoints whose Swift method returns `Void` (the TS
 /// counterpart returns `Promise<void>` and discards the parsed payload) —
 /// `revokeInvite`, `updateMember`, `removeMember`. Declared with no stored

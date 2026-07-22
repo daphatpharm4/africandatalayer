@@ -5,14 +5,16 @@ import Foundation
 /// drive success/failure deterministically without any stub-validation
 /// heuristics (unlike `StubAuthService`, which is exercised separately by
 /// `StubAuthServiceTests`).
-final class MockAuthService: AuthServiceProtocol, @unchecked Sendable {
+final class MockAuthService: AuthServiceProtocol, AuthSessionRestoring, @unchecked Sendable {
     enum Behavior {
         case succeed
         case throwError(AuthServiceError)
     }
 
     var behavior: Behavior = .succeed
+    var restoredUser: AuthSessionUser?
     private(set) var signInCallCount = 0
+    private(set) var restoreSessionCallCount = 0
     private(set) var lastEmail: String?
     private(set) var lastPassword: String?
 
@@ -26,5 +28,10 @@ final class MockAuthService: AuthServiceProtocol, @unchecked Sendable {
         case .throwError(let error):
             throw error
         }
+    }
+
+    func restoreSession() async -> AuthSessionUser? {
+        restoreSessionCallCount += 1
+        return restoredUser
     }
 }
