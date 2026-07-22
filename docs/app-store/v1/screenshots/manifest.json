@@ -1,0 +1,13 @@
+{
+  "locales": ["en-US", "fr-FR"],
+  "frames": [
+    {"id": "operation"},
+    {"id": "capture"},
+    {"id": "review"},
+    {"id": "manage"},
+    {"id": "recover"},
+    {"id": "bilingual"}
+  ],
+  "width": 1320,
+  "height": 2868
+}

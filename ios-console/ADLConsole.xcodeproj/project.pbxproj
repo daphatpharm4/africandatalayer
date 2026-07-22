@@ -109,6 +109,7 @@
 		D9F748E5FD3982E80BB90089 /* CompanyMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4026C1A8BD5D7D9A2B342 /* CompanyMapView.swift */; };
 		DAFE86DBC002CCB4B15CB394 /* StubAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFEAB3969E7318AF2F3D2F3 /* StubAuthServiceTests.swift */; };
 		DD2D6D88D269AE1F2457F010 /* ConsoleShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1CE08F3646167DA72E6D1A7 /* ConsoleShellView.swift */; };
+		DDD0B89F4823C3EB6D709AB8 /* AppStoreScreenshotTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09FBB6CCE00606B24486881C /* AppStoreScreenshotTests.swift */; };
 		DFD2A5644DD7CBE0D5B52439 /* ExistingPayloadSubmissionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99312C730B8B20453C6DEFDC /* ExistingPayloadSubmissionAdapter.swift */; };
 		E1CF2F958B5171D1F5FB514F /* CompanyMapViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34325F59345EC6D0063AFCB1 /* CompanyMapViewModelTests.swift */; };
 		E853BE4A2E970C4441CE2A38 /* PlatformRoleRank.swift in Sources */ = {isa = PBXBuildFile; fileRef = E21B3462FA21737C21B9E40B /* PlatformRoleRank.swift */; };
@@ -154,6 +155,7 @@
 		038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureViewModel.swift; sourceTree = "<group>"; };
 		08D7784C42D75445E370C4B8 /* ADLConsoleTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = ADLConsoleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0948CE2D0955F7887148B0A9 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		09FBB6CCE00606B24486881C /* AppStoreScreenshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreScreenshotTests.swift; sourceTree = "<group>"; };
 		0BB287A00F74C5A03AC0888C /* MetricKitReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricKitReporterTests.swift; sourceTree = "<group>"; };
 		0EB5D8A32F2DF9BC38F6778F /* ConfigurationErrorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigurationErrorView.swift; sourceTree = "<group>"; };
 		0FFEAB3969E7318AF2F3D2F3 /* StubAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StubAuthServiceTests.swift; sourceTree = "<group>"; };
@@ -415,6 +417,7 @@
 		5D6430B19732EA934DB2E91B /* ADLConsoleUITests */ = {
 			isa = PBXGroup;
 			children = (
+				09FBB6CCE00606B24486881C /* AppStoreScreenshotTests.swift */,
 				83CEB97A096A206619CB3AD4 /* InvitationOnboardingUITests.swift */,
 				59F8D69F98795855A58D0608 /* PermissionUITests.swift */,
 				0133A5412AAE42A0C34A3F43 /* RecoveryAccessibilityUITests.swift */,
@@ -757,6 +760,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DDD0B89F4823C3EB6D709AB8 /* AppStoreScreenshotTests.swift in Sources */,
 				934CB08E3018527C431F516A /* InvitationOnboardingUITests.swift in Sources */,
 				F5C97E3BDE11A70D7B9ADD02 /* PermissionUITests.swift in Sources */,
 				693E69ADF4A01A1ACF237141 /* RecoveryAccessibilityUITests.swift in Sources */,
