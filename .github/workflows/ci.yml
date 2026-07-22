@@ -97,3 +97,19 @@ jobs:
         run: xcodebuild test -project ADLConsole.xcodeproj -scheme ADLConsole-Debug -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' CODE_SIGNING_ALLOWED=NO
       - name: Compile Release
         run: xcodebuild build -project ADLConsole.xcodeproj -scheme ADLConsole -configuration Release -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+
+  ios-console-release-gate:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging')
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios-console
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Run release gate
+        run: bash Scripts/release_gate.sh --configuration Release --evidence ../docs/release/evidence/m2-release-system.md
+        env:
+          ADL_STAGING_EMAIL: ${{ secrets.ADL_STAGING_EMAIL }}
+          ADL_STAGING_PASSWORD: ${{ secrets.ADL_STAGING_PASSWORD }}

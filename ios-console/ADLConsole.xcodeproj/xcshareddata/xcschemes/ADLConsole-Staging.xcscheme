@@ -35,6 +35,20 @@
                ReferencedContainer = "container:ADLConsole.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0D1C6CCBB7BFF4F265639828"
+               BuildableName = "ADLConsoleUITests.xctest"
+               BlueprintName = "ADLConsoleUITests"
+               ReferencedContainer = "container:ADLConsole.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -61,6 +75,17 @@
                BlueprintIdentifier = "21FE20ED563FA951AEC363E1"
                BuildableName = "ADLConsoleTests.xctest"
                BlueprintName = "ADLConsoleTests"
+               ReferencedContainer = "container:ADLConsole.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "0D1C6CCBB7BFF4F265639828"
+               BuildableName = "ADLConsoleUITests.xctest"
+               BlueprintName = "ADLConsoleUITests"
                ReferencedContainer = "container:ADLConsole.xcodeproj">
             </BuildableReference>
          </TestableReference>
