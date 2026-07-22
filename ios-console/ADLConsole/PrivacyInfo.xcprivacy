@@ -97,19 +97,22 @@
 		</dict>
 	</array>
 	<!--
-	No required-reason APIs are called by this app's own code as of this
-	task: the offline draft queue (ConsoleForms.FileRecordQueueStore, wired
-	in State/AppState.swift) persists via plain FileManager
-	read/write/createDirectory calls, none of which are on Apple's
-	required-reason list (no file-timestamp, disk-space, or
-	system-boot-time APIs). `ConsoleForms.UserDefaultsRecordQueueStore`
-	exists as an alternative store implementation but is NOT instantiated
-	anywhere in the shipped app target, so UserDefaults (CA92.1) is
-	intentionally omitted here. If a future change wires that store in (or
-	adds a required-reason API call anywhere else), this array must gain
-	the matching entry before that change ships.
+	The offline draft queue currently uses FileRecordQueueStore, but the
+	statically linked ConsoleForms package also contains
+	UserDefaultsRecordQueueStore. Declare CA92.1 for that app-private
+	UserDefaults access so the linked binary's required-reason API usage is
+	covered even when the alternative store is not instantiated.
 	-->
 	<key>NSPrivacyAccessedAPITypes</key>
-	<array/>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
