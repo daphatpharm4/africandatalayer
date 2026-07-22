@@ -68,6 +68,34 @@ public final class RecordDatabase: Sendable {
             try db.create(index: "idx_queued_records_owner_state", on: "queued_records", columns: ["owner_user_id", "organization_id", "state", "next_attempt_at"])
             try db.create(index: "idx_media_attachments_record", on: "media_attachments", columns: ["record_local_id", "placement", "ordinal"])
         }
+        migrator.registerMigration("workspace-v2") { db in
+            try db.create(table: "workspace_snapshots") { t in
+                t.column("owner_user_id", .text).notNull()
+                t.column("organization_id", .text).notNull()
+                t.column("role", .text).notNull()
+                t.column("verified_at", .datetime).notNull()
+                t.column("expires_at", .datetime).notNull()
+                t.column("verified_system_uptime", .double).notNull()
+                t.column("organization_json", .blob).notNull()
+                t.column("projects_json", .blob).notNull()
+                t.column("published_schemas_json", .blob).notNull()
+                t.column("locale", .text).notNull()
+                t.column("is_locked", .boolean).notNull().defaults(to: false)
+                t.primaryKey(["owner_user_id", "organization_id"])
+            }
+
+            try db.create(table: "role_surface_caches") { t in
+                t.column("surface", .text).notNull()
+                t.column("owner_user_id", .text).notNull()
+                t.column("organization_id", .text).notNull()
+                t.column("payload", .blob).notNull()
+                t.column("fetched_at", .datetime).notNull()
+                t.column("byte_count", .integer).notNull()
+                t.primaryKey(["surface", "owner_user_id", "organization_id"])
+            }
+
+            try db.create(index: "idx_role_surface_caches_owner", on: "role_surface_caches", columns: ["owner_user_id", "organization_id", "fetched_at"])
+        }
         return migrator
     }()
 
