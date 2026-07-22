@@ -5,6 +5,11 @@ options:
     iOS: "17.0"
   createIntermediateGroups: true
 
+settings:
+  base:
+    ADL_BUILD_CHANNEL: production
+    ADL_API_BASE_URL: https://www.app.africandatalayer.com
+
 packages:
   ConsoleCore:
     path: Packages/ConsoleCore
@@ -22,6 +27,8 @@ targets:
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_ADL_BUILD_CHANNEL: "$(ADL_BUILD_CHANNEL)"
+        INFOPLIST_KEY_ADL_API_BASE_URL: "$(ADL_API_BASE_URL)"
         INFOPLIST_KEY_CFBundleDisplayName: ADL Console
         INFOPLIST_KEY_UILaunchScreen_Generation: true
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true

@@ -27,6 +27,7 @@
 		240231EAACC22FEF37CB3A16 /* OfflineRolePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA19128BF86D0078C1DB2A01 /* OfflineRolePolicy.swift */; };
 		2BE86F3F8D99D9017F509D3C /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0948CE2D0955F7887148B0A9 /* SettingsView.swift */; };
 		2DB37526C9865B8F8B6B40C1 /* ConsoleModels in Frameworks */ = {isa = PBXBuildFile; productRef = B7D50563A39437ABAF09100A /* ConsoleModels */; };
+		2F14F76A204ED61431910B1C /* AppEnvironmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31FDD52AFE2F536B70588BF1 /* AppEnvironmentTests.swift */; };
 		2FBEFB01BF452CC86B2C00E5 /* CaptureMediaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D11F8A6812A531550ABB39E /* CaptureMediaStore.swift */; };
 		30226AC8B5A49DCEFBBFFE08 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */; };
 		31DE52917509EC0120DBBC59 /* ADLImageCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E3DCFB6C09C0E4F22739D3A /* ADLImageCache.swift */; };
@@ -44,6 +45,7 @@
 		5A2E74D10DFC571904584F7A /* SyncEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FEE7697CEC97984307504BF /* SyncEngine.swift */; };
 		5A62B5E3B15C3385730EACE2 /* PendingWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407C55F7371AFD8D7866485B /* PendingWorkView.swift */; };
 		5C39D44E339A94B9113A8C38 /* AuthTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0893A69AC6208B1CC61D04 /* AuthTransport.swift */; };
+		60C79732FF835BFCBB7E37A7 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DA59868B5F2C703ED049F40 /* AppEnvironment.swift */; };
 		6B0A3651A1F1DB44BF6A9CB2 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11DA660AE3456559B18F002 /* RootView.swift */; };
 		6DD66A144E373099E9BEDCD0 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9C5756D198653BA9FC365D2 /* LocationService.swift */; };
 		74A9440279DDF2B7FB98EBFB /* CaptureFraudMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C213DACF65AE6E0BF1544D6 /* CaptureFraudMetadata.swift */; };
@@ -143,6 +145,7 @@
 		30AD6F052C32EFB5860F539B /* MockPlatformTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockPlatformTransport.swift; sourceTree = "<group>"; };
 		30CAF5446BFE144A551EEF6A /* ConsoleMapKitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleMapKitView.swift; sourceTree = "<group>"; };
 		31F5A3C167EED943EFC16EBA /* MembersViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersViewModelTests.swift; sourceTree = "<group>"; };
+		31FDD52AFE2F536B70588BF1 /* AppEnvironmentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironmentTests.swift; sourceTree = "<group>"; };
 		34325F59345EC6D0063AFCB1 /* CompanyMapViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanyMapViewModelTests.swift; sourceTree = "<group>"; };
 		3857F03467082404E18DF626 /* MockLocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockLocationService.swift; sourceTree = "<group>"; };
 		3B2A976CE1EADC510EE0BBA4 /* CompanyPointDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompanyPointDetailView.swift; sourceTree = "<group>"; };
@@ -168,6 +171,7 @@
 		8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleOverviewContentTests.swift; sourceTree = "<group>"; };
 		8E3DCFB6C09C0E4F22739D3A /* ADLImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLImageCache.swift; sourceTree = "<group>"; };
 		99312C730B8B20453C6DEFDC /* ExistingPayloadSubmissionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingPayloadSubmissionAdapter.swift; sourceTree = "<group>"; };
+		9DA59868B5F2C703ED049F40 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
 		9E51A2E83645779E8C6E8352 /* CaptureAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureAttachmentPicker.swift; sourceTree = "<group>"; };
 		9EEDA9923CA560C9B02CA6AE /* SessionRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRepositoryTests.swift; sourceTree = "<group>"; };
 		9F68854CA5FCE5B9B62C5FD3 /* ADLLogoMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLLogoMark.swift; sourceTree = "<group>"; };
@@ -253,6 +257,7 @@
 		0BA91C831138E6FEAB057491 /* ADLConsoleTests */ = {
 			isa = PBXGroup;
 			children = (
+				31FDD52AFE2F536B70588BF1 /* AppEnvironmentTests.swift */,
 				BFFC04E641DBE0F76C30CA77 /* AppStateTests.swift */,
 				70B6F55BA6240B36E2E03C3E /* CaptureCoordinatorTests.swift */,
 				DD1829FAC802540453948783 /* CaptureMediaPreparerTests.swift */,
@@ -413,6 +418,14 @@
 			path = Shell;
 			sourceTree = "<group>";
 		};
+		AC2E260074058ECE77BD4870 /* Configuration */ = {
+			isa = PBXGroup;
+			children = (
+				9DA59868B5F2C703ED049F40 /* AppEnvironment.swift */,
+			);
+			path = Configuration;
+			sourceTree = "<group>";
+		};
 		B6354367202AD37D34D9FF6E /* Screens */ = {
 			isa = PBXGroup;
 			children = (
@@ -484,6 +497,7 @@
 				68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */,
 				85B45F2A010FB0E34479C738 /* Auth */,
 				9040F72B08261AED9348976E /* CaptureStorage */,
+				AC2E260074058ECE77BD4870 /* Configuration */,
 				0B78C8DCA23F992608BD4167 /* DesignSystem */,
 				4C37DCB0306A309FBB5675C8 /* Runtime */,
 				B6354367202AD37D34D9FF6E /* Screens */,
@@ -613,6 +627,7 @@
 				ACBA096578E554C6B9AC66A0 /* ADLConsoleFont.swift in Sources */,
 				31DE52917509EC0120DBBC59 /* ADLImageCache.swift in Sources */,
 				87FE738BF3E2FB3F986B1BEB /* ADLLogoMark.swift in Sources */,
+				60C79732FF835BFCBB7E37A7 /* AppEnvironment.swift in Sources */,
 				8A2B607C80C944A54ACFFCA4 /* AppSettingsView.swift in Sources */,
 				09477BD669DBB16183AA17D1 /* AppState.swift in Sources */,
 				C72139B7B76404F8F2978867 /* AuthService.swift in Sources */,
@@ -672,6 +687,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2F14F76A204ED61431910B1C /* AppEnvironmentTests.swift in Sources */,
 				F9C2068A476617868C81CA41 /* AppStateTests.swift in Sources */,
 				A1C23084260F638820496B2C /* CaptureCoordinatorTests.swift in Sources */,
 				3770CC2042DBC9B0E9244A46 /* CaptureMediaPreparerTests.swift in Sources */,
@@ -736,6 +752,8 @@
 		49227ADBE616D62DD6991B8B /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ADL_API_BASE_URL = "https://www.app.africandatalayer.com";
+				ADL_BUILD_CHANNEL = production;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -823,6 +841,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ADL_API_BASE_URL = "$(ADL_API_BASE_URL)";
+				INFOPLIST_KEY_ADL_BUILD_CHANNEL = "$(ADL_BUILD_CHANNEL)";
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
@@ -853,6 +873,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_ADL_API_BASE_URL = "$(ADL_API_BASE_URL)";
+				INFOPLIST_KEY_ADL_BUILD_CHANNEL = "$(ADL_BUILD_CHANNEL)";
 				INFOPLIST_KEY_CFBundleDisplayName = "ADL Console";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
@@ -878,6 +900,8 @@
 		E6F3AC50B174D8F55CF8FB7E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ADL_API_BASE_URL = "https://www.app.africandatalayer.com";
+				ADL_BUILD_CHANNEL = production;
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
