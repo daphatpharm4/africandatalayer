@@ -6,6 +6,7 @@ public protocol WorkspaceRepositoryProtocol: Sendable {
     func save(_ snapshot: WorkspaceSnapshot) async throws
     func load(ownerUserID: String, organizationID: String) async throws -> WorkspaceSnapshot?
     func loadUnlocked(ownerUserID: String, organizationID: String) async throws -> WorkspaceSnapshot?
+    func loadAnyUnlocked() async throws -> WorkspaceSnapshot?
     func lock(ownerUserID: String) async throws
     func unlock(ownerUserID: String, organizationID: String) async throws -> Bool
     func saveRoleSurface(_ surface: String, payload: Data, ownerUserID: String, organizationID: String) async throws
@@ -58,6 +59,14 @@ public final class WorkspaceRepository: WorkspaceRepositoryProtocol {
                 SELECT * FROM workspace_snapshots
                 WHERE owner_user_id = ? AND organization_id = ? AND is_locked = 0
                 """, arguments: [ownerUserID, organizationID])
+        }.map(Self.rowToSnapshot)
+    }
+
+    public func loadAnyUnlocked() async throws -> WorkspaceSnapshot? {
+        try await database.reader.read { db in
+            try Row.fetchOne(db, sql: """
+                SELECT * FROM workspace_snapshots WHERE is_locked = 0
+                """)
         }.map(Self.rowToSnapshot)
     }
 

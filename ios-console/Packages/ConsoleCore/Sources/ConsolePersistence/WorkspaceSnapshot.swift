@@ -46,20 +46,24 @@ extension WorkspaceSnapshot {
         ownerUserID: String = "u1",
         organizationID: String = "o1",
         role: PlatformRole = .collector,
-        locale: String = "en"
+        verifiedAt: Date = Date(timeIntervalSince1970: 0),
+        expiresAt: Date = Date(timeIntervalSince1970: 259_200),
+        verifiedSystemUptime: TimeInterval = 1000,
+        locale: String = "en",
+        isLocked: Bool = false
     ) -> WorkspaceSnapshot {
         WorkspaceSnapshot(
             ownerUserID: ownerUserID,
             organizationID: organizationID,
             role: role,
-            verifiedAt: Date(timeIntervalSince1970: 0),
-            expiresAt: Date(timeIntervalSince1970: 259_200),
-            verifiedSystemUptime: 1000,
+            verifiedAt: verifiedAt,
+            expiresAt: expiresAt,
+            verifiedSystemUptime: verifiedSystemUptime,
             organizationJSON: Data("{}".utf8),
             projectsJSON: Data("[]".utf8),
             publishedSchemasJSON: Data("[]".utf8),
             locale: locale,
-            isLocked: false
+            isLocked: isLocked
         )
     }
 }
