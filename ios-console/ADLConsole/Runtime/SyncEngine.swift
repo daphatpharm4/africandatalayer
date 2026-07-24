@@ -31,6 +31,7 @@ actor SyncEngine {
     private let ownerUserID: String
     private let organizationID: String
     private let jitter: @Sendable (TimeInterval) -> TimeInterval
+    private let logError: @Sendable (String) -> Void
     private var drainTask: Task<Void, Never>?
 
     init(
@@ -41,6 +42,9 @@ actor SyncEngine {
         organizationID: String,
         jitter: @escaping @Sendable (TimeInterval) -> TimeInterval = { delay in
             delay * Double.random(in: 0.8...1.2)
+        },
+        logError: @escaping @Sendable (String) -> Void = { message in
+            os_log(.error, "%{public}@", message)
         }
     ) {
         self.ledger = ledger
@@ -49,6 +53,7 @@ actor SyncEngine {
         self.ownerUserID = ownerUserID
         self.organizationID = organizationID
         self.jitter = jitter
+        self.logError = logError
     }
 
     func trigger(_ trigger: SyncTrigger) async {
@@ -70,7 +75,7 @@ actor SyncEngine {
                 guard let next = try await ledger.claimNextDue(ownerUserID: ownerUserID, organizationID: organizationID) else { break }
                 record = next
             } catch {
-                os_log(.error, "SyncEngine.drain: DB error on claimNextDue: %{public}@", String(describing: error))
+                logError("SyncEngine.drain: DB error on claimNextDue: \(error)")
                 break  // next trigger retries; break avoids a tight spin on a persistent DB error
             }
             let now = Date()

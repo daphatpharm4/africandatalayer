@@ -7,9 +7,10 @@ final class SyncEngineTests: XCTestCase {
     private func makeEngine(
         ledger: RecordLedgerProtocol,
         submitter: MockRecordSubmitter = MockRecordSubmitter(),
-        mediaStore: InMemoryCaptureMediaStore = InMemoryCaptureMediaStore()
+        mediaStore: InMemoryCaptureMediaStore = InMemoryCaptureMediaStore(),
+        logError: @escaping @Sendable (String) -> Void = { _ in }
     ) -> SyncEngine {
-        SyncEngine(ledger: ledger, submitter: submitter, mediaStore: mediaStore, ownerUserID: "u1", organizationID: "o1")
+        SyncEngine(ledger: ledger, submitter: submitter, mediaStore: mediaStore, ownerUserID: "u1", organizationID: "o1", logError: logError)
     }
 
     func testTriggerSendsPendingRecords() async throws {
@@ -46,12 +47,52 @@ final class SyncEngineTests: XCTestCase {
         let ledger = MockRecordLedger()
         ledger.claimNextDueShouldThrow = true
         let submitter = MockRecordSubmitter()
-        let engine = makeEngine(ledger: ledger, submitter: submitter)
+        let logSink = LogSinkRecorder()
+        let engine = makeEngine(ledger: ledger, submitter: submitter, logError: logSink.record)
 
         await engine.trigger(.manual)
 
-        // Engine should return without crashing or hanging; error is logged, not swallowed silently.
+        // Engine should return without crashing or hanging.
         XCTAssertEqual(submitter.callCount, 0)
+        // The discriminating assertion: a DB error on claimNextDue must be surfaced via the log
+        // sink exactly once, not silently swallowed (regression guard for the try? -> do/catch fix).
+        XCTAssertEqual(logSink.messages.count, 1)
+        XCTAssertTrue(logSink.messages.first?.contains("claimNextDue") ?? false)
+    }
+
+    func testCleanDrainDoesNotLogError() async throws {
+        let ledger = try RecordLedger(database: .inMemory())
+        let record = LedgerRecord(localID: "r1", ownerUserID: "u1", organizationID: "o1", projectID: "p1", schemaVersionID: "sv1", recordTypeKey: "pharmacy", fieldValuesJSON: "{}", state: .pending, createdAt: Date(timeIntervalSince1970: 0), updatedAt: Date(timeIntervalSince1970: 0))
+        try await ledger.insert(record, attachments: [])
+        let submitter = MockRecordSubmitter()
+        let logSink = LogSinkRecorder()
+        let engine = makeEngine(ledger: ledger, submitter: submitter, logError: logSink.record)
+
+        await engine.trigger(.manual)
+
+        XCTAssertEqual(submitter.callCount, 1)
+        XCTAssertTrue(logSink.messages.isEmpty)
+    }
+}
+
+/// Captures log messages emitted via an injected `logError` sink, for asserting on behavior that
+/// otherwise has no externally observable difference from a silently-swallowed error. Backed by a
+/// lock (not an actor) so `record` can be passed directly as a synchronous `@Sendable` closure and
+/// observed immediately after `await engine.trigger(...)` returns, with no async hop to race.
+private final class LogSinkRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _messages: [String] = []
+
+    var messages: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _messages
+    }
+
+    func record(_ message: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        _messages.append(message)
     }
 }
 
