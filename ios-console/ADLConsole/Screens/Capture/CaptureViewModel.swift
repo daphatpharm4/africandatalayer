@@ -364,7 +364,7 @@ final class CaptureViewModel: ObservableObject {
         let recordLocalID = UUID().uuidString
         let attachment = try await mediaStore.stage(
             prepared,
-            ownerUserID: "pending",
+            ownerUserID: ownerUserID ?? "anonymous",
             organizationID: organizationId,
             recordLocalID: recordLocalID
         )

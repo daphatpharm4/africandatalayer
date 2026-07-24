@@ -369,6 +369,40 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertNil(body?["pointId"])
     }
 
+    // MARK: - Media staging owner attribution (H2)
+
+    /// `addPhoto` used to hardcode `ownerUserID: "pending"` when staging
+    /// media, regardless of the view model's injected real user id — so
+    /// every staged attachment's path was scoped under a literal "pending"
+    /// owner instead of the actual signed-in user. Asserts the staged
+    /// attachment's path reflects the injected `ownerUserID`.
+    func testAddPhotoStagesMediaUnderInjectedOwnerUserID() async throws {
+        let transport = RoutingMockPlatformTransport()
+        let mediaStore = InMemoryCaptureMediaStore()
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en,
+            mediaStore: mediaStore,
+            ownerUserID: "real-user-42"
+        )
+
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 50, height: 50)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 50, height: 50))
+        }
+        let data = try XCTUnwrap(image.pngData())
+
+        let attachment = try await viewModel.addPhoto(data, placement: .recordEvidence)
+
+        XCTAssertTrue(
+            attachment.relativePath.hasPrefix("real-user-42/org-1/"),
+            "Expected attachment path to be scoped under the real owner user id, got: \(attachment.relativePath)"
+        )
+        XCTAssertFalse(attachment.relativePath.contains("pending"))
+    }
+
     // MARK: - GPS evidence capture
 
     func testRequestLocationPopulatesEvidenceGps() async {
