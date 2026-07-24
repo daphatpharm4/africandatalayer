@@ -1,6 +1,7 @@
 import ConsoleForms
 import ConsolePersistence
 import Foundation
+import os
 
 enum SyncTrigger: String, Sendable {
     case recordPersisted, foreground, reconnected, manual, backgroundRefresh
@@ -24,7 +25,7 @@ enum SyncSubmissionError: Error, Equatable, Sendable {
 }
 
 actor SyncEngine {
-    private let ledger: RecordLedger
+    private let ledger: RecordLedgerProtocol
     private let submitter: any RecordSubmitting
     private let mediaStore: any CaptureMediaStoreProtocol
     private let ownerUserID: String
@@ -33,7 +34,7 @@ actor SyncEngine {
     private var drainTask: Task<Void, Never>?
 
     init(
-        ledger: RecordLedger,
+        ledger: RecordLedgerProtocol,
         submitter: any RecordSubmitting,
         mediaStore: any CaptureMediaStoreProtocol,
         ownerUserID: String,
@@ -62,8 +63,16 @@ actor SyncEngine {
     }
 
     private func drain() async {
-        while let record = try? await ledger.claimNextDue(ownerUserID: ownerUserID, organizationID: organizationID) {
+        while true {
             if Task.isCancelled { break }
+            let record: LedgerRecord
+            do {
+                guard let next = try await ledger.claimNextDue(ownerUserID: ownerUserID, organizationID: organizationID) else { break }
+                record = next
+            } catch {
+                os_log(.error, "SyncEngine.drain: DB error on claimNextDue: %{public}@", String(describing: error))
+                break  // next trigger retries; break avoids a tight spin on a persistent DB error
+            }
             let now = Date()
             do {
                 let serverRecordID = try await submitter.submit(record)

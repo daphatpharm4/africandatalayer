@@ -5,7 +5,7 @@ import XCTest
 
 final class SyncEngineTests: XCTestCase {
     private func makeEngine(
-        ledger: RecordLedger,
+        ledger: RecordLedgerProtocol,
         submitter: MockRecordSubmitter = MockRecordSubmitter(),
         mediaStore: InMemoryCaptureMediaStore = InMemoryCaptureMediaStore()
     ) -> SyncEngine {
@@ -41,6 +41,18 @@ final class SyncEngineTests: XCTestCase {
         let r1 = try await ledger.record(localID: "r1")
         XCTAssertEqual(r1?.state, .blockedValidation)
     }
+
+    func testDBErrorOnClaimDoesNotHaltEngine() async {
+        let ledger = MockRecordLedger()
+        ledger.claimNextDueShouldThrow = true
+        let submitter = MockRecordSubmitter()
+        let engine = makeEngine(ledger: ledger, submitter: submitter)
+
+        await engine.trigger(.manual)
+
+        // Engine should return without crashing or hanging; error is logged, not swallowed silently.
+        XCTAssertEqual(submitter.callCount, 0)
+    }
 }
 
 final class MockRecordSubmitter: RecordSubmitting, @unchecked Sendable {
@@ -57,5 +69,60 @@ final class MockRecordSubmitter: RecordSubmitting, @unchecked Sendable {
             }
         }
         return "server-\(record.localID)"
+    }
+}
+
+/// Wraps a real in-memory `RecordLedger` so most calls behave normally, but lets tests force
+/// `claimNextDue` to throw — simulating a DB error mid-drain. Mirrors `FailingRecordLedger` in
+/// LegacyQueueMigratorTests.swift.
+private final class MockRecordLedger: RecordLedgerProtocol, @unchecked Sendable {
+    private let inner: RecordLedger
+    var claimNextDueShouldThrow = false
+
+    init() {
+        inner = RecordLedger(database: try! RecordDatabase.inMemory())
+    }
+
+    func insert(_ record: LedgerRecord, attachments: [LedgerAttachment]) async throws {
+        try await inner.insert(record, attachments: attachments)
+    }
+
+    func record(localID: String) async throws -> LedgerRecord? {
+        try await inner.record(localID: localID)
+    }
+
+    func records(ownerUserID: String, organizationID: String) async throws -> [LedgerRecord] {
+        try await inner.records(ownerUserID: ownerUserID, organizationID: organizationID)
+    }
+
+    func claimNextDue(ownerUserID: String, organizationID: String) async throws -> LedgerRecord? {
+        if claimNextDueShouldThrow {
+            throw RecordLedgerError.notRecoverable
+        }
+        return try await inner.claimNextDue(ownerUserID: ownerUserID, organizationID: organizationID)
+    }
+
+    func recordRetry(localID: String, error: LedgerError, nextAttemptAt: Date) async throws {
+        try await inner.recordRetry(localID: localID, error: error, nextAttemptAt: nextAttemptAt)
+    }
+
+    func recordBlock(localID: String, state: RecordState, error: LedgerError) async throws {
+        try await inner.recordBlock(localID: localID, state: state, error: error)
+    }
+
+    func recordAcknowledgement(localID: String, serverRecordID: String, acknowledgedAt: Date) async throws {
+        try await inner.recordAcknowledgement(localID: localID, serverRecordID: serverRecordID, acknowledgedAt: acknowledgedAt)
+    }
+
+    func discard(localID: String, discardedAt: Date) async throws {
+        try await inner.discard(localID: localID, discardedAt: discardedAt)
+    }
+
+    func recoverInterruptedSends() async throws {
+        try await inner.recoverInterruptedSends()
+    }
+
+    func snapshot(ownerUserID: String, organizationID: String) async throws -> RecordLedgerSnapshot {
+        try await inner.snapshot(ownerUserID: ownerUserID, organizationID: organizationID)
     }
 }
