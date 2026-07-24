@@ -307,6 +307,15 @@ class AppState: ObservableObject {
 
     func signOut() {
         let ownerUserID = currentUserID
+        // Drop cached durable sync engines for every organization the user
+        // touched this session — they're keyed by organizationID and are
+        // rebuilt lazily by `durableSyncEngine(organizationID:)`, so this is
+        // cheap. Without it, `syncEngines` grows unbounded across
+        // sign-in/sign-out cycles (M4). Any in-flight drain `Task` an engine
+        // owns keeps running to completion after its actor reference here is
+        // released — its acknowledgements still land — so this is safe to do
+        // unconditionally.
+        syncEngines.removeAll()
         isAuthenticated = false
         sessionState = .unauthenticated
         organizations = []
@@ -373,6 +382,18 @@ class AppState: ObservableObject {
     /// `ConsoleShell.tsx` (`onSelectOrganization`).
     func selectOrganization(organizationId: String) {
         guard let membership = organizations.first(where: { $0.organization.id == organizationId }) else { return }
+        // `loadOrganizations()` calls this on every bootstrap/relaunch,
+        // including redundantly re-selecting the org that is already
+        // current — so only drop cached durable sync engines when the
+        // selection is an actual switch. An unconditional `removeAll()`
+        // here would thrash a possibly in-flight engine on every redundant
+        // call. Engines rebuild lazily via `durableSyncEngine(organizationID:)`,
+        // so clearing the whole cache on a real switch is cheap, and any
+        // drain `Task` the dropped engine owns keeps running to completion
+        // (M4).
+        if let previousOrganizationID = organization?.id, previousOrganizationID != organizationId {
+            syncEngines.removeAll()
+        }
         organization = membership.organization
         role = membership.role
         route = consoleLandingRoute(role: membership.role)
@@ -439,6 +460,11 @@ class AppState: ObservableObject {
     }
 
     #if DEBUG
+    /// Test seam for the M4 regression (stale `syncEngines` entries leaking
+    /// across org switches / sign-out) — `syncEngines` itself stays
+    /// `private` since nothing outside `AppState` needs the cache.
+    var syncEnginesCount: Int { syncEngines.count }
+
     func seedPreviewOrganizationsLoadState(_ loadState: LoadState) {
         organizationsLoadState = loadState
     }
