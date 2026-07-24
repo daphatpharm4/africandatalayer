@@ -107,7 +107,7 @@ final class CaptureMediaStore: CaptureMediaStoreProtocol, @unchecked Sendable {
     private func existingCount(in directory: URL) throws -> Int {
         guard fileManager.fileExists(atPath: directory.path) else { return 0 }
         let contents = try fileManager.contentsOfDirectory(atPath: directory.path)
-        return contents.filter { $0.hasSuffix(".jpg") || $0.hasSuffix(".jpeg") || $0.hasSuffix(".png") }.count
+        return contents.filter { $0.hasSuffix(".jpg") || $0.hasSuffix(".jpeg") || $0.hasSuffix(".png") || $0.hasSuffix(".webp") }.count
     }
 
     private func fileExtension(for mimeType: String) -> String {

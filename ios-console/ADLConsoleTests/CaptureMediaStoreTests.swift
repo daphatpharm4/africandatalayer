@@ -40,6 +40,28 @@ final class CaptureMediaStoreTests: XCTestCase {
         XCTAssertEqual(second.ordinal, 1)
     }
 
+    // MARK: - existingCount includes .webp (disk-backed store; H1 regression)
+
+    func testDiskStoreExistingCountIncludesWebp() async throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+        let store = CaptureMediaStore(baseURL: tempDir)
+
+        let webpData = Data([0x52, 0x49, 0x46, 0x46])
+        let webpSha = SHA256.hash(data: webpData).compactMap { String(format: "%02x", $0) }.joined()
+        let webp = PreparedCaptureMedia(data: webpData, mimeType: "image/webp", sha256: webpSha, pixelWidth: 100, pixelHeight: 100)
+
+        let jpgData = Data([0xFF, 0xD8, 0xFF])
+        let jpgSha = SHA256.hash(data: jpgData).compactMap { String(format: "%02x", $0) }.joined()
+        let jpg = PreparedCaptureMedia(data: jpgData, mimeType: "image/jpeg", sha256: jpgSha, pixelWidth: 100, pixelHeight: 100)
+
+        let a1 = try await store.stage(webp, ownerUserID: "u1", organizationID: "o1", recordLocalID: "r1")
+        let a2 = try await store.stage(jpg, ownerUserID: "u1", organizationID: "o1", recordLocalID: "r1")
+
+        XCTAssertEqual(a1.ordinal, 0, "first staged webp should be ordinal 0")
+        XCTAssertEqual(a2.ordinal, 1, "second staged jpg must be ordinal 1 — regresses to 0 if webp is uncounted, overwriting the webp file")
+    }
+
     // MARK: - Resolve verifies checksum
 
     func testResolveReturnsOriginalData() async throws {
