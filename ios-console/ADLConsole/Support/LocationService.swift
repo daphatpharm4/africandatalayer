@@ -46,24 +46,52 @@ final class CoreLocationService: NSObject, LocationServiceProtocol, CLLocationMa
     }
 
     func requestOneShotLocation() async throws -> FormGpsValue {
-        try await withCheckedThrowingContinuation { continuation in
-            lock.lock()
-            self.continuation = continuation
-            lock.unlock()
-            DispatchQueue.main.async {
-                self.manager.delegate = self
-                let status = self.manager.authorizationStatus
-                switch status {
-                case .notDetermined:
-                    self.manager.requestWhenInUseAuthorization()
-                case .denied, .restricted:
-                    self.finish(.failure(LocationServiceError.permissionDenied))
-                case .authorizedWhenInUse, .authorizedAlways:
-                    self.manager.requestLocation()
-                @unknown default:
-                    self.manager.requestLocation()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<FormGpsValue, Error>) in
+                lock.lock()
+                // A re-entrant call must not silently overwrite an
+                // in-flight continuation -- capture+nil the prior one
+                // under the lock so its awaiting caller is resumed
+                // (rather than leaking / hanging forever) instead of
+                // being dropped.
+                let previous = self.continuation
+                self.continuation = nil
+                if Task.isCancelled {
+                    // Cancellation may have raced ahead of us (e.g. the
+                    // onCancel handler below already ran before this
+                    // closure got a chance to store `continuation`).
+                    // Bail out here instead of kicking off a
+                    // CLLocationManager request nothing will ever cancel.
+                    lock.unlock()
+                    previous?.resume(throwing: CancellationError())
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                self.continuation = continuation
+                lock.unlock()
+                previous?.resume(throwing: CancellationError())
+
+                DispatchQueue.main.async {
+                    self.manager.delegate = self
+                    let status = self.manager.authorizationStatus
+                    switch status {
+                    case .notDetermined:
+                        self.manager.requestWhenInUseAuthorization()
+                    case .denied, .restricted:
+                        self.finish(.failure(LocationServiceError.permissionDenied))
+                    case .authorizedWhenInUse, .authorizedAlways:
+                        self.manager.requestLocation()
+                    @unknown default:
+                        self.manager.requestLocation()
+                    }
                 }
             }
+        } onCancel: {
+            lock.lock()
+            let pending = self.continuation
+            self.continuation = nil
+            lock.unlock()
+            pending?.resume(throwing: CancellationError())
         }
     }
 
