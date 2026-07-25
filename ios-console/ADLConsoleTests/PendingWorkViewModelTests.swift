@@ -2,6 +2,38 @@
 import ConsolePersistence
 import XCTest
 
+/// A `CaptureMediaStoreProtocol` wrapper that always fails `discard(recordLocalID:)`
+/// while delegating every other call to a real `InMemoryCaptureMediaStore`.
+/// Used to force the media-discard failure path in `confirmDiscard()` without
+/// touching ledger behavior.
+private final class FailingDiscardCaptureMediaStore: CaptureMediaStoreProtocol, @unchecked Sendable {
+    private let wrapped: InMemoryCaptureMediaStore
+
+    init(wrapped: InMemoryCaptureMediaStore) {
+        self.wrapped = wrapped
+    }
+
+    func stage(_ media: PreparedCaptureMedia, ownerUserID: String, organizationID: String, recordLocalID: String) async throws -> LedgerAttachment {
+        try await wrapped.stage(media, ownerUserID: ownerUserID, organizationID: organizationID, recordLocalID: recordLocalID)
+    }
+
+    func resolve(_ attachment: LedgerAttachment) async throws -> Data {
+        try await wrapped.resolve(attachment)
+    }
+
+    func removeAcknowledged(recordLocalID: String) async throws {
+        try await wrapped.removeAcknowledged(recordLocalID: recordLocalID)
+    }
+
+    func discard(recordLocalID: String) async throws {
+        throw CaptureMediaStoreError.fileSystemFailure("forced failure for test")
+    }
+
+    func quarantine(_ attachment: LedgerAttachment, reason: String) async throws {
+        try await wrapped.quarantine(attachment, reason: reason)
+    }
+}
+
 @MainActor
 final class PendingWorkViewModelTests: XCTestCase {
     private func makeViewModel(
@@ -148,6 +180,34 @@ final class PendingWorkViewModelTests: XCTestCase {
         guard case .loaded(let remaining) = vm.viewState else { XCTFail(); return }
         XCTAssertEqual(remaining.count, 1)
         XCTAssertEqual(remaining[0].id, "r2")
+    }
+
+    func testConfirmDiscardDoesNotDiscardLedgerWhenMediaDiscardFails() async throws {
+        let database = try RecordDatabase.inMemory()
+        let ledger = RecordLedger(database: database)
+        let record = fixtureRecord(localID: "r1", state: .pending)
+        try await ledger.insert(record)
+
+        let mediaStore = FailingDiscardCaptureMediaStore(wrapped: InMemoryCaptureMediaStore())
+        let vm = PendingWorkViewModel(
+            ledger: ledger,
+            mediaStore: mediaStore,
+            ownerUserID: "u1",
+            organizationID: "o1",
+            language: .en
+        )
+        await vm.loadItems()
+        guard case .loaded(let items) = vm.viewState else { XCTFail("Expected .loaded"); return }
+
+        vm.requestDiscard(items[0])
+        await vm.confirmDiscard()
+
+        // Media discard threw before the ledger discard could run, so the
+        // ledger record must still exist (not discarded) — proving discard
+        // order prevents orphaned media without a corresponding ledger loss.
+        let persisted = try await ledger.record(localID: "r1")
+        XCTAssertNotNil(persisted, "ledger record should still exist since media discard failed first")
+        XCTAssertEqual(persisted?.state, .pending)
     }
 
     func testConfirmDiscardFailsForAcknowledgedRecord() async throws {

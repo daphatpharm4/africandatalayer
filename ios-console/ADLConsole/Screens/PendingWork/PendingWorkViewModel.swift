@@ -109,8 +109,8 @@ final class PendingWorkViewModel: ObservableObject {
         discardConfirmationItem = nil
         guard item.state.isRecoverable else { return }
         do {
-            try await ledger.discard(localID: item.id, discardedAt: Date())
             try await mediaStore.discard(recordLocalID: item.id)
+            try await ledger.discard(localID: item.id, discardedAt: Date())
         } catch {
             // discard failure is surfaced on next load
         }
