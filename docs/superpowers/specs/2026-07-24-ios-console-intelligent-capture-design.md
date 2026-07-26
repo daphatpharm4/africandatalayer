@@ -110,16 +110,28 @@ struct DeviceProfile: Equatable, Sendable, Codable {
 
 ### Dedup Check Before Submission
 
-**Integration:** Before `submit()` proceeds, compute a hash of the field values (`recordData` as JSON string → SHA-256). Call `POST /api/submissions/dedup` with `{projectId, recordTypeKey, fieldValuesHash}`. If a duplicate exists within the cooldown window, warn the user with a bottom sheet ("This looks like a duplicate entry from [date]. Submit anyway?").
+**Reuse the existing backend endpoint.** The web app already exposes duplicate detection at `GET /api/submissions?view=dedup_candidates` (handler in `api/submissions/index.ts`, logic in `lib/server/dedup.ts:buildDedupCandidates`). It is **geo + category + name proximity** matching, **not** a hash lookup — there is no `fieldValuesHash`. The iOS console consumes it as-is; no backend change.
 
-**API contract:**
+**Integration:** After `validate()` succeeds and before enqueueing, call the endpoint with the record's category, the capture GPS coordinates, and (optionally) the site/road name field. If the response's `shouldPrompt` is `true`, show a bottom sheet listing the nearby candidates ("This looks like an existing point nearby. Add to it, or submit as new?").
+
+**API contract (real — verified against `api/submissions/index.ts` + `lib/server/dedup.ts`):**
 ```
-POST /api/submissions/dedup
-Body: { projectId, recordTypeKey, fieldValuesHash, organizationId }
-Response: { isDuplicate: bool, existingSubmission?: { id, capturedAt, capturedBy } }
+GET /api/submissions?view=dedup_candidates&category=<SubmissionCategory>&lat=<double>&lng=<double>&name=<optional string>
+Auth: required (401 if unauthenticated). 400 if category invalid or lat/lng non-finite.
+Response (DedupCheckResult):
+{
+  shouldPrompt: boolean,          // true when a candidate is close/similar enough to warrant a prompt
+  radiusMeters: number,           // search radius used (category-dependent)
+  bestCandidatePointId: string | null,
+  candidates: [
+    { pointId, category, siteName, latitude, longitude, distanceMeters, similarityScore, matchScore }
+  ]
+}
 ```
 
-**UI:** Add a `dedupCheckTask` to `CaptureViewModel`. Run it after validation, before enqueueing. On duplicate hit, show `DedupWarningSheet` with submit-anyway / cancel actions.
+Note: matching is server-side against projected points (name similarity 55% · distance 35% · brand 10%); the client only supplies category + coordinates + optional name. This aligns with dedup on the CREATE path already implemented in `api/submissions` (`dedupDecision` / `dedupTargetPointId`), so an "add to existing" action should submit with `dedupDecision: "use_existing"` and `dedupTargetPointId: <chosen pointId>`.
+
+**UI:** Add a `dedupCheckTask` to `CaptureViewModel`. Run it after validation, before enqueueing. When `shouldPrompt`, show `DedupWarningSheet` with submit-as-new / add-to-existing (per candidate) / cancel actions.
 
 ### Batch Capture Mode
 
@@ -137,7 +149,9 @@ Response: { isDuplicate: bool, existingSubmission?: { id, capturedAt, capturedBy
 
 func submitInBatch() async {
     await submit()
-    if isBatchMode && submitState == .synced || submitState == .queuedPendingSync {
+    // Parenthesize: && binds tighter than ||, but the intent is "in batch mode AND
+    // (synced OR queued)". Without the parens the queued branch fires even outside batch mode.
+    if isBatchMode && (submitState == .synced || submitState == .queuedPendingSync) {
         batchCompleted += 1
         resetDraftValues()
     }
@@ -161,4 +175,4 @@ func submitInBatch() async {
 - `CMMotionManager` drains battery if left running; must be started on capture begin and stopped promptly
 - EXIF GPS data may reflect the camera's GPS fix, not the device's — need to compare evidence GPS with EXIF GPS and flag significant discrepancies
 - Low-end device detection requires a maintained device list; prefer RAM-based heuristic (< 2GB = low-end)
-- Dedup API doesn't exist yet — backend work needed
+- Dedup endpoint **already exists** (`GET /api/submissions?view=dedup_candidates`) — no backend work. Risk is instead client-side: the check needs a valid GPS fix and category before it can run, so gate it to run only after GPS evidence is captured; on network failure, fail open (allow submit) rather than blocking the field agent.

@@ -10,7 +10,10 @@
 
 ## Global Constraints
 
-- All API calls go through existing `POST /api/user?view=platform_*` pattern
+- Analytics data comes from `GET /api/analytics?view=…` and `GET /api/leaderboard` / `POST /api/ai/search` — these are their own routes, NOT `/api/user?view=platform_*`, so `callPlatform` cannot serve them (use a credentialed GET against the correct path). Only genuinely platform-scoped data (orgs, members) uses `/api/user?view=platform_*`.
+- `categoryBreakdown`, `agentPerformance`, `heatMapData` have no dedicated view — derive them client-side from existing endpoints (see repository notes). No backend changes.
+- Simulator on this machine is **iPhone 17 Pro** (not iPhone 15); test with `-only-testing:` per target.
+- Commits stage explicit files — never `git add -A`.
 - Charts use iOS 17+ built-in Swift Charts (no third-party library)
 - Map overlays must coexist with existing MKMapView usage
 - New screens use existing `ConsoleDestination` routing pattern
@@ -137,16 +140,37 @@ public protocol AnalyticsRepositoryProtocol: Sendable {
 public final class AnalyticsRepository: AnalyticsRepositoryProtocol, Sendable {
     private let apiClient: PlatformAPIClient
 
+    // NOTE: analytics lives at GET /api/analytics?view=… and rankings at GET /api/leaderboard —
+    // these are NOT /api/user platform views, so `callPlatform` (hard-coded to api/user?view=platform_*)
+    // CANNOT serve them. Use a credentialed GET against the correct path (build the URL with
+    // URLComponents against baseURL.appendingPathComponent("api/analytics"), send the session cookie).
+    // Real view names (verified in api/analytics/index.ts): snapshots, deltas, monthly, trends,
+    // anomalies, spatial_intelligence, kpi_summary, kpi_weekly. (It is "deltas", not "delta".)
+
     public func deltaSnapshot(organizationId: String) async throws -> DeltaSnapshot {
-        try await apiClient.callPlatform(method: "GET", path: "/api/analytics", query: ["view": "delta", "organizationId": organizationId])
+        try await apiClient.analyticsGet(view: "kpi_summary", query: ["organizationId": organizationId])
     }
 
     public func weeklyTrends(organizationId: String, weeks: Int) async throws -> [WeeklyTrend] {
-        try await apiClient.callPlatform(method: "GET", path: "/api/analytics", query: ["view": "trends", "weeks": String(weeks), "organizationId": organizationId])
+        try await apiClient.analyticsGet(view: "trends", query: ["weeks": String(weeks), "organizationId": organizationId])
     }
-    // ... remaining methods follow same pattern
+
+    public func anomalies(organizationId: String, since: Date) async throws -> [AnomalyFlag] {
+        try await apiClient.analyticsGet(view: "anomalies", query: ["organizationId": organizationId])
+    }
+
+    public func spatialIntelligence(organizationId: String) async throws -> [GeohashScore] {
+        try await apiClient.analyticsGet(view: "spatial_intelligence", query: ["organizationId": organizationId])
+    }
+
+    // DERIVED — no dedicated backend view. Compose client-side from existing endpoints:
+    //   categoryBreakdown: derive from snapshots/vertical counts
+    //   agentPerformance:  combine GET /api/leaderboard with submission data
+    //   heatMapData:       derive from the spatial_intelligence geohash cells
+    // aiQuery: POST /api/ai/search
 }
 ```
+(`analyticsGet` is a small new client helper doing a credentialed GET against `api/analytics` and decoding — add it alongside the existing transport, do not route through `callPlatform`.)
 
 - [ ] **Step 4: Run tests**
 

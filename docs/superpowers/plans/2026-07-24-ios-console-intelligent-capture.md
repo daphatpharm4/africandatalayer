@@ -13,7 +13,10 @@
 - All new providers follow the existing `LocationServiceProtocol` pattern: a `Sendable` protocol and a concrete `final class` implementation in `ADLConsole/Support/`, with a mock in `ADLConsoleTests/`.
 - Every new feature must have tests in the existing XCTest target at `ADLConsoleTests/`.
 - No new dependencies. Use only Apple frameworks already imported by the target (UIKit, CoreMotion, CryptoKit, AVFoundation, Speech).
-- All new Info.plist usage descriptions go into `project.yml` (XcodeGen generates Info.plist).
+- **This project is XcodeGen-managed (`project.yml`) with a CI drift gate (`Scripts/check_xcodegen_drift.sh`, which runs `xcodegen generate` then `git diff --exit-code` on `project.pbxproj`).** Two hard rules follow:
+  - **Never hand-edit `ADLConsole.xcodeproj/project.pbxproj`.** `project.yml` globs each target's source directory (`ADLConsoleTests: sources: [ADLConsoleTests]`), so a NEW test/source file placed in the folder is auto-included on the next `xcodegen generate` — no pbxproj entry needed. A manual pbxproj edit uses non-deterministic UUIDs that XcodeGen will not reproduce, failing the drift gate. If a file must be wired, run `xcodegen generate` and commit the regenerated pbxproj (with the CI-pinned XcodeGen version), never a hand-edit.
+  - **All Info.plist usage descriptions go into `project.yml`** as `INFOPLIST_KEY_*` under the `ADLConsole` target's `settings.base` (existing keys there: `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, `NSLocationWhenInUseUsageDescription`). This subproject adds: `INFOPLIST_KEY_NSSpeechRecognitionUsageDescription` (voice-to-text) and `INFOPLIST_KEY_NSMotionUsageDescription` (CMMotionManager GPS integrity). After editing `project.yml`, run `xcodegen generate` and commit the result.
+- Commits stage explicit files — never `git add -A` (it would sweep in `.opencode.json` / xcuserstate / scratch).
 - GPS integrity: CMMotionManager must start on capture begin and stop on submit to avoid battery drain.
 - SHA-256 hashing already exists in `CaptureMediaStore` — the photo integrity provider wraps or reuses it rather than duplicating.
 
@@ -600,47 +603,60 @@ git add -A && git commit -m "feat(intelligent-capture): add SpeechRecognitionPro
 - Modify: `ADLConsoleTests/CaptureViewModelTests.swift`
 
 **Interfaces:**
-- Consumes: `PlatformAPIClient`, field values hash
-- Produces: Dedup API method, `@Published dedupState`, `DedupWarningSheet` UI
+- Consumes: `PlatformAPIClient`, record category + capture GPS + optional name (NOT a hash)
+- Produces: dedup API method hitting the real endpoint, `@Published dedupState`, `DedupWarningSheet` UI
 
-- [ ] **Step 1: Write the failing tests**
+**Endpoint reality (do NOT invent one):** duplicate detection already exists at `GET /api/submissions?view=dedup_candidates` (`api/submissions/index.ts`, logic in `lib/server/dedup.ts:buildDedupCandidates`). It is **geo + category + name proximity**, not a hash lookup — there is no `fieldValuesHash`, no `record_dedup` view, no POST. It requires an authenticated session (`requireUser` → `authContext`); the console already holds that same Auth.js session, so it can call it directly. **This path is `api/submissions`, NOT `api/user`, so `callPlatform` (which is hard-coded to `api/user?view=platform_*`) cannot be used** — add a method that builds a URL against `api/submissions` with credentials, mirroring `callPlatform`'s `URLComponents` + credentialed transport, or reuse whatever credentialed GET the transport already exposes.
+
+- [ ] **Step 1: Write the failing tests** (mock the transport to return a canned `DedupCheckResult`)
 
 ```swift
-// In CaptureViewModelTests.swift, add to `testSubmitIncludesFraudMetadataEvidence` section:
-
-func testSubmitChecksDedupBeforeEnqueueing() async { ... }
-func testSubmitWarnsOnDuplicateFound() async { ... }
-func testSubmitProceedsWhenDedupClean() async { ... }
-
+// In CaptureViewModelTests.swift
+func testSubmitChecksDedupBeforeEnqueueing() async { /* asserts dedup GET issued with category+lat+lng after validate, before enqueue */ }
+func testSubmitPromptsWhenShouldPromptTrue() async { /* shouldPrompt:true -> dedupState == .prompt(candidates) */ }
+func testSubmitProceedsWhenShouldPromptFalse() async { /* shouldPrompt:false -> proceeds to enqueue */ }
+func testDedupNetworkFailureFailsOpen() async { /* transport throws -> proceeds (does not block the field agent) */ }
 ```
 - [ ] **Step 2: Run to verify failure**
 - [ ] **Step 3: Write minimal implementation**
 
-**PlatformAPIClient addition (in existing file, add after `nearbyPlatformPoints`):**
+**PlatformAPIClient addition — decodable matches the REAL `DedupCheckResult` shape:**
 ```swift
-public struct DedupCheckRequest: Encodable {
-    public var projectId: String
-    public var recordTypeKey: String
-    public var fieldValuesHash: String
-    public var organizationId: String
+public struct DedupCandidate: Decodable, Equatable, Sendable, Identifiable {
+    public var id: String { pointId }
+    public var pointId: String
+    public var category: String
+    public var siteName: String
+    public var latitude: Double
+    public var longitude: Double
+    public var distanceMeters: Double
+    public var similarityScore: Double
+    public var matchScore: Double
 }
 
-public struct DedupCheckResponse: Decodable {
-    public var isDuplicate: Bool
-    public var existingSubmission: ExistingSubmission?
+public struct DedupCheckResult: Decodable, Equatable, Sendable {
+    public var shouldPrompt: Bool
+    public var radiusMeters: Double
+    public var bestCandidatePointId: String?
+    public var candidates: [DedupCandidate]
 }
 
-public struct ExistingSubmission: Decodable, Equatable, Sendable {
-    public var id: String
-    public var capturedAt: String
-    public var capturedBy: String
-}
-
-public func checkDedup(projectId: String, recordTypeKey: String, fieldValuesHash: String, organizationId: String) async throws -> DedupCheckResponse {
-    let bodyData = try JSONEncoder().encode(
-        DedupCheckRequest(projectId: projectId, recordTypeKey: recordTypeKey, fieldValuesHash: fieldValuesHash, organizationId: organizationId)
-    )
-    return try await callPlatform("record_dedup", method: .post, bodyData: bodyData)
+/// GET api/submissions?view=dedup_candidates&category=&lat=&lng=&name=
+/// NOTE: hits `api/submissions` directly (not callPlatform's `api/user`). Sends the session cookie.
+public func dedupCandidates(category: String, latitude: Double, longitude: Double, name: String?) async throws -> DedupCheckResult {
+    guard var components = URLComponents(url: baseURL.appendingPathComponent("api/submissions"), resolvingAgainstBaseURL: false) else {
+        throw PlatformAPIError.invalidURL
+    }
+    var items = [
+        URLQueryItem(name: "view", value: "dedup_candidates"),
+        URLQueryItem(name: "category", value: category),
+        URLQueryItem(name: "lat", value: String(latitude)),
+        URLQueryItem(name: "lng", value: String(longitude)),
+    ]
+    if let name, !name.isEmpty { items.append(URLQueryItem(name: "name", value: name)) }
+    components.queryItems = items
+    // reuse the same credentialed GET/transport callPlatform uses; decode DedupCheckResult
+    return try await transport.get(components.url!)   // adapt to the real transport API
 }
 ```
 
@@ -649,52 +665,40 @@ public func checkDedup(projectId: String, recordTypeKey: String, fieldValuesHash
 enum DedupState: Equatable {
     case idle
     case checking
-    case clean
-    case duplicate(existing: DedupExisting?)
-}
-
-struct DedupExisting: Equatable {
-    var id: String
-    var capturedAt: Date
-    var capturedBy: String
+    case prompt(candidates: [DedupCandidate], bestPointId: String?)
+    case clear
 }
 
 @Published private(set) var dedupState: DedupState = .idle
 
-func checkDedup(for draft: RecordDraft) async {
-    guard let projectOption = selectedProjectOption else { return }
+func checkDedup() async {
+    guard let category = selectedCategory, let gps = capturedGpsValue else { return } // requires category + a GPS fix
     dedupState = .checking
     do {
-        let data = try JSONEncoder().encode(draft.data)
-        let hash = SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
-        let response = try await apiClient.checkDedup(
-            projectId: projectOption.project.id,
-            recordTypeKey: draft.recordTypeKey,
-            fieldValuesHash: hash,
-            organizationId: organizationId
+        let result = try await apiClient.dedupCandidates(
+            category: category.rawValue,
+            latitude: gps.latitude,
+            longitude: gps.longitude,
+            name: currentNameFieldValue   // optional site/road name if the schema has one
         )
-        if response.isDuplicate, let existing = response.existingSubmission {
-            let formatter = ISO8601DateFormatter()
-            dedupState = .duplicate(existing: DedupExisting(
-                id: existing.id,
-                capturedAt: formatter.date(from: existing.capturedAt) ?? Date(),
-                capturedBy: existing.capturedBy
-            ))
-        } else {
-            dedupState = .clean
-        }
+        dedupState = result.shouldPrompt ? .prompt(candidates: result.candidates, bestPointId: result.bestCandidatePointId) : .clear
     } catch {
-        // Dedup API unavailable — proceed without blocking
-        dedupState = .clean
+        dedupState = .clear   // fail open — never block a field submission on a dedup network error
     }
 }
 ```
 
-Modify `submit()` to run dedup check after validation, before enqueueing.
+Modify `submit()` to run `checkDedup()` after `validate()`, before enqueueing. On `.prompt`, present `DedupWarningSheet`; "add to existing" submits with `dedupDecision: "use_existing"` + `dedupTargetPointId: <candidate.pointId>` (the CREATE path in `api/submissions` already honors these fields); "submit as new" proceeds normally.
+
 - [ ] **Step 4: Run to verify pass**
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit** (stage explicit files — never `git add -A`, it would sweep in unrelated working-tree changes)
 ```bash
-git add -A && git commit -m "feat(intelligent-capture): add dedup check before submission"
+git add ios-console/Packages/ConsoleCore/Sources/ConsoleAPI/PlatformAPIClient.swift \
+        ios-console/ADLConsole/Screens/Capture/DedupWarningSheet.swift \
+        ios-console/ADLConsole/Screens/Capture/CaptureViewModel.swift \
+        ios-console/ADLConsole/Screens/Capture/CaptureView.swift \
+        ios-console/ADLConsoleTests/CaptureViewModelTests.swift
+git commit -m "feat(intelligent-capture): add dedup check before submission"
 ```
 
 ---

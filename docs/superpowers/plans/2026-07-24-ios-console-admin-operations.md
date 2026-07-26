@@ -4,7 +4,11 @@
 
 **Goal:** Add admin tools to the iOS console: communications panel, lead queue, campaign history, rich text email editor, bulk review, quality info, compliance screen, help center, sync error audit trail, and admin scope switching.
 
-**Architecture:** Each feature is an independent screen backed by existing or new PlatformAPIClient methods. Bulk review reuses `POST /api/submissions/batch-review`. Communications panel consumes existing `lib/server/email/` and `lib/server/sms/` endpoints. Admin scope switching extends the existing org picker. Static content screens (quality info, compliance, help center) render bundle-loaded markdown.
+**Architecture:** Each feature is an independent screen backed by new PlatformAPIClient methods. Bulk review reuses `POST /api/submissions/batch-review`. The communications panel consumes the existing campaign/template/audience endpoints, which live under **`api/privacy?view=…`** (NOT `/api/email/*` or `/api/sms/*`, which do not exist) — see the corrected **Endpoint correction table** in `docs/superpowers/specs/2026-07-24-ios-console-admin-operations-design.md` for the exact `view` names and methods. Two features (per-campaign recipient drill-down; lead-queue resolve/dismiss decision) may need a small new `api/privacy` `view` — those are the only possible backend additions; everything else is a client wrapper. Admin scope switching extends the existing org picker. Static content screens (quality info, compliance, help center) render bundle-loaded markdown.
+
+> **Endpoints (authoritative — from the corrected spec):** list `GET /api/privacy?view=campaigns|sms-campaigns|email-templates`, create `POST /api/privacy?view=campaigns|sms-campaigns`, cancel `POST /api/privacy?view=campaigns:cancel|sms-campaigns:cancel`, audience preview `GET /api/privacy?view=audience-preview`, lead queue `GET /api/privacy?view=ip-reports`. These are on `api/privacy`, so client methods hit that path directly — `callPlatform` (hard-coded to `api/user?view=platform_*`) cannot serve them; use a credentialed GET/POST against the correct path (same session cookie).
+>
+> **Commit hygiene:** stage explicit files in every task's commit — do NOT use `git add -A` (it would sweep in unrelated working-tree changes such as `.opencode.json` / xcuserstate).
 
 **Tech Stack:** Swift 6, SwiftUI, PlatformAPIClient, WebKit (rich text editor), MarkdownUI (help center)
 

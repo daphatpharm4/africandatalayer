@@ -8,7 +8,25 @@
 
 ## Objective
 
-Deliver the iOS console's admin and operations surface — a set of manager/owner-gated screens for running field programs, triaging compliance issues, managing communications, and providing in-app reference material. Every screen must work within the existing role-based navigation (`canAccessConsoleScreen`), reuse existing `ConsoleState` infrastructure, and talk to the existing email/SMS/batch-review backend endpoints. The project does not change the backend — it surfaces existing server capability on mobile.
+Deliver the iOS console's admin and operations surface — a set of manager/owner-gated screens for running field programs, triaging compliance issues, managing communications, and providing in-app reference material. Every screen must work within the existing role-based navigation (`canAccessConsoleScreen`), reuse existing `ConsoleState` infrastructure, and talk to the existing backend endpoints. The project does not change the backend — it surfaces existing server capability on mobile.
+
+> **Endpoint correction (verified against the codebase 2026-07-24):** the email/SMS/template/lead-queue capabilities are all real, but they are **not** exposed at `/api/email/*` or `/api/sms/*` (those routes do not exist). They live under **`api/privacy`** as `view=` sub-routes (handlers in `api/privacy/index.ts`, logic in `lib/server/email/campaigns.ts`, `lib/server/sms/campaigns.ts`, `lib/server/email/templates.ts`). Batch review is at `api/submissions/batch-review.ts`. The real map:
+>
+> | Capability | Real endpoint |
+> |---|---|
+> | List email campaigns | `GET /api/privacy?view=campaigns` |
+> | Create email campaign | `POST /api/privacy?view=campaigns` (body validated by `campaignCreateSchema`, `createdBy` from session) |
+> | Cancel email campaign | `POST /api/privacy?view=campaigns:cancel` (`{ id }`) |
+> | List SMS campaigns | `GET /api/privacy?view=sms-campaigns` |
+> | Create/cancel SMS campaign | `POST /api/privacy?view=sms-campaigns` / `?view=sms-campaigns:cancel` |
+> | List email templates | `GET /api/privacy?view=email-templates` (`includeArchived` param) |
+> | Archive template | `POST /api/privacy?view=email-templates:archive` |
+> | Audience size preview (dry-run) | `GET /api/privacy?view=audience-preview` |
+> | Lead queue (IP/privacy reports) | `GET /api/privacy?view=ip-reports` (list); `POST /api/privacy?view=ip-report` (file) |
+> | Batch review | `POST /api/submissions/batch-review` |
+> | Drain scheduled sends (cron) | `GET /api/analytics?view=campaign_drain` (already wired, not a console concern) |
+>
+> Still-unverified (treat as decision points during implementation, may need a small new `view`): a per-campaign **recipient drill-down** endpoint, and a **report resolution/decision** endpoint (list exists via `ip-reports`; resolve/dismiss action is not confirmed present).
 
 ## Current state
 
@@ -36,7 +54,7 @@ This subproject delivers:
 
 It does not deliver:
 
-- New backend endpoints for email/SMS (the existing `lib/server/email/campaigns.ts` and `lib/server/sms/campaigns.ts` are sufficient — the iOS app needs an API client wrapper to call them, but the server routes already exist)
+- New backend endpoints for email/SMS (the existing `lib/server/email/campaigns.ts` and `lib/server/sms/campaigns.ts` are sufficient and are already exposed via `api/privacy?view=campaigns|sms-campaigns|...` — the iOS app only needs an API client wrapper hitting those `api/privacy` routes; see the Endpoint correction table above)
 - A full message inbox or two-way messaging
 - Automatic campaign delivery scheduling on the client (the backend handles scheduled dispatch; the client sets `scheduledAt`)
 - An email WYSIWYG editor equivalent to Mailchimp (the rich text editor is a basic toolbar for bold/italic/headings/links, not a full drag-and-drop builder)
@@ -48,23 +66,24 @@ It does not deliver:
 
 **UI approach:** A tab-picker at the top toggling between Email and SMS, each with a list of existing campaigns and a "+" FAB to create a new one. The list shows subject/message preview, status badge (draft/scheduled/sending/completed/cancelled), recipient count, and sent time. Tapping a row opens the campaign detail.
 
-A companion `CampaignListViewModel` fetches from `PlatformAPIClient.listEmailCampaigns()` and `listSmsCampaigns()` (new API client methods wrapping the existing `GET /api/email/campaigns` and `GET /api/sms/campaigns`).
+A companion `CampaignListViewModel` fetches from `PlatformAPIClient.listEmailCampaigns()` and `listSmsCampaigns()` (new API client methods wrapping the existing `GET /api/privacy?view=campaigns` and `GET /api/privacy?view=sms-campaigns`).
 
 **Create flow:** A multi-step form:
 
-1. **Template picker** (Email only): list of saved templates from `GET /api/email/templates`. Selecting one pre-fills subject, HTML body, and text body. The user can also start from scratch.
-2. **Audience picker** (shared Email/SMS): a form with pickers for roles (multi-select: agent/admin/client), trust tier (new/standard/trusted/elite/restricted), map scope (multi-select), recency filter (last active N days). Shows estimated recipient count from a dry-run call (`POST /api/email/campaigns` with `dryRun: true` or equivalent).
+1. **Template picker** (Email only): list of saved templates from `GET /api/privacy?view=email-templates`. Selecting one pre-fills subject, HTML body, and text body. The user can also start from scratch.
+2. **Audience picker** (shared Email/SMS): a form with pickers for roles (multi-select: agent/admin/client), trust tier (new/standard/trusted/elite/restricted), map scope (multi-select), recency filter (last active N days). Shows estimated recipient count from the dedicated preview endpoint `GET /api/privacy?view=audience-preview` (returns `recipientCount`).
 3. **Schedule picker**: immediate send or a `UIDatePicker` for `scheduledAt`.
-4. **Review & send**: summary card with subject/message, audience size, schedule. "Send" button calls `POST /api/email/campaigns` or `POST /api/sms/campaigns`.
+4. **Review & send**: summary card with subject/message, audience size, schedule. "Send" button calls `POST /api/privacy?view=campaigns` (email) or `POST /api/privacy?view=sms-campaigns` (SMS). The request body must match the server's `campaignCreateSchema`; `createdBy` is taken from the session server-side, not the client.
 
-**Data source:** New `PlatformAPIClient` methods wrapping the existing API routes:
+**Data source:** New `PlatformAPIClient` methods wrapping the existing `api/privacy` routes:
 
-- `GET /api/email/campaigns` → `listEmailCampaigns()`
-- `GET /api/email/campaigns/:id` → `getEmailCampaign(id:)`
-- `POST /api/email/campaigns` → `createEmailCampaign(...)`
-- `POST /api/email/campaigns/:id/cancel` → `cancelEmailCampaign(id:)`
-- `GET /api/email/templates` → `listEmailTemplates()`
-- Same pattern for SMS with `/api/sms/` prefix
+- `GET /api/privacy?view=campaigns` → `listEmailCampaigns()`
+- `POST /api/privacy?view=campaigns` → `createEmailCampaign(...)`
+- `POST /api/privacy?view=campaigns:cancel` (`{ id }`) → `cancelEmailCampaign(id:)`
+- `GET /api/privacy?view=email-templates` → `listEmailTemplates()`
+- `GET /api/privacy?view=audience-preview` → `previewAudience(filter:)`
+- SMS: `GET/POST /api/privacy?view=sms-campaigns`, `POST /api/privacy?view=sms-campaigns:cancel`
+- Note: there is **no** `getEmailCampaign(id:)` single-fetch route today; `listCampaigns` returns the full list. If a detail fetch is needed, either derive it from the list response or add a small `view=campaign` server sub-route.
 
 **Integration with role-based access:** New `ConsoleScreen.communications` case, gated to `.manager` and `.owner` (same as members/projects). Added to `canAccessConsoleScreen` and `ConsoleNavigation.allDestinations`.
 
@@ -78,7 +97,7 @@ Filters: status, type, date range. Sort: date (default descending), status.
 
 **Detail view:** Full report text, any uploaded evidence attachments (displayed as thumbnails with tap-to-preview), reporter info, audit log of status changes.
 
-**Data source:** New API client methods wrapping existing or new admin endpoints. If the backend `lib/server/` has IP/privacy report handling (check `fraudAlerts.ts`, `securityAudit.ts`), surface those; otherwise a new endpoint `GET /api/reports/queue` and `POST /api/reports/:id/decision`.
+**Data source:** The lead queue list already exists — `GET /api/privacy?view=ip-reports` returns the IP/privacy report queue; reports are filed via `POST /api/privacy?view=ip-report`. Wrap those in new client methods. **Verify during implementation:** a resolve/dismiss **decision** endpoint is not confirmed to exist — if `api/privacy` has no `ip-report:resolve` (or similar) view, a small new server sub-route is needed for the resolve/dismiss actions (this is the one place in this subproject that may require a backend addition).
 
 **Integration with role-based access:** New `ConsoleScreen.leadQueue` case. Gated to `.manager` and `.owner`.
 
@@ -94,7 +113,7 @@ Filters: status, type, date range. Sort: date (default descending), status.
 
 **Drill-down:** A `CampaignRecipientListView` showing `email_campaign_recipients` or `sms_campaign_recipients` rows with status and error text. Supports searching by email.
 
-**Data source:** Same as Communications panel — `listEmailCampaigns()` / `listSmsCampaigns()` already return sent/failed/suppressed counts. Add a `GET /api/email/campaigns/:id/recipients` endpoint wrapper for drill-down.
+**Data source:** Same as Communications panel — `listEmailCampaigns()` / `listSmsCampaigns()` (i.e. `GET /api/privacy?view=campaigns` / `sms-campaigns`) already return per-campaign sent/failed/suppressed counts. **The per-recipient drill-down endpoint does not exist yet** — `listCampaigns` returns campaign-level rows, not the `email_campaign_recipients` breakdown. This drill-down needs a small new server sub-route (e.g. `GET /api/privacy?view=campaign-recipients&id=<id>`); scope it as the one net-new backend view for this screen, or defer the drill-down.
 
 **Integration:** Reached from the Communications panel (a "History" tab or button at the top), or as a standalone destination. Gated same as Communications.
 
@@ -247,7 +266,7 @@ case syncAudit = "SYNC_AUDIT"
 
 ### New API client methods
 
-All wrap existing backend routes — no backend changes required.
+All wrap the existing `api/privacy` / `api/submissions/batch-review` routes (see the Endpoint correction table). **Exceptions** that may need a small new server `view`: `listEmailCampaignRecipients` / `listSmsCampaignRecipients` (drill-down) and `resolveLeadQueueItem` (report decision). Everything else is a pure client wrapper — no backend change.
 
 ```swift
 // Email campaigns
@@ -353,7 +372,7 @@ struct BatchReviewInput: Codable {
 
 This subproject depends on:
 
-- The existing `lib/server/email/` and `lib/server/sms/` backend modules (already deployed — no new backend work required, but the API routes they expose need to be verified available and documented)
+- The existing `lib/server/email/` and `lib/server/sms/` backend modules, exposed as `api/privacy?view=campaigns|sms-campaigns|email-templates|audience-preview|ip-reports` (verified present in `api/privacy/index.ts`). Two drill-down/decision views (campaign-recipients, report-resolution) are **not** confirmed and may be the only backend additions this subproject needs.
 - The existing `api/submissions/batch-review.ts` endpoint (already deployed)
 - `ConsoleState.ConsoleScreen` from ConsoleCore (extended with new cases)
 - `PlatformAPIClient` from ConsoleAPI (extended with new methods)

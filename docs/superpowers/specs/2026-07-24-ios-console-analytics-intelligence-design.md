@@ -51,7 +51,7 @@ protocol AnalyticsRepositoryProtocol: Sendable {
 }
 ```
 
-Each method maps to an existing API endpoint. The repository aggregates and caches where appropriate.
+**Endpoint reality (verified against `api/analytics/index.ts` 2026-07-24):** the analytics endpoint exposes these views — `snapshots, deltas, monthly, trends, anomalies, spatial_intelligence, kpi_summary, kpi_weekly` (see the `Invalid view` error list in `api/analytics/index.ts`). So `deltaSnapshot` → `kpi_summary`/`snapshots`, `weeklyTrends` → `trends`/`kpi_weekly`, `anomalies` → `anomalies`, `spatialIntelligence` → `spatial_intelligence` (backed by `lib/server/spatialIntelligence.ts`), all map 1:1. **`categoryBreakdown`, `agentPerformance`, and `heatMapData` do NOT have dedicated views** — derive `categoryBreakdown` client-side from snapshot/vertical data, `agentPerformance` from `GET /api/leaderboard` + submission data, and `heatMapData` from the `spatial_intelligence` geohash cells. `aiQuery` → `POST /api/ai/search`. The repository aggregates and caches where appropriate.
 
 ### Data Models
 
