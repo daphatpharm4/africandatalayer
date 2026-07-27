@@ -17,6 +17,7 @@
 		0E895F093A7BE1E2B2779695 /* ADLConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */; };
 		109D12C53085688AC9835D7A /* SyncEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49681E86F2B2B7454EE5AAAE /* SyncEngineTests.swift */; };
 		10DF95A9868106CB366B2EA2 /* MembersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9D6C5D4CABBA873B7D166C1 /* MembersView.swift */; };
+		1138752CEA72C5EB06B7BF50 /* GPSIntegrityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59C279BDA4AF1B91C2FA2FCB /* GPSIntegrityProviderTests.swift */; };
 		114A4385E08BCE8EB00C1A20 /* SessionRepositoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EEDA9923CA560C9B02CA6AE /* SessionRepositoryTests.swift */; };
 		136F6A1495FAB38428A978BD /* ConfigurationErrorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EB5D8A32F2DF9BC38F6778F /* ConfigurationErrorView.swift */; };
 		1959BE4002E4245900F84ABF /* ConsoleState in Frameworks */ = {isa = PBXBuildFile; productRef = 4F924DAF268789C0063BB4B1 /* ConsoleState */; };
@@ -110,6 +111,7 @@
 		D37A622C72CFE1A9E52D247E /* DeviceProfilingProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4689F45D79608301C90CF2B0 /* DeviceProfilingProviderTests.swift */; };
 		D498023343D19CE92732CDC9 /* OSLogTelemetryClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2BD5801C1CCA85DC92EECA /* OSLogTelemetryClient.swift */; };
 		D556A979AE9A13FCD168D4FC /* ConsoleAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 3ED90C531DEC0C3B1566C798 /* ConsoleAPI */; };
+		D60CCAF9D2249C277B7EB756 /* GPSIntegrityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4CF171766EE63191596E140 /* GPSIntegrityProvider.swift */; };
 		D73D7321ED6F0EDC35E9FBCA /* MetricSummaryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 523AF29544237186A6F4D14F /* MetricSummaryStore.swift */; };
 		D9F748E5FD3982E80BB90089 /* CompanyMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4026C1A8BD5D7D9A2B342 /* CompanyMapView.swift */; };
 		DAFE86DBC002CCB4B15CB394 /* StubAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FFEAB3969E7318AF2F3D2F3 /* StubAuthServiceTests.swift */; };
@@ -202,6 +204,7 @@
 		5094894D20B5243DEAC98A67 /* AuthorizationClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthorizationClock.swift; sourceTree = "<group>"; };
 		523AF29544237186A6F4D14F /* MetricSummaryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricSummaryStore.swift; sourceTree = "<group>"; };
 		5466134B1E28B26BFB511D6C /* ReviewRecordDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewRecordDetailView.swift; sourceTree = "<group>"; };
+		59C279BDA4AF1B91C2FA2FCB /* GPSIntegrityProviderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPSIntegrityProviderTests.swift; sourceTree = "<group>"; };
 		59F8D69F98795855A58D0608 /* PermissionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionUITests.swift; sourceTree = "<group>"; };
 		5B2BD5801C1CCA85DC92EECA /* OSLogTelemetryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSLogTelemetryClient.swift; sourceTree = "<group>"; };
 		5D11F8A6812A531550ABB39E /* CaptureMediaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMediaStore.swift; sourceTree = "<group>"; };
@@ -274,6 +277,7 @@
 		F066670C6E638AC8E1C36E62 /* Staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Staging.xcconfig; sourceTree = "<group>"; };
 		F1888A33AE5F578D70B5AFD2 /* PendingWorkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingWorkViewModel.swift; sourceTree = "<group>"; };
 		F1989798475124A3D5643BB3 /* ExistingPayloadSubmissionAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingPayloadSubmissionAdapterTests.swift; sourceTree = "<group>"; };
+		F4CF171766EE63191596E140 /* GPSIntegrityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPSIntegrityProvider.swift; sourceTree = "<group>"; };
 		FB58F02D5F67A043815C5703 /* FaultInjectors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaultInjectors.swift; sourceTree = "<group>"; };
 		FECA943EAFA189D3E4F75B2C /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleLanguage.swift; sourceTree = "<group>"; };
@@ -341,6 +345,7 @@
 				8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */,
 				4689F45D79608301C90CF2B0 /* DeviceProfilingProviderTests.swift */,
 				F1989798475124A3D5643BB3 /* ExistingPayloadSubmissionAdapterTests.swift */,
+				59C279BDA4AF1B91C2FA2FCB /* GPSIntegrityProviderTests.swift */,
 				4F3255C7F11087BF2EF60657 /* InvitationOnboardingTests.swift */,
 				C15C0BA61A7D79F92FBC217D /* LegacyQueueMigratorTests.swift */,
 				8224CAE2939E2BED891F3DA1 /* LocationServiceTests.swift */,
@@ -600,6 +605,7 @@
 				FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */,
 				4320DDD4943A7125EDC2D253 /* ConsoleOfflineCache.swift */,
 				0C9BF320EF04CFA57406B43E /* DeviceProfilingProvider.swift */,
+				F4CF171766EE63191596E140 /* GPSIntegrityProvider.swift */,
 				78ED39B27689F3A126E2F64F /* InvitationOnboardingModel.swift */,
 				D9C5756D198653BA9FC365D2 /* LocationService.swift */,
 				39935145BE54039ADFA866D9 /* PhotoIntegrityProvider.swift */,
@@ -829,6 +835,7 @@
 				ADC670F171BF03D9BD93F246 /* DataBrowseView.swift in Sources */,
 				A85FC66B083C7F157749B74A /* DeviceProfilingProvider.swift in Sources */,
 				DFD2A5644DD7CBE0D5B52439 /* ExistingPayloadSubmissionAdapter.swift in Sources */,
+				D60CCAF9D2249C277B7EB756 /* GPSIntegrityProvider.swift in Sources */,
 				43E6FD5EE9DFCE73309ED28F /* InMemoryTelemetryClient.swift in Sources */,
 				1C973A1834265AB255B68ABE /* InvitationOnboardingModel.swift in Sources */,
 				4017F3A41331A89E89D6F37C /* LegacyQueueMigrator.swift in Sources */,
@@ -882,6 +889,7 @@
 				D37A622C72CFE1A9E52D247E /* DeviceProfilingProviderTests.swift in Sources */,
 				F71B802B675CE2A8D066D176 /* ExistingPayloadSubmissionAdapterTests.swift in Sources */,
 				B2DA803ADFC59C96824AA9D3 /* FaultInjectors.swift in Sources */,
+				1138752CEA72C5EB06B7BF50 /* GPSIntegrityProviderTests.swift in Sources */,
 				94820C91213956598B4CCF7E /* InvitationOnboardingTests.swift in Sources */,
 				AE43D3BD0414732715DBE739 /* LegacyQueueMigratorTests.swift in Sources */,
 				A3582C13EF24E7F3C5C6C385 /* LocationServiceTests.swift in Sources */,
