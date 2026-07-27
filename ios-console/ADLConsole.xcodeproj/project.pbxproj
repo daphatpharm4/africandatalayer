@@ -122,6 +122,7 @@
 		DFD2A5644DD7CBE0D5B52439 /* ExistingPayloadSubmissionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99312C730B8B20453C6DEFDC /* ExistingPayloadSubmissionAdapter.swift */; };
 		E19ECD3882E936238B45FE6A /* SpeechRecognitionProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 353D19BC941D05691C2FB55A /* SpeechRecognitionProvider.swift */; };
 		E1CF2F958B5171D1F5FB514F /* CompanyMapViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34325F59345EC6D0063AFCB1 /* CompanyMapViewModelTests.swift */; };
+		E7D5CE96E99D7FB9E9B5D72A /* CaptureFraudMetadataTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFF420870644C20E1C079549 /* CaptureFraudMetadataTests.swift */; };
 		E853BE4A2E970C4441CE2A38 /* PlatformRoleRank.swift in Sources */ = {isa = PBXBuildFile; fileRef = E21B3462FA21737C21B9E40B /* PlatformRoleRank.swift */; };
 		EAEF5251DA0F9F2EE88CC3F0 /* ConsoleMapKitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 30CAF5446BFE144A551EEF6A /* ConsoleMapKitView.swift */; };
 		EBA62C0540707D569D6AC622 /* OperationalStatusModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 853AEBAC635CE2A65C3FE4EE /* OperationalStatusModelTests.swift */; };
@@ -251,6 +252,7 @@
 		B68AC3813E459AB00923B123 /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
 		BA19128BF86D0078C1DB2A01 /* OfflineRolePolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineRolePolicy.swift; sourceTree = "<group>"; };
 		BE4488CA2496F8EC8BC56E81 /* CameraCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCaptureView.swift; sourceTree = "<group>"; };
+		BFF420870644C20E1C079549 /* CaptureFraudMetadataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureFraudMetadataTests.swift; sourceTree = "<group>"; };
 		BFFC04E641DBE0F76C30CA77 /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
 		C15C0BA61A7D79F92FBC217D /* LegacyQueueMigratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegacyQueueMigratorTests.swift; sourceTree = "<group>"; };
 		C1CDBE52D6079E80272BD348 /* SchemaBuilderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderViewModel.swift; sourceTree = "<group>"; };
@@ -341,6 +343,7 @@
 				31FDD52AFE2F536B70588BF1 /* AppEnvironmentTests.swift */,
 				BFFC04E641DBE0F76C30CA77 /* AppStateTests.swift */,
 				70B6F55BA6240B36E2E03C3E /* CaptureCoordinatorTests.swift */,
+				BFF420870644C20E1C079549 /* CaptureFraudMetadataTests.swift */,
 				DD1829FAC802540453948783 /* CaptureMediaPreparerTests.swift */,
 				A59DEF4491FA4780EEFEE3AD /* CaptureMediaStoreTests.swift */,
 				B6697FDDF541472843E45C85 /* CaptureResilienceTests.swift */,
@@ -889,6 +892,7 @@
 				2F14F76A204ED61431910B1C /* AppEnvironmentTests.swift in Sources */,
 				F9C2068A476617868C81CA41 /* AppStateTests.swift in Sources */,
 				A1C23084260F638820496B2C /* CaptureCoordinatorTests.swift in Sources */,
+				E7D5CE96E99D7FB9E9B5D72A /* CaptureFraudMetadataTests.swift in Sources */,
 				3770CC2042DBC9B0E9244A46 /* CaptureMediaPreparerTests.swift in Sources */,
 				4E82A80AA100CE69F32B39AE /* CaptureMediaStoreTests.swift in Sources */,
 				55B6820A02D4D2D0F0BD345B /* CaptureResilienceTests.swift in Sources */,
@@ -1180,6 +1184,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ADL Console uses your location to attach a GPS fix as evidence for a captured record.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ADL Console uses the microphone to let you dictate field values by voice.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "ADL Console uses motion sensors to verify the GPS fix on a captured record is genuine.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ADL Console lets you attach a photo from your library as evidence for a captured record.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ADL Console uses speech recognition to let you dictate field values by voice.";
@@ -1214,6 +1219,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ADL Console uses your location to attach a GPS fix as evidence for a captured record.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ADL Console uses the microphone to let you dictate field values by voice.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "ADL Console uses motion sensors to verify the GPS fix on a captured record is genuine.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ADL Console lets you attach a photo from your library as evidence for a captured record.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ADL Console uses speech recognition to let you dictate field values by voice.";
@@ -1267,6 +1273,7 @@
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "ADL Console uses your camera to attach photo evidence to a captured record.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ADL Console uses your location to attach a GPS fix as evidence for a captured record.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "ADL Console uses the microphone to let you dictate field values by voice.";
 				INFOPLIST_KEY_NSMotionUsageDescription = "ADL Console uses motion sensors to verify the GPS fix on a captured record is genuine.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "ADL Console lets you attach a photo from your library as evidence for a captured record.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "ADL Console uses speech recognition to let you dictate field values by voice.";

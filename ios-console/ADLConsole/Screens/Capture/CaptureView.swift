@@ -654,8 +654,17 @@ struct CaptureView: View {
                         },
                         onPhotoCleared: { localID in
                             viewModel.removePreparedPhoto(localID: localID)
-                        }
+                        },
+                        onVoiceInput: viewModel.isVoiceInputAvailable ? { key in
+                            Task { await viewModel.requestVoiceInput(for: key) }
+                        } : nil,
+                        isVoiceInputActive: viewModel.voiceInputActiveKey == descriptor.key
                     )
+                }
+                if let voiceInputErrorMessage = viewModel.voiceInputErrorMessage {
+                    Text(voiceInputErrorMessage)
+                        .font(ADLConsoleFont.footnote)
+                        .foregroundStyle(ADLConsoleColor.danger)
                 }
             }
             .padding(16)

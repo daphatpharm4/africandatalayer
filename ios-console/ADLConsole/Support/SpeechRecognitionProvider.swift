@@ -41,6 +41,29 @@ enum SpeechRecognitionError: Error, Equatable {
     case unavailable
     case permissionDenied
     case recognitionFailed(String)
+
+    /// Bilingual, user-facing message for `CaptureViewModel.requestVoiceInput`
+    /// to surface — mirrors `LocationServiceError.message(_:)`'s pattern for
+    /// the capture flow's other permission-gated hardware seam.
+    func message(_ language: ConsoleLanguage) -> String {
+        switch self {
+        case .permissionDenied:
+            return language.t(
+                "Microphone access is denied. Enable it in Settings to use voice input.",
+                "L'accès au microphone est refusé. Activez-le dans Réglages pour utiliser la saisie vocale."
+            )
+        case .unavailable:
+            return language.t(
+                "Voice input is unavailable right now.",
+                "La saisie vocale est indisponible pour le moment."
+            )
+        case .recognitionFailed:
+            return language.t(
+                "Could not understand the audio. Try again.",
+                "Impossible de comprendre l'audio. Réessayez."
+            )
+        }
+    }
 }
 
 /// Production `SpeechRecognitionProviding` backed by `SFSpeechRecognizer`

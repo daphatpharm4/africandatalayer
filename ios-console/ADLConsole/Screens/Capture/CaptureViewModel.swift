@@ -105,6 +105,13 @@ final class CaptureViewModel: ObservableObject {
     @Published var batchTarget: Int = 0
     @Published private(set) var batchCompleted: Int = 0
 
+    /// The field `key` currently mid-dictation via `requestVoiceInput(for:)`,
+    /// or `nil` when no voice-input request is in flight — `CaptureView`
+    /// binds this to the active field's mic-button state so at most one
+    /// field's dictation runs (and shows as active) at a time.
+    @Published private(set) var voiceInputActiveKey: String?
+    @Published private(set) var voiceInputErrorMessage: String?
+
     let language: ConsoleLanguage
 
     private let apiClient: PlatformAPIClient
@@ -116,6 +123,11 @@ final class CaptureViewModel: ObservableObject {
     private let offlineCache: ConsoleOfflineCacheProtocol
     private let onQueueSnapshotChanged: (@MainActor (RecordQueueSnapshot?) -> Void)?
     private let fraudMetadataProvider: CaptureFraudMetadataProviding
+    /// `nil` disables the voice-input affordance entirely (e.g. tests that
+    /// don't want `CaptureFieldControl` to render a mic button). Defaults to
+    /// a real `SFSpeechRecognizerService` so existing callers (`AppState`)
+    /// get working dictation without any change on their end.
+    private let speechRecognitionProvider: SpeechRecognitionProviding?
     private var photoMetadataByRef: [String: PlatformRecordEvidence.PhotoMetadata] = [:]
     private let mediaStore: CaptureMediaStoreProtocol
     private let durableCoordinator: CaptureCoordinator?
@@ -145,6 +157,7 @@ final class CaptureViewModel: ObservableObject {
         offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache(),
         onQueueSnapshotChanged: (@MainActor (RecordQueueSnapshot?) -> Void)? = nil,
         fraudMetadataProvider: CaptureFraudMetadataProviding = NativeCaptureFraudMetadataProvider(),
+        speechRecognitionProvider: SpeechRecognitionProviding? = SFSpeechRecognizerService(),
         mediaStore: CaptureMediaStoreProtocol = InMemoryCaptureMediaStore(),
         durableCoordinator: CaptureCoordinator? = nil,
         ownerUserID: String? = nil,
@@ -162,6 +175,7 @@ final class CaptureViewModel: ObservableObject {
         self.offlineCache = offlineCache
         self.onQueueSnapshotChanged = onQueueSnapshotChanged
         self.fraudMetadataProvider = fraudMetadataProvider
+        self.speechRecognitionProvider = speechRecognitionProvider
         self.mediaStore = mediaStore
         self.durableCoordinator = durableCoordinator
         self.ownerUserID = ownerUserID
@@ -371,6 +385,46 @@ final class CaptureViewModel: ObservableObject {
 
     func stopFraudMetadataCapture() {
         fraudMetadataProvider.stopCapture()
+    }
+
+    // MARK: - Voice input
+
+    /// Whether `CaptureFieldControl` should render a mic-button affordance at
+    /// all — `false` only when no `speechRecognitionProvider` was injected.
+    var isVoiceInputAvailable: Bool {
+        speechRecognitionProvider != nil
+    }
+
+    /// Requests one dictation pass via the injected `SpeechRecognitionProviding`
+    /// and, on success, fills the field named `key` with the (trimmed)
+    /// transcript — `.numberText` for a `.number` field, `.text` for every
+    /// other control kind, matching `textBinding`/`numberTextBinding` in
+    /// `CaptureFieldControl`. A no-op when no provider was injected, the
+    /// field doesn't exist on the current record type, or the transcript is
+    /// empty (e.g. the collector tapped the mic then said nothing).
+    func requestVoiceInput(for key: String) async {
+        guard let speechRecognitionProvider else { return }
+        guard let descriptor = descriptors.first(where: { $0.key == key }) else { return }
+
+        voiceInputErrorMessage = nil
+        voiceInputActiveKey = key
+        defer { voiceInputActiveKey = nil }
+
+        do {
+            let transcript = try await speechRecognitionProvider.requestTranscription()
+            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { return }
+            switch descriptor.control {
+            case .number:
+                setValue(.numberText(trimmed), for: key)
+            default:
+                setValue(.text(trimmed), for: key)
+            }
+        } catch let error as SpeechRecognitionError {
+            voiceInputErrorMessage = error.message(language)
+        } catch {
+            voiceInputErrorMessage = language.t("Voice input failed.", "La saisie vocale a échoué.")
+        }
     }
 
     func addPhotoRef(_ ref: String, metadata: PlatformRecordEvidence.PhotoMetadata? = nil) {
