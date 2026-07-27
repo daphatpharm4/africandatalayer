@@ -97,6 +97,14 @@ final class CaptureViewModel: ObservableObject {
     @Published private(set) var attachmentViewStates: [CaptureAttachmentViewState] = []
     @Published private(set) var dedupState: DedupState = .idle
 
+    /// Batch capture mode — lets a collector submit a run of records against
+    /// the same project/record type back-to-back without re-navigating.
+    /// `batchTarget` is typically seeded from a mission quota; `0` just means
+    /// "no known target", the floating counter still tracks `batchCompleted`.
+    @Published var isBatchMode: Bool = false
+    @Published var batchTarget: Int = 0
+    @Published private(set) var batchCompleted: Int = 0
+
     let language: ConsoleLanguage
 
     private let apiClient: PlatformAPIClient
@@ -648,6 +656,36 @@ final class CaptureViewModel: ObservableObject {
     func cancelDedupPrompt() {
         dedupState = .idle
         submitState = .idle
+    }
+
+    // MARK: - Batch capture
+
+    /// Runs a normal `submit()` and, when it actually went through — synced
+    /// immediately or safely queued offline — advances the batch counter and
+    /// clears the draft so `CaptureView` is ready for the next entry.
+    ///
+    /// `&&` binds tighter than `||` in Swift, so the `||` MUST stay
+    /// parenthesized here: `isBatchMode && (a || b)`. Written as
+    /// `isBatchMode && a || b` this would read as `(isBatchMode && a) || b`,
+    /// which fires the "advance batch" branch on `.queuedPendingSync` even
+    /// when `isBatchMode` is false. The original design spec had exactly
+    /// this bug — do not reintroduce it.
+    func submitInBatch() async {
+        await submit()
+        if isBatchMode && (submitState == .synced || submitState == .queuedPendingSync) {
+            batchCompleted += 1
+            resetDraftValues(resetSubmitState: false)
+            submitState = .idle
+        }
+    }
+
+    /// Exits batch mode and resets its counters — wired to the "Finish
+    /// batch" button on `CaptureView`. Does not touch the in-progress draft;
+    /// a collector who finishes mid-entry keeps whatever they had typed.
+    func finishBatch() {
+        isBatchMode = false
+        batchCompleted = 0
+        batchTarget = 0
     }
 
     private func performSubmit(recordType: PlatformRecordType, projectOption: ProjectOption) async {

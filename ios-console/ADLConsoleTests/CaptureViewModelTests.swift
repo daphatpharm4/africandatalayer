@@ -612,6 +612,103 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.evidenceGps)
         XCTAssertNotNil(viewModel.locationErrorMessage)
     }
+
+    // MARK: - Batch capture mode (Intelligent Capture Task 6)
+
+    /// A successful `submitInBatch()` call — the underlying `submit()` lands
+    /// on `.synced` — increments `batchCompleted` by one so the floating "N
+    /// of M collected" counter tracks real progress.
+    func testBatchModeIncrementsProgressAfterSubmit() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submitInBatch()
+
+        XCTAssertEqual(viewModel.batchCompleted, 1)
+        XCTAssertEqual(viewModel.batchTarget, 3)
+        XCTAssertTrue(viewModel.isBatchMode)
+    }
+
+    /// After a successful batch submit the draft (field values) is cleared
+    /// so the collector can immediately start the next entry, and
+    /// `submitState` returns to `.idle` rather than lingering on `.synced`
+    /// (which would otherwise re-trigger the batch-continue branch on the
+    /// next unrelated state read).
+    func testBatchModeResetsFormAfterSubmit() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submitInBatch()
+
+        XCTAssertEqual(viewModel.value(for: "name"), .text(""))
+        XCTAssertEqual(viewModel.submitState, .idle)
+    }
+
+    /// A submit that does NOT succeed (permanent failure from the server)
+    /// must not increment the counter or reset the draft — the collector
+    /// still has unsubmitted work in front of them.
+    func testBatchModeDoesNotIncrementProgressOnFailure() async {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(schemaJSON, forView: "platform_schema_get")
+        transport.setResponse(Data("""
+        {"error": "invalid record"}
+        """.utf8), forView: "platform_record_create")
+
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: FailingStatusTransport(inner: transport, statusCode: 400)),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en
+        )
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submitInBatch()
+
+        guard case .failed = viewModel.submitState else {
+            return XCTFail("expected submitState == .failed, got \(viewModel.submitState)")
+        }
+        XCTAssertEqual(viewModel.batchCompleted, 0)
+        XCTAssertEqual(viewModel.value(for: "name"), .text("Acme Pharmacy"))
+    }
+
+    /// `finishBatch()` exits batch mode entirely, resetting the counters —
+    /// used by the "Finish batch" button on `CaptureView`.
+    func testBatchModeFinishExitsBatchMode() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 5
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        await viewModel.submitInBatch()
+        XCTAssertEqual(viewModel.batchCompleted, 1)
+
+        viewModel.finishBatch()
+
+        XCTAssertFalse(viewModel.isBatchMode)
+        XCTAssertEqual(viewModel.batchCompleted, 0)
+        XCTAssertEqual(viewModel.batchTarget, 0)
+    }
 }
 
 /// Wraps another `PlatformTransport`, forcing every response to a fixed
