@@ -534,4 +534,109 @@ public struct PlatformAPIClient: Sendable {
             )
         }
     }
+
+    // MARK: - Analytics (api/analytics, api/leaderboard, api/ai/search — NOT api/user)
+
+    /// Shared credentialed-request core for the analytics surface. Mirrors
+    /// `callPlatform`'s `URLComponents` construction, credentialed
+    /// `transport.send` call, and non-2xx error mapping, but against an
+    /// arbitrary `path` instead of the `callPlatform`-hard-coded `api/user`.
+    /// Used by `analyticsGet`, `leaderboard`, and `aiAnalyticsQuery` — none
+    /// of which are `api/user?view=platform_*` calls, so none of them can go
+    /// through `callPlatform`.
+    private func sendAnalyticsRequest<Response: Decodable>(
+        path: String,
+        method: PlatformHTTPMethod,
+        queryItems: [URLQueryItem] = [],
+        bodyData: Data? = nil,
+        decoder: JSONDecoder = JSONDecoder()
+    ) async throws -> Response {
+        guard var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false) else {
+            throw PlatformAPIError(message: "Invalid base URL", status: -1)
+        }
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
+        }
+
+        guard let url = components.url else {
+            throw PlatformAPIError(message: "Invalid request URL", status: -1)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = method.rawValue
+        if let bodyData {
+            request.setValue("application/json", forHTTPHeaderField: "content-type")
+            request.httpBody = bodyData
+        }
+
+        let (data, response) = try await transport.send(request)
+
+        guard (200..<300).contains(response.statusCode) else {
+            let errorPayload = (try? JSONDecoder().decode(PlatformAPIErrorPayload.self, from: data))
+                ?? PlatformAPIErrorPayload(error: nil, code: nil, issues: nil)
+            throw PlatformAPIError(
+                message: errorPayload.error ?? "Request failed (\(response.statusCode))",
+                status: response.statusCode,
+                code: errorPayload.code,
+                issues: errorPayload.issues
+            )
+        }
+
+        do {
+            return try decoder.decode(Response.self, from: data)
+        } catch {
+            throw PlatformAPIError(
+                message: "Failed to decode response for \(path): \(error)",
+                status: response.statusCode
+            )
+        }
+    }
+
+    /// `GET api/analytics?view=<view>&...query` — the read-only analytics
+    /// surface (see `api/analytics/index.ts`). Real view names: `snapshots`,
+    /// `deltas`, `monthly`, `trends`, `anomalies`, `spatial_intelligence`,
+    /// `kpi_summary`, `kpi_weekly`.
+    ///
+    /// Several of these views (`snapshots`, `deltas`, `anomalies`,
+    /// `kpi_weekly`) return raw Postgres rows with snake_case column names
+    /// (e.g. `snapshot_date`, `vertical_id`) rather than the hand-built
+    /// camelCase objects the other views return. Rather than hand-writing
+    /// `CodingKeys` per snake_case row type, this decodes with
+    /// `.convertFromSnakeCase` uniformly — it is a no-op for already-camelCase
+    /// keys (no underscores to convert), so it's safe across every view.
+    public func analyticsGet<Response: Decodable>(view: String, query: [String: String] = [:]) async throws -> Response {
+        var queryItems = [URLQueryItem(name: "view", value: view)]
+        for (key, value) in query {
+            queryItems.append(URLQueryItem(name: key, value: value))
+        }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try await sendAnalyticsRequest(path: "api/analytics", method: .get, queryItems: queryItems, decoder: decoder)
+    }
+
+    /// `GET api/leaderboard` — public ranking endpoint, bare-array response,
+    /// no `view` param and no query params at all (see
+    /// `api/leaderboard/index.ts`).
+    public func leaderboard() async throws -> [LeaderboardEntry] {
+        try await sendAnalyticsRequest(path: "api/leaderboard", method: .get)
+    }
+
+    /// `POST api/ai/search?view=analytics-query` — natural-language
+    /// analytics Q&A (see `api/ai/search.ts` `handleAnalyticsAssistant` /
+    /// `answerAnalyticsQuestion` in `lib/server/ai/analyticsAssistant.ts`).
+    /// The request body's only required field is `question`; `vertical`,
+    /// `zone`, `dateRange`, and `exportFormat` are optional server-side and
+    /// unused by this task's `aiQuery(organizationId:query:)` entry point.
+    public func aiAnalyticsQuery(question: String) async throws -> AIQueryResponse {
+        struct Body: Encodable {
+            var question: String
+        }
+        let bodyData = try JSONEncoder().encode(Body(question: question))
+        return try await sendAnalyticsRequest(
+            path: "api/ai/search",
+            method: .post,
+            queryItems: [URLQueryItem(name: "view", value: "analytics-query")],
+            bodyData: bodyData
+        )
+    }
 }
