@@ -8,10 +8,12 @@
 
 /* Begin PBXBuildFile section */
 		054C479A8C0C3BA2DE76C06E /* NetworkAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B34CD969F94FB035DF8D1FE1 /* NetworkAuthServiceTests.swift */; };
+		07D5FE2EA7D02CFCC2BCB631 /* WeeklyTrendChartView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5CB740089112C691EA5117A /* WeeklyTrendChartView.swift */; };
 		0874A92C71B88BAD739AB0C0 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8C938B84004334C2A02BD10 /* SessionRepository.swift */; };
 		09477BD669DBB16183AA17D1 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8AEB59475DCD55068CE81EBB /* AppState.swift */; };
 		09B5B0A9EA8E97730F430292 /* ADLConsoleComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E979F6715DC0C5FB3DB562A6 /* ADLConsoleComponents.swift */; };
 		0A359448F2B31082E03BAEF2 /* PhotoIntegrityProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 824ECFCD317A664EB537866D /* PhotoIntegrityProviderTests.swift */; };
+		0D1DE1059A8845200D808C79 /* KPIHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDDBE26FEB6DB60E8CAD7515 /* KPIHeaderView.swift */; };
 		0D6A395201C57E3E7F7FD3C6 /* SchemaBuilderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DDB4F5FF96EC8981E97573B /* SchemaBuilderViewModelTests.swift */; };
 		0E87C0811873EC7972A5D8BB /* PlatformErrorMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E9B332D7DA30F3903D833F8 /* PlatformErrorMessage.swift */; };
 		0E895F093A7BE1E2B2779695 /* ADLConsoleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */; };
@@ -56,11 +58,13 @@
 		5A62B5E3B15C3385730EACE2 /* PendingWorkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407C55F7371AFD8D7866485B /* PendingWorkView.swift */; };
 		5C39D44E339A94B9113A8C38 /* AuthTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F0893A69AC6208B1CC61D04 /* AuthTransport.swift */; };
 		60C79732FF835BFCBB7E37A7 /* AppEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DA59868B5F2C703ED049F40 /* AppEnvironment.swift */; };
+		67A718F1D7B620D7CE8DF579 /* DeltaDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6611897931B1AE96AC59E81 /* DeltaDashboardView.swift */; };
 		693E69ADF4A01A1ACF237141 /* RecoveryAccessibilityUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0133A5412AAE42A0C34A3F43 /* RecoveryAccessibilityUITests.swift */; };
 		6B0A3651A1F1DB44BF6A9CB2 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D11DA660AE3456559B18F002 /* RootView.swift */; };
 		6DD66A144E373099E9BEDCD0 /* LocationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9C5756D198653BA9FC365D2 /* LocationService.swift */; };
 		74A9440279DDF2B7FB98EBFB /* CaptureFraudMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C213DACF65AE6E0BF1544D6 /* CaptureFraudMetadata.swift */; };
 		77B1719673125A4464973DDF /* SchemaBuilderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1CDBE52D6079E80272BD348 /* SchemaBuilderViewModel.swift */; };
+		77F787CC4317698D3FADC555 /* DeltaDashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E51203EDC71C5FE74769434 /* DeltaDashboardViewModel.swift */; };
 		7AE185132577E6F44AEA21F1 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2C7AA417BE1CD3555FBD4A76 /* Assets.xcassets */; };
 		7C9E08CA1F784AF88BE316EA /* ConsoleAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 49E18CF1964ED13E8D945CFC /* ConsoleAPI */; };
 		83133C483DF7236A9B48FEB9 /* SettingsViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDA356BFA8DEACC0D49A4DFD /* SettingsViewModelTests.swift */; };
@@ -68,6 +72,7 @@
 		834CB398D6E50E6B3F7BC28F /* CompanyPointDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B2A976CE1EADC510EE0BBA4 /* CompanyPointDetailView.swift */; };
 		849B13AE9BA976F1A22E896E /* ADLConsoleColor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 031FC650E637FA153AF3C596 /* ADLConsoleColor.swift */; };
 		87FE738BF3E2FB3F986B1BEB /* ADLLogoMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F68854CA5FCE5B9B62C5FD3 /* ADLLogoMark.swift */; };
+		88CFAE042EDBAD08FD4F62FA /* DeltaDashboardViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C9DAEDD116119B9699BCD8E /* DeltaDashboardViewModelTests.swift */; };
 		8A2B607C80C944A54ACFFCA4 /* AppSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2728581F0B52FEB36FC2E696 /* AppSettingsView.swift */; };
 		8B7A3C9B3D18745B43929E9A /* AppDependencies.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD107D441F52EE0F4E4C3709 /* AppDependencies.swift */; };
 		8DEAA95B1D22DFF58254B2F9 /* PhotoIntegrityProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39935145BE54039ADFA866D9 /* PhotoIntegrityProvider.swift */; };
@@ -219,6 +224,7 @@
 		6762B91F0FC04480CD5D38D5 /* OperationalStatusModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationalStatusModel.swift; sourceTree = "<group>"; };
 		68682D6319039E661D9D69F7 /* SchemaBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderView.swift; sourceTree = "<group>"; };
 		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		6C9DAEDD116119B9699BCD8E /* DeltaDashboardViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeltaDashboardViewModelTests.swift; sourceTree = "<group>"; };
 		6F726B02DE492CE310DF6F6C /* OfflineRolePolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineRolePolicyTests.swift; sourceTree = "<group>"; };
 		70B6F55BA6240B36E2E03C3E /* CaptureCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureCoordinatorTests.swift; sourceTree = "<group>"; };
 		73208963E99B28107F30FE43 /* TelemetryPrivacyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TelemetryPrivacyTests.swift; sourceTree = "<group>"; };
@@ -237,6 +243,7 @@
 		8E3DCFB6C09C0E4F22739D3A /* ADLImageCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLImageCache.swift; sourceTree = "<group>"; };
 		99312C730B8B20453C6DEFDC /* ExistingPayloadSubmissionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingPayloadSubmissionAdapter.swift; sourceTree = "<group>"; };
 		9DA59868B5F2C703ED049F40 /* AppEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppEnvironment.swift; sourceTree = "<group>"; };
+		9E51203EDC71C5FE74769434 /* DeltaDashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeltaDashboardViewModel.swift; sourceTree = "<group>"; };
 		9E51A2E83645779E8C6E8352 /* CaptureAttachmentPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureAttachmentPicker.swift; sourceTree = "<group>"; };
 		9EEDA9923CA560C9B02CA6AE /* SessionRepositoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRepositoryTests.swift; sourceTree = "<group>"; };
 		9F68854CA5FCE5B9B62C5FD3 /* ADLLogoMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLLogoMark.swift; sourceTree = "<group>"; };
@@ -267,6 +274,7 @@
 		CDA356BFA8DEACC0D49A4DFD /* SettingsViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewModelTests.swift; sourceTree = "<group>"; };
 		CF89EE969F1884F273796C39 /* MembersViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MembersViewModel.swift; sourceTree = "<group>"; };
 		D11DA660AE3456559B18F002 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		D5CB740089112C691EA5117A /* WeeklyTrendChartView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyTrendChartView.swift; sourceTree = "<group>"; };
 		D9135E7C767659E8968D7D57 /* ADLConsole.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ADLConsole.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D99EF653090E90D976DC4578 /* ADLConsoleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLConsoleApp.swift; sourceTree = "<group>"; };
 		D9C5756D198653BA9FC365D2 /* LocationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationService.swift; sourceTree = "<group>"; };
@@ -286,7 +294,9 @@
 		F1888A33AE5F578D70B5AFD2 /* PendingWorkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PendingWorkViewModel.swift; sourceTree = "<group>"; };
 		F1989798475124A3D5643BB3 /* ExistingPayloadSubmissionAdapterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExistingPayloadSubmissionAdapterTests.swift; sourceTree = "<group>"; };
 		F4CF171766EE63191596E140 /* GPSIntegrityProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPSIntegrityProvider.swift; sourceTree = "<group>"; };
+		F6611897931B1AE96AC59E81 /* DeltaDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeltaDashboardView.swift; sourceTree = "<group>"; };
 		FB58F02D5F67A043815C5703 /* FaultInjectors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FaultInjectors.swift; sourceTree = "<group>"; };
+		FDDBE26FEB6DB60E8CAD7515 /* KPIHeaderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KPIHeaderView.swift; sourceTree = "<group>"; };
 		FECA943EAFA189D3E4F75B2C /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		FF8E621E287F8C1F847A8C24 /* ConsoleLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConsoleLanguage.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -352,6 +362,7 @@
 				1300412BB49D3D8C2D9C8562 /* ConnectivityMonitorTests.swift */,
 				B0718ECDBE845BB4007DD07F /* ConsoleDestinationsTests.swift */,
 				8C3EC130FF5D93347DE8E49D /* ConsoleOverviewContentTests.swift */,
+				6C9DAEDD116119B9699BCD8E /* DeltaDashboardViewModelTests.swift */,
 				4689F45D79608301C90CF2B0 /* DeviceProfilingProviderTests.swift */,
 				F1989798475124A3D5643BB3 /* ExistingPayloadSubmissionAdapterTests.swift */,
 				59C279BDA4AF1B91C2FA2FCB /* GPSIntegrityProviderTests.swift */,
@@ -525,6 +536,17 @@
 			path = CaptureStorage;
 			sourceTree = "<group>";
 		};
+		A11886351EDE739BEE79D85F /* Analytics */ = {
+			isa = PBXGroup;
+			children = (
+				F6611897931B1AE96AC59E81 /* DeltaDashboardView.swift */,
+				9E51203EDC71C5FE74769434 /* DeltaDashboardViewModel.swift */,
+				FDDBE26FEB6DB60E8CAD7515 /* KPIHeaderView.swift */,
+				D5CB740089112C691EA5117A /* WeeklyTrendChartView.swift */,
+			);
+			path = Analytics;
+			sourceTree = "<group>";
+		};
 		A1639E2A40460E69B94715AA /* Config */ = {
 			isa = PBXGroup;
 			children = (
@@ -574,6 +596,7 @@
 				B63CA04DD109C10734A9398A /* DataBrowseView.swift */,
 				C3F0AC450421341F693CD910 /* OverviewView.swift */,
 				C9285C198CC532BDF8E950B5 /* PlaceholderScreenView.swift */,
+				A11886351EDE739BEE79D85F /* Analytics */,
 				890AF84C493ACC387C2B0FC4 /* Capture */,
 				DC98F565254081B1042CBE88 /* Map */,
 				125C634349C8F0EFEA71AF25 /* Members */,
@@ -846,11 +869,14 @@
 				DD2D6D88D269AE1F2457F010 /* ConsoleShellView.swift in Sources */,
 				ADC670F171BF03D9BD93F246 /* DataBrowseView.swift in Sources */,
 				969AF8280F4B5A68E2652F9E /* DedupWarningSheet.swift in Sources */,
+				67A718F1D7B620D7CE8DF579 /* DeltaDashboardView.swift in Sources */,
+				77F787CC4317698D3FADC555 /* DeltaDashboardViewModel.swift in Sources */,
 				A85FC66B083C7F157749B74A /* DeviceProfilingProvider.swift in Sources */,
 				DFD2A5644DD7CBE0D5B52439 /* ExistingPayloadSubmissionAdapter.swift in Sources */,
 				D60CCAF9D2249C277B7EB756 /* GPSIntegrityProvider.swift in Sources */,
 				43E6FD5EE9DFCE73309ED28F /* InMemoryTelemetryClient.swift in Sources */,
 				1C973A1834265AB255B68ABE /* InvitationOnboardingModel.swift in Sources */,
+				0D1DE1059A8845200D808C79 /* KPIHeaderView.swift in Sources */,
 				4017F3A41331A89E89D6F37C /* LegacyQueueMigrator.swift in Sources */,
 				6DD66A144E373099E9BEDCD0 /* LocationService.swift in Sources */,
 				10DF95A9868106CB366B2EA2 /* MembersView.swift in Sources */,
@@ -882,6 +908,7 @@
 				41564F833E15EFFB65F40F5A /* SupportLinks.swift in Sources */,
 				5A2E74D10DFC571904584F7A /* SyncEngine.swift in Sources */,
 				9566806C6B75D9886FB71089 /* TelemetryClient.swift in Sources */,
+				07D5FE2EA7D02CFCC2BCB631 /* WeeklyTrendChartView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -901,6 +928,7 @@
 				BAEC2FC74A7EB9855321924F /* ConnectivityMonitorTests.swift in Sources */,
 				C746C0769E47918835336DF1 /* ConsoleDestinationsTests.swift in Sources */,
 				CB7D89B404F30D9D9809A789 /* ConsoleOverviewContentTests.swift in Sources */,
+				88CFAE042EDBAD08FD4F62FA /* DeltaDashboardViewModelTests.swift in Sources */,
 				D37A622C72CFE1A9E52D247E /* DeviceProfilingProviderTests.swift in Sources */,
 				F71B802B675CE2A8D066D176 /* ExistingPayloadSubmissionAdapterTests.swift in Sources */,
 				B2DA803ADFC59C96824AA9D3 /* FaultInjectors.swift in Sources */,
