@@ -1,16 +1,23 @@
 import ConsoleModels
 import SwiftUI
 
-/// Presented when `CaptureViewModel.dedupState` is `.prompt` — lets the
-/// collector resolve a possible duplicate before the capture submits: attach
-/// to one of the nearby existing points instead of creating a new one,
-/// submit as a new point anyway, or cancel and keep editing.
+/// Presented when `CaptureViewModel.dedupState` is `.prompt` — informs the
+/// collector about nearby points that look similar to the in-progress
+/// capture before it submits. This sheet is informational only: the listed
+/// candidates are legacy public *projected points*, and
+/// `platform_record_create`'s `pointId` parameter only resolves org
+/// *platform records* (`lib/server/platform/pointLookup.ts`) — there is no
+/// way for this flow to "attach" a capture to one of these candidates, so
+/// the sheet doesn't offer that action. The collector reviews the list, then
+/// either submits anyway (as a new record) or cancels and keeps editing. The
+/// separate, pre-existing "attach to an existing point" mechanism
+/// (`CaptureViewModel.attach(to:)`/`preAttachPointId`, driven from the
+/// company-map flow) is unrelated and unaffected by this sheet.
 struct DedupWarningSheet: View {
     let candidates: [DedupCandidate]
     let bestPointId: String?
     let language: ConsoleLanguage
-    let onSubmitAsNew: () -> Void
-    let onUseExisting: (DedupCandidate) -> Void
+    let onSubmitAnyway: () -> Void
     let onCancel: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -29,10 +36,10 @@ struct DedupWarningSheet: View {
                         }
                     }
                     ADLConsolePrimaryButton(
-                        title: t("Submit as new point", "Soumettre comme nouveau point"),
-                        systemImage: "plus.circle.fill"
+                        title: t("Submit anyway", "Soumettre quand même"),
+                        systemImage: "checkmark.circle.fill"
                     ) {
-                        onSubmitAsNew()
+                        onSubmitAnyway()
                         dismiss()
                     }
                 }
@@ -62,8 +69,8 @@ struct DedupWarningSheet: View {
                     .foregroundStyle(ADLConsoleColor.ink)
             }
             Text(t(
-                "We found \(candidates.count) nearby point(s) that look similar. Attach your capture to one of them, or submit as a new point if it's genuinely different.",
-                "Nous avons trouvé \(candidates.count) point(s) similaire(s) à proximité. Associez votre relevé à l'un d'eux, ou soumettez comme nouveau point s'il est réellement différent."
+                "We found \(candidates.count) nearby point(s) that look similar. Review them below, then submit anyway if this is genuinely different, or cancel to keep editing.",
+                "Nous avons trouvé \(candidates.count) point(s) similaire(s) à proximité. Consultez-les ci-dessous, puis soumettez quand même si ce relevé est réellement différent, ou annulez pour continuer à modifier."
             ))
             .font(ADLConsoleFont.footnote)
             .foregroundStyle(ADLConsoleColor.inkMuted)
@@ -71,51 +78,45 @@ struct DedupWarningSheet: View {
         }
     }
 
+    /// A plain (non-interactive) informational row — no "use existing"
+    /// action. Distance + match score help the collector judge for
+    /// themselves whether the in-progress capture is really a duplicate.
     private func candidateRow(_ candidate: DedupCandidate) -> some View {
         let isBest = candidate.pointId == bestPointId
-        return Button {
-            onUseExisting(candidate)
-            dismiss()
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(isBest ? ADLConsoleColor.forestWash : ADLConsoleColor.navyWash)
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "mappin.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(isBest ? ADLConsoleColor.forestDark : ADLConsoleColor.navy)
-                }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(candidate.siteName ?? candidate.category)
-                        .font(ADLConsoleFont.subheadline)
-                        .foregroundStyle(ADLConsoleColor.ink)
-                        .lineLimit(1)
-                    Text(t(
-                        "\(Int(candidate.distanceMeters.rounded()))m away · \(Int((candidate.matchScore * 100).rounded()))% match",
-                        "à \(Int(candidate.distanceMeters.rounded()))m · \(Int((candidate.matchScore * 100).rounded()))% de correspondance"
-                    ))
-                    .font(ADLConsoleFont.caption)
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
-                }
-                Spacer()
-                if isBest {
-                    ADLConsolePill(
-                        text: t("Best match", "Meilleure correspondance"),
-                        foreground: ADLConsoleColor.forestDark,
-                        background: ADLConsoleColor.forestWash
-                    )
-                }
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(ADLConsoleColor.inkMuted)
+        return HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(isBest ? ADLConsoleColor.forestWash : ADLConsoleColor.navyWash)
+                    .frame(width: 44, height: 44)
+                Image(systemName: "mappin.circle.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isBest ? ADLConsoleColor.forestDark : ADLConsoleColor.navy)
             }
-            .padding(12)
-            .background(ADLConsoleColor.surface)
-            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
-            .adlShadowBorder()
+            VStack(alignment: .leading, spacing: 3) {
+                Text(candidate.siteName ?? candidate.category)
+                    .font(ADLConsoleFont.subheadline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .lineLimit(1)
+                Text(t(
+                    "\(Int(candidate.distanceMeters.rounded()))m away · \(Int((candidate.matchScore * 100).rounded()))% match",
+                    "à \(Int(candidate.distanceMeters.rounded()))m · \(Int((candidate.matchScore * 100).rounded()))% de correspondance"
+                ))
+                .font(ADLConsoleFont.caption)
+                .foregroundStyle(ADLConsoleColor.inkMuted)
+            }
+            Spacer()
+            if isBest {
+                ADLConsolePill(
+                    text: t("Best match", "Meilleure correspondance"),
+                    foreground: ADLConsoleColor.forestDark,
+                    background: ADLConsoleColor.forestWash
+                )
+            }
         }
-        .buttonStyle(ADLConsolePressStyle())
-        .accessibilityLabel(candidate.siteName ?? candidate.category)
+        .padding(12)
+        .background(ADLConsoleColor.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+        .adlShadowBorder()
+        .accessibilityElement(children: .combine)
     }
 }

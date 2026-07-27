@@ -480,11 +480,15 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertEqual(items?.count, 0)
     }
 
-    /// Resolving a prompt with "add to existing" (`resolveDedupPrompt(useExisting:)`)
-    /// resumes the submit and sends the chosen candidate's `pointId` on the
-    /// create call — the same `pointId` mechanism `attach(to:)` uses, since
-    /// `platform_record_create` has no separate dedup-decision fields.
-    func testResolveDedupPromptUseExistingSendsCandidatePointIdAndSubmits() async {
+    /// `resolveDedupPrompt()` (C2: `DedupWarningSheet` downgraded to
+    /// informational-only, "Submit anyway" / "Cancel") resumes the submit
+    /// as a NEW record — it must never send a listed candidate's `pointId`
+    /// on the create call. That `pointId` is a legacy public *projected
+    /// point* id; `platform_record_create`'s `pointId` parameter only
+    /// resolves org *platform records* (`lib/server/platform/pointLookup.ts`),
+    /// so writing a dedup candidate's id there is a guaranteed 409, not a
+    /// working "attach to existing" path.
+    func testResolveDedupPromptSubmitsAsNewWithoutSendingCandidatePointId() async {
         let transport = RoutingMockPlatformTransport()
         let viewModel = makeViewModel(transport: transport)
         transport.setResponse(dedupPromptJSON, forView: "dedup_candidates")
@@ -495,17 +499,20 @@ final class CaptureViewModelTests: XCTestCase {
         viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
 
         await viewModel.submit()
-        guard case .prompt = viewModel.dedupState else {
+        guard case .prompt(let candidates, _) = viewModel.dedupState else {
             return XCTFail("expected dedupState == .prompt before resolving")
         }
+        // Candidates are still listed for the collector to review...
+        XCTAssertEqual(candidates.map(\.pointId), ["pt-1"])
 
-        await viewModel.resolveDedupPrompt(useExisting: "pt-1")
+        await viewModel.resolveDedupPrompt()
 
+        // ...but resolving never sends one of their ids as `pointId`.
         XCTAssertEqual(viewModel.submitState, .synced)
         let createRequests = transport.requests(forView: "platform_record_create")
         XCTAssertEqual(createRequests.count, 1)
         let body = try? JSONSerialization.jsonObject(with: createRequests[0].httpBody ?? Data()) as? [String: Any]
-        XCTAssertEqual(body?["pointId"] as? String, "pt-1")
+        XCTAssertNil(body?["pointId"])
     }
 
     /// `shouldPrompt: false` (no close-enough duplicate) lets `submit()`
@@ -585,6 +592,84 @@ final class CaptureViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.dedupState, .clear)
         XCTAssertTrue(transport.requests(forView: "dedup_candidates").isEmpty)
+    }
+
+    /// C1: the dedup endpoint's `category` query param goes straight to
+    /// `normalizeCategory` in `api/submissions/index.ts`, which only accepts
+    /// the legacy `SubmissionCategory` domain (or its legacy aliases) and
+    /// 400s otherwise — a 400 that `checkDedup()`'s fail-open error handling
+    /// would previously swallow silently, leaving dedup invisibly inert for
+    /// any schema record type outside that legacy set. A record-type key
+    /// with no legacy-category mapping (e.g. an org's custom schema key)
+    /// must skip the network call entirely rather than firing a request
+    /// guaranteed to fail.
+    func testCheckDedupSkipsNetworkCallForRecordTypeKeyWithNoLegacyCategoryMapping() async {
+        let transport = RoutingMockPlatformTransport()
+        let customSchemaJSON = Data("""
+        {
+          "draft": null,
+          "published": {
+            "id": "schema-2",
+            "projectId": "proj-1",
+            "organizationId": "org-1",
+            "version": 1,
+            "status": "published",
+            "definition": {
+              "recordTypes": [
+                {
+                  "key": "org_custom_survey",
+                  "label": {"en": "Custom Survey", "fr": "Enquête personnalisée"},
+                  "fields": [
+                    {"key": "name", "label": {"en": "Name", "fr": "Nom"}, "type": "text", "required": true}
+                  ],
+                  "evidence": {"gpsRequired": false, "minPhotos": 0, "notesRequired": false}
+                }
+              ]
+            },
+            "publishedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "versions": []
+        }
+        """.utf8)
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(customSchemaJSON, forView: "platform_schema_get")
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en
+        )
+
+        await viewModel.loadProjects()
+        XCTAssertEqual(viewModel.selectedRecordTypeKey, "org_custom_survey")
+        viewModel.setValue(.text("Something"), for: "name")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.checkDedup()
+
+        XCTAssertEqual(viewModel.dedupState, .clear)
+        XCTAssertTrue(transport.requests(forView: "dedup_candidates").isEmpty)
+    }
+
+    /// C1 counterpart: a record type whose key IS in the legacy category set
+    /// (`"pharmacy"`) still issues the dedup request as before.
+    func testCheckDedupIssuesNetworkCallForRecordTypeKeyWithLegacyCategoryMapping() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupClearJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        XCTAssertEqual(viewModel.selectedRecordTypeKey, "pharmacy")
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.checkDedup()
+
+        XCTAssertEqual(viewModel.dedupState, .clear)
+        XCTAssertEqual(transport.requests(forView: "dedup_candidates").count, 1)
     }
 
     // MARK: - GPS evidence capture
@@ -689,6 +774,40 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.value(for: "name"), .text("Acme Pharmacy"))
     }
 
+    /// I1: in batch mode, a record resolved through `DedupWarningSheet`
+    /// (`resolveDedupPrompt()`, "Submit anyway") must count toward the batch
+    /// the same as any other submit — previously `submitInBatch()` was the
+    /// only place that incremented `batchCompleted`, so a dedup-prompted
+    /// submit (which returns through `resolveDedupPrompt()`, not
+    /// `submitInBatch()`'s own post-`submit()` check) never advanced the
+    /// counter even though the record itself synced successfully.
+    func testBatchModeResolveDedupPromptSubmitAnywayIncrementsBatchCompleted() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupPromptJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submitInBatch()
+        guard case .prompt = viewModel.dedupState else {
+            return XCTFail("expected dedupState == .prompt")
+        }
+        // The prompt paused the submit — batch accounting must not have
+        // advanced yet.
+        XCTAssertEqual(viewModel.batchCompleted, 0)
+
+        await viewModel.resolveDedupPrompt()
+
+        XCTAssertEqual(viewModel.batchCompleted, 1)
+        XCTAssertEqual(viewModel.submitState, .idle)
+        XCTAssertTrue(viewModel.isBatchMode)
+    }
+
     /// `finishBatch()` exits batch mode entirely, resetting the counters —
     /// used by the "Finish batch" button on `CaptureView`.
     func testBatchModeFinishExitsBatchMode() async {
@@ -708,6 +827,149 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.isBatchMode)
         XCTAssertEqual(viewModel.batchCompleted, 0)
         XCTAssertEqual(viewModel.batchTarget, 0)
+    }
+
+    // MARK: - Voice input stop/termination (Task C3)
+
+    /// C3: the mic button doubles as a STOP affordance while dictation is
+    /// active for a field — a second `requestVoiceInput(for:)` call for the
+    /// SAME field must cancel the in-flight recognition task rather than
+    /// starting a new one, and `voiceInputActiveKey` must clear once that
+    /// cancellation is observed. This is the level at which the "stop" path
+    /// is testable without a real microphone: `SpeechRecognitionProviding`
+    /// is a protocol seam, so the stub below stands in for
+    /// `SFSpeechRecognizerService`'s production
+    /// `withTaskCancellationHandler`-driven behavior (which this test can't
+    /// exercise directly, since that requires a live `AVAudioEngine`).
+    func testRequestVoiceInputSecondTapForSameFieldCancelsInFlightDictation() async {
+        let transport = RoutingMockPlatformTransport()
+        let provider = CancellationAwareSpeechRecognitionProvider()
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en,
+            speechRecognitionProvider: provider
+        )
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(schemaJSON, forView: "platform_schema_get")
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+
+        await viewModel.loadProjects()
+
+        viewModel.requestVoiceInput(for: "name")
+        await provider.waitUntilRequestStarted()
+        XCTAssertEqual(viewModel.voiceInputActiveKey, "name")
+
+        // Second tap on the SAME field == stop, not "start again".
+        viewModel.requestVoiceInput(for: "name")
+
+        await provider.waitUntilCancellationObserved()
+        // Give the cancelled task's `defer { voiceInputActiveKey = nil }` a
+        // beat to run on the main actor after the stub resumes.
+        for _ in 0..<50 where viewModel.voiceInputActiveKey != nil {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        XCTAssertNil(viewModel.voiceInputActiveKey)
+        XCTAssertEqual(provider.requestCount, 1, "stopping should not start a second, independent transcription request")
+    }
+}
+
+/// `SpeechRecognitionProviding` stub whose `requestTranscription()` blocks
+/// until the enclosing `Task` is cancelled — standing in for the real
+/// `SFSpeechRecognizerService.productionPerformRecognition`'s
+/// `withTaskCancellationHandler`-driven "manual stop ends audio input, then
+/// the recognizer still resolves" behavior, without touching a real
+/// microphone or `AVAudioEngine`.
+private final class CancellationAwareSpeechRecognitionProvider: SpeechRecognitionProviding, @unchecked Sendable {
+    let isAvailable = true
+
+    private let lock = NSLock()
+    private var _requestCount = 0
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var cancelledContinuation: CheckedContinuation<Void, Never>?
+    private var didStart = false
+    private var didObserveCancellation = false
+
+    var requestCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _requestCount
+    }
+
+    func requestTranscription() async throws -> String {
+        markStarted()?.resume()
+
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        markCancellationObserved()?.resume()
+
+        return "stopped early"
+    }
+
+    /// Synchronous (non-`async`) helpers wrap every `lock`/`unlock` pair —
+    /// `NSLock.lock()`/`unlock()` are `noasync` in this SDK, so they can't be
+    /// called directly inside `requestTranscription()`'s `async` body.
+    private func markStarted() -> CheckedContinuation<Void, Never>? {
+        lock.lock()
+        defer { lock.unlock() }
+        _requestCount += 1
+        didStart = true
+        let toResume = startedContinuation
+        startedContinuation = nil
+        return toResume
+    }
+
+    private func markCancellationObserved() -> CheckedContinuation<Void, Never>? {
+        lock.lock()
+        defer { lock.unlock() }
+        didObserveCancellation = true
+        let toResume = cancelledContinuation
+        cancelledContinuation = nil
+        return toResume
+    }
+
+    private func lockedDidStart() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didStart
+    }
+
+    private func lockedDidObserveCancellation() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didObserveCancellation
+    }
+
+    func waitUntilRequestStarted() async {
+        if lockedDidStart() { return }
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if didStart {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                startedContinuation = continuation
+                lock.unlock()
+            }
+        }
+    }
+
+    func waitUntilCancellationObserved() async {
+        if lockedDidObserveCancellation() { return }
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if didObserveCancellation {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                cancelledContinuation = continuation
+                lock.unlock()
+            }
+        }
     }
 }
 

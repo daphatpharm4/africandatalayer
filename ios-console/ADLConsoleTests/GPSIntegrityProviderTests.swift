@@ -272,6 +272,54 @@ final class GPSIntegrityProviderTests: XCTestCase {
         XCTAssertFalse(gyroStarted.wrapped)
     }
 
+    // MARK: - motionCaptureStats (Task I2: single motion session)
+
+    /// `motionCaptureStats` is the raw (non-distilled) counterpart to
+    /// `integrityScore`'s confidence value — `NativeCaptureFraudMetadataProvider`
+    /// consumes this instead of running its own second `CMMotionManager`
+    /// session for the same fields.
+    func testMotionCaptureStatsReflectsSamplesCollectedSinceStartCapture() {
+        let provider = MotionGPSIntegrityProvider(
+            readIsAccelerometerAvailable: { true },
+            readIsAccelerometerActive: { false },
+            beginAccelerometerUpdates: { onSample in
+                onSample(1.4, 0.9, 0.2) // large deviation: motion detected
+                onSample(1.3, 0.8, 0.3)
+            },
+            endAccelerometerUpdates: {},
+            readIsGyroAvailable: { true },
+            readIsGyroActive: { false },
+            beginGyroUpdates: {},
+            endGyroUpdates: {}
+        )
+
+        provider.startCapture()
+        let stats = provider.motionCaptureStats
+
+        XCTAssertTrue(stats.isAccelerometerAvailable)
+        XCTAssertTrue(stats.isGyroAvailable)
+        XCTAssertEqual(stats.accelerometerSampleCount, 2)
+        XCTAssertTrue(stats.motionDetectedDuringCapture)
+    }
+
+    func testMotionCaptureStatsIsZeroSampleCountBeforeStartCapture() {
+        let provider = MotionGPSIntegrityProvider(
+            readIsAccelerometerAvailable: { true },
+            readIsAccelerometerActive: { false },
+            beginAccelerometerUpdates: { onSample in onSample(0, 0, 1) },
+            endAccelerometerUpdates: {},
+            readIsGyroAvailable: { false },
+            readIsGyroActive: { false },
+            beginGyroUpdates: {},
+            endGyroUpdates: {}
+        )
+
+        let stats = provider.motionCaptureStats
+
+        XCTAssertEqual(stats.accelerometerSampleCount, 0)
+        XCTAssertFalse(stats.motionDetectedDuringCapture)
+    }
+
     // MARK: - Production default initializer compiles and is usable
 
     func testDefaultInitializerUsesProductionMotionManager() {

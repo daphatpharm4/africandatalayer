@@ -29,6 +29,32 @@ protocol GPSIntegrityProviding: Sendable {
     /// Scores GPS plausibility against the motion samples collected since
     /// the last `startCapture()`.
     func integrityScore(gps: FormGpsValue?, capturedAt: Date) -> GPSIntegrityResult
+
+    /// Raw per-capture accelerometer/gyro telemetry collected since the last
+    /// `startCapture()` — sensor availability, sample count, and whether
+    /// meaningful motion was detected. `integrityScore` only exposes a
+    /// distilled confidence value; `NativeCaptureFraudMetadataProvider`
+    /// needs these raw counts too (mirroring the backend's
+    /// `GpsIntegrityReport` shape), so exposing them here lets it consume
+    /// this provider's single `CMMotionManager` session instead of running a
+    /// second, duplicate one of its own.
+    var motionCaptureStats: MotionCaptureStats { get }
+}
+
+/// Raw accelerometer/gyro telemetry for one capture session — the
+/// non-distilled counterpart to `GPSIntegrityResult`'s confidence score.
+struct MotionCaptureStats: Equatable, Sendable {
+    let isAccelerometerAvailable: Bool
+    let isGyroAvailable: Bool
+    let accelerometerSampleCount: Int
+    let motionDetectedDuringCapture: Bool
+
+    static let zero = MotionCaptureStats(
+        isAccelerometerAvailable: false,
+        isGyroAvailable: false,
+        accelerometerSampleCount: 0,
+        motionDetectedDuringCapture: false
+    )
 }
 
 /// Motion-derived GPS plausibility signal for a single capture.
@@ -147,6 +173,18 @@ final class MotionGPSIntegrityProvider: GPSIntegrityProviding, @unchecked Sendab
         if readIsGyroActive() {
             endGyroUpdates()
         }
+    }
+
+    var motionCaptureStats: MotionCaptureStats {
+        let (samples, motionDetected) = stateLock.withLock {
+            (accelerometerSampleCount, motionDetectedDuringCapture)
+        }
+        return MotionCaptureStats(
+            isAccelerometerAvailable: readIsAccelerometerAvailable(),
+            isGyroAvailable: readIsGyroAvailable(),
+            accelerometerSampleCount: samples,
+            motionDetectedDuringCapture: motionDetected
+        )
     }
 
     func integrityScore(gps: FormGpsValue?, capturedAt: Date) -> GPSIntegrityResult {

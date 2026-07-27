@@ -135,15 +135,15 @@ final class CaptureViewModel: ObservableObject {
     private let onDurableRecordPersisted: (@MainActor (String) async -> Void)?
     private let creationAllowed: @MainActor () -> Bool
     private var pendingMedia: [String: CaptureIntentMedia] = [:]
-    /// Set by `resolveDedupPrompt(useExisting:)` when the collector picks
-    /// "add to existing" off `DedupWarningSheet`. Folded into
-    /// `submitAttachPointId` below — `createPlatformRecord`'s `pointId`
-    /// parameter (the same mechanism `attach(to:)`/`preAttachPointId` use for
-    /// company-map attachment) is the one thing `platform_record_create`
-    /// actually understands for "this belongs to an existing point"; unlike
-    /// the original field app's `api/submissions` CREATE path, it has no
-    /// separate `dedupDecision`/`dedupTargetPointId` fields to set.
-    private var dedupTargetPointId: String?
+    /// The `Task` backing the in-flight `requestVoiceInput(for:)` call, if
+    /// any — retained so a second tap on the same field's mic button (which
+    /// renders as a STOP affordance while `voiceInputActiveKey == key`, see
+    /// `CaptureFieldControl`) can cancel it. `SFSpeechRecognizerService`'s
+    /// production recognition path observes that cancellation via
+    /// `withTaskCancellationHandler` and ends audio input, letting the
+    /// recognizer settle on a final (possibly partial) transcript instead of
+    /// listening forever.
+    private var voiceInputTask: Task<Void, Never>?
     private static let enrichMaxDistanceMeters: Double = 250
 
     init(
@@ -210,7 +210,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     private var submitAttachPointId: String? {
-        dedupTargetPointId ?? attachedPoint?.pointId ?? preAttachPointId
+        attachedPoint?.pointId ?? preAttachPointId
     }
 
     var captureProgress: CaptureProgress {
@@ -358,7 +358,6 @@ final class CaptureViewModel: ObservableObject {
         preAttachPointId = nil
         lastValidation = nil
         dedupState = .idle
-        dedupTargetPointId = nil
         if resetSubmitState {
             submitState = .idle
         }
@@ -399,31 +398,50 @@ final class CaptureViewModel: ObservableObject {
     /// and, on success, fills the field named `key` with the (trimmed)
     /// transcript — `.numberText` for a `.number` field, `.text` for every
     /// other control kind, matching `textBinding`/`numberTextBinding` in
-    /// `CaptureFieldControl`. A no-op when no provider was injected, the
-    /// field doesn't exist on the current record type, or the transcript is
-    /// empty (e.g. the collector tapped the mic then said nothing).
-    func requestVoiceInput(for key: String) async {
+    /// `CaptureFieldControl`. A no-op when no provider was injected or the
+    /// field doesn't exist on the current record type; a transcript that's
+    /// empty (e.g. the collector tapped the mic then said nothing) leaves the
+    /// field untouched.
+    ///
+    /// A second call for the SAME field while its dictation is already in
+    /// flight (`voiceInputActiveKey == key`) is treated as "stop" rather than
+    /// "start again": it cancels the in-flight `voiceInputTask` instead of
+    /// requesting a fresh transcription. `SFSpeechRecognizerService`'s
+    /// production recognition path reacts to that cancellation by ending
+    /// audio input and letting the recognizer resolve normally with whatever
+    /// it had transcribed so far, so this still fills the field — it just
+    /// stops listening early instead of running until a timeout.
+    func requestVoiceInput(for key: String) {
         guard let speechRecognitionProvider else { return }
+
+        if voiceInputActiveKey == key {
+            voiceInputTask?.cancel()
+            return
+        }
+
         guard let descriptor = descriptors.first(where: { $0.key == key }) else { return }
 
         voiceInputErrorMessage = nil
         voiceInputActiveKey = key
-        defer { voiceInputActiveKey = nil }
+        voiceInputTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.voiceInputActiveKey = nil }
 
-        do {
-            let transcript = try await speechRecognitionProvider.requestTranscription()
-            let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return }
-            switch descriptor.control {
-            case .number:
-                setValue(.numberText(trimmed), for: key)
-            default:
-                setValue(.text(trimmed), for: key)
+            do {
+                let transcript = try await speechRecognitionProvider.requestTranscription()
+                let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                switch descriptor.control {
+                case .number:
+                    self.setValue(.numberText(trimmed), for: key)
+                default:
+                    self.setValue(.text(trimmed), for: key)
+                }
+            } catch let error as SpeechRecognitionError {
+                self.voiceInputErrorMessage = error.message(self.language)
+            } catch {
+                self.voiceInputErrorMessage = self.language.t("Voice input failed.", "La saisie vocale a échoué.")
             }
-        } catch let error as SpeechRecognitionError {
-            voiceInputErrorMessage = error.message(language)
-        } catch {
-            voiceInputErrorMessage = language.t("Voice input failed.", "La saisie vocale a échoué.")
         }
     }
 
@@ -598,12 +616,52 @@ final class CaptureViewModel: ObservableObject {
 
     // MARK: - Duplicate-candidate check
 
+    /// The dedup endpoint's `category` query param goes straight to
+    /// `normalizeCategory` in `api/submissions/index.ts`, which only accepts
+    /// the legacy `SubmissionCategory` domain — the 7 vertical ids
+    /// (`shared/verticals.ts`'s `VERTICALS` keys) or the legacy aliases in
+    /// its `LEGACY_CATEGORY_MAP` — and 400s on anything else. A schema
+    /// record-type `key` outside that set (e.g. an org's custom schema key
+    /// like `"org_custom_survey"`) would 400 on every request; `checkDedup()`
+    /// already fails open to `.clear` on any error, so that 400 would be
+    /// silently swallowed and dedup would look "on" while actually never
+    /// running. Gating on this mapping client-side avoids firing a request
+    /// that's guaranteed to fail, rather than relying on fail-open to hide it.
+    private static let legacyDedupCategoryKeys: Set<String> = [
+        "pharmacy", "fuel_station", "mobile_money", "alcohol_outlet",
+        "billboard", "transport_road", "census_proxy",
+    ]
+
+    /// Mirrors `LEGACY_CATEGORY_MAP` in `shared/verticals.ts` exactly —
+    /// the uppercase legacy `Category` enum values `normalizeCategoryAlias`
+    /// also accepts alongside an exact vertical-id match.
+    private static let legacyDedupCategoryAliases: [String: String] = [
+        "PHARMACY": "pharmacy",
+        "FUEL": "fuel_station",
+        "MOBILE_MONEY": "mobile_money",
+        "ALCOHOL_OUTLET": "alcohol_outlet",
+        "BILLBOARD": "billboard",
+        "TRANSPORT_ROAD": "transport_road",
+        "CENSUS_PROXY": "census_proxy",
+        "KIOSK": "mobile_money",
+    ]
+
+    /// Resolves a schema record-type `key` to the legacy category string the
+    /// dedup endpoint understands, or `nil` if there is no such mapping.
+    private static func legacyDedupCategory(forRecordTypeKey key: String) -> String? {
+        if legacyDedupCategoryKeys.contains(key) { return key }
+        return legacyDedupCategoryAliases[key]
+    }
+
     /// Looks up nearby possible-duplicate points for the in-progress capture
     /// — `GET api/submissions?view=dedup_candidates`, a geo + category + name
     /// proximity match (see `lib/server/dedup.ts:buildDedupCandidates`), NOT
     /// a hash lookup. Requires a selected record type and a captured GPS fix;
     /// without either there is nothing to check against, so `dedupState`
-    /// goes straight to `.clear`.
+    /// goes straight to `.clear`. Likewise, when the selected record type's
+    /// `key` has no legacy-category mapping (see `legacyDedupCategory`
+    /// above), the lookup is skipped entirely rather than firing a request
+    /// the server is guaranteed to reject.
     ///
     /// Any failure — network error or an unparsable/unexpected response —
     /// also lands on `.clear`, never `.prompt`: this check must fail OPEN.
@@ -613,10 +671,14 @@ final class CaptureViewModel: ObservableObject {
             dedupState = .clear
             return
         }
+        guard let legacyCategory = Self.legacyDedupCategory(forRecordTypeKey: recordType.key) else {
+            dedupState = .clear
+            return
+        }
         dedupState = .checking
         do {
             let result = try await apiClient.dedupCandidates(
-                category: recordType.key,
+                category: legacyCategory,
                 latitude: gps.latitude,
                 longitude: gps.longitude,
                 name: currentNameFieldValue
@@ -656,9 +718,10 @@ final class CaptureViewModel: ObservableObject {
     /// `submitState` reflects that as `.queuedPendingSync`, not `.failed`.
     ///
     /// When `checkDedup()` lands on `.prompt`, this returns early without
-    /// enqueueing anything — `CaptureView` presents `DedupWarningSheet`,
-    /// which resumes the flow via `resolveDedupPrompt(useExisting:)` (submit
-    /// as new / attach to a candidate) or aborts it via `cancelDedupPrompt()`.
+    /// enqueueing anything — `CaptureView` presents `DedupWarningSheet`
+    /// (informational-only: lists candidates, no "use existing" action),
+    /// which resumes the flow via `resolveDedupPrompt()` ("Submit anyway")
+    /// or aborts it via `cancelDedupPrompt()` ("Cancel").
     func submit() async {
         guard creationAllowed() else {
             submitState = .failed(language.t(
@@ -690,19 +753,25 @@ final class CaptureViewModel: ObservableObject {
         await performSubmit(recordType: recordType, projectOption: projectOption)
     }
 
-    /// Resumes a `submit()` that paused on `DedupState.prompt`. `pointId ==
-    /// nil` means "submit as new"; a candidate's `pointId` means "attach this
-    /// capture to that existing point instead of creating a fresh one" —
-    /// reusing the same `pointId` mechanism `attach(to:)`/`preAttachPointId`
-    /// already use for company-map attachment.
-    func resolveDedupPrompt(useExisting pointId: String?) async {
-        dedupTargetPointId = pointId
+    /// Resumes a `submit()` that paused on `DedupState.prompt` — the
+    /// collector reviewed the listed candidates on `DedupWarningSheet` and
+    /// chose "Submit anyway". `DedupWarningSheet` is informational-only:
+    /// dedup candidates are legacy public *projected points*, and
+    /// `platform_record_create`'s `pointId` parameter only resolves org
+    /// *platform records* (`lib/server/platform/pointLookup.ts`) — sending a
+    /// candidate's `pointId` there is a guaranteed 409, not a valid "attach
+    /// to existing" path. The only supported "this belongs to an existing
+    /// point" mechanism for this flow is `attach(to:)`/`preAttachPointId`
+    /// (company-map attachment), which `submitAttachPointId` still honors
+    /// here unchanged — this method only ever proceeds as a new record.
+    func resolveDedupPrompt() async {
         dedupState = .clear
         guard let recordType = selectedRecordType, let projectOption = selectedProjectOption else {
             submitState = .failed(language.t("Choose a project and record type first.", "Choisissez d'abord un projet et un type d'enregistrement."))
             return
         }
         await performSubmit(recordType: recordType, projectOption: projectOption)
+        advanceBatchIfCompleted()
     }
 
     /// Dismisses `DedupWarningSheet` without submitting anything — the
@@ -718,14 +787,29 @@ final class CaptureViewModel: ObservableObject {
     /// immediately or safely queued offline — advances the batch counter and
     /// clears the draft so `CaptureView` is ready for the next entry.
     ///
+    /// When `submit()` pauses on `DedupState.prompt` instead, `submitState`
+    /// stays `.idle` (neither `.synced` nor `.queuedPendingSync`), so
+    /// `advanceBatchIfCompleted()` below is a no-op here — the batch counter
+    /// only advances once the collector resolves the prompt via
+    /// `resolveDedupPrompt()`, which applies this same bookkeeping itself.
+    func submitInBatch() async {
+        await submit()
+        advanceBatchIfCompleted()
+    }
+
+    /// Shared "did this submit actually complete" bookkeeping for
+    /// `submitInBatch()` and `resolveDedupPrompt()` — both routes into
+    /// `performSubmit` need the same batch-counter/draft-reset treatment on
+    /// success so a record resolved through `DedupWarningSheet` in batch mode
+    /// counts toward the batch the same as any other submit.
+    ///
     /// `&&` binds tighter than `||` in Swift, so the `||` MUST stay
     /// parenthesized here: `isBatchMode && (a || b)`. Written as
     /// `isBatchMode && a || b` this would read as `(isBatchMode && a) || b`,
     /// which fires the "advance batch" branch on `.queuedPendingSync` even
     /// when `isBatchMode` is false. The original design spec had exactly
     /// this bug — do not reintroduce it.
-    func submitInBatch() async {
-        await submit()
+    private func advanceBatchIfCompleted() {
         if isBatchMode && (submitState == .synced || submitState == .queuedPendingSync) {
             batchCompleted += 1
             resetDraftValues(resetSubmitState: false)

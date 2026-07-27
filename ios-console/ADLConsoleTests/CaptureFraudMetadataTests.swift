@@ -105,11 +105,19 @@ final class CaptureFraudMetadataTests: XCTestCase {
     // MARK: - gpsIntegrity(gps:capturedAt:) <- GPSIntegrityProviding
 
     func testGpsIntegrityFlagsMockLocationWhenProviderReportsLowConfidenceMismatch() {
-        let gpsIntegrity = FakeGPSIntegrityProvider(result: GPSIntegrityResult(
-            isStationary: true,
-            motionConsistent: false,
-            confidenceScore: 0.3
-        ))
+        let gpsIntegrity = FakeGPSIntegrityProvider(
+            result: GPSIntegrityResult(
+                isStationary: true,
+                motionConsistent: false,
+                confidenceScore: 0.3
+            ),
+            motionCaptureStats: MotionCaptureStats(
+                isAccelerometerAvailable: true,
+                isGyroAvailable: true,
+                accelerometerSampleCount: 5,
+                motionDetectedDuringCapture: true
+            )
+        )
         let provider = NativeCaptureFraudMetadataProvider(
             gpsIntegrityProvider: gpsIntegrity,
             deviceProfilingProvider: FakeDeviceProfilingProvider(),
@@ -160,6 +168,85 @@ final class CaptureFraudMetadataTests: XCTestCase {
         XCTAssertFalse(integrity.mockLocationDetected)
         XCTAssertNil(integrity.mockLocationMethod)
     }
+
+    // MARK: - Single motion session (Task I2): raw stats <- GPSIntegrityProviding
+
+    /// `NativeCaptureFraudMetadataProvider` used to run its own second
+    /// `CMMotionManager` session purely to report
+    /// `hasAccelerometerData`/`hasGyroscopeData`/`accelerometerSampleCount`/
+    /// `motionDetectedDuringCapture` — duplicating the session
+    /// `gpsIntegrityProvider` already runs. It now reads those fields
+    /// straight off `gpsIntegrityProvider.motionCaptureStats` instead of
+    /// owning any sensor state of its own; this proves the raw stats really
+    /// do come from the injected provider, not a second live session.
+    func testGpsIntegrityRawMotionFieldsComeFromGpsIntegrityProviderNotASecondSession() {
+        let stats = MotionCaptureStats(
+            isAccelerometerAvailable: true,
+            isGyroAvailable: true,
+            accelerometerSampleCount: 7,
+            motionDetectedDuringCapture: true
+        )
+        let gpsIntegrity = FakeGPSIntegrityProvider(motionCaptureStats: stats)
+        let provider = NativeCaptureFraudMetadataProvider(
+            gpsIntegrityProvider: gpsIntegrity,
+            deviceProfilingProvider: FakeDeviceProfilingProvider(),
+            photoIntegrityProvider: FakePhotoIntegrityProvider()
+        )
+        let gps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        let integrity = provider.gpsIntegrity(gps: gps, capturedAt: Date())
+
+        XCTAssertEqual(integrity.hasAccelerometerData, true)
+        XCTAssertEqual(integrity.hasGyroscopeData, true)
+        XCTAssertEqual(integrity.accelerometerSampleCount, 7)
+        XCTAssertEqual(integrity.motionDetectedDuringCapture, true)
+    }
+
+    /// Honest sentinel check: with zero real accelerometer samples, even a
+    /// `confidenceScore` that isn't exactly `0.5` (the old, indirect
+    /// "hasMotionSamples" signal) must NOT flag a mock location — the fixed
+    /// `hasMotionSamples` check reads the real sample count directly instead
+    /// of inferring it from the score.
+    func testGpsIntegrityDoesNotFlagMockLocationWhenSampleCountIsZeroEvenIfConfidenceScoreIsNotBaseline() {
+        let gpsIntegrity = FakeGPSIntegrityProvider(
+            result: GPSIntegrityResult(isStationary: true, motionConsistent: false, confidenceScore: 0.3),
+            motionCaptureStats: MotionCaptureStats(
+                isAccelerometerAvailable: true,
+                isGyroAvailable: true,
+                accelerometerSampleCount: 0,
+                motionDetectedDuringCapture: false
+            )
+        )
+        let provider = NativeCaptureFraudMetadataProvider(
+            gpsIntegrityProvider: gpsIntegrity,
+            deviceProfilingProvider: FakeDeviceProfilingProvider(),
+            photoIntegrityProvider: FakePhotoIntegrityProvider()
+        )
+        let gps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        let integrity = provider.gpsIntegrity(gps: gps, capturedAt: Date())
+
+        XCTAssertFalse(integrity.mockLocationDetected, "zero real samples should never flag a mock location, regardless of confidenceScore")
+        XCTAssertNil(integrity.mockLocationMethod)
+    }
+
+    /// `startCapture()`/`stopCapture()` only ever delegate to
+    /// `gpsIntegrityProvider` — no second motion session is started.
+    func testStartAndStopCaptureOnlyDelegateToGpsIntegrityProviderExactlyOnce() {
+        let gpsIntegrity = FakeGPSIntegrityProvider()
+        let provider = NativeCaptureFraudMetadataProvider(
+            gpsIntegrityProvider: gpsIntegrity,
+            deviceProfilingProvider: FakeDeviceProfilingProvider(),
+            photoIntegrityProvider: FakePhotoIntegrityProvider()
+        )
+
+        provider.startCapture()
+        provider.startCapture()
+        provider.stopCapture()
+
+        XCTAssertEqual(gpsIntegrity.startCaptureCallCount, 2)
+        XCTAssertEqual(gpsIntegrity.stopCaptureCallCount, 1)
+    }
 }
 
 // MARK: - Fakes
@@ -169,9 +256,14 @@ private final class FakeGPSIntegrityProvider: GPSIntegrityProviding, @unchecked 
     private(set) var stopCaptureCallCount = 0
     private(set) var integrityScoreCallCount = 0
     private let result: GPSIntegrityResult
+    let motionCaptureStats: MotionCaptureStats
 
-    init(result: GPSIntegrityResult = GPSIntegrityResult(isStationary: true, motionConsistent: true, confidenceScore: 0.5)) {
+    init(
+        result: GPSIntegrityResult = GPSIntegrityResult(isStationary: true, motionConsistent: true, confidenceScore: 0.5),
+        motionCaptureStats: MotionCaptureStats = .zero
+    ) {
         self.result = result
+        self.motionCaptureStats = motionCaptureStats
     }
 
     func startCapture() { startCaptureCallCount += 1 }

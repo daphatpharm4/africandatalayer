@@ -52,6 +52,7 @@ final class SpeechRecognitionProviderTests: XCTestCase {
                 return .denied
             },
             readIsRecognizerAvailable: { true },
+            readRecordPermission: { .granted },
             performAudioRecognition: { "transcribed text" }
         )
         let text = try await service.requestTranscription()
@@ -103,6 +104,7 @@ final class SpeechRecognitionProviderTests: XCTestCase {
             readAuthorizationStatus: { .notDetermined },
             requestSpeechAuthorization: { .authorized },
             readIsRecognizerAvailable: { true },
+            readRecordPermission: { .granted },
             performAudioRecognition: { "granted after prompt" }
         )
         let text = try await service.requestTranscription()
@@ -156,6 +158,7 @@ final class SpeechRecognitionProviderTests: XCTestCase {
             readAuthorizationStatus: { .authorized },
             requestSpeechAuthorization: { .authorized },
             readIsRecognizerAvailable: { true },
+            readRecordPermission: { .granted },
             performAudioRecognition: {
                 throw SpeechRecognitionError.recognitionFailed("no speech detected")
             }
@@ -165,6 +168,77 @@ final class SpeechRecognitionProviderTests: XCTestCase {
             XCTFail("expected recognitionFailed")
         } catch SpeechRecognitionError.recognitionFailed(let message) {
             XCTAssertEqual(message, "no speech detected")
+        } catch {
+            XCTFail("wrong error type: \(error)")
+        }
+    }
+
+    // MARK: - SFSpeechRecognizerService: microphone (record) permission gating (Task C3)
+
+    /// Microphone access is a *separate* permission from speech-recognition
+    /// authorization. Denied mic access must surface `.permissionDenied`
+    /// without ever reaching `performAudioRecognition` — previously there
+    /// was no such check at all, so a denied/never-granted microphone would
+    /// let `AVAudioEngine.start()` run with no audio and the recognition
+    /// task hang indefinitely waiting for input.
+    func testRequestTranscriptionWhenRecordPermissionDeniedThrowsPermissionDeniedWithoutAttemptingRecognition() async {
+        let service = SFSpeechRecognizerService(
+            readAuthorizationStatus: { .authorized },
+            requestSpeechAuthorization: {
+                XCTFail("should not reach speech-authorization prompting")
+                return .denied
+            },
+            readIsRecognizerAvailable: { true },
+            readRecordPermission: { .denied },
+            requestRecordPermission: {
+                XCTFail("should not re-prompt once denied")
+                return false
+            },
+            performAudioRecognition: {
+                XCTFail("should not attempt recognition without microphone permission")
+                return ""
+            }
+        )
+        do {
+            _ = try await service.requestTranscription()
+            XCTFail("expected permissionDenied")
+        } catch SpeechRecognitionError.permissionDenied {
+            // expected
+        } catch {
+            XCTFail("wrong error type: \(error)")
+        }
+    }
+
+    func testRequestTranscriptionWhenRecordPermissionUndeterminedPromptsThenProceedsIfGranted() async throws {
+        let service = SFSpeechRecognizerService(
+            readAuthorizationStatus: { .authorized },
+            requestSpeechAuthorization: { .authorized },
+            readIsRecognizerAvailable: { true },
+            readRecordPermission: { .undetermined },
+            requestRecordPermission: { true },
+            performAudioRecognition: { "granted after mic prompt" }
+        )
+        let text = try await service.requestTranscription()
+        XCTAssertEqual(text, "granted after mic prompt")
+    }
+
+    func testRequestTranscriptionWhenRecordPermissionUndeterminedAndUserDeniesThrowsPermissionDenied() async {
+        let service = SFSpeechRecognizerService(
+            readAuthorizationStatus: { .authorized },
+            requestSpeechAuthorization: { .authorized },
+            readIsRecognizerAvailable: { true },
+            readRecordPermission: { .undetermined },
+            requestRecordPermission: { false },
+            performAudioRecognition: {
+                XCTFail("should not attempt recognition when the user denies the microphone prompt")
+                return ""
+            }
+        )
+        do {
+            _ = try await service.requestTranscription()
+            XCTFail("expected permissionDenied")
+        } catch SpeechRecognitionError.permissionDenied {
+            // expected
         } catch {
             XCTFail("wrong error type: \(error)")
         }

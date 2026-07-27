@@ -79,6 +79,16 @@ final class SFSpeechRecognizerService: SpeechRecognitionProviding, @unchecked Se
     private let readAuthorizationStatus: @Sendable () -> SFSpeechRecognizerAuthorizationStatus
     private let requestSpeechAuthorization: @Sendable () async -> SFSpeechRecognizerAuthorizationStatus
     private let readIsRecognizerAvailable: @Sendable () -> Bool
+    /// Microphone permission — a *separate* iOS permission from speech
+    /// recognition (`readAuthorizationStatus` above). Checked (and, if
+    /// undetermined, requested) before `performAudioRecognition()` so a
+    /// collector who has speech recognition authorized but has denied (or
+    /// never been asked for) microphone access gets a clean
+    /// `.permissionDenied` instead of `AVAudioEngine.start()` silently
+    /// producing no audio and the recognition task hanging with nothing to
+    /// transcribe.
+    private let readRecordPermission: @Sendable () -> AVAudioApplication.recordPermission
+    private let requestRecordPermission: @Sendable () async -> Bool
     private let performAudioRecognition: @Sendable () async throws -> String
 
     init(
@@ -88,12 +98,18 @@ final class SFSpeechRecognizerService: SpeechRecognitionProviding, @unchecked Se
             SFSpeechRecognizerService.productionRequestAuthorization,
         readIsRecognizerAvailable: @escaping @Sendable () -> Bool =
             SFSpeechRecognizerService.productionIsRecognizerAvailable,
+        readRecordPermission: @escaping @Sendable () -> AVAudioApplication.recordPermission =
+            { AVAudioApplication.shared.recordPermission },
+        requestRecordPermission: @escaping @Sendable () async -> Bool =
+            SFSpeechRecognizerService.productionRequestRecordPermission,
         performAudioRecognition: @escaping @Sendable () async throws -> String =
             SFSpeechRecognizerService.productionPerformRecognition
     ) {
         self.readAuthorizationStatus = readAuthorizationStatus
         self.requestSpeechAuthorization = requestSpeechAuthorization
         self.readIsRecognizerAvailable = readIsRecognizerAvailable
+        self.readRecordPermission = readRecordPermission
+        self.requestRecordPermission = requestRecordPermission
         self.performAudioRecognition = performAudioRecognition
     }
 
@@ -109,7 +125,28 @@ final class SFSpeechRecognizerService: SpeechRecognitionProviding, @unchecked Se
         guard readIsRecognizerAvailable() else {
             throw SpeechRecognitionError.unavailable
         }
+        guard await resolvedRecordPermissionGranted() else {
+            throw SpeechRecognitionError.permissionDenied
+        }
         return try await performAudioRecognition()
+    }
+
+    /// Reads the current microphone permission; if it's still
+    /// `.undetermined`, prompts the user via `requestRecordPermission` and
+    /// resolves to whatever they chose. `.denied` is returned as `false`
+    /// without re-prompting, matching `resolvedAuthorizationStatus()`'s
+    /// no-re-prompt behavior for speech-recognition authorization above.
+    private func resolvedRecordPermissionGranted() async -> Bool {
+        switch readRecordPermission() {
+        case .granted:
+            return true
+        case .denied:
+            return false
+        case .undetermined:
+            return await requestRecordPermission()
+        @unknown default:
+            return false
+        }
     }
 
     /// Reads the current authorization status; if it's still
@@ -150,67 +187,156 @@ final class SFSpeechRecognizerService: SpeechRecognitionProviding, @unchecked Se
         }
     }
 
+    private static func productionRequestRecordPermission() async -> Bool {
+        await withCheckedContinuation { continuation in
+            AVAudioApplication.requestRecordPermission { granted in
+                continuation.resume(returning: granted)
+            }
+        }
+    }
+
+    /// Hard ceiling on how long one dictation pass listens before it forces
+    /// itself to finish, ending audio input the same way a manual STOP tap
+    /// does (see `RecognitionAudioSession.endAudio()` below). Without this,
+    /// a collector who taps the mic and is interrupted (or a recognizer that
+    /// never emits a final result for some audio) leaves the capture flow
+    /// hung indefinitely — there was previously no `endAudio()` call and no
+    /// stop affordance at all.
+    private static let maxDictationDurationSeconds: UInt64 = 10
+
+    /// Performs one recognition pass: starts the audio session, races the
+    /// recognizer's own completion against a max-duration timeout, and
+    /// resolves cooperatively with the enclosing `Task`'s cancellation (the
+    /// STOP path — see `CaptureViewModel.requestVoiceInput(for:)`). All three
+    /// completion routes — recognizer result/error, timeout, and outer-task
+    /// cancellation — go through `ResumeOnce` so the continuation is resumed
+    /// exactly once no matter which one "wins" the race.
     private static func productionPerformRecognition() async throws -> String {
         guard let recognizer = productionRecognizer else {
             throw SpeechRecognitionError.unavailable
         }
 
-        let recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        recognitionRequest.shouldReportPartialResults = false
-
         let session = RecognitionAudioSession()
-        try session.start(appendingBuffersTo: recognitionRequest)
+        try session.start()
 
-        return try await withCheckedThrowingContinuation { continuation in
-            let hasResumedLock = NSLock()
-            var hasResumed = false
-            recognizer.recognitionTask(with: recognitionRequest) { result, error in
-                hasResumedLock.lock()
-                let alreadyResumed = hasResumed
-                if !alreadyResumed, error != nil || result?.isFinal == true {
-                    hasResumed = true
-                }
-                hasResumedLock.unlock()
-                guard !alreadyResumed else { return }
+        return try await withTaskCancellationHandler(
+            operation: {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<String, Error>) in
+                    let resumeOnce = ResumeOnce(continuation)
 
-                if let error {
-                    session.finish()
-                    continuation.resume(throwing: SpeechRecognitionError.recognitionFailed(error.localizedDescription))
-                    return
+                    recognizer.recognitionTask(with: session.recognitionRequest) { result, error in
+                        if let error {
+                            session.finish()
+                            resumeOnce.resume(throwing: SpeechRecognitionError.recognitionFailed(error.localizedDescription))
+                            return
+                        }
+                        guard let result, result.isFinal else { return }
+                        session.finish()
+                        resumeOnce.resume(returning: result.bestTranscription.formattedString)
+                    }
+
+                    Task {
+                        try? await Task.sleep(nanoseconds: maxDictationDurationSeconds * 1_000_000_000)
+                        // Idempotent: if the recognizer already produced a
+                        // final result (and `session.finish()` already ran),
+                        // this is a harmless no-op — `resumeOnce` guarantees
+                        // the continuation itself only resolves once either
+                        // way.
+                        session.endAudio()
+                    }
                 }
-                guard let result, result.isFinal else { return }
-                session.finish()
-                continuation.resume(returning: result.bestTranscription.formattedString)
+            },
+            onCancel: {
+                // Fires when the enclosing `Task` is cancelled — the manual
+                // STOP path. Ending audio input lets the recognizer settle
+                // on a final result (or error) through the normal
+                // completion-handler path above, so the transcript captured
+                // so far still comes back instead of the call hanging.
+                session.endAudio()
             }
-        }
+        )
     }
 }
 
-/// Owns the `AVAudioEngine`/`AVAudioInputNode`/`AVAudioSession` state for a
-/// single recognition request. Neither `AVAudioEngine` nor
-/// `AVAudioInputNode` is `Sendable`, so wrapping them in their own
-/// `@unchecked Sendable` type (rather than capturing them as loose locals)
-/// is what lets `productionPerformRecognition` pass a `finish()` call into
+/// Guards a `CheckedContinuation` so exactly one of the racing completions —
+/// the recognizer's result/error callback, the max-duration timeout, or
+/// outer-task cancellation — actually resumes it. Resuming a
+/// `CheckedContinuation` more than once is a runtime trap, so every
+/// completion route in `productionPerformRecognition` must go through this.
+private final class ResumeOnce<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var didResume = false
+    private let continuation: CheckedContinuation<Value, Error>
+
+    init(_ continuation: CheckedContinuation<Value, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: Value) {
+        guard claim() else { return }
+        continuation.resume(returning: value)
+    }
+
+    func resume(throwing error: Error) {
+        guard claim() else { return }
+        continuation.resume(throwing: error)
+    }
+
+    /// Returns `true` exactly once — the first caller across any thread wins
+    /// and is responsible for resuming the continuation; every later caller
+    /// gets `false` and must no-op.
+    private func claim() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !didResume else { return false }
+        didResume = true
+        return true
+    }
+}
+
+/// Owns the `AVAudioEngine`/`AVAudioInputNode`/`AVAudioSession`/
+/// `SFSpeechAudioBufferRecognitionRequest` state for a single recognition
+/// request. None of `AVAudioEngine`, `AVAudioInputNode`, or
+/// `SFSpeechAudioBufferRecognitionRequest` is `Sendable`, so wrapping them
+/// all in one `@unchecked Sendable` type (rather than capturing them as loose
+/// locals) is what lets `productionPerformRecognition` pass `finish()` into
 /// `SFSpeechRecognizer.recognitionTask(with:resultHandler:)`'s `@Sendable`
-/// completion handler — the same trade-off `SFSpeechRecognizerService`
-/// itself makes at the class level, and `MotionGPSIntegrityProvider` makes
-/// for its `CMMotionManager`.
+/// completion handler and `endAudio()` into both the timeout `Task` and the
+/// `withTaskCancellationHandler` cancellation closure — the same trade-off
+/// `SFSpeechRecognizerService` itself makes at the class level, and
+/// `MotionGPSIntegrityProvider` makes for its `CMMotionManager`.
 private final class RecognitionAudioSession: @unchecked Sendable {
+    let recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
     private let audioEngine = AVAudioEngine()
     private let audioSession = AVAudioSession.sharedInstance()
 
-    func start(appendingBuffersTo recognitionRequest: SFSpeechAudioBufferRecognitionRequest) throws {
+    init() {
+        recognitionRequest.shouldReportPartialResults = false
+    }
+
+    func start() throws {
         try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let recognitionRequest = recognitionRequest
         inputNode.installTap(onBus: 0, bufferSize: 1_024, format: recordingFormat) { buffer, _ in
             recognitionRequest.append(buffer)
         }
 
         audioEngine.prepare()
         try audioEngine.start()
+    }
+
+    /// Ends audio input so the in-flight recognition task settles on a final
+    /// result instead of continuing to listen — called from both the
+    /// max-duration timeout and a manual STOP (task cancellation). Safe to
+    /// call more than once or after `finish()`;
+    /// `SFSpeechAudioBufferRecognitionRequest.endAudio()` is documented as
+    /// tolerant of redundant calls.
+    func endAudio() {
+        recognitionRequest.endAudio()
     }
 
     func finish() {

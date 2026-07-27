@@ -1,6 +1,5 @@
 import ConsoleForms
 import ConsoleModels
-import CoreMotion
 import Foundation
 import ImageIO
 import UIKit
@@ -29,19 +28,6 @@ final class NativeCaptureFraudMetadataProvider: CaptureFraudMetadataProviding {
     private let photoIntegrityProvider: PhotoIntegrityProviding
     private let deviceTimestamp: () -> Date
 
-    /// Raw per-capture accelerometer/gyro telemetry (availability, sample
-    /// count, "was the device moving" flag). `GPSIntegrityProviding` only
-    /// exposes a distilled `GPSIntegrityResult` (confidence score, not raw
-    /// sample counts) — since `PlatformRecordEvidence.GpsIntegrity` mirrors
-    /// the backend's `GpsIntegrityReport` and needs the raw counts, this
-    /// provider keeps its own lightweight `CMMotionManager` session
-    /// specifically for those fields, run alongside `gpsIntegrityProvider`'s
-    /// own session (started/stopped together in `startCapture`/`stopCapture`
-    /// below).
-    private let motionManager = CMMotionManager()
-    private var accelerometerSampleCount = 0
-    private var motionDetectedDuringCapture = false
-
     /// A motion/GPS-fix mismatch this confident (accelerometer says the
     /// device is moving while the GPS fix reads as a stationary/loose-accuracy
     /// one, or vice versa) is the same "spoofed location" signature
@@ -62,40 +48,16 @@ final class NativeCaptureFraudMetadataProvider: CaptureFraudMetadataProviding {
     }
 
     func startCapture() {
-        accelerometerSampleCount = 0
-        motionDetectedDuringCapture = false
-
-        if motionManager.isAccelerometerAvailable, !motionManager.isAccelerometerActive {
-            motionManager.accelerometerUpdateInterval = 0.25
-            motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-                guard let self, let acceleration = data?.acceleration else { return }
-                self.accelerometerSampleCount += 1
-                let magnitude = sqrt(
-                    acceleration.x * acceleration.x
-                    + acceleration.y * acceleration.y
-                    + acceleration.z * acceleration.z
-                )
-                if abs(magnitude - 1.0) > 0.08 {
-                    self.motionDetectedDuringCapture = true
-                }
-            }
-        }
-
-        if motionManager.isGyroAvailable, !motionManager.isGyroActive {
-            motionManager.gyroUpdateInterval = 0.25
-            motionManager.startGyroUpdates()
-        }
-
+        // Motion sampling for this capture is owned entirely by
+        // `gpsIntegrityProvider` — see `motionCaptureStats` in
+        // `gpsIntegrity(gps:capturedAt:)` below. There used to be a second,
+        // duplicate `CMMotionManager` session running here; collapsing to
+        // one avoids two competing accelerometer/gyro subscriptions (and the
+        // associated battery/CPU cost) for the same capture.
         gpsIntegrityProvider.startCapture()
     }
 
     func stopCapture() {
-        if motionManager.isAccelerometerActive {
-            motionManager.stopAccelerometerUpdates()
-        }
-        if motionManager.isGyroActive {
-            motionManager.stopGyroUpdates()
-        }
         gpsIntegrityProvider.stopCapture()
     }
 
@@ -153,10 +115,13 @@ final class NativeCaptureFraudMetadataProvider: CaptureFraudMetadataProviding {
         let nowMs = Int(deviceTimestamp().timeIntervalSince1970 * 1000)
         let gpsMs = gps == nil ? nil : Int(capturedAt.timeIntervalSince1970 * 1000)
         let integrity = gpsIntegrityProvider.integrityScore(gps: gps, capturedAt: capturedAt)
-        // `confidenceScore` only falls back to the neutral `0.5` default when
-        // there's no GPS fix or no motion samples to reason about — anything
-        // else means the provider had a genuine accelerometer/gyro reading.
-        let hasMotionSamples = gps != nil && integrity.confidenceScore != 0.5
+        let stats = gpsIntegrityProvider.motionCaptureStats
+        // Reads directly off the provider's real sample count now that it's
+        // exposed — previously this inferred "did we actually have motion
+        // samples" indirectly from `confidenceScore != 0.5`, a sentinel that
+        // only happened to work because 0.5 is `GPSIntegrityResult`'s
+        // no-samples fallback value.
+        let hasMotionSamples = stats.accelerometerSampleCount > 0
         let mockLocationDetected = hasMotionSamples
             && !integrity.motionConsistent
             && integrity.confidenceScore <= Self.mockLocationConfidenceThreshold
@@ -164,10 +129,10 @@ final class NativeCaptureFraudMetadataProvider: CaptureFraudMetadataProviding {
         return PlatformRecordEvidence.GpsIntegrity(
             mockLocationDetected: mockLocationDetected,
             mockLocationMethod: mockLocationDetected ? "motion_gps_mismatch" : nil,
-            hasAccelerometerData: motionManager.isAccelerometerAvailable && accelerometerSampleCount > 0,
-            hasGyroscopeData: motionManager.isGyroAvailable,
-            accelerometerSampleCount: accelerometerSampleCount,
-            motionDetectedDuringCapture: motionDetectedDuringCapture,
+            hasAccelerometerData: stats.isAccelerometerAvailable && stats.accelerometerSampleCount > 0,
+            hasGyroscopeData: stats.isGyroAvailable,
+            accelerometerSampleCount: stats.accelerometerSampleCount,
+            motionDetectedDuringCapture: stats.motionDetectedDuringCapture,
             gpsAccuracyMeters: gps?.accuracyMeters,
             networkType: nil,
             gpsTimestamp: gpsMs,

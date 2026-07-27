@@ -66,11 +66,8 @@ struct CaptureView: View {
                     candidates: candidates,
                     bestPointId: bestPointId,
                     language: appState.language,
-                    onSubmitAsNew: {
-                        Task { await viewModel.resolveDedupPrompt(useExisting: nil) }
-                    },
-                    onUseExisting: { candidate in
-                        Task { await viewModel.resolveDedupPrompt(useExisting: candidate.pointId) }
+                    onSubmitAnyway: {
+                        Task { await viewModel.resolveDedupPrompt() }
                     },
                     onCancel: {
                         viewModel.cancelDedupPrompt()
@@ -656,7 +653,7 @@ struct CaptureView: View {
                             viewModel.removePreparedPhoto(localID: localID)
                         },
                         onVoiceInput: viewModel.isVoiceInputAvailable ? { key in
-                            Task { await viewModel.requestVoiceInput(for: key) }
+                            viewModel.requestVoiceInput(for: key)
                         } : nil,
                         isVoiceInputActive: viewModel.voiceInputActiveKey == descriptor.key
                     )

@@ -179,17 +179,24 @@ struct CaptureFieldControl: View {
 
     /// 44x44 tap target (CLAUDE.md's minimum touch-target size) so it's
     /// reachable in the field, same as every other tappable control here.
+    ///
+    /// While dictation is active for this field, the button doubles as a
+    /// STOP affordance rather than being disabled — `action` still fires
+    /// `onVoiceInput(descriptor.key)`, and `CaptureViewModel.requestVoiceInput(for:)`
+    /// interprets a call for the already-active field as "stop" (cancels the
+    /// in-flight recognition task) instead of starting a new request. Without
+    /// this, a collector who taps the mic has no way to end dictation short
+    /// of the production recognizer's own max-duration timeout.
     @ViewBuilder
     private func voiceInputButton(action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: isVoiceInputActive ? "mic.fill" : "mic")
+            Image(systemName: isVoiceInputActive ? "stop.circle.fill" : "mic")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(isVoiceInputActive ? ADLConsoleColor.terraDark : ADLConsoleColor.inkMuted)
                 .frame(width: 44, height: 44)
         }
         .buttonStyle(ADLConsolePressStyle())
-        .disabled(isVoiceInputActive)
-        .accessibilityLabel(t("Dictate", "Dicter"))
+        .accessibilityLabel(isVoiceInputActive ? t("Stop dictation", "Arrêter la dictée") : t("Dictate", "Dicter"))
     }
 
     // MARK: - Bindings
