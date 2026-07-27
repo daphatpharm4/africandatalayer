@@ -180,15 +180,22 @@ final class MockAnalyticsRepository: AnalyticsRepositoryProtocol, @unchecked Sen
         let weeks: Int
     }
 
+    struct SpatialIntelligenceCall: Equatable {
+        let organizationId: String
+        let vertical: String
+    }
+
     var deltaSnapshotResult: Result<DeltaSnapshot, Error> = .failure(PlatformAPIError(message: "unset", status: 500))
     var weeklyTrendsResult: Result<[WeeklyTrend], Error> = .success([])
     var categoryBreakdownResult: Result<[CategoryBreakdown], Error> = .success([])
     var agentPerformanceResult: Result<[AgentPerformance], Error> = .success([])
+    var spatialIntelligenceResult: Result<[GeohashScore], Error> = .success([])
 
     private(set) var deltaSnapshotCallCount = 0
     private(set) var weeklyTrendsCalls: [WeeklyTrendsCall] = []
     private(set) var categoryBreakdownCallCount = 0
     private(set) var agentPerformanceCallCount = 0
+    private(set) var spatialIntelligenceCalls: [SpatialIntelligenceCall] = []
 
     func deltaSnapshot(organizationId: String) async throws -> DeltaSnapshot {
         deltaSnapshotCallCount += 1
@@ -210,7 +217,11 @@ final class MockAnalyticsRepository: AnalyticsRepositoryProtocol, @unchecked Sen
         return try agentPerformanceResult.get()
     }
 
-    func spatialIntelligence(organizationId: String, vertical: String) async throws -> [GeohashScore] { [] }
+    func spatialIntelligence(organizationId: String, vertical: String) async throws -> [GeohashScore] {
+        spatialIntelligenceCalls.append(SpatialIntelligenceCall(organizationId: organizationId, vertical: vertical))
+        return try spatialIntelligenceResult.get()
+    }
+
     func anomalies(organizationId: String, since: Date) async throws -> [AnomalyFlag] { [] }
     func heatMapData(organizationId: String, vertical: String) async throws -> [HeatMapCell] { [] }
 

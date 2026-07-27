@@ -153,10 +153,18 @@ struct ConsoleMapKitView: UIViewRepresentable {
     let points: [CollapsedPlatformPoint]
     @Binding var region: MKCoordinateRegion
     @Binding var selectedPoint: CollapsedPlatformPoint?
+    /// Spatial-intelligence overlay state (Task 5). Defaults keep this
+    /// representable's existing single call site (`CompanyMapView`) source
+    /// compatible with any future caller that only wants the plain pin map.
+    var overlayMode: CompanyMapViewModel.OverlayMode = .none
+    var gridCells: [GeohashScore] = []
+    var heatCells: [HeatMapCell] = []
+    var onSelectGridCell: ((GeohashScore) -> Void)?
 
     func makeUIView(context: Context) -> MKMapView {
         if let cached = ConsoleMapHolder.shared.mapView {
             cached.delegate = context.coordinator
+            context.coordinator.installGridTapRecognizer(on: cached)
             return cached
         }
 
@@ -169,6 +177,7 @@ struct ConsoleMapKitView: UIViewRepresentable {
         mapView.showsUserLocation = true
         mapView.setRegion(region, animated: false)
         mapView.addConsoleTileOverlay()
+        context.coordinator.installGridTapRecognizer(on: mapView)
 
         ConsoleMapHolder.shared.mapView = mapView
         return mapView
@@ -201,17 +210,88 @@ struct ConsoleMapKitView: UIViewRepresentable {
         if !newAnnotations.isEmpty {
             mapView.addAnnotations(newAnnotations)
         }
+
+        updateSpatialOverlays(on: mapView)
+    }
+
+    /// Adds/removes/replaces `GeohashGridOverlay`/`HeatMapOverlay` to match
+    /// `overlayMode` + `gridCells`/`heatCells`. Only one of the two is ever
+    /// on the map at a time; `.none` clears both.
+    private func updateSpatialOverlays(on mapView: MKMapView) {
+        let existingGrid = mapView.overlays.compactMap { $0 as? GeohashGridOverlay }.first
+        let existingHeat = mapView.overlays.compactMap { $0 as? HeatMapOverlay }.first
+
+        switch overlayMode {
+        case .none:
+            if let existingGrid { mapView.removeOverlay(existingGrid) }
+            if let existingHeat { mapView.removeOverlay(existingHeat) }
+
+        case .grid:
+            if let existingHeat { mapView.removeOverlay(existingHeat) }
+            if existingGrid?.cells.map(\.id) != gridCells.map(\.id) {
+                if let existingGrid { mapView.removeOverlay(existingGrid) }
+                if !gridCells.isEmpty {
+                    mapView.addOverlay(GeohashGridOverlay(cells: gridCells), level: .aboveLabels)
+                }
+            }
+
+        case .heat:
+            if let existingGrid { mapView.removeOverlay(existingGrid) }
+            if existingHeat?.cells.map(\.geohash) != heatCells.map(\.geohash) {
+                if let existingHeat { mapView.removeOverlay(existingHeat) }
+                if !heatCells.isEmpty {
+                    mapView.addOverlay(HeatMapOverlay(cells: heatCells), level: .aboveLabels)
+                }
+            }
+        }
     }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
     }
 
-    final class Coordinator: NSObject, MKMapViewDelegate {
+    final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: ConsoleMapKitView
+        private weak var installedOnMapView: MKMapView?
 
         init(parent: ConsoleMapKitView) {
             self.parent = parent
+        }
+
+        /// Adds the grid-cell tap recognizer once per `MKMapView` instance.
+        /// `ConsoleMapHolder` reuses a single `MKMapView` across
+        /// `CompanyMapView` appearances, so this guards against stacking a
+        /// duplicate recognizer on every `makeUIView` call.
+        func installGridTapRecognizer(on mapView: MKMapView) {
+            guard installedOnMapView !== mapView else { return }
+            let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap(_:)))
+            tap.delegate = self
+            mapView.addGestureRecognizer(tap)
+            installedOnMapView = mapView
+        }
+
+        @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard parent.overlayMode == .grid, gesture.state == .ended else { return }
+            guard let mapView = gesture.view as? MKMapView else { return }
+            let coordinate = mapView.convert(gesture.location(in: mapView), toCoordinateFrom: mapView)
+            guard let hit = parent.gridCells.first(where: { Self.contains(coordinate: coordinate, cellId: $0.cellId) }) else { return }
+            parent.onSelectGridCell?(hit)
+        }
+
+        private static func contains(coordinate: CLLocationCoordinate2D, cellId: String) -> Bool {
+            guard let bounds = try? GeohashGeometry.decodeBounds(cellId) else { return false }
+            return coordinate.latitude >= bounds.south && coordinate.latitude <= bounds.north
+                && coordinate.longitude >= bounds.west && coordinate.longitude <= bounds.east
+        }
+
+        // Let the grid tap recognizer coexist with the map's own built-in
+        // pan/zoom/annotation-selection recognizers instead of stealing
+        // touches from them.
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            true
         }
 
         func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
@@ -241,6 +321,12 @@ struct ConsoleMapKitView: UIViewRepresentable {
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
             if let tileOverlay = overlay as? MKTileOverlay {
                 return MKTileOverlayRenderer(tileOverlay: tileOverlay)
+            }
+            if let gridOverlay = overlay as? GeohashGridOverlay {
+                return GeohashGridRenderer(overlay: gridOverlay)
+            }
+            if let heatOverlay = overlay as? HeatMapOverlay {
+                return HeatMapRenderer(overlay: heatOverlay)
             }
             return MKOverlayRenderer(overlay: overlay)
         }
