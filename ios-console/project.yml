@@ -46,6 +46,8 @@ targets:
         INFOPLIST_KEY_NSCameraUsageDescription: "ADL Console uses your camera to attach photo evidence to a captured record."
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "ADL Console lets you attach a photo from your library as evidence for a captured record."
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "ADL Console uses your location to attach a GPS fix as evidence for a captured record."
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "ADL Console uses speech recognition to let you dictate field values by voice."
+        INFOPLIST_KEY_NSMotionUsageDescription: "ADL Console uses motion sensors to verify the GPS fix on a captured record is genuine."
     configFiles:
       Debug: Config/Debug.xcconfig
       Staging: Config/Staging.xcconfig
