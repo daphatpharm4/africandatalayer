@@ -46,6 +46,20 @@ final class CaptureViewModel: ObservableObject {
         case failed(String)
     }
 
+    /// State of the pre-submit duplicate-candidate lookup
+    /// (`PlatformAPIClient.dedupCandidates`, `GET
+    /// api/submissions?view=dedup_candidates`). `.prompt` pauses `submit()`
+    /// and surfaces `DedupWarningSheet`; every other case lets `submit()`
+    /// proceed straight through — including a network/decode failure, which
+    /// intentionally lands on `.clear` rather than any error case so a flaky
+    /// dedup lookup never blocks a field submission ("fail open").
+    enum DedupState: Equatable {
+        case idle
+        case checking
+        case prompt(candidates: [DedupCandidate], bestPointId: String?)
+        case clear
+    }
+
     struct CaptureProgress: Equatable {
         var completed: Int
         var total: Int
@@ -81,6 +95,7 @@ final class CaptureViewModel: ObservableObject {
     @Published private(set) var attachedPoint: PlatformNearbyPoint?
     @Published private(set) var preAttachPointId: String?
     @Published private(set) var attachmentViewStates: [CaptureAttachmentViewState] = []
+    @Published private(set) var dedupState: DedupState = .idle
 
     let language: ConsoleLanguage
 
@@ -100,6 +115,15 @@ final class CaptureViewModel: ObservableObject {
     private let onDurableRecordPersisted: (@MainActor (String) async -> Void)?
     private let creationAllowed: @MainActor () -> Bool
     private var pendingMedia: [String: CaptureIntentMedia] = [:]
+    /// Set by `resolveDedupPrompt(useExisting:)` when the collector picks
+    /// "add to existing" off `DedupWarningSheet`. Folded into
+    /// `submitAttachPointId` below — `createPlatformRecord`'s `pointId`
+    /// parameter (the same mechanism `attach(to:)`/`preAttachPointId` use for
+    /// company-map attachment) is the one thing `platform_record_create`
+    /// actually understands for "this belongs to an existing point"; unlike
+    /// the original field app's `api/submissions` CREATE path, it has no
+    /// separate `dedupDecision`/`dedupTargetPointId` fields to set.
+    private var dedupTargetPointId: String?
     private static let enrichMaxDistanceMeters: Double = 250
 
     init(
@@ -164,7 +188,7 @@ final class CaptureViewModel: ObservableObject {
     }
 
     private var submitAttachPointId: String? {
-        attachedPoint?.pointId ?? preAttachPointId
+        dedupTargetPointId ?? attachedPoint?.pointId ?? preAttachPointId
     }
 
     var captureProgress: CaptureProgress {
@@ -311,6 +335,8 @@ final class CaptureViewModel: ObservableObject {
         attachedPoint = nil
         preAttachPointId = nil
         lastValidation = nil
+        dedupState = .idle
+        dedupTargetPointId = nil
         if resetSubmitState {
             submitState = .idle
         }
@@ -508,13 +534,69 @@ final class CaptureViewModel: ObservableObject {
         return result
     }
 
+    // MARK: - Duplicate-candidate check
+
+    /// Looks up nearby possible-duplicate points for the in-progress capture
+    /// — `GET api/submissions?view=dedup_candidates`, a geo + category + name
+    /// proximity match (see `lib/server/dedup.ts:buildDedupCandidates`), NOT
+    /// a hash lookup. Requires a selected record type and a captured GPS fix;
+    /// without either there is nothing to check against, so `dedupState`
+    /// goes straight to `.clear`.
+    ///
+    /// Any failure — network error or an unparsable/unexpected response —
+    /// also lands on `.clear`, never `.prompt`: this check must fail OPEN.
+    /// A flaky dedup lookup must never block a field agent's submission.
+    func checkDedup() async {
+        guard let recordType = selectedRecordType, let gps = evidenceGps else {
+            dedupState = .clear
+            return
+        }
+        dedupState = .checking
+        do {
+            let result = try await apiClient.dedupCandidates(
+                category: recordType.key,
+                latitude: gps.latitude,
+                longitude: gps.longitude,
+                name: currentNameFieldValue
+            )
+            dedupState = result.shouldPrompt
+                ? .prompt(candidates: result.candidates, bestPointId: result.bestCandidatePointId)
+                : .clear
+        } catch {
+            dedupState = .clear
+        }
+    }
+
+    /// Best-effort "name-ish" value to pass as the dedup lookup's optional
+    /// `name` query param. The schema-driven form has no fixed name field —
+    /// unlike the original field app's fixed `SubmissionDetails.name` /
+    /// `.siteName` / `.roadName` — so this scans the current record type's
+    /// text descriptors for a key that reads like one, which is close enough
+    /// to be useful without hard-coding a specific schema's field keys.
+    private var currentNameFieldValue: String? {
+        for descriptor in descriptors where descriptor.control == .text {
+            guard descriptor.key.localizedCaseInsensitiveContains("name") else { continue }
+            if case .text(let value) = values[descriptor.key] {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
     // MARK: - Submit
 
-    /// Validates, then (on success) builds a `RecordDraft`, enqueues it, and
-    /// triggers an immediate `RecordQueue.sync` wired to
+    /// Validates, then (on success) checks for duplicate candidates and,
+    /// once clear, builds a `RecordDraft`, enqueues it, and triggers an
+    /// immediate `RecordQueue.sync` wired to
     /// `PlatformAPIClient.createPlatformRecord`. A draft that fails to sync
     /// right away (offline, retryable server error) stays safely queued —
     /// `submitState` reflects that as `.queuedPendingSync`, not `.failed`.
+    ///
+    /// When `checkDedup()` lands on `.prompt`, this returns early without
+    /// enqueueing anything — `CaptureView` presents `DedupWarningSheet`,
+    /// which resumes the flow via `resolveDedupPrompt(useExisting:)` (submit
+    /// as new / attach to a candidate) or aborts it via `cancelDedupPrompt()`.
     func submit() async {
         guard creationAllowed() else {
             submitState = .failed(language.t(
@@ -538,6 +620,37 @@ final class CaptureViewModel: ObservableObject {
             return
         }
 
+        await checkDedup()
+        if case .prompt = dedupState {
+            return
+        }
+
+        await performSubmit(recordType: recordType, projectOption: projectOption)
+    }
+
+    /// Resumes a `submit()` that paused on `DedupState.prompt`. `pointId ==
+    /// nil` means "submit as new"; a candidate's `pointId` means "attach this
+    /// capture to that existing point instead of creating a fresh one" —
+    /// reusing the same `pointId` mechanism `attach(to:)`/`preAttachPointId`
+    /// already use for company-map attachment.
+    func resolveDedupPrompt(useExisting pointId: String?) async {
+        dedupTargetPointId = pointId
+        dedupState = .clear
+        guard let recordType = selectedRecordType, let projectOption = selectedProjectOption else {
+            submitState = .failed(language.t("Choose a project and record type first.", "Choisissez d'abord un projet et un type d'enregistrement."))
+            return
+        }
+        await performSubmit(recordType: recordType, projectOption: projectOption)
+    }
+
+    /// Dismisses `DedupWarningSheet` without submitting anything — the
+    /// collector keeps editing the in-progress capture.
+    func cancelDedupPrompt() {
+        dedupState = .idle
+        submitState = .idle
+    }
+
+    private func performSubmit(recordType: PlatformRecordType, projectOption: ProjectOption) async {
         submitState = .submitting
 
         let data = FormValidator.recordData(recordType: recordType, values: values)

@@ -50,6 +50,42 @@ struct CaptureView: View {
         .onDisappear {
             viewModel.stopFraudMetadataCapture()
         }
+        .sheet(isPresented: isDedupPromptPresented) {
+            if case .prompt(let candidates, let bestPointId) = viewModel.dedupState {
+                DedupWarningSheet(
+                    candidates: candidates,
+                    bestPointId: bestPointId,
+                    language: appState.language,
+                    onSubmitAsNew: {
+                        Task { await viewModel.resolveDedupPrompt(useExisting: nil) }
+                    },
+                    onUseExisting: { candidate in
+                        Task { await viewModel.resolveDedupPrompt(useExisting: candidate.pointId) }
+                    },
+                    onCancel: {
+                        viewModel.cancelDedupPrompt()
+                    }
+                )
+            }
+        }
+    }
+
+    /// Drives `DedupWarningSheet`'s presentation off `viewModel.dedupState`
+    /// directly rather than a separate `@State` flag — `.prompt` is the only
+    /// state that should show the sheet, and dismissing it (swipe-down)
+    /// should read as "cancel" the same as tapping the Cancel button.
+    private var isDedupPromptPresented: Binding<Bool> {
+        Binding(
+            get: {
+                if case .prompt = viewModel.dedupState { return true }
+                return false
+            },
+            set: { newValue in
+                if !newValue {
+                    viewModel.cancelDedupPrompt()
+                }
+            }
+        )
     }
 
     // MARK: - Field command center

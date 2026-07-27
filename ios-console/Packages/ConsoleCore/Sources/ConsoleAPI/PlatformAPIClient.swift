@@ -469,4 +469,69 @@ public struct PlatformAPIClient: Sendable {
         let envelope: RecordSummaryEnvelope = try await callPlatform("record_my_summary", method: .get)
         return envelope.summary
     }
+
+    // MARK: - Duplicate detection (api/submissions, NOT api/user)
+
+    /// `GET api/submissions?view=dedup_candidates&category=&lat=&lng=&name=`
+    /// — geo + category + name proximity duplicate lookup, see
+    /// `lib/server/dedup.ts:buildDedupCandidates`. There is no hash-based
+    /// dedup endpoint and no POST variant; this is read-only.
+    ///
+    /// Deliberately does NOT go through `callPlatform`: that helper is
+    /// hard-coded to `api/user?view=platform_*`, but this lookup lives on
+    /// the original field-submission surface, `api/submissions`. This
+    /// mirrors `callPlatform`'s `URLComponents` construction and
+    /// credentialed `transport.send` call directly against that different
+    /// path instead. Auth is the same cookie session `callPlatform` relies
+    /// on (see `URLSessionPlatformTransport`'s auth note) — no extra wiring
+    /// needed here either.
+    public func dedupCandidates(
+        category: String,
+        latitude: Double,
+        longitude: Double,
+        name: String? = nil
+    ) async throws -> DedupCheckResult {
+        guard var components = URLComponents(url: baseURL.appendingPathComponent("api/submissions"), resolvingAgainstBaseURL: false) else {
+            throw PlatformAPIError(message: "Invalid base URL", status: -1)
+        }
+        var queryItems = [
+            URLQueryItem(name: "view", value: "dedup_candidates"),
+            URLQueryItem(name: "category", value: category),
+            URLQueryItem(name: "lat", value: String(latitude)),
+            URLQueryItem(name: "lng", value: String(longitude)),
+        ]
+        if let name {
+            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                queryItems.append(URLQueryItem(name: "name", value: trimmed))
+            }
+        }
+        components.queryItems = queryItems
+
+        guard let url = components.url else {
+            throw PlatformAPIError(message: "Invalid request URL", status: -1)
+        }
+
+        let (data, response) = try await transport.send(URLRequest(url: url))
+
+        guard (200..<300).contains(response.statusCode) else {
+            let errorPayload = (try? JSONDecoder().decode(PlatformAPIErrorPayload.self, from: data))
+                ?? PlatformAPIErrorPayload(error: nil, code: nil, issues: nil)
+            throw PlatformAPIError(
+                message: errorPayload.error ?? "Request failed (\(response.statusCode))",
+                status: response.statusCode,
+                code: errorPayload.code,
+                issues: errorPayload.issues
+            )
+        }
+
+        do {
+            return try JSONDecoder().decode(DedupCheckResult.self, from: data)
+        } catch {
+            throw PlatformAPIError(
+                message: "Failed to decode dedup_candidates response: \(error)",
+                status: response.statusCode
+            )
+        }
+    }
 }

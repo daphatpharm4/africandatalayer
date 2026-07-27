@@ -78,6 +78,7 @@
 		94820C91213956598B4CCF7E /* InvitationOnboardingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F3255C7F11087BF2EF60657 /* InvitationOnboardingTests.swift */; };
 		9566806C6B75D9886FB71089 /* TelemetryClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBBF5ACB9601E1993F7DDCF6 /* TelemetryClient.swift */; };
 		9638F1BE163620F0030E5FB4 /* ReviewQueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A68E54A2963687B993B143 /* ReviewQueueView.swift */; };
+		969AF8280F4B5A68E2652F9E /* DedupWarningSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64BD7B08AF10E78D1CB67996 /* DedupWarningSheet.swift */; };
 		9D2AE1CD442AFEEA91AAFE55 /* ConsoleState in Frameworks */ = {isa = PBXBuildFile; productRef = FDEDD3CBD4312F0E4AB42590 /* ConsoleState */; };
 		9D8B092B9FCB72591453F172 /* ConsolePersistence in Frameworks */ = {isa = PBXBuildFile; productRef = C3ECA22514F95857A7359E5E /* ConsolePersistence */; };
 		A1C23084260F638820496B2C /* CaptureCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70B6F55BA6240B36E2E03C3E /* CaptureCoordinatorTests.swift */; };
@@ -213,6 +214,7 @@
 		5B2BD5801C1CCA85DC92EECA /* OSLogTelemetryClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSLogTelemetryClient.swift; sourceTree = "<group>"; };
 		5D11F8A6812A531550ABB39E /* CaptureMediaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureMediaStore.swift; sourceTree = "<group>"; };
 		5FEE7697CEC97984307504BF /* SyncEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncEngine.swift; sourceTree = "<group>"; };
+		64BD7B08AF10E78D1CB67996 /* DedupWarningSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DedupWarningSheet.swift; sourceTree = "<group>"; };
 		6762B91F0FC04480CD5D38D5 /* OperationalStatusModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OperationalStatusModel.swift; sourceTree = "<group>"; };
 		68682D6319039E661D9D69F7 /* SchemaBuilderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchemaBuilderView.swift; sourceTree = "<group>"; };
 		68D4E8F752CD4C9EDD271FE7 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -504,6 +506,7 @@
 				13EB8A729DC236F9773C5D26 /* CaptureFieldControl.swift */,
 				DF20BD775A3750BC88BAC553 /* CaptureView.swift */,
 				038A695EADC9A9E7598FDBC9 /* CaptureViewModel.swift */,
+				64BD7B08AF10E78D1CB67996 /* DedupWarningSheet.swift */,
 			);
 			path = Capture;
 			sourceTree = "<group>";
@@ -839,6 +842,7 @@
 				F43D63704B24F91AA7750DE9 /* ConsoleOverviewContent.swift in Sources */,
 				DD2D6D88D269AE1F2457F010 /* ConsoleShellView.swift in Sources */,
 				ADC670F171BF03D9BD93F246 /* DataBrowseView.swift in Sources */,
+				969AF8280F4B5A68E2652F9E /* DedupWarningSheet.swift in Sources */,
 				A85FC66B083C7F157749B74A /* DeviceProfilingProvider.swift in Sources */,
 				DFD2A5644DD7CBE0D5B52439 /* ExistingPayloadSubmissionAdapter.swift in Sources */,
 				D60CCAF9D2249C277B7EB756 /* GPSIntegrityProvider.swift in Sources */,

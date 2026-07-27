@@ -60,6 +60,16 @@ final class CaptureViewModelTests: XCTestCase {
     }}
     """.utf8)
 
+    private let dedupClearJSON = Data("""
+    {"shouldPrompt": false, "radiusMeters": 25, "bestCandidatePointId": null, "candidates": []}
+    """.utf8)
+
+    private let dedupPromptJSON = Data("""
+    {"shouldPrompt": true, "radiusMeters": 25, "bestCandidatePointId": "pt-1", "candidates": [
+        {"pointId": "pt-1", "category": "pharmacy", "siteName": "Acme Pharmacy", "latitude": 4.0501, "longitude": 9.7001, "distanceMeters": 5.2, "similarityScore": 0.92, "matchScore": 0.88}
+    ]}
+    """.utf8)
+
     private func makeViewModel(
         transport: RoutingMockPlatformTransport,
         queue: RecordQueue = RecordQueue(store: InMemoryRecordQueueStore()),
@@ -403,6 +413,180 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertFalse(attachment.relativePath.contains("pending"))
     }
 
+    // MARK: - Dedup check before submission (Intelligent Capture Task 5)
+
+    /// Confirms `checkDedup()` fires the real endpoint — `GET
+    /// api/submissions?view=dedup_candidates&category=&lat=&lng=&name=` —
+    /// with the selected record type's key, the captured GPS fix, and the
+    /// best-effort name field, and that it runs strictly between `validate()`
+    /// and the `platform_record_create` enqueue/sync call.
+    func testSubmitIssuesDedupRequestAfterValidateBeforeEnqueueingRecordCreate() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupClearJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        XCTAssertEqual(viewModel.submitState, .synced)
+
+        let dedupRequests = transport.requests(forView: "dedup_candidates")
+        XCTAssertEqual(dedupRequests.count, 1)
+        let dedupQuery = URLComponents(url: dedupRequests[0].url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(dedupQuery.first { $0.name == "category" }?.value, "pharmacy")
+        XCTAssertEqual(dedupQuery.first { $0.name == "lat" }?.value, "4.05")
+        XCTAssertEqual(dedupQuery.first { $0.name == "lng" }?.value, "9.7")
+        XCTAssertEqual(dedupQuery.first { $0.name == "name" }?.value, "Acme Pharmacy")
+
+        // Never a POST — dedup_candidates is read-only.
+        XCTAssertEqual(dedupRequests[0].httpMethod, "GET")
+
+        let dedupIndex = transport.capturedRequests.firstIndex { $0.url?.query?.contains("view=dedup_candidates") == true }
+        let createIndex = transport.capturedRequests.firstIndex { $0.url?.query?.contains("view=platform_record_create") == true }
+        XCTAssertNotNil(dedupIndex)
+        XCTAssertNotNil(createIndex)
+        XCTAssertLessThan(dedupIndex!, createIndex!)
+    }
+
+    /// `shouldPrompt: true` pauses the submit flow: `dedupState` becomes
+    /// `.prompt(candidates:bestPointId:)` and nothing is enqueued or sent to
+    /// `platform_record_create` until the collector resolves the prompt.
+    func testSubmitEntersPromptStateWhenDedupShouldPromptIsTrue() async {
+        let transport = RoutingMockPlatformTransport()
+        let queue = RecordQueue(store: InMemoryRecordQueueStore())
+        let viewModel = makeViewModel(transport: transport, queue: queue)
+        transport.setResponse(dedupPromptJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        guard case .prompt(let candidates, let bestPointId) = viewModel.dedupState else {
+            return XCTFail("expected dedupState == .prompt, got \(viewModel.dedupState)")
+        }
+        XCTAssertEqual(candidates.map(\.pointId), ["pt-1"])
+        XCTAssertEqual(candidates.first?.siteName, "Acme Pharmacy")
+        XCTAssertEqual(bestPointId, "pt-1")
+        XCTAssertEqual(viewModel.submitState, .idle)
+        XCTAssertTrue(transport.requests(forView: "platform_record_create").isEmpty)
+        let items = try? await queue.items()
+        XCTAssertEqual(items?.count, 0)
+    }
+
+    /// Resolving a prompt with "add to existing" (`resolveDedupPrompt(useExisting:)`)
+    /// resumes the submit and sends the chosen candidate's `pointId` on the
+    /// create call — the same `pointId` mechanism `attach(to:)` uses, since
+    /// `platform_record_create` has no separate dedup-decision fields.
+    func testResolveDedupPromptUseExistingSendsCandidatePointIdAndSubmits() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupPromptJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+        guard case .prompt = viewModel.dedupState else {
+            return XCTFail("expected dedupState == .prompt before resolving")
+        }
+
+        await viewModel.resolveDedupPrompt(useExisting: "pt-1")
+
+        XCTAssertEqual(viewModel.submitState, .synced)
+        let createRequests = transport.requests(forView: "platform_record_create")
+        XCTAssertEqual(createRequests.count, 1)
+        let body = try? JSONSerialization.jsonObject(with: createRequests[0].httpBody ?? Data()) as? [String: Any]
+        XCTAssertEqual(body?["pointId"] as? String, "pt-1")
+    }
+
+    /// `shouldPrompt: false` (no close-enough duplicate) lets `submit()`
+    /// proceed straight through to enqueue + sync, same as if dedup had
+    /// never run.
+    func testSubmitProceedsToRecordCreateWhenDedupShouldPromptIsFalse() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupClearJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        // dedupState ends on .idle, not .clear: performSubmit's
+        // resetDraftValues(resetSubmitState: false) resets it post-submit
+        // (CaptureViewModel.swift:338). The meaningful assertion is that the
+        // dedup check actually ran exactly once before the create request.
+        XCTAssertEqual(viewModel.dedupState, .idle)
+        XCTAssertEqual(viewModel.submitState, .synced)
+        XCTAssertEqual(transport.requests(forView: "dedup_candidates").count, 1)
+        XCTAssertEqual(transport.requests(forView: "platform_record_create").count, 1)
+    }
+
+    /// A dedup-lookup network failure must fail OPEN — never block a field
+    /// submission. `dedupState` lands on `.idle` (post-submit reset, not any
+    /// error case) and `submit()` proceeds to `platform_record_create`
+    /// exactly as if no duplicate had been found.
+    func testDedupNetworkFailureFailsOpenAndSubmitProceeds() async {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(schemaJSON, forView: "platform_schema_get")
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+        let throwingTransport = ThrowingViewTransport(inner: transport, view: "dedup_candidates")
+
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: throwingTransport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en
+        )
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        // dedupState ends on .idle (post-submit reset, see
+        // CaptureViewModel.swift:338) — the meaningful assertions are that
+        // the dedup lookup was actually attempted (and failed) and that
+        // submit still proceeded to create the record (fail-open).
+        XCTAssertEqual(viewModel.dedupState, .idle)
+        XCTAssertEqual(viewModel.submitState, .synced)
+        XCTAssertEqual(transport.requests(forView: "dedup_candidates").count, 1)
+        XCTAssertEqual(transport.requests(forView: "platform_record_create").count, 1)
+    }
+
+    /// Without a captured GPS fix there is nothing to check duplicates
+    /// against — `checkDedup()` should skip the network call entirely and
+    /// land straight on `.clear`, letting submission proceed unblocked (this
+    /// mirrors every pre-existing submit test in this file, none of which
+    /// set `evidenceGps`).
+    func testCheckDedupSkipsNetworkCallWithoutCapturedGps() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.checkDedup()
+
+        XCTAssertEqual(viewModel.dedupState, .clear)
+        XCTAssertTrue(transport.requests(forView: "dedup_candidates").isEmpty)
+    }
+
     // MARK: - GPS evidence capture
 
     func testRequestLocationPopulatesEvidenceGps() async {
@@ -507,6 +691,37 @@ private final class StubCaptureFraudMetadataProvider: CaptureFraudMetadataProvid
             deviceTimestamp: 1_784_457_600_250,
             timeDeltaMs: 250
         )
+    }
+}
+
+/// Wraps another `PlatformTransport`, throwing a plain (non-`PlatformAPIError`)
+/// error for requests targeting one specific `view` — simulates a genuine
+/// network failure (as opposed to a decodable non-2xx response) on just the
+/// dedup lookup, to prove `checkDedup()` fails open on any thrown error, not
+/// just HTTP error responses.
+private final class ThrowingViewTransport: PlatformTransport, @unchecked Sendable {
+    private struct SimulatedNetworkError: Error {}
+
+    private let inner: PlatformTransport
+    private let view: String
+
+    init(inner: PlatformTransport, view: String) {
+        self.inner = inner
+        self.view = view
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        if let url = request.url,
+           let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           components.queryItems?.first(where: { $0.name == "view" })?.value == view {
+            // Still record the attempt on `inner` (a RoutingMockPlatformTransport
+            // never throws — `send` above just returns the recorded request's
+            // canned response) so tests can assert the dedup lookup was actually
+            // issued before failing open, not merely that it would have been.
+            _ = try? await inner.send(request)
+            throw SimulatedNetworkError()
+        }
+        return try await inner.send(request)
     }
 }
 
