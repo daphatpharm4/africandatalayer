@@ -161,6 +161,26 @@ export const recordReviewSchema = z.object({
   }
 });
 
+// Batch counterpart to `recordReviewSchema` — same decision enum
+// ("approved" | "rejected"), applied to every id in `recordIds` in one
+// request. Field names (`decision`/`notes`) are distinct from the
+// single-record view's (`status`/`reviewNotes`) to keep the batch payload
+// self-describing; the enum values themselves are identical.
+export const recordBatchReviewSchema = z.object({
+  organizationId: uuid,
+  recordIds: z.array(uuid).min(1, "At least one record id is required").max(200),
+  decision: z.enum(["approved", "rejected"]),
+  notes: z.string().trim().max(2_000).optional(),
+}).superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.notes) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["notes"],
+      message: "Explain why these records are being rejected",
+    });
+  }
+});
+
 export const notificationBroadcastSchema = z.object({
   organizationId: uuid,
   targetRoles: z.array(z.enum(["manager", "reviewer", "collector", "viewer"])).min(1).max(4),

@@ -25,6 +25,9 @@
 //   admin_org_access    POST  — suspend/reactivate a company (ADL admin)
 //   record_create       POST  — create a record (collector+); optional pointId
 //                                gates GPS proximity + a 24h per-point cooldown
+//   record_batch_review POST  — apply one approve/reject decision to many
+//                                record ids in one request (reviewer+); loops
+//                                the same per-record logic as record_review
 //   point_nearby        GET   — org's own nearby points for the picker (collector+)
 //   notification_broadcast POST — notify lower-role members in an organization
 //
@@ -38,6 +41,7 @@ import { errorResponse, jsonResponse } from "../http.js";
 import { ROLE_RANK, validateSchemaDefinition } from "../../../shared/platformSchema.js";
 import type { PlatformRole } from "../../../shared/platformTypes.js";
 import { validatePlatformRecord } from "../../../shared/platformRecord.js";
+import type { PlatformRecord } from "../../../shared/platformTypes.js";
 import { readIdempotencyKey } from "../idempotencyCore.js";
 import { hashRequestPayload } from "../idempotencyGeneric.js";
 import * as orgStore from "./orgStore.js";
@@ -60,6 +64,7 @@ import {
   orgCreateSchema,
   orgUpdateSchema,
   projectCreateSchema,
+  recordBatchReviewSchema,
   recordCreateSchema,
   recordReviewSchema,
   schemaDraftSaveSchema,
@@ -854,6 +859,38 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ summary }, { status: 200 });
   }
 
+  // Core single-record review logic — applies the decision via `reviewRecordFn`
+  // and fires the `record_reviewed` audit event. Both `handleRecordReview`
+  // (one record) and `handleRecordBatchReview` (many records, looped) call
+  // this SAME function so the business logic + audit/side-effect behavior
+  // never drifts between the two entry points. Returns `null` when the
+  // record doesn't exist, isn't in this org, or isn't `pending_review`
+  // (i.e. `reviewRecordFn`'s `WHERE ... AND status = 'pending_review'` found
+  // no row) — callers turn that into a 404 (single) or a per-record
+  // "skipped" result (batch).
+  async function reviewOneRecord(input: {
+    organizationId: string;
+    recordId: string;
+    status: "approved" | "rejected";
+    reviewedBy: string;
+    reviewNotes?: string;
+  }): Promise<PlatformRecord | null> {
+    const record = await reviewRecordFn(input);
+    if (!record) return null;
+    await audit({
+      organizationId: input.organizationId,
+      projectId: record.projectId,
+      actorUserId: input.reviewedBy,
+      eventType: "record_reviewed",
+      payload: {
+        recordId: record.id,
+        status: record.status,
+        hasReviewNotes: Boolean(record.reviewNotes),
+      },
+    });
+    return record;
+  }
+
   async function handleRecordReview(request: Request): Promise<Response> {
     const rawBody = await readJson(request);
     if (rawBody === null) return errorResponse("Invalid JSON body", 400);
@@ -862,24 +899,75 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     const body = parsed.data;
     const context = await requireOrgRole(request, body.organizationId, "reviewer", tenancyDeps);
     if (isTenancyFailure(context)) return context;
-    const record = await reviewRecordFn({
-      ...body,
+    const record = await reviewOneRecord({
+      organizationId: body.organizationId,
+      recordId: body.recordId,
+      status: body.status,
       reviewedBy: context.userId,
       reviewNotes: body.reviewNotes,
     });
     if (!record) return errorResponse("Record not found", 404, { code: "platform_record_not_found" });
-    await audit({
-      organizationId: body.organizationId,
-      projectId: record.projectId,
-      actorUserId: context.userId,
-      eventType: "record_reviewed",
-      payload: {
-        recordId: record.id,
-        status: record.status,
-        hasReviewNotes: Boolean(record.reviewNotes),
-      },
-    });
     return jsonResponse({ record }, { status: 200 });
+  }
+
+  // ── record_batch_review ───────────────────────────────────────────────────
+  // Same decision applied to every id in `recordIds`, one `reviewOneRecord`
+  // call per id (no batch SQL, no shortcuts) so per-record audit + any future
+  // side effects on `reviewOneRecord` fire exactly once per record, same as
+  // the single-review path. One record failing (thrown error) or being
+  // unreviewable (already resolved / wrong org / not found) never aborts the
+  // rest of the batch — every id in the request gets its own result entry.
+  async function handleRecordBatchReview(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(recordBatchReviewSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+    const context = await requireOrgRole(request, body.organizationId, "reviewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    // De-dupe while preserving the caller's ordering — a repeated id would
+    // otherwise attempt a second review of an already-resolved record and
+    // report a spurious "skipped" entry.
+    const recordIds = Array.from(new Set(body.recordIds));
+
+    const results: Array<{
+      recordId: string;
+      status: "ok" | "error" | "skipped";
+      error?: string;
+      skippedReason?: string;
+    }> = [];
+    let skippedCount = 0;
+
+    for (const recordId of recordIds) {
+      try {
+        const record = await reviewOneRecord({
+          organizationId: body.organizationId,
+          recordId,
+          status: body.decision,
+          reviewedBy: context.userId,
+          reviewNotes: body.notes,
+        });
+        if (!record) {
+          skippedCount += 1;
+          results.push({
+            recordId,
+            status: "skipped",
+            skippedReason: "Record not found or already reviewed",
+          });
+        } else {
+          results.push({ recordId, status: "ok" });
+        }
+      } catch (error) {
+        results.push({
+          recordId,
+          status: "error",
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return jsonResponse({ results, skippedCount }, { status: 200 });
   }
 
   async function handleNotificationBroadcast(request: Request): Promise<Response> {
@@ -1034,6 +1122,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
     platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
     platform_record_review: { method: "POST", handler: handleRecordReview },
+    platform_record_batch_review: { method: "POST", handler: handleRecordBatchReview },
     platform_notification_broadcast: { method: "POST", handler: handleNotificationBroadcast },
     platform_record_export_csv: { method: "GET", handler: (request) => handleRecordExportCsv(request, new URL(request.url)) },
     platform_record_export_geojson: { method: "GET", handler: (request) => handleRecordExportGeojson(request, new URL(request.url)) },
