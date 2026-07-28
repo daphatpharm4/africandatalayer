@@ -279,28 +279,64 @@ final class ReviewQueueViewModel: ObservableObject {
         return await decide(recordId, status: .rejected, reviewNotes: trimmed)
     }
 
-    /// Mass-approve every currently-selected record. There is no bulk
-    /// endpoint on the web either — `ReviewQueueScreen.tsx`'s `decide` is
-    /// always one record at a time; this iterates the selection (in a
-    /// stable, sorted order) and calls the same per-record `reviewPlatformRecord`
-    /// decision for each id, exactly as if a reviewer approved each row by
-    /// hand. A failing item's error lands in `itemErrors[id]` and that item
-    /// stays in both `records` and `selection` (still visible, still
-    /// selected, ready for a retry); every other selected item is still
-    /// attempted regardless — one failure never aborts the batch. Returns
-    /// the number of records that were successfully approved.
+    /// Mass-approve every currently-selected record via ONE
+    /// `platform_record_batch_review` call (`PlatformAPIClient.batchReviewRecords`)
+    /// rather than one `platform_record_review` request per id — see
+    /// `handleRecordBatchReview` in `lib/server/platform/api.ts`, which loops
+    /// the exact same per-record review + audit logic the single endpoint
+    /// uses, so this is behaviorally identical to approving each row by hand,
+    /// just one network round trip. Selection is snapshotted (sorted, and
+    /// filtered to ids still present in `records`) before the call so the
+    /// response — one `PlatformRecordBatchReviewItemResult` per id, same
+    /// order — can be zipped back unambiguously.
+    ///
+    /// Per result: `.ok` removes the record from `records` and clears it from
+    /// `selection` (this pending-only queue's equivalent of a successful
+    /// single decision, see the type doc above); `.error`/`.skipped` leave
+    /// the record in both `records` and `selection` (still visible, still
+    /// selected, ready for a retry) and set `itemErrors[id]` to the
+    /// server-supplied `error`/`skippedReason` message. If the batch request
+    /// itself fails (network/5xx, no per-record results at all), every
+    /// selected id keeps its selection and gets the same connection-failure
+    /// message a single failed decision would show. Returns the number of
+    /// records that were successfully approved.
     @discardableResult
     func approveSelected() async -> Int {
         guard canMutate else { return 0 }
+        let selectedIds = selection.sorted().filter { id in records.contains { $0.id == id } }
+        guard !selectedIds.isEmpty else { return 0 }
+
         isBulkBusy = true
         defer { isBulkBusy = false }
-        var succeededCount = 0
-        for recordId in selection.sorted() where records.contains(where: { $0.id == recordId }) {
-            if await decide(recordId, status: .approved, reviewNotes: nil) {
-                succeededCount += 1
+        for id in selectedIds { itemErrors[id] = nil }
+
+        do {
+            let response = try await apiClient.batchReviewRecords(
+                organizationId: organizationId,
+                recordIds: selectedIds,
+                decision: .approved
+            )
+            var succeededCount = 0
+            for result in response.results {
+                switch result.status {
+                case .ok:
+                    records.removeAll { $0.id == result.recordId }
+                    selection.remove(result.recordId)
+                    succeededCount += 1
+                case .error:
+                    itemErrors[result.recordId] = result.error ?? genericDecisionFailureMessage()
+                case .skipped:
+                    itemErrors[result.recordId] = result.skippedReason ?? genericDecisionFailureMessage()
+                }
             }
+            return succeededCount
+        } catch {
+            let message = decisionFailureMessage(for: error)
+            for id in selectedIds {
+                itemErrors[id] = message
+            }
+            return 0
         }
-        return succeededCount
     }
 
     /// Port of `decide()`'s network call + local-state update. POST
@@ -337,6 +373,18 @@ final class ReviewQueueViewModel: ObservableObject {
         return language.t(
             "Could not load company records. Check your connection and try again.",
             "Impossible de charger les données entreprise. Vérifiez votre connexion et réessayez."
+        )
+    }
+
+    /// Fallback message for a per-record `.error`/`.skipped` batch-review
+    /// result that didn't carry its own `error`/`skippedReason` string —
+    /// same copy `decisionFailureMessage` falls back to for a non-`PlatformAPIError`
+    /// single-decision failure, so a bulk failure and a single failure read
+    /// the same way to the reviewer.
+    private func genericDecisionFailureMessage() -> String {
+        language.t(
+            "The review decision was not saved. Check your connection and try again.",
+            "La décision n'a pas été enregistrée. Vérifiez votre connexion et réessayez."
         )
     }
 

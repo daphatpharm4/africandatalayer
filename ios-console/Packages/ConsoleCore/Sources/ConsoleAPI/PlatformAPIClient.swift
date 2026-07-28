@@ -440,6 +440,33 @@ public struct PlatformAPIClient: Sendable {
         return envelope.record
     }
 
+    /// `view=platform_record_batch_review`, POST. Applies ONE decision to
+    /// every id in `recordIds` in a single request — the batch counterpart to
+    /// `reviewPlatformRecord`, backed by `handleRecordBatchReview` in
+    /// `lib/server/platform/api.ts`, which loops the exact same per-record
+    /// review + audit logic `reviewPlatformRecord` uses (`reviewOneRecord`)
+    /// rather than a bespoke bulk code path. The response is the bare
+    /// `{ results, skippedCount }` payload (not wrapped in an envelope) —
+    /// one `PlatformRecordBatchReviewItemResult` per id in `recordIds`,
+    /// same order, so callers can zip results back to their local selection.
+    public func batchReviewRecords(
+        organizationId: String,
+        recordIds: [String],
+        decision: PlatformRecordReviewStatus,
+        notes: String? = nil
+    ) async throws -> PlatformRecordBatchReviewResponse {
+        struct Body: Encodable {
+            var organizationId: String
+            var recordIds: [String]
+            var decision: PlatformRecordReviewStatus
+            var notes: String?
+        }
+        let bodyData = try JSONEncoder().encode(
+            Body(organizationId: organizationId, recordIds: recordIds, decision: decision, notes: notes)
+        )
+        return try await callPlatform("record_batch_review", method: .post, bodyData: bodyData)
+    }
+
     /// `view=platform_notification_broadcast`, POST. Sends an operational
     /// notification to members whose roles are included in `targetRoles`.
     public func sendNotificationBroadcast(
