@@ -37,6 +37,7 @@ final class ConsoleAccessTests: XCTestCase {
     //   ONBOARDING                   -> isAdlAdmin
     //   LOADING, AUTH_REQUIRED       -> false (falls into TS `default: return false`)
     //   MAP                          -> true for every role (iOS-only, no TS case)
+    //   ANALYTICS                    -> role != "viewer" (iOS-only, no TS case)
 
     private func expectedAccess(role: PlatformRole, screen: ConsoleScreen, isAdlAdmin: Bool) -> Bool {
         switch screen {
@@ -54,6 +55,8 @@ final class ConsoleAccessTests: XCTestCase {
             return isAdlAdmin
         case .loading, .authRequired:
             return false
+        case .analytics:
+            return role != .viewer
         }
     }
 
@@ -152,5 +155,12 @@ final class ConsoleAccessTests: XCTestCase {
             XCTAssertFalse(canAccessConsoleScreen(role: role, screen: .authRequired))
             XCTAssertFalse(canAccessConsoleScreen(role: role, screen: .authRequired, isAdlAdmin: true))
         }
+
+        // ANALYTICS: everyone except viewer.
+        XCTAssertTrue(canAccessConsoleScreen(role: .owner, screen: .analytics))
+        XCTAssertTrue(canAccessConsoleScreen(role: .manager, screen: .analytics))
+        XCTAssertTrue(canAccessConsoleScreen(role: .reviewer, screen: .analytics))
+        XCTAssertTrue(canAccessConsoleScreen(role: .collector, screen: .analytics))
+        XCTAssertFalse(canAccessConsoleScreen(role: .viewer, screen: .analytics))
     }
 }

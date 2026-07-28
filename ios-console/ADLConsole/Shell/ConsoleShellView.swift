@@ -314,6 +314,8 @@ struct ConsoleShellView: View {
             reviewContent
         case .projects:
             projectsContent
+        case .analytics:
+            analyticsContent
         case .members:
             membersContent
         case .settings:
@@ -343,6 +345,15 @@ struct ConsoleShellView: View {
             ProjectsView(viewModel: appState.makeProjectsViewModel(organizationId: organizationId))
         } else {
             PlaceholderScreenView(screen: .projects)
+        }
+    }
+
+    @ViewBuilder
+    private var analyticsContent: some View {
+        if let organizationId = appState.organization?.id, let role = appState.role {
+            AnalyticsHubView(organizationId: organizationId, role: role)
+        } else {
+            PlaceholderScreenView(screen: .analytics)
         }
     }
 

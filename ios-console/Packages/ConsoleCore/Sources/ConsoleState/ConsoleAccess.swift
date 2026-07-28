@@ -25,6 +25,14 @@ public func consoleLandingRoute(role: PlatformRole) -> ConsoleRoute {
 ///                               capture/browse points, so it stays as open
 ///                               as OVERVIEW/PROJECTS rather than following
 ///                               DATA's `role != .collector` gate)
+///   ANALYTICS                -> role != .viewer (iOS-only addition, no TS
+///                               case — per the analytics-intelligence design
+///                               spec's role matrix, owner/manager/reviewer/
+///                               collector all have some analytics surface
+///                               [see `AnalyticsTab.visibleTabs(role:)` in the
+///                               app layer for the per-tab breakdown]; viewer
+///                               is not in that matrix, so it stays gated out
+///                               here at the destination level)
 public func canAccessConsoleScreen(
     role: PlatformRole,
     screen: ConsoleScreen,
@@ -45,5 +53,7 @@ public func canAccessConsoleScreen(
         return isAdlAdmin
     case .loading, .authRequired:
         return false
+    case .analytics:
+        return role != .viewer
     }
 }

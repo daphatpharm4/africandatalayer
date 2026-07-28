@@ -57,6 +57,12 @@ class AppState: ObservableObject {
     /// bootstraps with, instead of `AppState` growing a method per screen.
     let apiClient: PlatformAPIClient
     private let authService: AuthServiceProtocol
+    /// Backs every `make*AnalyticsViewModel`/`makeAIAnalyticsAssistantViewModel`
+    /// factory below — a stateless wrapper over `apiClient` (see
+    /// `AnalyticsRepository`'s doc comment in `ConsoleAPI`), so building it
+    /// once and sharing it is a plain efficiency choice, not a correctness
+    /// requirement.
+    private lazy var analyticsRepository: AnalyticsRepositoryProtocol = AnalyticsRepository(apiClient: apiClient)
 
     /// The offline record-capture queue, owned centrally (not per-screen) so
     /// a draft enqueued in one `CaptureView` session survives navigating
@@ -254,6 +260,47 @@ class AppState: ObservableObject {
                 self?.allowsOfflineCapability(.administrationMutation) ?? false
             }
         )
+    }
+
+    /// Builds a fresh `DeltaDashboardViewModel` for `ConsoleShellView`'s
+    /// ANALYTICS destination (Delta Dashboard tab), mirroring
+    /// `makeReviewQueueViewModel` above.
+    func makeDeltaDashboardViewModel(organizationId: String) -> DeltaDashboardViewModel {
+        DeltaDashboardViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `InvestorDashboardViewModel` for the ANALYTICS
+    /// destination's Investor Dashboard tab, mirroring
+    /// `makeDeltaDashboardViewModel` above.
+    func makeInvestorDashboardViewModel(organizationId: String) -> InvestorDashboardViewModel {
+        InvestorDashboardViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `CategoryBreakdownViewModel` for the ANALYTICS
+    /// destination's Category Breakdown tab, mirroring
+    /// `makeDeltaDashboardViewModel` above.
+    func makeCategoryBreakdownViewModel(organizationId: String) -> CategoryBreakdownViewModel {
+        CategoryBreakdownViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `AgentPerformanceViewModel` for the ANALYTICS
+    /// destination's Agent Performance tab, mirroring
+    /// `makeDeltaDashboardViewModel` above.
+    func makeAgentPerformanceViewModel(organizationId: String) -> AgentPerformanceViewModel {
+        AgentPerformanceViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `ExportPanelViewModel` for the ANALYTICS destination's
+    /// Export tab, mirroring `makeDeltaDashboardViewModel` above.
+    func makeExportPanelViewModel(organizationId: String) -> ExportPanelViewModel {
+        ExportPanelViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `AIAnalyticsAssistantViewModel` for the ANALYTICS
+    /// destination's AI Assistant tab, mirroring `makeDeltaDashboardViewModel`
+    /// above.
+    func makeAIAnalyticsAssistantViewModel(organizationId: String) -> AIAnalyticsAssistantViewModel {
+        AIAnalyticsAssistantViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
     }
 
     private func allowsOfflineCapability(_ capability: OfflineCapability) -> Bool {

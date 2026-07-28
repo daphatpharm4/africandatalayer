@@ -33,6 +33,7 @@ enum ConsoleNavigation {
         ConsoleDestination(screen: .data, titleEN: "Company data", titleFR: "Données entreprise"),
         ConsoleDestination(screen: .review, titleEN: "Review queue", titleFR: "File de révision"),
         ConsoleDestination(screen: .projects, titleEN: "Projects", titleFR: "Projets"),
+        ConsoleDestination(screen: .analytics, titleEN: "Analytics", titleFR: "Analytique"),
         ConsoleDestination(screen: .members, titleEN: "Members", titleFR: "Membres"),
         ConsoleDestination(screen: .settings, titleEN: "Settings", titleFR: "Paramètres"),
     ]

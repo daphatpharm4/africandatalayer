@@ -191,6 +191,16 @@ final class ConsoleRoutingTests: XCTestCase {
         XCTAssertEqual(consoleRouteToHash(ConsoleRoute(screen: .map)), "#/map")
     }
 
+    // MARK: - ANALYTICS (iOS-console-only, no TS counterpart — see `ConsoleScreen.analytics`)
+
+    func testAnalytics() {
+        XCTAssertEqual(parseConsoleHash("#/analytics"), ConsoleRoute(screen: .analytics))
+    }
+
+    func testToHashAnalytics() {
+        XCTAssertEqual(consoleRouteToHash(ConsoleRoute(screen: .analytics)), "#/analytics")
+    }
+
     // MARK: - Round trips
 
     func testRoundTripsForEveryProducibleRoute() {
@@ -206,6 +216,7 @@ final class ConsoleRoutingTests: XCTestCase {
             ConsoleRoute(screen: .join),
             ConsoleRoute(screen: .join, joinToken: "tok-1"),
             ConsoleRoute(screen: .map),
+            ConsoleRoute(screen: .analytics),
         ]
         for route in routes {
             let hash = consoleRouteToHash(route)

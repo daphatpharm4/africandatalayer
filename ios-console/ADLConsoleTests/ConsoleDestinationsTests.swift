@@ -96,4 +96,17 @@ final class ConsoleDestinationsTests: XCTestCase {
             }
         }
     }
+
+    /// `.analytics` per the analytics-intelligence design spec's role
+    /// matrix: everyone except viewer.
+    func testAnalyticsDestinationVisibleForEveryRoleExceptViewer() {
+        for role in PlatformRole.allCases {
+            let screens = Set(ConsoleNavigation.visibleDestinations(role: role).map(\.screen))
+            if role == .viewer {
+                XCTAssertFalse(screens.contains(.analytics), "role=\(role) must not see ANALYTICS")
+            } else {
+                XCTAssertTrue(screens.contains(.analytics), "role=\(role) must see ANALYTICS")
+            }
+        }
+    }
 }
