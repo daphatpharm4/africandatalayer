@@ -99,11 +99,17 @@ test("record_batch_review reports mixed ok/error results without aborting the ba
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.skippedCount, 0);
+  // The per-record error must be a generic message — never the raw
+  // error/DB text (information disclosure).
   assert.deepEqual(body.results, [
     { recordId: RECORD_1, status: "ok" },
-    { recordId: RECORD_2, status: "error", error: "simulated database failure" },
+    { recordId: RECORD_2, status: "error", error: "Review failed" },
     { recordId: RECORD_3, status: "ok" },
   ]);
+  assert.ok(
+    !JSON.stringify(body).includes("simulated database failure"),
+    "raw error message must not leak to the client",
+  );
 });
 
 test("record_batch_review reports a not-found/already-reviewed record as skipped", async () => {

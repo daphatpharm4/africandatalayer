@@ -959,10 +959,13 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
           results.push({ recordId, status: "ok" });
         }
       } catch (error) {
+        // Log the real error server-side; never return raw error/DB messages
+        // to the client (information disclosure).
+        console.error(`platform_record_batch_review: review failed for record ${recordId}`, error);
         results.push({
           recordId,
           status: "error",
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: "Review failed",
         });
       }
     }
