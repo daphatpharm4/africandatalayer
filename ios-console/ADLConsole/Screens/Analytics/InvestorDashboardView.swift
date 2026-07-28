@@ -100,13 +100,22 @@ struct InvestorDashboardView: View {
                 .tint(viewModel.trustScore > 70 ? ADLConsoleColor.forest : ADLConsoleColor.gold)
                 .frame(maxWidth: .infinity)
 
-                Text(t("Trust Score", "Score de confiance"))
-                    .font(ADLConsoleFont.subheadline)
-                    .foregroundStyle(ADLConsoleColor.ink)
+                HStack(spacing: 6) {
+                    Text(t("Trust Score", "Score de confiance"))
+                        .font(ADLConsoleFont.subheadline)
+                        .foregroundStyle(ADLConsoleColor.ink)
+                    Text(t("ESTIMATED", "ESTIMÉ"))
+                        .font(ADLConsoleFont.caption)
+                        .fontWeight(.bold)
+                        .foregroundStyle(ADLConsoleColor.gold)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(ADLConsoleColor.gold.opacity(0.15), in: Capsule())
+                }
                 Text(
                     t(
-                        "Blends verification rate and fraud rate.",
-                        "Combine le taux de vérification et le taux de fraude."
+                        "Estimated indicator — blends verification rate and fraud rate; not an audited score.",
+                        "Indicateur estimé — combine le taux de vérification et le taux de fraude ; pas un score audité."
                     )
                 )
                 .font(ADLConsoleFont.caption)
