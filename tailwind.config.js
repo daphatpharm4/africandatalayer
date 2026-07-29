@@ -5,6 +5,7 @@ const config = {
     "./App.tsx",
     "./index.tsx",
     "./components/**/*.{js,ts,jsx,tsx}",
+    "./lib/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
@@ -33,6 +34,7 @@ const config = {
         },
         amber: {
           DEFAULT: '#d97706',
+          dark: '#92400e',
           wash: '#fef3c7',
         },
         streak: {

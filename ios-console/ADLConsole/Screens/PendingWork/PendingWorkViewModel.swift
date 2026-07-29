@@ -43,6 +43,8 @@ final class PendingWorkViewModel: ObservableObject {
     @Published private(set) var isExporting = false
     @Published private(set) var isRetrying = false
     @Published private(set) var exportText: String?
+    @Published private(set) var errorRecords: [LedgerRecord] = []
+    @Published private(set) var errorHistoryMessage: String?
 
     let language: ConsoleLanguage
 
@@ -94,6 +96,22 @@ final class PendingWorkViewModel: ObservableObject {
         }
     }
 
+    func loadErrorHistory(limit: Int = 100) async {
+        errorHistoryMessage = nil
+        do {
+            errorRecords = try await ledger.errorHistory(
+                ownerUserID: ownerUserID,
+                organizationID: organizationID,
+                limit: limit
+            )
+        } catch {
+            errorHistoryMessage = language.t(
+                "Could not load sync error history.",
+                "Impossible de charger l’historique des erreurs de synchronisation."
+            )
+        }
+    }
+
     func requestDiscard(_ item: PendingItem) {
         guard capabilityAllowed(.discardPendingRecord) else { return }
         discardConfirmationItem = item
@@ -109,8 +127,8 @@ final class PendingWorkViewModel: ObservableObject {
         discardConfirmationItem = nil
         guard item.state.isRecoverable else { return }
         do {
-            try await ledger.discard(localID: item.id, discardedAt: Date())
             try await mediaStore.discard(recordLocalID: item.id)
+            try await ledger.discard(localID: item.id, discardedAt: Date())
         } catch {
             // discard failure is surfaced on next load
         }

@@ -1908,7 +1908,12 @@ const ContributionFlow: React.FC<Props> = ({
         <div className="micro-label-wide text-gray-400">
           {t('Step 3 — Confirm location', 'Étape 3 — Confirmer la position')}
         </div>
-        <button onClick={retryLocation} className="motion-pressable micro-label text-navy">
+        <button
+          type="button"
+          data-testid="capture-recovery-cta"
+          onClick={retryLocation}
+          className="motion-pressable adl-focusable min-h-12 rounded-xl px-3 micro-label text-navy"
+        >
           {t('Retry', 'Réessayer')}
         </button>
       </div>
@@ -2092,7 +2097,7 @@ const ContributionFlow: React.FC<Props> = ({
             <>
               <Camera size={40} className="text-gray-500" />
               <span className="text-sm font-semibold text-gray-700">{t('Tap to capture', 'Appuyez pour capturer')}</span>
-              <span className="text-[11px] text-gray-400">{t('Photo required for verification', 'Photo requise pour vérification')}</span>
+              <span className="text-[11px] text-gray-600">{t('Photo required for verification', 'Photo requise pour vérification')}</span>
             </>
           )}
         </div>
@@ -2100,7 +2105,7 @@ const ContributionFlow: React.FC<Props> = ({
     );
     return (
       <div className="space-y-3">
-        <div className="micro-label-wide mb-3 text-gray-400">
+        <div className="micro-label-wide mb-3 text-ink-muted">
           {t('Step 1 — Capture photo', 'Étape 1 — Capturer la photo')}
         </div>
         {isNative() ? (
@@ -3166,7 +3171,12 @@ const ContributionFlow: React.FC<Props> = ({
         <div className="ambient-orb right-[-2rem] top-[-1rem] h-20 w-20 bg-gold/20" />
         <div className="ambient-orb left-[-1rem] bottom-[-2rem] h-24 w-24 bg-terra/10" style={{ animationDelay: '-2s' }} />
         <div className="flex items-center justify-between mb-3">
-          <button onClick={handleBackPress} className="motion-pressable flex h-11 w-11 items-center justify-center -ml-2 text-gray-500">
+          <button
+            type="button"
+            onClick={handleBackPress}
+            aria-label={t('Back', 'Retour')}
+            className="motion-pressable flex h-11 w-11 items-center justify-center -ml-2 text-gray-500"
+          >
             <ArrowLeft size={24} />
           </button>
           <span className="text-xs font-bold text-gray-900 uppercase tracking-[0.2em]">
@@ -3194,12 +3204,12 @@ const ContributionFlow: React.FC<Props> = ({
                       {done ? (
                         <CheckCircle size={12} className="text-white" />
                       ) : (
-                        <span className={`text-[10px] font-bold ${active ? 'text-white' : 'text-gray-400'}`}>
+                        <span className={`text-[10px] font-bold ${active ? 'text-white' : 'text-gray-600'}`}>
                           {i + 1}
                         </span>
                       )}
                     </div>
-                    <span className={`text-[10px] font-semibold ${active ? 'text-navy' : 'text-gray-400'}`}>
+                    <span className={`text-[10px] font-semibold ${active ? 'text-navy' : 'text-gray-600'}`}>
                       {t(stepLabel.en, stepLabel.fr)}
                     </span>
                   </div>
@@ -3222,7 +3232,7 @@ const ContributionFlow: React.FC<Props> = ({
             </span>
           </div>
           {isEnrichMode && effectiveSeedPoint && (
-            <span className="micro-label text-gray-400 truncate max-w-[140px]">
+            <span className="micro-label text-ink-muted truncate max-w-[140px]">
               {effectiveSeedPoint.name}
             </span>
           )}
@@ -3426,22 +3436,25 @@ const ContributionFlow: React.FC<Props> = ({
             <span>{t('Back', 'Retour')}</span>
           </button>
           {currentStep === STEPS.length - 1 && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
-              className="motion-pressable button-breathe flex h-14 items-center justify-center gap-2 rounded-xl bg-navy text-white text-xs font-bold uppercase tracking-widest shadow-lg disabled:opacity-70"
-              style={{ boxShadow: 'var(--shadow-lift)' }}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>{t('Saving', 'Enregistrement')}</span>
-                </>
-              ) : (
-                <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Créer point')}</span>
+            <div className="space-y-2">
+              {typeof navigator !== 'undefined' && !navigator.onLine && (
+                <button type="button" onClick={handleSubmit} className="adl-focusable min-h-12 w-full rounded-xl border border-navy-border bg-white px-4 text-sm font-semibold text-navy">
+                  {t('Save draft', 'Enregistrer le brouillon')}
+                </button>
               )}
-            </button>
+              <button
+                data-testid="capture-primary-cta"
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
+                className="motion-pressable button-breathe flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-navy text-white text-xs font-bold uppercase tracking-widest shadow-lg disabled:opacity-70"
+                style={{ boxShadow: 'var(--shadow-lift)' }}
+              >
+                {isSubmitting ? <span>{t('Saving', 'Enregistrement')}…</span> : (
+                  <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Créer point')}</span>
+                )}
+              </button>
+            </div>
           )}
         </div>
       </div>

@@ -38,6 +38,25 @@ final class ReviewQueueViewModelTests: XCTestCase {
         Data("{\"record\": \(recordJSON(id: id))}".utf8)
     }
 
+    private func batchReviewResponse(
+        ok: [String] = [],
+        errors: [(id: String, message: String)] = [],
+        skipped: [(id: String, reason: String)] = []
+    ) -> Data {
+        var items: [String] = []
+        for id in ok {
+            items.append("{\"recordId\": \"\(id)\", \"status\": \"ok\"}")
+        }
+        for entry in errors {
+            items.append("{\"recordId\": \"\(entry.id)\", \"status\": \"error\", \"error\": \"\(entry.message)\"}")
+        }
+        for entry in skipped {
+            items.append("{\"recordId\": \"\(entry.id)\", \"status\": \"skipped\", \"skippedReason\": \"\(entry.reason)\"}")
+        }
+        let skippedCount = skipped.count
+        return Data("{\"results\": [\(items.joined(separator: ","))], \"skippedCount\": \(skippedCount)}".utf8)
+    }
+
     private func makeViewModel(transport: RoutingMockPlatformTransport) -> ReviewQueueViewModel {
         ReviewQueueViewModel(
             apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
@@ -179,12 +198,12 @@ final class ReviewQueueViewModelTests: XCTestCase {
         )
     }
 
-    // MARK: - Mass-approve
+    // MARK: - Mass-approve (platform_record_batch_review, ONE call)
 
-    func testApproveSelectedIteratesSelectionAndCallsPerRecord() async {
+    func testApproveSelectedCallsBatchReviewOnceWithAllSelectedIds() async {
         let transport = RoutingMockPlatformTransport()
         transport.setResponse(listResponse(["rec-1", "rec-2", "rec-3"]), forView: "platform_record_list")
-        transport.setResponse(reviewResponse(id: "rec-x"), forView: "platform_record_review")
+        transport.setResponse(batchReviewResponse(ok: ["rec-1", "rec-2"]), forView: "platform_record_batch_review")
         let viewModel = makeViewModel(transport: transport)
         await viewModel.load()
         viewModel.toggleSelection("rec-1")
@@ -195,16 +214,72 @@ final class ReviewQueueViewModelTests: XCTestCase {
         XCTAssertEqual(succeededCount, 2)
         XCTAssertEqual(viewModel.records.map(\.id), ["rec-3"])
         XCTAssertTrue(viewModel.selection.isEmpty)
-        XCTAssertEqual(transport.requests(forView: "platform_record_review").count, 2)
+
+        // Exactly ONE batch request, carrying every selected id — not one
+        // request per record.
+        let requests = transport.requests(forView: "platform_record_batch_review")
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertTrue(transport.requests(forView: "platform_record_review").isEmpty)
+        XCTAssertEqual(requests[0].httpMethod, "POST")
+        let body = try? JSONSerialization.jsonObject(with: requests[0].httpBody ?? Data()) as? [String: Any]
+        XCTAssertEqual(body?["organizationId"] as? String, "org-1")
+        XCTAssertEqual(body?["recordIds"] as? [String], ["rec-1", "rec-2"])
+        XCTAssertEqual(body?["decision"] as? String, "approved")
     }
 
-    func testMassApproveFailingItemLeavesOthersIntactAndSurfacesItsError() async {
+    func testApproveSelectedErrorResultLeavesRecordSelectedAndSurfacesMessage() async {
         let transport = RoutingMockPlatformTransport()
         transport.setResponse(listResponse(["rec-1", "rec-2"]), forView: "platform_record_list")
-        transport.setResponse(reviewResponse(id: "rec-x"), forView: "platform_record_review")
-        let failingTransport = RecordReviewFailureTransport(inner: transport, failingRecordId: "rec-1")
+        transport.setResponse(
+            batchReviewResponse(ok: ["rec-2"], errors: [(id: "rec-1", message: "simulated failure")]),
+            forView: "platform_record_batch_review"
+        )
+        let viewModel = makeViewModel(transport: transport)
+        await viewModel.load()
+        viewModel.toggleSelection("rec-1")
+        viewModel.toggleSelection("rec-2")
+
+        let succeededCount = await viewModel.approveSelected()
+
+        XCTAssertEqual(succeededCount, 1)
+        // rec-1 errored and stays (still visible, still selected); rec-2
+        // succeeded and was removed.
+        XCTAssertEqual(viewModel.records.map(\.id), ["rec-1"])
+        XCTAssertTrue(viewModel.selection.contains("rec-1"))
+        XCTAssertFalse(viewModel.selection.contains("rec-2"))
+        XCTAssertEqual(viewModel.itemError(for: "rec-1"), "simulated failure")
+        XCTAssertNil(viewModel.itemError(for: "rec-2"))
+    }
+
+    func testApproveSelectedSkippedResultLeavesRecordSelectedAndSurfacesReason() async {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(listResponse(["rec-1", "rec-2"]), forView: "platform_record_list")
+        transport.setResponse(
+            batchReviewResponse(ok: ["rec-2"], skipped: [(id: "rec-1", reason: "Record not found or already reviewed")]),
+            forView: "platform_record_batch_review"
+        )
+        let viewModel = makeViewModel(transport: transport)
+        await viewModel.load()
+        viewModel.toggleSelection("rec-1")
+        viewModel.toggleSelection("rec-2")
+
+        let succeededCount = await viewModel.approveSelected()
+
+        XCTAssertEqual(succeededCount, 1)
+        XCTAssertEqual(viewModel.records.map(\.id), ["rec-1"])
+        XCTAssertTrue(viewModel.selection.contains("rec-1"))
+        XCTAssertEqual(viewModel.itemError(for: "rec-1"), "Record not found or already reviewed")
+    }
+
+    func testApproveSelectedWholeRequestFailureKeepsSelectionAndSurfacesMessageForEveryItem() async {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(listResponse(["rec-1", "rec-2"]), forView: "platform_record_list")
+        transport.setResponse(Data("{\"error\":\"boom\"}".utf8), forView: "platform_record_batch_review")
         let viewModel = ReviewQueueViewModel(
-            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: failingTransport),
+            apiClient: PlatformAPIClient(
+                baseURL: URL(string: "https://example.com")!,
+                transport: StatusOverrideTransport(inner: transport, view: "platform_record_batch_review", statusCode: 503)
+            ),
             organizationId: "org-1",
             language: .en
         )
@@ -214,13 +289,11 @@ final class ReviewQueueViewModelTests: XCTestCase {
 
         let succeededCount = await viewModel.approveSelected()
 
-        XCTAssertEqual(succeededCount, 1)
-        // rec-1 failed and stays; rec-2 succeeded and was removed.
-        XCTAssertEqual(viewModel.records.map(\.id), ["rec-1"])
-        XCTAssertTrue(viewModel.selection.contains("rec-1"))
-        XCTAssertFalse(viewModel.selection.contains("rec-2"))
+        XCTAssertEqual(succeededCount, 0)
+        XCTAssertEqual(viewModel.records.map(\.id), ["rec-1", "rec-2"])
+        XCTAssertEqual(viewModel.selection, ["rec-1", "rec-2"])
         XCTAssertNotNil(viewModel.itemError(for: "rec-1"))
-        XCTAssertNil(viewModel.itemError(for: "rec-2"))
+        XCTAssertNotNil(viewModel.itemError(for: "rec-2"))
     }
 
     // MARK: - Selection helpers
@@ -264,36 +337,5 @@ private final class StatusOverrideTransport: PlatformTransport, @unchecked Senda
             headerFields: ["content-type": "application/json"]
         )!
         return (data, failingResponse)
-    }
-}
-
-/// Forces the `platform_record_review` response for one specific `recordId`
-/// (read from the POST body) to a 500 — used to simulate one failing item in
-/// a mass-approve batch while every other record's request still succeeds.
-private final class RecordReviewFailureTransport: PlatformTransport, @unchecked Sendable {
-    private let inner: RoutingMockPlatformTransport
-    private let failingRecordId: String
-
-    init(inner: RoutingMockPlatformTransport, failingRecordId: String) {
-        self.inner = inner
-        self.failingRecordId = failingRecordId
-    }
-
-    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        let (data, response) = try await inner.send(request)
-        guard response.url?.query?.contains("view=platform_record_review") == true,
-              let body = request.httpBody,
-              let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
-              json["recordId"] as? String == failingRecordId
-        else {
-            return (data, response)
-        }
-        let failingResponse = HTTPURLResponse(
-            url: response.url!,
-            statusCode: 500,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["content-type": "application/json"]
-        )!
-        return (Data("{\"error\": \"simulated failure\"}".utf8), failingResponse)
     }
 }

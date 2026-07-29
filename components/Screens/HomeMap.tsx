@@ -261,6 +261,9 @@ const HomeMap: React.FC<Props> = ({
 
   return (
     <div data-testid="home-map-view" className="flex-1 bg-navy-light relative overflow-hidden z-0 min-h-0">
+      <p data-testid="map-selection-state" className="sr-only" role="status">
+        {t('Select a map point to review it before capture.', 'Sélectionnez un point sur la carte avant la capture.')}
+      </p>
       <MapContainer
         key={`map-${companyMode ? 'company' : mapScope}`}
         center={mapCenter}

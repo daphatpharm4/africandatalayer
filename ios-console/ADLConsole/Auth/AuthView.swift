@@ -174,6 +174,7 @@ struct AuthView: View {
                 ) {
                     Task { await appState.signIn(email: email, password: password) }
                 }
+                .accessibilityIdentifier("auth-open-company-console")
 
                 Text(t(
                     "New users must use the invitation link sent by their manager.",

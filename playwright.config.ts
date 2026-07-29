@@ -4,6 +4,7 @@ const docsMode = process.env.PW_DOCS === '1';
 
 export default defineConfig({
   testDir: '.',
+  testIgnore: ['.worktrees/**', '.claude/worktrees/**', 'node_modules/**'],
   timeout: 60_000,
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),

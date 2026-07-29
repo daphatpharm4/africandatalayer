@@ -46,6 +46,20 @@ final class CaptureViewModel: ObservableObject {
         case failed(String)
     }
 
+    /// State of the pre-submit duplicate-candidate lookup
+    /// (`PlatformAPIClient.dedupCandidates`, `GET
+    /// api/submissions?view=dedup_candidates`). `.prompt` pauses `submit()`
+    /// and surfaces `DedupWarningSheet`; every other case lets `submit()`
+    /// proceed straight through — including a network/decode failure, which
+    /// intentionally lands on `.clear` rather than any error case so a flaky
+    /// dedup lookup never blocks a field submission ("fail open").
+    enum DedupState: Equatable {
+        case idle
+        case checking
+        case prompt(candidates: [DedupCandidate], bestPointId: String?)
+        case clear
+    }
+
     struct CaptureProgress: Equatable {
         var completed: Int
         var total: Int
@@ -81,6 +95,22 @@ final class CaptureViewModel: ObservableObject {
     @Published private(set) var attachedPoint: PlatformNearbyPoint?
     @Published private(set) var preAttachPointId: String?
     @Published private(set) var attachmentViewStates: [CaptureAttachmentViewState] = []
+    @Published private(set) var dedupState: DedupState = .idle
+
+    /// Batch capture mode — lets a collector submit a run of records against
+    /// the same project/record type back-to-back without re-navigating.
+    /// `batchTarget` is typically seeded from a mission quota; `0` just means
+    /// "no known target", the floating counter still tracks `batchCompleted`.
+    @Published var isBatchMode: Bool = false
+    @Published var batchTarget: Int = 0
+    @Published private(set) var batchCompleted: Int = 0
+
+    /// The field `key` currently mid-dictation via `requestVoiceInput(for:)`,
+    /// or `nil` when no voice-input request is in flight — `CaptureView`
+    /// binds this to the active field's mic-button state so at most one
+    /// field's dictation runs (and shows as active) at a time.
+    @Published private(set) var voiceInputActiveKey: String?
+    @Published private(set) var voiceInputErrorMessage: String?
 
     let language: ConsoleLanguage
 
@@ -93,6 +123,11 @@ final class CaptureViewModel: ObservableObject {
     private let offlineCache: ConsoleOfflineCacheProtocol
     private let onQueueSnapshotChanged: (@MainActor (RecordQueueSnapshot?) -> Void)?
     private let fraudMetadataProvider: CaptureFraudMetadataProviding
+    /// `nil` disables the voice-input affordance entirely (e.g. tests that
+    /// don't want `CaptureFieldControl` to render a mic button). Defaults to
+    /// a real `SFSpeechRecognizerService` so existing callers (`AppState`)
+    /// get working dictation without any change on their end.
+    private let speechRecognitionProvider: SpeechRecognitionProviding?
     private var photoMetadataByRef: [String: PlatformRecordEvidence.PhotoMetadata] = [:]
     private let mediaStore: CaptureMediaStoreProtocol
     private let durableCoordinator: CaptureCoordinator?
@@ -100,6 +135,15 @@ final class CaptureViewModel: ObservableObject {
     private let onDurableRecordPersisted: (@MainActor (String) async -> Void)?
     private let creationAllowed: @MainActor () -> Bool
     private var pendingMedia: [String: CaptureIntentMedia] = [:]
+    /// The `Task` backing the in-flight `requestVoiceInput(for:)` call, if
+    /// any — retained so a second tap on the same field's mic button (which
+    /// renders as a STOP affordance while `voiceInputActiveKey == key`, see
+    /// `CaptureFieldControl`) can cancel it. `SFSpeechRecognizerService`'s
+    /// production recognition path observes that cancellation via
+    /// `withTaskCancellationHandler` and ends audio input, letting the
+    /// recognizer settle on a final (possibly partial) transcript instead of
+    /// listening forever.
+    private var voiceInputTask: Task<Void, Never>?
     private static let enrichMaxDistanceMeters: Double = 250
 
     init(
@@ -113,6 +157,7 @@ final class CaptureViewModel: ObservableObject {
         offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache(),
         onQueueSnapshotChanged: (@MainActor (RecordQueueSnapshot?) -> Void)? = nil,
         fraudMetadataProvider: CaptureFraudMetadataProviding = NativeCaptureFraudMetadataProvider(),
+        speechRecognitionProvider: SpeechRecognitionProviding? = SFSpeechRecognizerService(),
         mediaStore: CaptureMediaStoreProtocol = InMemoryCaptureMediaStore(),
         durableCoordinator: CaptureCoordinator? = nil,
         ownerUserID: String? = nil,
@@ -130,6 +175,7 @@ final class CaptureViewModel: ObservableObject {
         self.offlineCache = offlineCache
         self.onQueueSnapshotChanged = onQueueSnapshotChanged
         self.fraudMetadataProvider = fraudMetadataProvider
+        self.speechRecognitionProvider = speechRecognitionProvider
         self.mediaStore = mediaStore
         self.durableCoordinator = durableCoordinator
         self.ownerUserID = ownerUserID
@@ -311,6 +357,7 @@ final class CaptureViewModel: ObservableObject {
         attachedPoint = nil
         preAttachPointId = nil
         lastValidation = nil
+        dedupState = .idle
         if resetSubmitState {
             submitState = .idle
         }
@@ -339,6 +386,65 @@ final class CaptureViewModel: ObservableObject {
         fraudMetadataProvider.stopCapture()
     }
 
+    // MARK: - Voice input
+
+    /// Whether `CaptureFieldControl` should render a mic-button affordance at
+    /// all — `false` only when no `speechRecognitionProvider` was injected.
+    var isVoiceInputAvailable: Bool {
+        speechRecognitionProvider != nil
+    }
+
+    /// Requests one dictation pass via the injected `SpeechRecognitionProviding`
+    /// and, on success, fills the field named `key` with the (trimmed)
+    /// transcript — `.numberText` for a `.number` field, `.text` for every
+    /// other control kind, matching `textBinding`/`numberTextBinding` in
+    /// `CaptureFieldControl`. A no-op when no provider was injected or the
+    /// field doesn't exist on the current record type; a transcript that's
+    /// empty (e.g. the collector tapped the mic then said nothing) leaves the
+    /// field untouched.
+    ///
+    /// A second call for the SAME field while its dictation is already in
+    /// flight (`voiceInputActiveKey == key`) is treated as "stop" rather than
+    /// "start again": it cancels the in-flight `voiceInputTask` instead of
+    /// requesting a fresh transcription. `SFSpeechRecognizerService`'s
+    /// production recognition path reacts to that cancellation by ending
+    /// audio input and letting the recognizer resolve normally with whatever
+    /// it had transcribed so far, so this still fills the field — it just
+    /// stops listening early instead of running until a timeout.
+    func requestVoiceInput(for key: String) {
+        guard let speechRecognitionProvider else { return }
+
+        if voiceInputActiveKey == key {
+            voiceInputTask?.cancel()
+            return
+        }
+
+        guard let descriptor = descriptors.first(where: { $0.key == key }) else { return }
+
+        voiceInputErrorMessage = nil
+        voiceInputActiveKey = key
+        voiceInputTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.voiceInputActiveKey = nil }
+
+            do {
+                let transcript = try await speechRecognitionProvider.requestTranscription()
+                let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty else { return }
+                switch descriptor.control {
+                case .number:
+                    self.setValue(.numberText(trimmed), for: key)
+                default:
+                    self.setValue(.text(trimmed), for: key)
+                }
+            } catch let error as SpeechRecognitionError {
+                self.voiceInputErrorMessage = error.message(self.language)
+            } catch {
+                self.voiceInputErrorMessage = self.language.t("Voice input failed.", "La saisie vocale a échoué.")
+            }
+        }
+    }
+
     func addPhotoRef(_ ref: String, metadata: PlatformRecordEvidence.PhotoMetadata? = nil) {
         evidencePhotoRefs.append(ref)
         if let metadata {
@@ -364,7 +470,7 @@ final class CaptureViewModel: ObservableObject {
         let recordLocalID = UUID().uuidString
         let attachment = try await mediaStore.stage(
             prepared,
-            ownerUserID: "pending",
+            ownerUserID: ownerUserID ?? "anonymous",
             organizationID: organizationId,
             recordLocalID: recordLocalID
         )
@@ -508,13 +614,114 @@ final class CaptureViewModel: ObservableObject {
         return result
     }
 
+    // MARK: - Duplicate-candidate check
+
+    /// The dedup endpoint's `category` query param goes straight to
+    /// `normalizeCategory` in `api/submissions/index.ts`, which only accepts
+    /// the legacy `SubmissionCategory` domain — the 7 vertical ids
+    /// (`shared/verticals.ts`'s `VERTICALS` keys) or the legacy aliases in
+    /// its `LEGACY_CATEGORY_MAP` — and 400s on anything else. A schema
+    /// record-type `key` outside that set (e.g. an org's custom schema key
+    /// like `"org_custom_survey"`) would 400 on every request; `checkDedup()`
+    /// already fails open to `.clear` on any error, so that 400 would be
+    /// silently swallowed and dedup would look "on" while actually never
+    /// running. Gating on this mapping client-side avoids firing a request
+    /// that's guaranteed to fail, rather than relying on fail-open to hide it.
+    private static let legacyDedupCategoryKeys: Set<String> = [
+        "pharmacy", "fuel_station", "mobile_money", "alcohol_outlet",
+        "billboard", "transport_road", "census_proxy",
+    ]
+
+    /// Mirrors `LEGACY_CATEGORY_MAP` in `shared/verticals.ts` exactly —
+    /// the uppercase legacy `Category` enum values `normalizeCategoryAlias`
+    /// also accepts alongside an exact vertical-id match.
+    private static let legacyDedupCategoryAliases: [String: String] = [
+        "PHARMACY": "pharmacy",
+        "FUEL": "fuel_station",
+        "MOBILE_MONEY": "mobile_money",
+        "ALCOHOL_OUTLET": "alcohol_outlet",
+        "BILLBOARD": "billboard",
+        "TRANSPORT_ROAD": "transport_road",
+        "CENSUS_PROXY": "census_proxy",
+        "KIOSK": "mobile_money",
+    ]
+
+    /// Resolves a schema record-type `key` to the legacy category string the
+    /// dedup endpoint understands, or `nil` if there is no such mapping.
+    private static func legacyDedupCategory(forRecordTypeKey key: String) -> String? {
+        if legacyDedupCategoryKeys.contains(key) { return key }
+        return legacyDedupCategoryAliases[key]
+    }
+
+    /// Looks up nearby possible-duplicate points for the in-progress capture
+    /// — `GET api/submissions?view=dedup_candidates`, a geo + category + name
+    /// proximity match (see `lib/server/dedup.ts:buildDedupCandidates`), NOT
+    /// a hash lookup. Requires a selected record type and a captured GPS fix;
+    /// without either there is nothing to check against, so `dedupState`
+    /// goes straight to `.clear`. Likewise, when the selected record type's
+    /// `key` has no legacy-category mapping (see `legacyDedupCategory`
+    /// above), the lookup is skipped entirely rather than firing a request
+    /// the server is guaranteed to reject.
+    ///
+    /// Any failure — network error or an unparsable/unexpected response —
+    /// also lands on `.clear`, never `.prompt`: this check must fail OPEN.
+    /// A flaky dedup lookup must never block a field agent's submission.
+    func checkDedup() async {
+        guard let recordType = selectedRecordType, let gps = evidenceGps else {
+            dedupState = .clear
+            return
+        }
+        guard let legacyCategory = Self.legacyDedupCategory(forRecordTypeKey: recordType.key) else {
+            dedupState = .clear
+            return
+        }
+        dedupState = .checking
+        do {
+            let result = try await apiClient.dedupCandidates(
+                category: legacyCategory,
+                latitude: gps.latitude,
+                longitude: gps.longitude,
+                name: currentNameFieldValue
+            )
+            dedupState = result.shouldPrompt
+                ? .prompt(candidates: result.candidates, bestPointId: result.bestCandidatePointId)
+                : .clear
+        } catch {
+            dedupState = .clear
+        }
+    }
+
+    /// Best-effort "name-ish" value to pass as the dedup lookup's optional
+    /// `name` query param. The schema-driven form has no fixed name field —
+    /// unlike the original field app's fixed `SubmissionDetails.name` /
+    /// `.siteName` / `.roadName` — so this scans the current record type's
+    /// text descriptors for a key that reads like one, which is close enough
+    /// to be useful without hard-coding a specific schema's field keys.
+    private var currentNameFieldValue: String? {
+        for descriptor in descriptors where descriptor.control == .text {
+            guard descriptor.key.localizedCaseInsensitiveContains("name") else { continue }
+            if case .text(let value) = values[descriptor.key] {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return trimmed }
+            }
+        }
+        return nil
+    }
+
     // MARK: - Submit
 
-    /// Validates, then (on success) builds a `RecordDraft`, enqueues it, and
-    /// triggers an immediate `RecordQueue.sync` wired to
+    /// Validates, then (on success) checks for duplicate candidates and,
+    /// once clear, builds a `RecordDraft`, enqueues it, and triggers an
+    /// immediate `RecordQueue.sync` wired to
     /// `PlatformAPIClient.createPlatformRecord`. A draft that fails to sync
     /// right away (offline, retryable server error) stays safely queued —
     /// `submitState` reflects that as `.queuedPendingSync`, not `.failed`.
+    ///
+    /// When `checkDedup()` lands on `.prompt`, this returns early without
+    /// enqueueing anything — `CaptureView` presents `DedupWarningSheet`
+    /// (informational-only: lists candidates, no "use existing" action),
+    /// which resumes the flow via `resolveDedupPrompt()` ("Submit anyway")
+    /// or aborts it via `cancelDedupPrompt()` ("Cancel").
     func submit() async {
         guard creationAllowed() else {
             submitState = .failed(language.t(
@@ -538,6 +745,88 @@ final class CaptureViewModel: ObservableObject {
             return
         }
 
+        await checkDedup()
+        if case .prompt = dedupState {
+            return
+        }
+
+        await performSubmit(recordType: recordType, projectOption: projectOption)
+    }
+
+    /// Resumes a `submit()` that paused on `DedupState.prompt` — the
+    /// collector reviewed the listed candidates on `DedupWarningSheet` and
+    /// chose "Submit anyway". `DedupWarningSheet` is informational-only:
+    /// dedup candidates are legacy public *projected points*, and
+    /// `platform_record_create`'s `pointId` parameter only resolves org
+    /// *platform records* (`lib/server/platform/pointLookup.ts`) — sending a
+    /// candidate's `pointId` there is a guaranteed 409, not a valid "attach
+    /// to existing" path. The only supported "this belongs to an existing
+    /// point" mechanism for this flow is `attach(to:)`/`preAttachPointId`
+    /// (company-map attachment), which `submitAttachPointId` still honors
+    /// here unchanged — this method only ever proceeds as a new record.
+    func resolveDedupPrompt() async {
+        dedupState = .clear
+        guard let recordType = selectedRecordType, let projectOption = selectedProjectOption else {
+            submitState = .failed(language.t("Choose a project and record type first.", "Choisissez d'abord un projet et un type d'enregistrement."))
+            return
+        }
+        await performSubmit(recordType: recordType, projectOption: projectOption)
+        advanceBatchIfCompleted()
+    }
+
+    /// Dismisses `DedupWarningSheet` without submitting anything — the
+    /// collector keeps editing the in-progress capture.
+    func cancelDedupPrompt() {
+        dedupState = .idle
+        submitState = .idle
+    }
+
+    // MARK: - Batch capture
+
+    /// Runs a normal `submit()` and, when it actually went through — synced
+    /// immediately or safely queued offline — advances the batch counter and
+    /// clears the draft so `CaptureView` is ready for the next entry.
+    ///
+    /// When `submit()` pauses on `DedupState.prompt` instead, `submitState`
+    /// stays `.idle` (neither `.synced` nor `.queuedPendingSync`), so
+    /// `advanceBatchIfCompleted()` below is a no-op here — the batch counter
+    /// only advances once the collector resolves the prompt via
+    /// `resolveDedupPrompt()`, which applies this same bookkeeping itself.
+    func submitInBatch() async {
+        await submit()
+        advanceBatchIfCompleted()
+    }
+
+    /// Shared "did this submit actually complete" bookkeeping for
+    /// `submitInBatch()` and `resolveDedupPrompt()` — both routes into
+    /// `performSubmit` need the same batch-counter/draft-reset treatment on
+    /// success so a record resolved through `DedupWarningSheet` in batch mode
+    /// counts toward the batch the same as any other submit.
+    ///
+    /// `&&` binds tighter than `||` in Swift, so the `||` MUST stay
+    /// parenthesized here: `isBatchMode && (a || b)`. Written as
+    /// `isBatchMode && a || b` this would read as `(isBatchMode && a) || b`,
+    /// which fires the "advance batch" branch on `.queuedPendingSync` even
+    /// when `isBatchMode` is false. The original design spec had exactly
+    /// this bug — do not reintroduce it.
+    private func advanceBatchIfCompleted() {
+        if isBatchMode && (submitState == .synced || submitState == .queuedPendingSync) {
+            batchCompleted += 1
+            resetDraftValues(resetSubmitState: false)
+            submitState = .idle
+        }
+    }
+
+    /// Exits batch mode and resets its counters — wired to the "Finish
+    /// batch" button on `CaptureView`. Does not touch the in-progress draft;
+    /// a collector who finishes mid-entry keeps whatever they had typed.
+    func finishBatch() {
+        isBatchMode = false
+        batchCompleted = 0
+        batchTarget = 0
+    }
+
+    private func performSubmit(recordType: PlatformRecordType, projectOption: ProjectOption) async {
         submitState = .submitting
 
         let data = FormValidator.recordData(recordType: recordType, values: values)

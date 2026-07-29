@@ -60,6 +60,16 @@ final class CaptureViewModelTests: XCTestCase {
     }}
     """.utf8)
 
+    private let dedupClearJSON = Data("""
+    {"shouldPrompt": false, "radiusMeters": 25, "bestCandidatePointId": null, "candidates": []}
+    """.utf8)
+
+    private let dedupPromptJSON = Data("""
+    {"shouldPrompt": true, "radiusMeters": 25, "bestCandidatePointId": "pt-1", "candidates": [
+        {"pointId": "pt-1", "category": "pharmacy", "siteName": "Acme Pharmacy", "latitude": 4.0501, "longitude": 9.7001, "distanceMeters": 5.2, "similarityScore": 0.92, "matchScore": 0.88}
+    ]}
+    """.utf8)
+
     private func makeViewModel(
         transport: RoutingMockPlatformTransport,
         queue: RecordQueue = RecordQueue(store: InMemoryRecordQueueStore()),
@@ -369,6 +379,299 @@ final class CaptureViewModelTests: XCTestCase {
         XCTAssertNil(body?["pointId"])
     }
 
+    // MARK: - Media staging owner attribution (H2)
+
+    /// `addPhoto` used to hardcode `ownerUserID: "pending"` when staging
+    /// media, regardless of the view model's injected real user id — so
+    /// every staged attachment's path was scoped under a literal "pending"
+    /// owner instead of the actual signed-in user. Asserts the staged
+    /// attachment's path reflects the injected `ownerUserID`.
+    func testAddPhotoStagesMediaUnderInjectedOwnerUserID() async throws {
+        let transport = RoutingMockPlatformTransport()
+        let mediaStore = InMemoryCaptureMediaStore()
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en,
+            mediaStore: mediaStore,
+            ownerUserID: "real-user-42"
+        )
+
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 50, height: 50)).image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 50, height: 50))
+        }
+        let data = try XCTUnwrap(image.pngData())
+
+        let attachment = try await viewModel.addPhoto(data, placement: .recordEvidence)
+
+        XCTAssertTrue(
+            attachment.relativePath.hasPrefix("real-user-42/org-1/"),
+            "Expected attachment path to be scoped under the real owner user id, got: \(attachment.relativePath)"
+        )
+        XCTAssertFalse(attachment.relativePath.contains("pending"))
+    }
+
+    // MARK: - Dedup check before submission (Intelligent Capture Task 5)
+
+    /// Confirms `checkDedup()` fires the real endpoint — `GET
+    /// api/submissions?view=dedup_candidates&category=&lat=&lng=&name=` —
+    /// with the selected record type's key, the captured GPS fix, and the
+    /// best-effort name field, and that it runs strictly between `validate()`
+    /// and the `platform_record_create` enqueue/sync call.
+    func testSubmitIssuesDedupRequestAfterValidateBeforeEnqueueingRecordCreate() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupClearJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        XCTAssertEqual(viewModel.submitState, .synced)
+
+        let dedupRequests = transport.requests(forView: "dedup_candidates")
+        XCTAssertEqual(dedupRequests.count, 1)
+        let dedupQuery = URLComponents(url: dedupRequests[0].url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(dedupQuery.first { $0.name == "category" }?.value, "pharmacy")
+        XCTAssertEqual(dedupQuery.first { $0.name == "lat" }?.value, "4.05")
+        XCTAssertEqual(dedupQuery.first { $0.name == "lng" }?.value, "9.7")
+        XCTAssertEqual(dedupQuery.first { $0.name == "name" }?.value, "Acme Pharmacy")
+
+        // Never a POST — dedup_candidates is read-only.
+        XCTAssertEqual(dedupRequests[0].httpMethod, "GET")
+
+        let dedupIndex = transport.capturedRequests.firstIndex { $0.url?.query?.contains("view=dedup_candidates") == true }
+        let createIndex = transport.capturedRequests.firstIndex { $0.url?.query?.contains("view=platform_record_create") == true }
+        XCTAssertNotNil(dedupIndex)
+        XCTAssertNotNil(createIndex)
+        XCTAssertLessThan(dedupIndex!, createIndex!)
+    }
+
+    /// `shouldPrompt: true` pauses the submit flow: `dedupState` becomes
+    /// `.prompt(candidates:bestPointId:)` and nothing is enqueued or sent to
+    /// `platform_record_create` until the collector resolves the prompt.
+    func testSubmitEntersPromptStateWhenDedupShouldPromptIsTrue() async {
+        let transport = RoutingMockPlatformTransport()
+        let queue = RecordQueue(store: InMemoryRecordQueueStore())
+        let viewModel = makeViewModel(transport: transport, queue: queue)
+        transport.setResponse(dedupPromptJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        guard case .prompt(let candidates, let bestPointId) = viewModel.dedupState else {
+            return XCTFail("expected dedupState == .prompt, got \(viewModel.dedupState)")
+        }
+        XCTAssertEqual(candidates.map(\.pointId), ["pt-1"])
+        XCTAssertEqual(candidates.first?.siteName, "Acme Pharmacy")
+        XCTAssertEqual(bestPointId, "pt-1")
+        XCTAssertEqual(viewModel.submitState, .idle)
+        XCTAssertTrue(transport.requests(forView: "platform_record_create").isEmpty)
+        let items = try? await queue.items()
+        XCTAssertEqual(items?.count, 0)
+    }
+
+    /// `resolveDedupPrompt()` (C2: `DedupWarningSheet` downgraded to
+    /// informational-only, "Submit anyway" / "Cancel") resumes the submit
+    /// as a NEW record — it must never send a listed candidate's `pointId`
+    /// on the create call. That `pointId` is a legacy public *projected
+    /// point* id; `platform_record_create`'s `pointId` parameter only
+    /// resolves org *platform records* (`lib/server/platform/pointLookup.ts`),
+    /// so writing a dedup candidate's id there is a guaranteed 409, not a
+    /// working "attach to existing" path.
+    func testResolveDedupPromptSubmitsAsNewWithoutSendingCandidatePointId() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupPromptJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+        guard case .prompt(let candidates, _) = viewModel.dedupState else {
+            return XCTFail("expected dedupState == .prompt before resolving")
+        }
+        // Candidates are still listed for the collector to review...
+        XCTAssertEqual(candidates.map(\.pointId), ["pt-1"])
+
+        await viewModel.resolveDedupPrompt()
+
+        // ...but resolving never sends one of their ids as `pointId`.
+        XCTAssertEqual(viewModel.submitState, .synced)
+        let createRequests = transport.requests(forView: "platform_record_create")
+        XCTAssertEqual(createRequests.count, 1)
+        let body = try? JSONSerialization.jsonObject(with: createRequests[0].httpBody ?? Data()) as? [String: Any]
+        XCTAssertNil(body?["pointId"])
+    }
+
+    /// `shouldPrompt: false` (no close-enough duplicate) lets `submit()`
+    /// proceed straight through to enqueue + sync, same as if dedup had
+    /// never run.
+    func testSubmitProceedsToRecordCreateWhenDedupShouldPromptIsFalse() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupClearJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        // dedupState ends on .idle, not .clear: performSubmit's
+        // resetDraftValues(resetSubmitState: false) resets it post-submit
+        // (CaptureViewModel.swift:338). The meaningful assertion is that the
+        // dedup check actually ran exactly once before the create request.
+        XCTAssertEqual(viewModel.dedupState, .idle)
+        XCTAssertEqual(viewModel.submitState, .synced)
+        XCTAssertEqual(transport.requests(forView: "dedup_candidates").count, 1)
+        XCTAssertEqual(transport.requests(forView: "platform_record_create").count, 1)
+    }
+
+    /// A dedup-lookup network failure must fail OPEN — never block a field
+    /// submission. `dedupState` lands on `.idle` (post-submit reset, not any
+    /// error case) and `submit()` proceeds to `platform_record_create`
+    /// exactly as if no duplicate had been found.
+    func testDedupNetworkFailureFailsOpenAndSubmitProceeds() async {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(schemaJSON, forView: "platform_schema_get")
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+        let throwingTransport = ThrowingViewTransport(inner: transport, view: "dedup_candidates")
+
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: throwingTransport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en
+        )
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submit()
+
+        // dedupState ends on .idle (post-submit reset, see
+        // CaptureViewModel.swift:338) — the meaningful assertions are that
+        // the dedup lookup was actually attempted (and failed) and that
+        // submit still proceeded to create the record (fail-open).
+        XCTAssertEqual(viewModel.dedupState, .idle)
+        XCTAssertEqual(viewModel.submitState, .synced)
+        XCTAssertEqual(transport.requests(forView: "dedup_candidates").count, 1)
+        XCTAssertEqual(transport.requests(forView: "platform_record_create").count, 1)
+    }
+
+    /// Without a captured GPS fix there is nothing to check duplicates
+    /// against — `checkDedup()` should skip the network call entirely and
+    /// land straight on `.clear`, letting submission proceed unblocked (this
+    /// mirrors every pre-existing submit test in this file, none of which
+    /// set `evidenceGps`).
+    func testCheckDedupSkipsNetworkCallWithoutCapturedGps() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.checkDedup()
+
+        XCTAssertEqual(viewModel.dedupState, .clear)
+        XCTAssertTrue(transport.requests(forView: "dedup_candidates").isEmpty)
+    }
+
+    /// C1: the dedup endpoint's `category` query param goes straight to
+    /// `normalizeCategory` in `api/submissions/index.ts`, which only accepts
+    /// the legacy `SubmissionCategory` domain (or its legacy aliases) and
+    /// 400s otherwise — a 400 that `checkDedup()`'s fail-open error handling
+    /// would previously swallow silently, leaving dedup invisibly inert for
+    /// any schema record type outside that legacy set. A record-type key
+    /// with no legacy-category mapping (e.g. an org's custom schema key)
+    /// must skip the network call entirely rather than firing a request
+    /// guaranteed to fail.
+    func testCheckDedupSkipsNetworkCallForRecordTypeKeyWithNoLegacyCategoryMapping() async {
+        let transport = RoutingMockPlatformTransport()
+        let customSchemaJSON = Data("""
+        {
+          "draft": null,
+          "published": {
+            "id": "schema-2",
+            "projectId": "proj-1",
+            "organizationId": "org-1",
+            "version": 1,
+            "status": "published",
+            "definition": {
+              "recordTypes": [
+                {
+                  "key": "org_custom_survey",
+                  "label": {"en": "Custom Survey", "fr": "Enquête personnalisée"},
+                  "fields": [
+                    {"key": "name", "label": {"en": "Name", "fr": "Nom"}, "type": "text", "required": true}
+                  ],
+                  "evidence": {"gpsRequired": false, "minPhotos": 0, "notesRequired": false}
+                }
+              ]
+            },
+            "publishedAt": "2026-01-01T00:00:00.000Z"
+          },
+          "versions": []
+        }
+        """.utf8)
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(customSchemaJSON, forView: "platform_schema_get")
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en
+        )
+
+        await viewModel.loadProjects()
+        XCTAssertEqual(viewModel.selectedRecordTypeKey, "org_custom_survey")
+        viewModel.setValue(.text("Something"), for: "name")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.checkDedup()
+
+        XCTAssertEqual(viewModel.dedupState, .clear)
+        XCTAssertTrue(transport.requests(forView: "dedup_candidates").isEmpty)
+    }
+
+    /// C1 counterpart: a record type whose key IS in the legacy category set
+    /// (`"pharmacy"`) still issues the dedup request as before.
+    func testCheckDedupIssuesNetworkCallForRecordTypeKeyWithLegacyCategoryMapping() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupClearJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        XCTAssertEqual(viewModel.selectedRecordTypeKey, "pharmacy")
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.checkDedup()
+
+        XCTAssertEqual(viewModel.dedupState, .clear)
+        XCTAssertEqual(transport.requests(forView: "dedup_candidates").count, 1)
+    }
+
     // MARK: - GPS evidence capture
 
     func testRequestLocationPopulatesEvidenceGps() async {
@@ -393,6 +696,280 @@ final class CaptureViewModelTests: XCTestCase {
 
         XCTAssertNil(viewModel.evidenceGps)
         XCTAssertNotNil(viewModel.locationErrorMessage)
+    }
+
+    // MARK: - Batch capture mode (Intelligent Capture Task 6)
+
+    /// A successful `submitInBatch()` call — the underlying `submit()` lands
+    /// on `.synced` — increments `batchCompleted` by one so the floating "N
+    /// of M collected" counter tracks real progress.
+    func testBatchModeIncrementsProgressAfterSubmit() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submitInBatch()
+
+        XCTAssertEqual(viewModel.batchCompleted, 1)
+        XCTAssertEqual(viewModel.batchTarget, 3)
+        XCTAssertTrue(viewModel.isBatchMode)
+    }
+
+    /// After a successful batch submit the draft (field values) is cleared
+    /// so the collector can immediately start the next entry, and
+    /// `submitState` returns to `.idle` rather than lingering on `.synced`
+    /// (which would otherwise re-trigger the batch-continue branch on the
+    /// next unrelated state read).
+    func testBatchModeResetsFormAfterSubmit() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submitInBatch()
+
+        XCTAssertEqual(viewModel.value(for: "name"), .text(""))
+        XCTAssertEqual(viewModel.submitState, .idle)
+    }
+
+    /// A submit that does NOT succeed (permanent failure from the server)
+    /// must not increment the counter or reset the draft — the collector
+    /// still has unsubmitted work in front of them.
+    func testBatchModeDoesNotIncrementProgressOnFailure() async {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(schemaJSON, forView: "platform_schema_get")
+        transport.setResponse(Data("""
+        {"error": "invalid record"}
+        """.utf8), forView: "platform_record_create")
+
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: FailingStatusTransport(inner: transport, statusCode: 400)),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en
+        )
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+
+        await viewModel.submitInBatch()
+
+        guard case .failed = viewModel.submitState else {
+            return XCTFail("expected submitState == .failed, got \(viewModel.submitState)")
+        }
+        XCTAssertEqual(viewModel.batchCompleted, 0)
+        XCTAssertEqual(viewModel.value(for: "name"), .text("Acme Pharmacy"))
+    }
+
+    /// I1: in batch mode, a record resolved through `DedupWarningSheet`
+    /// (`resolveDedupPrompt()`, "Submit anyway") must count toward the batch
+    /// the same as any other submit — previously `submitInBatch()` was the
+    /// only place that incremented `batchCompleted`, so a dedup-prompted
+    /// submit (which returns through `resolveDedupPrompt()`, not
+    /// `submitInBatch()`'s own post-`submit()` check) never advanced the
+    /// counter even though the record itself synced successfully.
+    func testBatchModeResolveDedupPromptSubmitAnywayIncrementsBatchCompleted() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+        transport.setResponse(dedupPromptJSON, forView: "dedup_candidates")
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 3
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        viewModel.evidenceGps = FormGpsValue(latitude: 4.05, longitude: 9.7, accuracyMeters: 8)
+
+        await viewModel.submitInBatch()
+        guard case .prompt = viewModel.dedupState else {
+            return XCTFail("expected dedupState == .prompt")
+        }
+        // The prompt paused the submit — batch accounting must not have
+        // advanced yet.
+        XCTAssertEqual(viewModel.batchCompleted, 0)
+
+        await viewModel.resolveDedupPrompt()
+
+        XCTAssertEqual(viewModel.batchCompleted, 1)
+        XCTAssertEqual(viewModel.submitState, .idle)
+        XCTAssertTrue(viewModel.isBatchMode)
+    }
+
+    /// `finishBatch()` exits batch mode entirely, resetting the counters —
+    /// used by the "Finish batch" button on `CaptureView`.
+    func testBatchModeFinishExitsBatchMode() async {
+        let transport = RoutingMockPlatformTransport()
+        let viewModel = makeViewModel(transport: transport)
+
+        await viewModel.loadProjects()
+        viewModel.isBatchMode = true
+        viewModel.batchTarget = 5
+        viewModel.setValue(.text("Acme Pharmacy"), for: "name")
+        viewModel.setValue(.numberText("10"), for: "price")
+        await viewModel.submitInBatch()
+        XCTAssertEqual(viewModel.batchCompleted, 1)
+
+        viewModel.finishBatch()
+
+        XCTAssertFalse(viewModel.isBatchMode)
+        XCTAssertEqual(viewModel.batchCompleted, 0)
+        XCTAssertEqual(viewModel.batchTarget, 0)
+    }
+
+    // MARK: - Voice input stop/termination (Task C3)
+
+    /// C3: the mic button doubles as a STOP affordance while dictation is
+    /// active for a field — a second `requestVoiceInput(for:)` call for the
+    /// SAME field must cancel the in-flight recognition task rather than
+    /// starting a new one, and `voiceInputActiveKey` must clear once that
+    /// cancellation is observed. This is the level at which the "stop" path
+    /// is testable without a real microphone: `SpeechRecognitionProviding`
+    /// is a protocol seam, so the stub below stands in for
+    /// `SFSpeechRecognizerService`'s production
+    /// `withTaskCancellationHandler`-driven behavior (which this test can't
+    /// exercise directly, since that requires a live `AVAudioEngine`).
+    func testRequestVoiceInputSecondTapForSameFieldCancelsInFlightDictation() async {
+        let transport = RoutingMockPlatformTransport()
+        let provider = CancellationAwareSpeechRecognitionProvider()
+        let viewModel = CaptureViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            queue: RecordQueue(store: InMemoryRecordQueueStore()),
+            language: .en,
+            speechRecognitionProvider: provider
+        )
+        transport.setResponse(projectsJSON, forView: "platform_project_list")
+        transport.setResponse(schemaJSON, forView: "platform_schema_get")
+        transport.setResponse(createRecordJSON, forView: "platform_record_create")
+
+        await viewModel.loadProjects()
+
+        viewModel.requestVoiceInput(for: "name")
+        await provider.waitUntilRequestStarted()
+        XCTAssertEqual(viewModel.voiceInputActiveKey, "name")
+
+        // Second tap on the SAME field == stop, not "start again".
+        viewModel.requestVoiceInput(for: "name")
+
+        await provider.waitUntilCancellationObserved()
+        // Give the cancelled task's `defer { voiceInputActiveKey = nil }` a
+        // beat to run on the main actor after the stub resumes.
+        for _ in 0..<50 where viewModel.voiceInputActiveKey != nil {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        XCTAssertNil(viewModel.voiceInputActiveKey)
+        XCTAssertEqual(provider.requestCount, 1, "stopping should not start a second, independent transcription request")
+    }
+}
+
+/// `SpeechRecognitionProviding` stub whose `requestTranscription()` blocks
+/// until the enclosing `Task` is cancelled — standing in for the real
+/// `SFSpeechRecognizerService.productionPerformRecognition`'s
+/// `withTaskCancellationHandler`-driven "manual stop ends audio input, then
+/// the recognizer still resolves" behavior, without touching a real
+/// microphone or `AVAudioEngine`.
+private final class CancellationAwareSpeechRecognitionProvider: SpeechRecognitionProviding, @unchecked Sendable {
+    let isAvailable = true
+
+    private let lock = NSLock()
+    private var _requestCount = 0
+    private var startedContinuation: CheckedContinuation<Void, Never>?
+    private var cancelledContinuation: CheckedContinuation<Void, Never>?
+    private var didStart = false
+    private var didObserveCancellation = false
+
+    var requestCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return _requestCount
+    }
+
+    func requestTranscription() async throws -> String {
+        markStarted()?.resume()
+
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+
+        markCancellationObserved()?.resume()
+
+        return "stopped early"
+    }
+
+    /// Synchronous (non-`async`) helpers wrap every `lock`/`unlock` pair —
+    /// `NSLock.lock()`/`unlock()` are `noasync` in this SDK, so they can't be
+    /// called directly inside `requestTranscription()`'s `async` body.
+    private func markStarted() -> CheckedContinuation<Void, Never>? {
+        lock.lock()
+        defer { lock.unlock() }
+        _requestCount += 1
+        didStart = true
+        let toResume = startedContinuation
+        startedContinuation = nil
+        return toResume
+    }
+
+    private func markCancellationObserved() -> CheckedContinuation<Void, Never>? {
+        lock.lock()
+        defer { lock.unlock() }
+        didObserveCancellation = true
+        let toResume = cancelledContinuation
+        cancelledContinuation = nil
+        return toResume
+    }
+
+    private func lockedDidStart() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didStart
+    }
+
+    private func lockedDidObserveCancellation() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return didObserveCancellation
+    }
+
+    func waitUntilRequestStarted() async {
+        if lockedDidStart() { return }
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if didStart {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                startedContinuation = continuation
+                lock.unlock()
+            }
+        }
+    }
+
+    func waitUntilCancellationObserved() async {
+        if lockedDidObserveCancellation() { return }
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if didObserveCancellation {
+                lock.unlock()
+                continuation.resume()
+            } else {
+                cancelledContinuation = continuation
+                lock.unlock()
+            }
+        }
     }
 }
 
@@ -473,6 +1050,37 @@ private final class StubCaptureFraudMetadataProvider: CaptureFraudMetadataProvid
             deviceTimestamp: 1_784_457_600_250,
             timeDeltaMs: 250
         )
+    }
+}
+
+/// Wraps another `PlatformTransport`, throwing a plain (non-`PlatformAPIError`)
+/// error for requests targeting one specific `view` — simulates a genuine
+/// network failure (as opposed to a decodable non-2xx response) on just the
+/// dedup lookup, to prove `checkDedup()` fails open on any thrown error, not
+/// just HTTP error responses.
+private final class ThrowingViewTransport: PlatformTransport, @unchecked Sendable {
+    private struct SimulatedNetworkError: Error {}
+
+    private let inner: PlatformTransport
+    private let view: String
+
+    init(inner: PlatformTransport, view: String) {
+        self.inner = inner
+        self.view = view
+    }
+
+    func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        if let url = request.url,
+           let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+           components.queryItems?.first(where: { $0.name == "view" })?.value == view {
+            // Still record the attempt on `inner` (a RoutingMockPlatformTransport
+            // never throws — `send` above just returns the recorded request's
+            // canned response) so tests can assert the dedup lookup was actually
+            // issued before failing open, not merely that it would have been.
+            _ = try? await inner.send(request)
+            throw SimulatedNetworkError()
+        }
+        return try await inner.send(request)
     }
 }
 

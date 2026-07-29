@@ -1,4 +1,5 @@
 import React from 'react';
+import StatusBadge from './StatusBadge';
 
 export type RiskLevel = 'low' | 'medium' | 'high';
 
@@ -14,10 +15,8 @@ const RiskBadge: React.FC<Props> = ({ level, language }) => {
     : level === 'medium'
       ? t('Medium risk', 'Risque moyen')
       : t('High risk', 'Risque élevé');
-  const cls = level === 'low' ? 'risk-low' : level === 'medium' ? 'risk-medium' : 'risk-high';
-  return (
-    <span className={`micro-label rounded-full px-2 py-0.5 text-[10px] ${cls}`}>{label}</span>
-  );
+  const status = level === 'low' ? 'verified' : level === 'medium' ? 'warning' : 'flagged';
+  return <StatusBadge status={status} label={label} className="micro-label text-[10px]" />;
 };
 
 export default React.memo(RiskBadge);

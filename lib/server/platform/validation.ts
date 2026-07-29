@@ -161,9 +161,66 @@ export const recordReviewSchema = z.object({
   }
 });
 
+// Batch counterpart to `recordReviewSchema` — same decision enum
+// ("approved" | "rejected"), applied to every id in `recordIds` in one
+// request. Field names (`decision`/`notes`) are distinct from the
+// single-record view's (`status`/`reviewNotes`) to keep the batch payload
+// self-describing; the enum values themselves are identical.
+export const recordBatchReviewSchema = z.object({
+  organizationId: uuid,
+  recordIds: z.array(uuid).min(1, "At least one record id is required").max(200),
+  decision: z.enum(["approved", "rejected"]),
+  notes: z.string().trim().max(2_000).optional(),
+}).superRefine((value, context) => {
+  if (value.decision === "rejected" && !value.notes) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["notes"],
+      message: "Explain why these records are being rejected",
+    });
+  }
+});
+
 export const notificationBroadcastSchema = z.object({
   organizationId: uuid,
   targetRoles: z.array(z.enum(["manager", "reviewer", "collector", "viewer"])).min(1).max(4),
   title: z.string().trim().min(2).max(100),
   body: z.string().trim().min(2).max(500),
+});
+
+// ─── Missions & gamification ────────────────────────────────────────────────
+// See docs/superpowers/specs/2026-07-24-ios-console-missions-gamification-design.md
+
+export const missionCreateSchema = z.object({
+  organizationId: uuid,
+  titleEn: z.string().trim().max(120).default(""),
+  titleFr: z.string().trim().max(120).default(""),
+  quota: z.number().int().min(1).max(100),
+  // ISO datetime string; the superRefine below enforces it's strictly in the future.
+  deadline: z.string().datetime(),
+  rewardXp: z.number().int().min(0).max(500).default(20),
+  projectId: uuid.optional(),
+  category: z.string().trim().min(1).max(60).optional(),
+  notesEn: z.string().trim().max(2_000).optional(),
+  notesFr: z.string().trim().max(2_000).optional(),
+}).superRefine((value, context) => {
+  if (!value.titleEn && !value.titleFr) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["titleEn"],
+      message: "A title is required in at least one language",
+    });
+  }
+  if (new Date(value.deadline).getTime() <= Date.now()) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["deadline"],
+      message: "Deadline must be in the future",
+    });
+  }
+});
+
+export const missionAssignSchema = z.object({
+  missionId: uuid,
+  targetUserIds: z.array(z.string().trim().min(1)).min(1, "At least one collector is required").max(500),
 });

@@ -24,24 +24,34 @@ struct CaptureView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                fieldCommandCenter
-                pickerSection
-                if viewModel.selectedRecordType != nil {
-                    existingPointSection
-                    fieldsSection
-                    evidenceSection
-                    submitSection
-                } else if viewModel.loadState == .loading {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 24)
-                } else if viewModel.projectOptions.isEmpty {
-                    emptyStateCard
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    fieldCommandCenter
+                    pickerSection
+                    if !viewModel.projectOptions.isEmpty {
+                        batchModeSection
+                    }
+                    if viewModel.selectedRecordType != nil {
+                        existingPointSection
+                        fieldsSection
+                        evidenceSection
+                        submitSection
+                    } else if viewModel.loadState == .loading {
+                        ProgressView().frame(maxWidth: .infinity).padding(.top, 24)
+                    } else if viewModel.projectOptions.isEmpty {
+                        emptyStateCard
+                    }
                 }
+                .padding(20)
+                .padding(.bottom, viewModel.isBatchMode ? 64 : 0)
             }
-            .padding(20)
+            .background(ADLConsoleColor.page)
+
+            if viewModel.isBatchMode {
+                batchProgressBar
+            }
         }
-        .background(ADLConsoleColor.page)
         .task {
             viewModel.startFraudMetadataCapture()
             await viewModel.loadProjects()
@@ -50,6 +60,39 @@ struct CaptureView: View {
         .onDisappear {
             viewModel.stopFraudMetadataCapture()
         }
+        .sheet(isPresented: isDedupPromptPresented) {
+            if case .prompt(let candidates, let bestPointId) = viewModel.dedupState {
+                DedupWarningSheet(
+                    candidates: candidates,
+                    bestPointId: bestPointId,
+                    language: appState.language,
+                    onSubmitAnyway: {
+                        Task { await viewModel.resolveDedupPrompt() }
+                    },
+                    onCancel: {
+                        viewModel.cancelDedupPrompt()
+                    }
+                )
+            }
+        }
+    }
+
+    /// Drives `DedupWarningSheet`'s presentation off `viewModel.dedupState`
+    /// directly rather than a separate `@State` flag — `.prompt` is the only
+    /// state that should show the sheet, and dismissing it (swipe-down)
+    /// should read as "cancel" the same as tapping the Cancel button.
+    private var isDedupPromptPresented: Binding<Bool> {
+        Binding(
+            get: {
+                if case .prompt = viewModel.dedupState { return true }
+                return false
+            },
+            set: { newValue in
+                if !newValue {
+                    viewModel.cancelDedupPrompt()
+                }
+            }
+        )
     }
 
     // MARK: - Field command center
@@ -262,6 +305,111 @@ struct CaptureView: View {
             get: { viewModel.selectedRecordTypeKey },
             set: { newValue in if let newValue { viewModel.selectRecordType(newValue) } }
         )
+    }
+
+    // MARK: - Batch capture mode
+
+    /// Toggle + target stepper the collector uses to opt into submitting a
+    /// run of records back-to-back. Turning the toggle off routes through
+    /// `finishBatch()` rather than just flipping `isBatchMode`, so switching
+    /// it off mid-run also resets the counter/target the same way tapping
+    /// "Finish batch" on the floating bar does.
+    private var batchModeSection: some View {
+        ADLConsoleCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ADLConsoleMicroLabel(text: t("Batch capture", "Capture en lot"))
+                        Text(t(
+                            "Submit several records back-to-back without leaving this screen.",
+                            "Soumettez plusieurs enregistrements à la suite sans quitter cet écran."
+                        ))
+                        .font(ADLConsoleFont.caption)
+                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                    Toggle("", isOn: batchModeBinding)
+                        .labelsHidden()
+                }
+
+                if viewModel.isBatchMode {
+                    Stepper(
+                        value: $viewModel.batchTarget,
+                        in: 0...200
+                    ) {
+                        Text(viewModel.batchTarget > 0
+                             ? t("Target: \(viewModel.batchTarget)", "Objectif : \(viewModel.batchTarget)")
+                             : t("No target set", "Aucun objectif défini"))
+                        .font(ADLConsoleFont.footnote)
+                        .foregroundStyle(ADLConsoleColor.ink)
+                        .monospacedDigit()
+                    }
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private var batchModeBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.isBatchMode },
+            set: { newValue in
+                if newValue {
+                    viewModel.isBatchMode = true
+                } else {
+                    viewModel.finishBatch()
+                }
+            }
+        )
+    }
+
+    /// Floating "N of M collected" counter + "Finish batch" exit, pinned
+    /// above the scroll content while `isBatchMode` is true.
+    private var batchProgressBar: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(batchProgressLabel)
+                    .font(ADLConsoleFont.subheadline)
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+                if viewModel.batchTarget > 0 {
+                    ProgressView(value: Double(viewModel.batchCompleted), total: Double(viewModel.batchTarget))
+                        .tint(ADLConsoleColor.gold)
+                        .frame(width: 140)
+                }
+            }
+
+            Spacer()
+
+            Button {
+                viewModel.finishBatch()
+            } label: {
+                Text(t("Finish batch", "Terminer le lot"))
+                    .font(ADLConsoleFont.subheadline)
+                    .foregroundStyle(ADLConsoleColor.navy)
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 44)
+                    .background(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.button, style: .continuous))
+            }
+            .buttonStyle(ADLConsolePressStyle())
+            .accessibilityLabel(t("Finish batch capture", "Terminer la capture en lot"))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(ADLConsoleColor.navy)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.button, style: .continuous))
+        .adlShadowBorder()
+        .padding(.horizontal, 20)
+        .padding(.bottom, 16)
+        .accessibilityElement(children: .combine)
+    }
+
+    private var batchProgressLabel: String {
+        viewModel.batchTarget > 0
+            ? t("\(viewModel.batchCompleted) of \(viewModel.batchTarget) collected", "\(viewModel.batchCompleted) sur \(viewModel.batchTarget) collectés")
+            : t("\(viewModel.batchCompleted) collected", "\(viewModel.batchCompleted) collectés")
     }
 
     private var emptyStateCard: some View {
@@ -503,8 +651,17 @@ struct CaptureView: View {
                         },
                         onPhotoCleared: { localID in
                             viewModel.removePreparedPhoto(localID: localID)
-                        }
+                        },
+                        onVoiceInput: viewModel.isVoiceInputAvailable ? { key in
+                            viewModel.requestVoiceInput(for: key)
+                        } : nil,
+                        isVoiceInputActive: viewModel.voiceInputActiveKey == descriptor.key
                     )
+                }
+                if let voiceInputErrorMessage = viewModel.voiceInputErrorMessage {
+                    Text(voiceInputErrorMessage)
+                        .font(ADLConsoleFont.footnote)
+                        .foregroundStyle(ADLConsoleColor.danger)
                 }
             }
             .padding(16)
@@ -741,14 +898,22 @@ struct CaptureView: View {
                 isDisabled: viewModel.submitState == .submitting,
                 pressAnimationEnabled: false
             ) {
-                Task { await viewModel.submit() }
+                Task {
+                    if viewModel.isBatchMode {
+                        await viewModel.submitInBatch()
+                    } else {
+                        await viewModel.submit()
+                    }
+                }
             }
             submitStatusMessage
         }
     }
 
     private var submitButtonTitle: String {
-        t("Submit record", "Soumettre l'enregistrement")
+        viewModel.isBatchMode
+            ? t("Submit & continue", "Soumettre et continuer")
+            : t("Submit record", "Soumettre l'enregistrement")
     }
 
     @ViewBuilder

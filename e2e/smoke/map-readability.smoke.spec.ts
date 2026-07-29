@@ -21,7 +21,7 @@ test('Explore map keeps mission peek above a readable bottom navigation', async 
   await expect(page.getByTestId('home-map-view')).toBeVisible();
   await expect(nav).toBeVisible();
   await expect(missionPeek).toBeVisible();
-  await expect(missionPeek).toContainText(/Next high-value capture/i);
+  await expect(missionPeek).toContainText(/Next assignment move/i);
 
   const navBackground = await nav.evaluate((element) => getComputedStyle(element).backgroundColor);
   expect(parseAlpha(navBackground)).toBeGreaterThanOrEqual(0.98);

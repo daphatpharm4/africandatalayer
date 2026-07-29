@@ -11,6 +11,15 @@ enum OperationalStatus: Equatable, Sendable {
 }
 
 extension OperationalStatus {
+    var semanticTone: ADLConsoleSemanticTone {
+        switch self {
+        case .offline, .pending: return .warning
+        case .connecting, .syncing: return .info
+        case .blocked: return .danger
+        case .upToDate: return .success
+        }
+    }
+
     static func derive(
         path: ConnectivityState,
         session: SessionAvailability,

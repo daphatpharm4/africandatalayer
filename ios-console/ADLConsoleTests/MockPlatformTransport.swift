@@ -11,6 +11,7 @@ import Foundation
 /// target needs no `@testable` import.
 final class MockPlatformTransport: PlatformTransport, @unchecked Sendable {
     private(set) var capturedRequests: [URLRequest] = []
+    var lastRequest: URLRequest? { capturedRequests.last }
     var statusCode: Int = 200
     var responseData: Data = Data("{}".utf8)
 

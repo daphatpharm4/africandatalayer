@@ -26,16 +26,26 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>ADL Console uses your camera to attach photo evidence to a captured record.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>ADL Console uses your location to attach a GPS fix as evidence for a captured record.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ADL Console uses the microphone to let you dictate field values by voice.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>ADL Console uses motion sensors to verify the GPS fix on a captured record is genuine.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>ADL Console lets you attach a photo from your library as evidence for a captured record.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ADL Console uses speech recognition to let you dictate field values by voice.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
+		<key>UISceneConfigurations</key>
+		<dict/>
 	</dict>
 	<key>UILaunchScreen</key>
 	<dict/>

@@ -24,6 +24,21 @@ public enum ConsoleScreen: String, Codable, CaseIterable, Sendable, Equatable {
     /// every mirrored case above so it behaves consistently with the rest of
     /// the shell.
     case map = "MAP"
+    /// The role-gated analytics/intelligence hub (delta dashboard, investor
+    /// view, category breakdown, agent performance, export, AI assistant —
+    /// see `AnalyticsTab` in the app layer for the sub-tab breakdown).
+    /// Deliberately NOT a port of a TS `ConsoleScreen` case — the web console
+    /// has no analytics screen yet (per the analytics-intelligence design
+    /// spec) — but it plugs into the same `ConsoleRoute`/
+    /// `canAccessConsoleScreen`/`ConsoleNavigation` nav-gating pattern as
+    /// `.map` above.
+    case analytics = "ANALYTICS"
+    /// Platform-level operations backed by `api/privacy`. This is distinct
+    /// from organization manager tools and is gated by the authenticated
+    /// session's ADL-admin flag.
+    case admin = "ADMIN"
+    case missions = "MISSIONS"
+    case leaderboard = "LEADERBOARD"
 }
 
 /// Mirrors the `ConsoleRoute` interface in `lib/client/consoleState.ts`.

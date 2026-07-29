@@ -51,6 +51,15 @@
     --duration-fast: 220ms;
     --duration-base: 320ms;
     --duration-slow: 560ms;
+    --adl-space-1: 4px;
+    --adl-space-2: 8px;
+    --adl-space-3: 12px;
+    --adl-space-4: 16px;
+    --adl-space-6: 24px;
+    --adl-space-8: 32px;
+    --adl-radius-control: 12px;
+    --adl-radius-card: 16px;
+    --adl-radius-panel: 24px;
     --shadow-lift: 0 24px 60px -34px rgba(15, 43, 70, 0.36);
     --shadow-terra: 0 24px 48px -28px rgba(200, 107, 74, 0.42);
     --chart-navy: #0f2b46;
@@ -134,6 +143,18 @@
 
 /* ── Design system utilities ────────────────────────────── */
 @layer components {
+  .adl-focusable {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-navy focus-visible:ring-offset-2;
+  }
+
+  .adl-disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  [aria-selected='true'].adl-selectable {
+    @apply border-navy bg-navy-wash text-navy;
+  }
+
   /* Micro label — sunlight-readable uppercase label (11px min for field use) */
   .micro-label {
     @apply text-xs font-semibold uppercase tracking-[0.14em] leading-4;
@@ -205,7 +226,7 @@
   }
 
   .risk-medium {
-    @apply bg-amber-wash text-amber;
+    @apply bg-amber-wash text-amber-dark;
   }
 
   .risk-high {
@@ -213,7 +234,7 @@
   }
 
   .tier-gold {
-    @apply bg-gold-wash text-amber;
+    @apply bg-gold-wash text-amber-dark;
   }
 
   .tier-silver {

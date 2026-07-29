@@ -129,3 +129,40 @@ public struct PlatformNotificationBroadcastResponse: Codable, Equatable, Sendabl
 /// properties so it decodes successfully from any JSON object body without
 /// asserting on its shape.
 struct PlatformEmptyResponse: Decodable {}
+
+/// Per-record outcome inside a `platform_record_batch_review` response.
+/// Mirrors `lib/server/platform/api.ts`'s `handleRecordBatchReview` result
+/// shape exactly: `status` is `"ok"` when the decision was applied and
+/// audited, `"error"` when applying it threw, and `"skipped"` when the
+/// record wasn't eligible (not found / not this org / already resolved).
+public struct PlatformRecordBatchReviewItemResult: Codable, Equatable, Sendable {
+    public enum Status: String, Codable, Sendable, Equatable {
+        case ok
+        case error
+        case skipped
+    }
+
+    public var recordId: String
+    public var status: Status
+    public var error: String?
+    public var skippedReason: String?
+
+    public init(recordId: String, status: Status, error: String? = nil, skippedReason: String? = nil) {
+        self.recordId = recordId
+        self.status = status
+        self.error = error
+        self.skippedReason = skippedReason
+    }
+}
+
+/// Bare `{ results, skippedCount }` payload returned directly by
+/// `batchReviewPlatformRecordsRequest` (view `platform_record_batch_review`).
+public struct PlatformRecordBatchReviewResponse: Codable, Equatable, Sendable {
+    public var results: [PlatformRecordBatchReviewItemResult]
+    public var skippedCount: Int
+
+    public init(results: [PlatformRecordBatchReviewItemResult], skippedCount: Int) {
+        self.results = results
+        self.skippedCount = skippedCount
+    }
+}

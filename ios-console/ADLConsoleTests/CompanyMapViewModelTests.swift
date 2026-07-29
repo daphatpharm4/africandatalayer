@@ -198,6 +198,157 @@ final class CompanyMapViewModelTests: XCTestCase {
         viewModel.clearSelection()
         XCTAssertNil(viewModel.selectedPoint)
     }
+
+    // MARK: - Overlay mode (Grid / Heat) — mocks AnalyticsRepositoryProtocol
+    // directly, mirroring DeltaDashboardViewModelTests' approach, since that
+    // (not PlatformTransport) is the seam CompanyMapViewModel's overlay
+    // state actually depends on.
+
+    private func makeGeohashScore(
+        cellId: String = "u4pruy",
+        opportunityScore: Double = 72,
+        totalPoints: Int = 12,
+        latitude: Double = 4.05,
+        longitude: Double = 9.74
+    ) -> GeohashScore {
+        GeohashScore(
+            cellId: cellId,
+            verticalId: "pharmacy",
+            snapshotDate: "2026-07-20",
+            center: GeoCenter(latitude: latitude, longitude: longitude),
+            totalPoints: totalPoints,
+            completedPoints: totalPoints,
+            completionRate: 1,
+            avgConfidenceScore: 0.8,
+            photoCoverageRate: 0.9,
+            recentActivityRate: 0.5,
+            medianFreshnessDays: 2,
+            publishableChangeCount: 1,
+            newCount: 1,
+            removedCount: 0,
+            changedCount: 0,
+            operatorDiversity: 2,
+            marketSignalScore: 50,
+            opportunityScore: opportunityScore,
+            coverageGapScore: 20,
+            changeSignalScore: 10,
+            drivers: [],
+            caveats: [],
+            summary: ""
+        )
+    }
+
+    private func makeOverlayViewModel(analyticsRepository: MockAnalyticsRepository) -> CompanyMapViewModel {
+        let transport = RoutingMockPlatformTransport()
+        transport.setResponse(listResponse([]), forView: "platform_record_browse")
+        return CompanyMapViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            language: .en,
+            analyticsRepository: analyticsRepository
+        )
+    }
+
+    func testSetOverlayModeGridLoadsGridCells() async {
+        let analyticsRepository = MockAnalyticsRepository()
+        analyticsRepository.spatialIntelligenceResult = .success([makeGeohashScore()])
+        let viewModel = makeOverlayViewModel(analyticsRepository: analyticsRepository)
+
+        await viewModel.setOverlayMode(.grid)
+
+        XCTAssertEqual(viewModel.overlayMode, .grid)
+        XCTAssertEqual(viewModel.gridCells.count, 1)
+        XCTAssertEqual(viewModel.spatialLoadState, .loaded)
+        XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.count, 1)
+        XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.first?.organizationId, "org-1")
+        XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.first?.vertical, "all")
+    }
+
+    func testHeatCellsAreDerivedFromGridCellsWithoutASecondRepositoryCall() async {
+        let analyticsRepository = MockAnalyticsRepository()
+        analyticsRepository.spatialIntelligenceResult = .success([
+            makeGeohashScore(cellId: "u4pruy", opportunityScore: 72, latitude: 4.05, longitude: 9.74),
+        ])
+        let viewModel = makeOverlayViewModel(analyticsRepository: analyticsRepository)
+
+        await viewModel.setOverlayMode(.heat)
+
+        XCTAssertEqual(viewModel.heatCells.count, 1)
+        XCTAssertEqual(viewModel.heatCells.first?.geohash, "u4pruy")
+        XCTAssertEqual(viewModel.heatCells.first?.intensity, 72)
+        XCTAssertEqual(viewModel.heatCells.first?.latitude, 4.05)
+        XCTAssertEqual(viewModel.heatCells.first?.longitude, 9.74)
+        // heatMapData is never called — heatCells is derived client-side
+        // from the same gridCells the .grid mode already loaded.
+        XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.count, 1)
+    }
+
+    func testSetOverlayModeDoesNotReloadWhenAlreadyLoaded() async {
+        let analyticsRepository = MockAnalyticsRepository()
+        analyticsRepository.spatialIntelligenceResult = .success([makeGeohashScore()])
+        let viewModel = makeOverlayViewModel(analyticsRepository: analyticsRepository)
+
+        await viewModel.setOverlayMode(.grid)
+        await viewModel.setOverlayMode(.heat)
+        await viewModel.setOverlayMode(.grid)
+
+        XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.count, 1, "cells are shared across grid/heat once loaded")
+    }
+
+    func testSetOverlayModeNoneDoesNotTriggerALoad() async {
+        let analyticsRepository = MockAnalyticsRepository()
+        let viewModel = makeOverlayViewModel(analyticsRepository: analyticsRepository)
+
+        await viewModel.setOverlayMode(.none)
+
+        XCTAssertEqual(viewModel.overlayMode, .none)
+        XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.count, 0)
+        XCTAssertEqual(viewModel.spatialLoadState, .idle)
+    }
+
+    func testSpatialLoadFailureSurfacesErrorStateAndRetrySucceeds() async {
+        let analyticsRepository = MockAnalyticsRepository()
+        analyticsRepository.spatialIntelligenceResult = .failure(PlatformAPIError(message: "Service unavailable", status: 503))
+        let viewModel = makeOverlayViewModel(analyticsRepository: analyticsRepository)
+
+        await viewModel.setOverlayMode(.grid)
+
+        guard case .failed = viewModel.spatialLoadState else {
+            return XCTFail("expected .failed spatialLoadState, got \(viewModel.spatialLoadState)")
+        }
+        XCTAssertNotNil(viewModel.spatialLoadErrorMessage)
+        XCTAssertTrue(viewModel.gridCells.isEmpty)
+
+        analyticsRepository.spatialIntelligenceResult = .success([makeGeohashScore()])
+        await viewModel.retrySpatialLoad()
+
+        XCTAssertEqual(viewModel.spatialLoadState, .loaded)
+        XCTAssertEqual(viewModel.gridCells.count, 1)
+        XCTAssertNil(viewModel.spatialLoadErrorMessage)
+    }
+
+    func test4xxSpatialErrorSurfacesTheServerMessageVerbatim() async {
+        let analyticsRepository = MockAnalyticsRepository()
+        analyticsRepository.spatialIntelligenceResult = .failure(PlatformAPIError(message: "Not authorized for this organization", status: 403))
+        let viewModel = makeOverlayViewModel(analyticsRepository: analyticsRepository)
+
+        await viewModel.setOverlayMode(.grid)
+
+        XCTAssertEqual(viewModel.spatialLoadErrorMessage, "Not authorized for this organization")
+    }
+
+    func testSelectAndClearGridCell() async {
+        let analyticsRepository = MockAnalyticsRepository()
+        let viewModel = makeOverlayViewModel(analyticsRepository: analyticsRepository)
+        let cell = makeGeohashScore(cellId: "abcdef")
+
+        XCTAssertNil(viewModel.selectedGridCell)
+        viewModel.selectGridCell(cell)
+        XCTAssertEqual(viewModel.selectedGridCell?.cellId, "abcdef")
+
+        viewModel.clearGridSelection()
+        XCTAssertNil(viewModel.selectedGridCell)
+    }
 }
 
 /// Forces every response for a specific `view` query param to a fixed

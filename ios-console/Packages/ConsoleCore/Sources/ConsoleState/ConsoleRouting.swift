@@ -66,6 +66,15 @@ public func parseConsoleHash(_ hash: String) -> ConsoleRoute {
     case "map":
         // iOS-console-only screen — see `ConsoleScreen.map`'s doc comment.
         return ConsoleRoute(screen: .map)
+    case "analytics":
+        // iOS-console-only screen — see `ConsoleScreen.analytics`'s doc comment.
+        return ConsoleRoute(screen: .analytics)
+    case "admin":
+        return ConsoleRoute(screen: .admin)
+    case "missions":
+        return ConsoleRoute(screen: .missions)
+    case "leaderboard":
+        return ConsoleRoute(screen: .leaderboard)
     default:
         return ConsoleRoute(screen: .overview)
     }
@@ -102,6 +111,15 @@ public func consoleRouteToHash(_ route: ConsoleRoute) -> String {
     case .map:
         // iOS-console-only screen — see `ConsoleScreen.map`'s doc comment.
         return "#/map"
+    case .analytics:
+        // iOS-console-only screen — see `ConsoleScreen.analytics`'s doc comment.
+        return "#/analytics"
+    case .admin:
+        return "#/admin"
+    case .missions:
+        return "#/missions"
+    case .leaderboard:
+        return "#/leaderboard"
     case .loading, .authRequired:
         return ""
     }

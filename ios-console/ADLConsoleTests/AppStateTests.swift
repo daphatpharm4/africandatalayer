@@ -1,6 +1,7 @@
 @testable import ADLConsole
 import ConsoleAPI
 import ConsoleModels
+import ConsolePersistence
 import ConsoleState
 import XCTest
 
@@ -13,12 +14,18 @@ final class AppStateTests: XCTestCase {
     private func makeAppState(
         transport: MockPlatformTransport,
         authService: MockAuthService,
-        offlineCache: ConsoleOfflineCacheProtocol = InMemoryConsoleOfflineCache()
+        offlineCache: ConsoleOfflineCacheProtocol = InMemoryConsoleOfflineCache(),
+        recordLedger: RecordLedger? = nil,
+        mediaStore: (any CaptureMediaStoreProtocol)? = nil,
+        connectivityMonitor: (any ConnectivityMonitoring)? = nil
     ) -> AppState {
         AppState(
             apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
             authService: authService,
-            offlineCache: offlineCache
+            offlineCache: offlineCache,
+            recordLedger: recordLedger,
+            mediaStore: mediaStore,
+            connectivityMonitor: connectivityMonitor
         )
     }
 
@@ -190,6 +197,78 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.route, ConsoleRoute(screen: .loading))
     }
 
+    // MARK: - syncEngines cleanup (M4)
+
+    /// Regression test for M4: `syncEngines` (a `[String: SyncEngine]`
+    /// cache keyed by organization ID, populated lazily by
+    /// `durableSyncEngine(organizationID:)`) was only ever appended to and
+    /// leaked one `SyncEngine` per organization the user ever visited.
+    /// Exercises the real production path end-to-end — `tryRestoreSession`
+    /// → `loadOrganizations` → `selectOrganization` → `triggerDurableSync`
+    /// — with a real in-memory `RecordLedger`/`RecordDatabase` and an
+    /// `InMemoryCaptureMediaStore`, so the engine actually gets built and
+    /// cached rather than asserting the fix in isolation.
+    func testSyncEnginesClearedOnRealOrgSwitchButNotOnRedundantReselection() async throws {
+        let transport = MockPlatformTransport()
+        transport.responseData = multiOrgJSON
+        let auth = MockAuthService()
+        auth.restoredResult = .authenticated(AuthSessionUser(id: "user-1", email: "owner@acme.test", role: nil, isAdmin: false))
+        let ledger = RecordLedger(database: try RecordDatabase.inMemory())
+        let state = makeAppState(
+            transport: transport,
+            authService: auth,
+            recordLedger: ledger,
+            mediaStore: InMemoryCaptureMediaStore(),
+            connectivityMonitor: StubConnectivityMonitor(state: .satisfied)
+        )
+
+        await state.tryRestoreSession()
+        state.startRuntime()
+        XCTAssertEqual(state.organization?.id, "org-1")
+
+        // First sync trigger for org-1 lazily builds and caches its engine.
+        await state.triggerDurableSync(.manual)
+        XCTAssertEqual(state.syncEnginesCount, 1, "expected org-1's engine to be cached")
+
+        // Redundant re-selection of the already-current org (mirrors what
+        // `loadOrganizations()` does on every relaunch/landing) must NOT
+        // thrash the cache.
+        state.selectOrganization(organizationId: "org-1")
+        XCTAssertEqual(state.syncEnginesCount, 1, "redundant reselection of the current org must not clear the cache")
+
+        // An actual switch must drop the stale org-1 engine synchronously.
+        state.selectOrganization(organizationId: "org-2")
+        XCTAssertEqual(state.syncEnginesCount, 0, "switching organizations must drop the previous org's cached engine")
+
+        // The cache rebuilds lazily and only holds the new org going forward.
+        await state.triggerDurableSync(.manual)
+        XCTAssertEqual(state.syncEnginesCount, 1, "expected org-2's engine to rebuild lazily after the switch")
+    }
+
+    func testSyncEnginesClearedOnSignOut() async throws {
+        let transport = MockPlatformTransport()
+        transport.responseData = singleOrgOwnerJSON
+        let auth = MockAuthService()
+        auth.restoredResult = .authenticated(AuthSessionUser(id: "user-1", email: "owner@acme.test", role: nil, isAdmin: false))
+        let ledger = RecordLedger(database: try RecordDatabase.inMemory())
+        let state = makeAppState(
+            transport: transport,
+            authService: auth,
+            recordLedger: ledger,
+            mediaStore: InMemoryCaptureMediaStore(),
+            connectivityMonitor: StubConnectivityMonitor(state: .satisfied)
+        )
+
+        await state.tryRestoreSession()
+        state.startRuntime()
+        await state.triggerDurableSync(.manual)
+        XCTAssertEqual(state.syncEnginesCount, 1, "expected org-1's engine to be cached before sign-out")
+
+        state.signOut()
+
+        XCTAssertEqual(state.syncEnginesCount, 0, "sign-out must clear all cached sync engines")
+    }
+
     // MARK: - visibleDestinations wiring
 
     func testVisibleDestinationsIsEmptyBeforeRoleIsKnown() {
@@ -249,4 +328,25 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(state.route, ConsoleRoute(screen: .authRequired))
         XCTAssertTrue(transport.capturedRequests.isEmpty)
     }
+}
+
+/// Deterministic `ConnectivityMonitoring` test double — reports a fixed
+/// `state` and an already-finished `stateStream` so `AppState.startRuntime()`
+/// sets `connectivityState` synchronously without leaving a live background
+/// `Task` awaiting connectivity changes that never arrive.
+private final class StubConnectivityMonitor: ConnectivityMonitoring, @unchecked Sendable {
+    let state: ConnectivityState
+
+    init(state: ConnectivityState) {
+        self.state = state
+    }
+
+    var stateStream: AsyncStream<ConnectivityState> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    func start() {}
+    func stop() {}
 }

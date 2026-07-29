@@ -25,8 +25,17 @@
 //   admin_org_access    POST  — suspend/reactivate a company (ADL admin)
 //   record_create       POST  — create a record (collector+); optional pointId
 //                                gates GPS proximity + a 24h per-point cooldown
+//   record_batch_review POST  — apply one approve/reject decision to many
+//                                record ids in one request (reviewer+); loops
+//                                the same per-record logic as record_review
 //   point_nearby        GET   — org's own nearby points for the picker (collector+)
 //   notification_broadcast POST — notify lower-role members in an organization
+//   mission_list        GET   — missions visible to the caller (manager+ sees
+//                                all with an org rollup; below manager sees
+//                                only their own assigned missions)
+//   mission_create       POST  — create a weekly mission (manager+)
+//   mission_assign        POST  — assign a mission to org collectors (manager+)
+//   mission_progress      GET   — per-collector progress for one mission (manager+)
 //
 // Every org/project view resolves tenancy via requireOrgRole/requireProjectOrgRole
 // BEFORE touching data; failures (401/403/404) are tenancy Responses returned as-is.
@@ -35,15 +44,18 @@ import { requireUser } from "../../auth.js";
 import { normalizeEmail } from "../../shared/identifier.js";
 import { isStorageUnavailableError } from "../db.js";
 import { errorResponse, jsonResponse } from "../http.js";
-import { ROLE_RANK, validateSchemaDefinition } from "../../../shared/platformSchema.js";
+import { ROLE_RANK, roleAtLeast, validateSchemaDefinition } from "../../../shared/platformSchema.js";
 import type { PlatformRole } from "../../../shared/platformTypes.js";
 import { validatePlatformRecord } from "../../../shared/platformRecord.js";
+import type { PlatformMission, PlatformRecord } from "../../../shared/platformTypes.js";
 import { readIdempotencyKey } from "../idempotencyCore.js";
 import { hashRequestPayload } from "../idempotencyGeneric.js";
 import * as orgStore from "./orgStore.js";
 import * as adminStore from "./adminStore.js";
 import * as projectStore from "./projectStore.js";
 import * as recordStore from "./recordStore.js";
+import * as missionStore from "./missionStore.js";
+import * as analyticsStore from "./analyticsStore.js";
 import { writePlatformAudit, type PlatformAuditEventType } from "./audit.js";
 import { createInviteToken, hashInviteToken, INVITE_TTL_DAYS, sendInviteEmail } from "./invites.js";
 import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenancy.js";
@@ -56,10 +68,13 @@ import {
   inviteRevokeSchema,
   memberRemoveSchema,
   memberUpdateSchema,
+  missionAssignSchema,
+  missionCreateSchema,
   notificationBroadcastSchema,
   orgCreateSchema,
   orgUpdateSchema,
   projectCreateSchema,
+  recordBatchReviewSchema,
   recordCreateSchema,
   recordReviewSchema,
   schemaDraftSaveSchema,
@@ -111,6 +126,17 @@ export interface PlatformApiDeps {
   findOrgPointFn?: typeof findOrgPoint;
   listNearbyOrgPointsFn?: typeof listNearbyOrgPoints;
   hasRecentRecordForPointFn?: typeof recordStore.hasRecentRecordForPoint;
+  createMissionDefinitionFn?: typeof missionStore.createMissionDefinition;
+  getMissionDefinitionFn?: typeof missionStore.getMissionDefinition;
+  assignMissionToUsersFn?: typeof missionStore.assignMissionToUsers;
+  listMissionsForCollectorFn?: typeof missionStore.listMissionsForCollector;
+  listMissionsForManagerFn?: typeof missionStore.listMissionsForManager;
+  listMissionProgressFn?: typeof missionStore.listMissionProgress;
+  getOrganizationDeltaSnapshotFn?: typeof analyticsStore.getOrganizationDeltaSnapshot;
+  listOrganizationWeeklyTrendsFn?: typeof analyticsStore.listOrganizationWeeklyTrends;
+  listOrganizationCategoryBreakdownFn?: typeof analyticsStore.listOrganizationCategoryBreakdown;
+  listOrganizationAgentPerformanceFn?: typeof analyticsStore.listOrganizationAgentPerformance;
+  listOrganizationSpatialCellsFn?: typeof analyticsStore.listOrganizationSpatialCells;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -185,6 +211,22 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const findOrgPointFn = deps.findOrgPointFn ?? findOrgPoint;
   const listNearbyOrgPointsFn = deps.listNearbyOrgPointsFn ?? listNearbyOrgPoints;
   const hasRecentRecordForPointFn = deps.hasRecentRecordForPointFn ?? recordStore.hasRecentRecordForPoint;
+  const createMissionDefinitionFn = deps.createMissionDefinitionFn ?? missionStore.createMissionDefinition;
+  const getMissionDefinitionFn = deps.getMissionDefinitionFn ?? missionStore.getMissionDefinition;
+  const assignMissionToUsersFn = deps.assignMissionToUsersFn ?? missionStore.assignMissionToUsers;
+  const listMissionsForCollectorFn = deps.listMissionsForCollectorFn ?? missionStore.listMissionsForCollector;
+  const listMissionsForManagerFn = deps.listMissionsForManagerFn ?? missionStore.listMissionsForManager;
+  const listMissionProgressFn = deps.listMissionProgressFn ?? missionStore.listMissionProgress;
+  const getOrganizationDeltaSnapshotFn =
+    deps.getOrganizationDeltaSnapshotFn ?? analyticsStore.getOrganizationDeltaSnapshot;
+  const listOrganizationWeeklyTrendsFn =
+    deps.listOrganizationWeeklyTrendsFn ?? analyticsStore.listOrganizationWeeklyTrends;
+  const listOrganizationCategoryBreakdownFn =
+    deps.listOrganizationCategoryBreakdownFn ?? analyticsStore.listOrganizationCategoryBreakdown;
+  const listOrganizationAgentPerformanceFn =
+    deps.listOrganizationAgentPerformanceFn ?? analyticsStore.listOrganizationAgentPerformance;
+  const listOrganizationSpatialCellsFn =
+    deps.listOrganizationSpatialCellsFn ?? analyticsStore.listOrganizationSpatialCells;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -854,6 +896,84 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ summary }, { status: 200 });
   }
 
+  // ── analytics ────────────────────────────────────────────────────────────
+  // Company analytics is deliberately served only through the tenant router.
+  // The membership check happens before a store function is called, and every
+  // store query receives the authorized organization id as its first filter.
+  async function handleOrganizationAnalytics(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const section = url.searchParams.get("section");
+    switch (section) {
+      case "snapshot":
+        return jsonResponse(await getOrganizationDeltaSnapshotFn(context.organizationId));
+      case "trends": {
+        const rawWeeks = Number(url.searchParams.get("weeks") ?? "12");
+        const weeks = Number.isFinite(rawWeeks) ? Math.min(52, Math.max(1, Math.floor(rawWeeks))) : 12;
+        const recordTypeKey = url.searchParams.get("vertical")?.trim() || undefined;
+        return jsonResponse(await listOrganizationWeeklyTrendsFn({
+          organizationId: context.organizationId,
+          recordTypeKey,
+          weeks,
+        }));
+      }
+      case "categories":
+        return jsonResponse(await listOrganizationCategoryBreakdownFn(context.organizationId));
+      case "agents":
+        return jsonResponse(await listOrganizationAgentPerformanceFn(context.organizationId));
+      case "spatial": {
+        const requestedVertical = url.searchParams.get("vertical")?.trim();
+        const recordTypeKey = requestedVertical && requestedVertical !== "all"
+          ? requestedVertical
+          : undefined;
+        return jsonResponse(await listOrganizationSpatialCellsFn({
+          organizationId: context.organizationId,
+          recordTypeKey,
+        }));
+      }
+      case "anomalies":
+        // No platform-record anomaly aggregate exists yet. Returning no tenant
+        // data is safer than falling through to ADL-wide analytics.
+        return jsonResponse([]);
+      default:
+        return errorResponse("Invalid analytics section", 400, { code: "platform_analytics_invalid_section" });
+    }
+  }
+
+  // Core single-record review logic — applies the decision via `reviewRecordFn`
+  // and fires the `record_reviewed` audit event. Both `handleRecordReview`
+  // (one record) and `handleRecordBatchReview` (many records, looped) call
+  // this SAME function so the business logic + audit/side-effect behavior
+  // never drifts between the two entry points. Returns `null` when the
+  // record doesn't exist, isn't in this org, or isn't `pending_review`
+  // (i.e. `reviewRecordFn`'s `WHERE ... AND status = 'pending_review'` found
+  // no row) — callers turn that into a 404 (single) or a per-record
+  // "skipped" result (batch).
+  async function reviewOneRecord(input: {
+    organizationId: string;
+    recordId: string;
+    status: "approved" | "rejected";
+    reviewedBy: string;
+    reviewNotes?: string;
+  }): Promise<PlatformRecord | null> {
+    const record = await reviewRecordFn(input);
+    if (!record) return null;
+    await audit({
+      organizationId: input.organizationId,
+      projectId: record.projectId,
+      actorUserId: input.reviewedBy,
+      eventType: "record_reviewed",
+      payload: {
+        recordId: record.id,
+        status: record.status,
+        hasReviewNotes: Boolean(record.reviewNotes),
+      },
+    });
+    return record;
+  }
+
   async function handleRecordReview(request: Request): Promise<Response> {
     const rawBody = await readJson(request);
     if (rawBody === null) return errorResponse("Invalid JSON body", 400);
@@ -862,24 +982,78 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     const body = parsed.data;
     const context = await requireOrgRole(request, body.organizationId, "reviewer", tenancyDeps);
     if (isTenancyFailure(context)) return context;
-    const record = await reviewRecordFn({
-      ...body,
+    const record = await reviewOneRecord({
+      organizationId: body.organizationId,
+      recordId: body.recordId,
+      status: body.status,
       reviewedBy: context.userId,
       reviewNotes: body.reviewNotes,
     });
     if (!record) return errorResponse("Record not found", 404, { code: "platform_record_not_found" });
-    await audit({
-      organizationId: body.organizationId,
-      projectId: record.projectId,
-      actorUserId: context.userId,
-      eventType: "record_reviewed",
-      payload: {
-        recordId: record.id,
-        status: record.status,
-        hasReviewNotes: Boolean(record.reviewNotes),
-      },
-    });
     return jsonResponse({ record }, { status: 200 });
+  }
+
+  // ── record_batch_review ───────────────────────────────────────────────────
+  // Same decision applied to every id in `recordIds`, one `reviewOneRecord`
+  // call per id (no batch SQL, no shortcuts) so per-record audit + any future
+  // side effects on `reviewOneRecord` fire exactly once per record, same as
+  // the single-review path. One record failing (thrown error) or being
+  // unreviewable (already resolved / wrong org / not found) never aborts the
+  // rest of the batch — every id in the request gets its own result entry.
+  async function handleRecordBatchReview(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(recordBatchReviewSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+    const context = await requireOrgRole(request, body.organizationId, "reviewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    // De-dupe while preserving the caller's ordering — a repeated id would
+    // otherwise attempt a second review of an already-resolved record and
+    // report a spurious "skipped" entry.
+    const recordIds = Array.from(new Set(body.recordIds));
+
+    const results: Array<{
+      recordId: string;
+      status: "ok" | "error" | "skipped";
+      error?: string;
+      skippedReason?: string;
+    }> = [];
+    let skippedCount = 0;
+
+    for (const recordId of recordIds) {
+      try {
+        const record = await reviewOneRecord({
+          organizationId: body.organizationId,
+          recordId,
+          status: body.decision,
+          reviewedBy: context.userId,
+          reviewNotes: body.notes,
+        });
+        if (!record) {
+          skippedCount += 1;
+          results.push({
+            recordId,
+            status: "skipped",
+            skippedReason: "Record not found or already reviewed",
+          });
+        } else {
+          results.push({ recordId, status: "ok" });
+        }
+      } catch (error) {
+        // Log the real error server-side; never return raw error/DB messages
+        // to the client (information disclosure).
+        console.error(`platform_record_batch_review: review failed for record ${recordId}`, error);
+        results.push({
+          recordId,
+          status: "error",
+          error: "Review failed",
+        });
+      }
+    }
+
+    return jsonResponse({ results, skippedCount }, { status: 200 });
   }
 
   async function handleNotificationBroadcast(request: Request): Promise<Response> {
@@ -1010,6 +1184,167 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     });
   }
 
+  // ── mission_list ──────────────────────────────────────────────────────────
+  // Visible to every role (mirrors OVERVIEW). Managers/owners see every mission
+  // in the org with an org-wide rollup of progress; everyone else sees only
+  // the missions assigned to them, with their own progress.
+  async function handleMissionList(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const missions = roleAtLeast(context.role, "manager")
+      ? await listMissionsForManagerFn(organizationId)
+      : await listMissionsForCollectorFn({ organizationId, userId: context.userId });
+
+    return jsonResponse({ missions }, { status: 200 });
+  }
+
+  // ── mission_create ───────────────────────────────────────────────────────
+  // Manager/owner only. Always creates a `weekly` mission — daily missions are
+  // exclusively auto-generated by the cron (missionsCron.ts).
+  async function handleMissionCreate(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(missionCreateSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const context = await requireOrgRole(request, body.organizationId, "manager", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const definition = await createMissionDefinitionFn({
+      organizationId: body.organizationId,
+      period: "weekly",
+      titleEn: body.titleEn,
+      titleFr: body.titleFr,
+      quota: body.quota,
+      deadline: body.deadline,
+      rewardXp: body.rewardXp,
+      projectId: body.projectId ?? null,
+      category: body.category ?? null,
+      notesEn: body.notesEn ?? null,
+      notesFr: body.notesFr ?? null,
+      createdBy: context.userId,
+    });
+
+    await audit({
+      organizationId: body.organizationId,
+      projectId: body.projectId ?? null,
+      actorUserId: context.userId,
+      eventType: "mission_created",
+      payload: { missionId: definition.id, quota: definition.quota, rewardXp: definition.rewardXp, deadline: definition.deadline },
+    });
+
+    const mission: PlatformMission = {
+      id: definition.id,
+      organizationId: definition.organizationId,
+      period: definition.period,
+      state: missionStore.computeMissionAssignmentState({ current: 0, quota: definition.quota, deadline: definition.deadline }),
+      titleEn: definition.titleEn,
+      titleFr: definition.titleFr,
+      quota: definition.quota,
+      current: 0,
+      rewardXp: definition.rewardXp,
+      deadline: definition.deadline,
+      projectId: definition.projectId,
+      category: definition.category,
+      notesEn: definition.notesEn,
+      notesFr: definition.notesFr,
+      assignedUserIds: [],
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+    };
+    return jsonResponse({ mission }, { status: 201 });
+  }
+
+  // ── mission_assign ───────────────────────────────────────────────────────
+  // Manager/owner only. Rejects any target id that isn't a CURRENT collector
+  // of the mission's organization (spec risk: manager targets a collector who
+  // has since left the org). Re-assigning an already-assigned collector is a
+  // no-op (handled by assignMissionToUsersFn's ON CONFLICT DO NOTHING) so
+  // their existing progress is never disturbed.
+  async function handleMissionAssign(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(missionAssignSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const definition = await getMissionDefinitionFn(body.missionId);
+    if (!definition) return errorResponse("Mission not found", 404, { code: "platform_mission_not_found" });
+
+    const context = await requireOrgRole(request, definition.organizationId, "manager", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const targetUserIds = Array.from(new Set(body.targetUserIds));
+    const members = await listMembersFn(definition.organizationId);
+    const collectorIds = new Set(members.filter((member) => member.role === "collector").map((member) => member.userId));
+    const invalidUserIds = targetUserIds.filter((userId) => !collectorIds.has(userId));
+    if (invalidUserIds.length > 0) {
+      return jsonResponse({
+        error: "Some target users are not current collectors in this organization",
+        code: "platform_mission_invalid_targets",
+        invalidUserIds,
+      }, { status: 400 });
+    }
+
+    await assignMissionToUsersFn({ missionId: body.missionId, userIds: targetUserIds });
+
+    await audit({
+      organizationId: definition.organizationId,
+      actorUserId: context.userId,
+      eventType: "mission_assigned",
+      payload: { missionId: body.missionId, targetUserIds },
+    });
+
+    return jsonResponse({ assigned: true, missionId: body.missionId, targetUserIds }, { status: 200 });
+  }
+
+  // ── mission_progress ─────────────────────────────────────────────────────
+  // Manager/owner only. Per-collector progress breakdown for one mission, plus
+  // an org-wide rollup `mission` summary (same shape mission_list returns for
+  // managers).
+  async function handleMissionProgress(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const missionId = url.searchParams.get("missionId") ?? "";
+    const context = await requireOrgRole(request, organizationId, "manager", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const definition = await getMissionDefinitionFn(missionId);
+    if (!definition || definition.organizationId !== organizationId) {
+      return errorResponse("Mission not found", 404, { code: "platform_mission_not_found" });
+    }
+
+    const progress = await listMissionProgressFn(missionId);
+    const totalCurrent = progress.reduce((sum, entry) => sum + entry.current, 0);
+    const state = missionStore.computeMissionAssignmentState({
+      current: totalCurrent,
+      quota: definition.quota,
+      deadline: definition.deadline,
+    });
+    const mission: PlatformMission = {
+      id: definition.id,
+      organizationId: definition.organizationId,
+      period: definition.period,
+      state,
+      titleEn: definition.titleEn,
+      titleFr: definition.titleFr,
+      quota: definition.quota,
+      current: totalCurrent,
+      rewardXp: definition.rewardXp,
+      deadline: definition.deadline,
+      projectId: definition.projectId,
+      category: definition.category,
+      notesEn: definition.notesEn,
+      notesFr: definition.notesFr,
+      assignedUserIds: progress.map((entry) => entry.userId),
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+    };
+    return jsonResponse({ mission, progress }, { status: 200 });
+  }
+
   // ── Dispatch map ──────────────────────────────────────────────────────────
   const routes: Record<string, { method: "GET" | "POST"; handler: (request: Request) => Promise<Response> }> = {
     platform_admin_org_list: { method: "GET", handler: handleAdminOrgList },
@@ -1033,11 +1368,17 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_list: { method: "GET", handler: (request) => handleRecordList(request, new URL(request.url)) },
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
     platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
+    platform_analytics: { method: "GET", handler: (request) => handleOrganizationAnalytics(request, new URL(request.url)) },
     platform_record_review: { method: "POST", handler: handleRecordReview },
+    platform_record_batch_review: { method: "POST", handler: handleRecordBatchReview },
     platform_notification_broadcast: { method: "POST", handler: handleNotificationBroadcast },
     platform_record_export_csv: { method: "GET", handler: (request) => handleRecordExportCsv(request, new URL(request.url)) },
     platform_record_export_geojson: { method: "GET", handler: (request) => handleRecordExportGeojson(request, new URL(request.url)) },
     platform_point_nearby: { method: "GET", handler: (request) => handlePointNearby(request, new URL(request.url)) },
+    platform_mission_list: { method: "GET", handler: (request) => handleMissionList(request, new URL(request.url)) },
+    platform_mission_create: { method: "POST", handler: handleMissionCreate },
+    platform_mission_assign: { method: "POST", handler: handleMissionAssign },
+    platform_mission_progress: { method: "GET", handler: (request) => handleMissionProgress(request, new URL(request.url)) },
   };
 
   return async function handlePlatform(request: Request): Promise<Response> {

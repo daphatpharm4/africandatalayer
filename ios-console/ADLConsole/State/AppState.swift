@@ -57,6 +57,12 @@ class AppState: ObservableObject {
     /// bootstraps with, instead of `AppState` growing a method per screen.
     let apiClient: PlatformAPIClient
     private let authService: AuthServiceProtocol
+    /// Backs every `make*AnalyticsViewModel`/`makeAIAnalyticsAssistantViewModel`
+    /// factory below — a stateless wrapper over `apiClient` (see
+    /// `AnalyticsRepository`'s doc comment in `ConsoleAPI`), so building it
+    /// once and sharing it is a plain efficiency choice, not a correctness
+    /// requirement.
+    private lazy var analyticsRepository: AnalyticsRepositoryProtocol = AnalyticsRepository(apiClient: apiClient)
 
     /// The offline record-capture queue, owned centrally (not per-screen) so
     /// a draft enqueued in one `CaptureView` session survives navigating
@@ -256,6 +262,68 @@ class AppState: ObservableObject {
         )
     }
 
+    /// Builds a fresh `DeltaDashboardViewModel` for `ConsoleShellView`'s
+    /// ANALYTICS destination (Delta Dashboard tab), mirroring
+    /// `makeReviewQueueViewModel` above.
+    func makeDeltaDashboardViewModel(organizationId: String) -> DeltaDashboardViewModel {
+        DeltaDashboardViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `InvestorDashboardViewModel` for the ANALYTICS
+    /// destination's Investor Dashboard tab, mirroring
+    /// `makeDeltaDashboardViewModel` above.
+    func makeInvestorDashboardViewModel(organizationId: String) -> InvestorDashboardViewModel {
+        InvestorDashboardViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `CategoryBreakdownViewModel` for the ANALYTICS
+    /// destination's Category Breakdown tab, mirroring
+    /// `makeDeltaDashboardViewModel` above.
+    func makeCategoryBreakdownViewModel(organizationId: String) -> CategoryBreakdownViewModel {
+        CategoryBreakdownViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `AgentPerformanceViewModel` for the ANALYTICS
+    /// destination's Agent Performance tab, mirroring
+    /// `makeDeltaDashboardViewModel` above.
+    func makeAgentPerformanceViewModel(organizationId: String) -> AgentPerformanceViewModel {
+        AgentPerformanceViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `ExportPanelViewModel` for the ANALYTICS destination's
+    /// Export tab, mirroring `makeDeltaDashboardViewModel` above.
+    func makeExportPanelViewModel(organizationId: String) -> ExportPanelViewModel {
+        ExportPanelViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    /// Builds a fresh `AIAnalyticsAssistantViewModel` for the ANALYTICS
+    /// destination's AI Assistant tab, mirroring `makeDeltaDashboardViewModel`
+    /// above.
+    func makeAIAnalyticsAssistantViewModel(organizationId: String) -> AIAnalyticsAssistantViewModel {
+        AIAnalyticsAssistantViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
+    }
+
+    func makeCommunicationsViewModel() -> CommunicationsViewModel {
+        CommunicationsViewModel(apiClient: apiClient, language: language)
+    }
+
+    func makeLeadQueueViewModel() -> LeadQueueViewModel {
+        LeadQueueViewModel(apiClient: apiClient, language: language)
+    }
+
+    func makeMissionsViewModel(organizationId: String) -> MissionsViewModel {
+        MissionsViewModel(
+            apiClient: apiClient,
+            organizationId: organizationId,
+            role: role ?? .viewer,
+            language: language
+        )
+    }
+
+    func makeLeaderboardViewModel(organizationId: String) -> LeaderboardViewModel {
+        LeaderboardViewModel(apiClient: apiClient, organizationId: organizationId, language: language)
+    }
+
     private func allowsOfflineCapability(_ capability: OfflineCapability) -> Bool {
         // Lightweight/test auth services do not expose SessionRepository's
         // richer restore result. Their successful sign-in is still an online
@@ -307,6 +375,15 @@ class AppState: ObservableObject {
 
     func signOut() {
         let ownerUserID = currentUserID
+        // Drop cached durable sync engines for every organization the user
+        // touched this session — they're keyed by organizationID and are
+        // rebuilt lazily by `durableSyncEngine(organizationID:)`, so this is
+        // cheap. Without it, `syncEngines` grows unbounded across
+        // sign-in/sign-out cycles (M4). Any in-flight drain `Task` an engine
+        // owns keeps running to completion after its actor reference here is
+        // released — its acknowledgements still land — so this is safe to do
+        // unconditionally.
+        syncEngines.removeAll()
         isAuthenticated = false
         sessionState = .unauthenticated
         organizations = []
@@ -373,6 +450,18 @@ class AppState: ObservableObject {
     /// `ConsoleShell.tsx` (`onSelectOrganization`).
     func selectOrganization(organizationId: String) {
         guard let membership = organizations.first(where: { $0.organization.id == organizationId }) else { return }
+        // `loadOrganizations()` calls this on every bootstrap/relaunch,
+        // including redundantly re-selecting the org that is already
+        // current — so only drop cached durable sync engines when the
+        // selection is an actual switch. An unconditional `removeAll()`
+        // here would thrash a possibly in-flight engine on every redundant
+        // call. Engines rebuild lazily via `durableSyncEngine(organizationID:)`,
+        // so clearing the whole cache on a real switch is cheap, and any
+        // drain `Task` the dropped engine owns keeps running to completion
+        // (M4).
+        if let previousOrganizationID = organization?.id, previousOrganizationID != organizationId {
+            syncEngines.removeAll()
+        }
         organization = membership.organization
         role = membership.role
         route = consoleLandingRoute(role: membership.role)
@@ -439,8 +528,27 @@ class AppState: ObservableObject {
     }
 
     #if DEBUG
+    /// Test seam for the M4 regression (stale `syncEngines` entries leaking
+    /// across org switches / sign-out) — `syncEngines` itself stays
+    /// `private` since nothing outside `AppState` needs the cache.
+    var syncEnginesCount: Int { syncEngines.count }
+
     func seedPreviewOrganizationsLoadState(_ loadState: LoadState) {
         organizationsLoadState = loadState
+    }
+
+    func configureSignedOutForUITest(locale: String) {
+        runtimeDisabledForUITest = true
+        language = locale == "fr" ? .fr : .en
+        currentUserID = nil
+        organizations = []
+        organization = nil
+        role = nil
+        isAuthenticated = false
+        sessionState = .unauthenticated
+        organizationsLoadState = .idle
+        route = ConsoleRoute(screen: .authRequired)
+        connectivityState = .satisfied
     }
 
     func configureForUITest(role roleValue: String, locale: String, connectivity: String) {

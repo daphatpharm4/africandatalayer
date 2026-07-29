@@ -1,7 +1,7 @@
 import ConsoleForms
 import ConsoleModels
-import CoreMotion
 import Foundation
+import ImageIO
 import UIKit
 
 @MainActor
@@ -14,67 +14,72 @@ protocol CaptureFraudMetadataProviding: AnyObject {
     func gpsIntegrity(gps: FormGpsValue?, capturedAt: Date) -> PlatformRecordEvidence.GpsIntegrity
 }
 
+/// Production `CaptureFraudMetadataProviding` — the adapter between the
+/// capture flow's evidence-building step and the individually-testable
+/// fraud/integrity providers (`GPSIntegrityProviding`,
+/// `DeviceProfilingProviding`, `PhotoIntegrityProviding`) built in earlier
+/// tasks. Each provider is injected with a real production default, so this
+/// type only maps their outputs onto `PlatformRecordEvidence`'s wire shape —
+/// it doesn't own any fraud-detection logic itself.
 @MainActor
 final class NativeCaptureFraudMetadataProvider: CaptureFraudMetadataProviding {
-    private let motionManager = CMMotionManager()
-    private var accelerometerSampleCount = 0
-    private var motionDetectedDuringCapture = false
+    private let gpsIntegrityProvider: GPSIntegrityProviding
+    private let deviceProfilingProvider: DeviceProfilingProviding
+    private let photoIntegrityProvider: PhotoIntegrityProviding
     private let deviceTimestamp: () -> Date
 
-    init(deviceTimestamp: @escaping () -> Date = { Date() }) {
+    /// A motion/GPS-fix mismatch this confident (accelerometer says the
+    /// device is moving while the GPS fix reads as a stationary/loose-accuracy
+    /// one, or vice versa) is the same "spoofed location" signature
+    /// `MotionGPSIntegrityProvider.integrityScore` scores at `0.3` — below
+    /// this threshold, flag it as a likely mock-location fix.
+    private static let mockLocationConfidenceThreshold: Double = 0.3
+
+    init(
+        gpsIntegrityProvider: GPSIntegrityProviding = MotionGPSIntegrityProvider(),
+        deviceProfilingProvider: DeviceProfilingProviding = SystemDeviceProfilingProvider(),
+        photoIntegrityProvider: PhotoIntegrityProviding = CoreImagePhotoIntegrityProvider(),
+        deviceTimestamp: @escaping () -> Date = { Date() }
+    ) {
+        self.gpsIntegrityProvider = gpsIntegrityProvider
+        self.deviceProfilingProvider = deviceProfilingProvider
+        self.photoIntegrityProvider = photoIntegrityProvider
         self.deviceTimestamp = deviceTimestamp
     }
 
     func startCapture() {
-        accelerometerSampleCount = 0
-        motionDetectedDuringCapture = false
-
-        if motionManager.isAccelerometerAvailable, !motionManager.isAccelerometerActive {
-            motionManager.accelerometerUpdateInterval = 0.25
-            motionManager.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-                guard let self, let acceleration = data?.acceleration else { return }
-                self.accelerometerSampleCount += 1
-                let magnitude = sqrt(
-                    acceleration.x * acceleration.x
-                    + acceleration.y * acceleration.y
-                    + acceleration.z * acceleration.z
-                )
-                if abs(magnitude - 1.0) > 0.08 {
-                    self.motionDetectedDuringCapture = true
-                }
-            }
-        }
-
-        if motionManager.isGyroAvailable, !motionManager.isGyroActive {
-            motionManager.gyroUpdateInterval = 0.25
-            motionManager.startGyroUpdates()
-        }
+        // Motion sampling for this capture is owned entirely by
+        // `gpsIntegrityProvider` — see `motionCaptureStats` in
+        // `gpsIntegrity(gps:capturedAt:)` below. There used to be a second,
+        // duplicate `CMMotionManager` session running here; collapsing to
+        // one avoids two competing accelerometer/gyro subscriptions (and the
+        // associated battery/CPU cost) for the same capture.
+        gpsIntegrityProvider.startCapture()
     }
 
     func stopCapture() {
-        if motionManager.isAccelerometerActive {
-            motionManager.stopAccelerometerUpdates()
-        }
-        if motionManager.isGyroActive {
-            motionManager.stopGyroUpdates()
-        }
+        gpsIntegrityProvider.stopCapture()
     }
 
     func device(language: ConsoleLanguage) -> PlatformRecordEvidence.Device {
+        let profile = deviceProfilingProvider.deviceProfile(language: language)
         let current = UIDevice.current
         return PlatformRecordEvidence.Device(
             deviceId: current.identifierForVendor?.uuidString ?? "ios-console-unknown",
             platform: "ios",
-            userAgent: "AfricanDataLayer-Console-iOS-Swift/1",
-            language: language.rawValue
+            userAgent: "AfricanDataLayer-Console-iOS-Swift/1 (\(profile.model); iOS \(profile.systemVersion))",
+            language: profile.language
         )
     }
 
     func photoMetadata(for dataURL: String, capturedAt: String) -> PlatformRecordEvidence.PhotoMetadata? {
         guard let parsed = Self.parseDataURL(dataURL) else { return nil }
-        let image = UIImage(data: parsed.data)
-        let pixelWidth = image.map { Int(($0.size.width * $0.scale).rounded()) }
-        let pixelHeight = image.map { Int(($0.size.height * $0.scale).rounded()) }
+        let exif = photoIntegrityProvider.extractExif(from: parsed.data)
+        let exifWidth = (exif[kCGImagePropertyPixelWidth as String] as? NSNumber)?.intValue
+        let exifHeight = (exif[kCGImagePropertyPixelHeight as String] as? NSNumber)?.intValue
+        let image = exifWidth == nil || exifHeight == nil ? UIImage(data: parsed.data) : nil
+        let pixelWidth = exifWidth ?? image.map { Int(($0.size.width * $0.scale).rounded()) }
+        let pixelHeight = exifHeight ?? image.map { Int(($0.size.height * $0.scale).rounded()) }
         return PlatformRecordEvidence.PhotoMetadata(
             mimeType: parsed.mimeType,
             originalBytes: parsed.data.count,
@@ -86,11 +91,15 @@ final class NativeCaptureFraudMetadataProvider: CaptureFraudMetadataProviding {
     }
 
     func clientExif(gps: FormGpsValue?, capturedAt: String) -> PlatformRecordEvidence.ClientExif? {
+        // `.language` only affects `DeviceProfile.language`, which this method
+        // doesn't use — only `.model` does, so the language argument here is
+        // arbitrary.
+        let deviceModel = deviceProfilingProvider.deviceProfile(language: .en).model
         guard gps != nil else {
             return PlatformRecordEvidence.ClientExif(
                 capturedAt: capturedAt,
                 deviceMake: "Apple",
-                deviceModel: UIDevice.current.model
+                deviceModel: deviceModel
             )
         }
         return PlatformRecordEvidence.ClientExif(
@@ -98,20 +107,32 @@ final class NativeCaptureFraudMetadataProvider: CaptureFraudMetadataProviding {
             longitude: gps?.longitude,
             capturedAt: capturedAt,
             deviceMake: "Apple",
-            deviceModel: UIDevice.current.model
+            deviceModel: deviceModel
         )
     }
 
     func gpsIntegrity(gps: FormGpsValue?, capturedAt: Date) -> PlatformRecordEvidence.GpsIntegrity {
         let nowMs = Int(deviceTimestamp().timeIntervalSince1970 * 1000)
         let gpsMs = gps == nil ? nil : Int(capturedAt.timeIntervalSince1970 * 1000)
+        let integrity = gpsIntegrityProvider.integrityScore(gps: gps, capturedAt: capturedAt)
+        let stats = gpsIntegrityProvider.motionCaptureStats
+        // Reads directly off the provider's real sample count now that it's
+        // exposed — previously this inferred "did we actually have motion
+        // samples" indirectly from `confidenceScore != 0.5`, a sentinel that
+        // only happened to work because 0.5 is `GPSIntegrityResult`'s
+        // no-samples fallback value.
+        let hasMotionSamples = stats.accelerometerSampleCount > 0
+        let mockLocationDetected = hasMotionSamples
+            && !integrity.motionConsistent
+            && integrity.confidenceScore <= Self.mockLocationConfidenceThreshold
+
         return PlatformRecordEvidence.GpsIntegrity(
-            mockLocationDetected: false,
-            mockLocationMethod: nil,
-            hasAccelerometerData: motionManager.isAccelerometerAvailable && accelerometerSampleCount > 0,
-            hasGyroscopeData: motionManager.isGyroAvailable,
-            accelerometerSampleCount: accelerometerSampleCount,
-            motionDetectedDuringCapture: motionDetectedDuringCapture,
+            mockLocationDetected: mockLocationDetected,
+            mockLocationMethod: mockLocationDetected ? "motion_gps_mismatch" : nil,
+            hasAccelerometerData: stats.isAccelerometerAvailable && stats.accelerometerSampleCount > 0,
+            hasGyroscopeData: stats.isGyroAvailable,
+            accelerometerSampleCount: stats.accelerometerSampleCount,
+            motionDetectedDuringCapture: stats.motionDetectedDuringCapture,
             gpsAccuracyMeters: gps?.accuracyMeters,
             networkType: nil,
             gpsTimestamp: gpsMs,

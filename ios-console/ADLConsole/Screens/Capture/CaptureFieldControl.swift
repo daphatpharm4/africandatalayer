@@ -14,6 +14,15 @@ struct CaptureFieldControl: View {
     let error: FormFieldError?
     var onPhotoSelected: ((Data, String) async throws -> String)? = nil
     var onPhotoCleared: ((String) -> Void)? = nil
+    /// Mic-button affordance for `.text`/`.number` fields — `nil` hides the
+    /// button entirely (mirrors `CaptureViewModel.isVoiceInputAvailable`),
+    /// non-`nil` fires with `descriptor.key` when tapped so the caller can
+    /// route it to `CaptureViewModel.requestVoiceInput(for:)`.
+    var onVoiceInput: ((String) -> Void)? = nil
+    /// Whether *this* field's dictation is currently in flight — drives the
+    /// mic icon/disabled state so only the field being dictated into shows
+    /// as active.
+    var isVoiceInputActive: Bool = false
     @State private var photoPickerItem: PhotosPickerItem?
     @State private var photoError: String?
 
@@ -44,27 +53,37 @@ struct CaptureFieldControl: View {
     private var control: some View {
         switch descriptor.control {
         case .text:
-            TextField(t("Enter text", "Saisir un texte"), text: textBinding)
-                .font(ADLConsoleFont.body)
-                .padding(12)
-                .background(ADLConsoleColor.surface)
-                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
-                        .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
-                )
+            HStack(spacing: 8) {
+                TextField(t("Enter text", "Saisir un texte"), text: textBinding)
+                    .font(ADLConsoleFont.body)
+                if let onVoiceInput {
+                    voiceInputButton { onVoiceInput(descriptor.key) }
+                }
+            }
+            .padding(12)
+            .background(ADLConsoleColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                    .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+            )
 
         case .number:
-            TextField(t("Enter a number", "Saisir un nombre"), text: numberTextBinding)
-                .font(ADLConsoleFont.body)
-                .keyboardType(.decimalPad)
-                .padding(12)
-                .background(ADLConsoleColor.surface)
-                .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
-                        .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
-                )
+            HStack(spacing: 8) {
+                TextField(t("Enter a number", "Saisir un nombre"), text: numberTextBinding)
+                    .font(ADLConsoleFont.body)
+                    .keyboardType(.decimalPad)
+                if let onVoiceInput {
+                    voiceInputButton { onVoiceInput(descriptor.key) }
+                }
+            }
+            .padding(12)
+            .background(ADLConsoleColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous)
+                    .stroke(ADLConsoleColor.navyBorder, lineWidth: 1)
+            )
 
         case .singleSelect:
             Menu {
@@ -154,6 +173,30 @@ struct CaptureFieldControl: View {
         case .gps:
             gpsFieldControl
         }
+    }
+
+    // MARK: - Voice input
+
+    /// 44x44 tap target (CLAUDE.md's minimum touch-target size) so it's
+    /// reachable in the field, same as every other tappable control here.
+    ///
+    /// While dictation is active for this field, the button doubles as a
+    /// STOP affordance rather than being disabled — `action` still fires
+    /// `onVoiceInput(descriptor.key)`, and `CaptureViewModel.requestVoiceInput(for:)`
+    /// interprets a call for the already-active field as "stop" (cancels the
+    /// in-flight recognition task) instead of starting a new request. Without
+    /// this, a collector who taps the mic has no way to end dictation short
+    /// of the production recognizer's own max-duration timeout.
+    @ViewBuilder
+    private func voiceInputButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: isVoiceInputActive ? "stop.circle.fill" : "mic")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isVoiceInputActive ? ADLConsoleColor.terraDark : ADLConsoleColor.inkMuted)
+                .frame(width: 44, height: 44)
+        }
+        .buttonStyle(ADLConsolePressStyle())
+        .accessibilityLabel(isVoiceInputActive ? t("Stop dictation", "Arrêter la dictée") : t("Dictate", "Dicter"))
     }
 
     // MARK: - Bindings

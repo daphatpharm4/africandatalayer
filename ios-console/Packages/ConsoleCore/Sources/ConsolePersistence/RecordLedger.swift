@@ -35,6 +35,7 @@ public protocol RecordLedgerProtocol: Sendable {
     func migrationSourceSHA256(name: String) async throws -> String?
     func record(localID: String) async throws -> LedgerRecord?
     func records(ownerUserID: String, organizationID: String) async throws -> [LedgerRecord]
+    func errorHistory(ownerUserID: String, organizationID: String, limit: Int) async throws -> [LedgerRecord]
     func attachments(localID: String) async throws -> [LedgerAttachment]
     func claimNextDue(ownerUserID: String, organizationID: String) async throws -> LedgerRecord?
     func recordRetry(localID: String, error: LedgerError, nextAttemptAt: Date) async throws
@@ -54,6 +55,15 @@ public extension RecordLedgerProtocol {
     func attachments(localID: String) async throws -> [LedgerAttachment] { [] }
     func scheduleImmediateRetry(localID: String) async throws {
         throw RecordLedgerError.notRecoverable
+    }
+    func errorHistory(ownerUserID: String, organizationID: String, limit: Int) async throws -> [LedgerRecord] {
+        let records = try await records(ownerUserID: ownerUserID, organizationID: organizationID)
+        return Array(
+            records
+                .filter { $0.lastErrorClassification != nil || $0.lastErrorSafeMessage != nil }
+                .sorted { $0.updatedAt > $1.updatedAt }
+                .prefix(max(0, limit))
+        )
     }
 }
 
@@ -111,6 +121,23 @@ public final class RecordLedger: RecordLedgerProtocol {
             try LedgerRecord
                 .filter(Column("owner_user_id") == ownerUserID && Column("organization_id") == organizationID)
                 .order(Column("created_at").asc)
+                .fetchAll(db)
+        }
+    }
+
+    public func errorHistory(ownerUserID: String, organizationID: String, limit: Int) async throws -> [LedgerRecord] {
+        try await database.reader.read { db in
+            try LedgerRecord
+                .filter(
+                    Column("owner_user_id") == ownerUserID
+                        && Column("organization_id") == organizationID
+                        && (
+                            Column("last_error_classification") != nil
+                                || Column("last_error_safe_message") != nil
+                        )
+                )
+                .order(Column("updated_at").desc)
+                .limit(max(0, limit))
                 .fetchAll(db)
         }
     }

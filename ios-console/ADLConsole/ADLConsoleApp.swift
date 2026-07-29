@@ -21,21 +21,46 @@ struct ADLConsoleApp: App {
                 legacyQueueStore: dependencies.legacyQueueStore
             )
             #if DEBUG
-            if let role = UserDefaults.standard.string(forKey: "uiTestRole") {
+            let uiTestEnvironment = ProcessInfo.processInfo.environment
+            if uiTestEnvironment["ADL_UI_TEST_MODE"] == "1",
+               let role = uiTestEnvironment["ADL_UI_TEST_ROLE"] {
                 state.configureForUITest(
                     role: role,
-                    locale: UserDefaults.standard.string(forKey: "uiTestLocale") ?? "en",
-                    connectivity: UserDefaults.standard.string(forKey: "uiTestConnectivity") ?? "online"
+                    locale: uiTestEnvironment["ADL_UI_TEST_LOCALE"] ?? "en",
+                    connectivity: uiTestEnvironment["ADL_UI_TEST_CONNECTIVITY"] ?? "online"
+                )
+            } else if uiTestEnvironment["ADL_UI_TEST_MODE"] == "1" {
+                state.configureSignedOutForUITest(
+                    locale: uiTestEnvironment["ADL_UI_TEST_LOCALE"] ?? "en"
                 )
             }
             #endif
             _appState = StateObject(wrappedValue: state)
         } catch {
-            _configurationError = State(initialValue: "ADL Console is not configured for this build.")
-            _appState = StateObject(wrappedValue: AppState(
+            let fallbackState = AppState(
                 apiClient: PlatformAPIClient(baseURL: URL(string: "about:blank")!),
                 authService: NetworkAuthService(baseURL: URL(string: "about:blank")!)
-            ))
+            )
+            #if DEBUG
+            let uiTestEnvironment = ProcessInfo.processInfo.environment
+            if uiTestEnvironment["ADL_UI_TEST_MODE"] == "1" {
+                if let role = uiTestEnvironment["ADL_UI_TEST_ROLE"] {
+                    fallbackState.configureForUITest(
+                        role: role,
+                        locale: uiTestEnvironment["ADL_UI_TEST_LOCALE"] ?? "en",
+                        connectivity: uiTestEnvironment["ADL_UI_TEST_CONNECTIVITY"] ?? "online"
+                    )
+                } else {
+                    fallbackState.configureSignedOutForUITest(
+                        locale: uiTestEnvironment["ADL_UI_TEST_LOCALE"] ?? "en"
+                    )
+                }
+                _appState = StateObject(wrappedValue: fallbackState)
+                return
+            }
+            #endif
+            _configurationError = State(initialValue: "ADL Console is not configured for this build.")
+            _appState = StateObject(wrappedValue: fallbackState)
         }
     }
 

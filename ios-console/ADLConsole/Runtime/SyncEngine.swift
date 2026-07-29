@@ -1,6 +1,7 @@
 import ConsoleForms
 import ConsolePersistence
 import Foundation
+import os
 
 enum SyncTrigger: String, Sendable {
     case recordPersisted, foreground, reconnected, manual, backgroundRefresh
@@ -24,22 +25,26 @@ enum SyncSubmissionError: Error, Equatable, Sendable {
 }
 
 actor SyncEngine {
-    private let ledger: RecordLedger
+    private let ledger: RecordLedgerProtocol
     private let submitter: any RecordSubmitting
     private let mediaStore: any CaptureMediaStoreProtocol
     private let ownerUserID: String
     private let organizationID: String
     private let jitter: @Sendable (TimeInterval) -> TimeInterval
+    private let logError: @Sendable (String) -> Void
     private var drainTask: Task<Void, Never>?
 
     init(
-        ledger: RecordLedger,
+        ledger: RecordLedgerProtocol,
         submitter: any RecordSubmitting,
         mediaStore: any CaptureMediaStoreProtocol,
         ownerUserID: String,
         organizationID: String,
         jitter: @escaping @Sendable (TimeInterval) -> TimeInterval = { delay in
             delay * Double.random(in: 0.8...1.2)
+        },
+        logError: @escaping @Sendable (String) -> Void = { message in
+            os_log(.error, "%{public}@", message)
         }
     ) {
         self.ledger = ledger
@@ -48,6 +53,7 @@ actor SyncEngine {
         self.ownerUserID = ownerUserID
         self.organizationID = organizationID
         self.jitter = jitter
+        self.logError = logError
     }
 
     func trigger(_ trigger: SyncTrigger) async {
@@ -62,8 +68,16 @@ actor SyncEngine {
     }
 
     private func drain() async {
-        while let record = try? await ledger.claimNextDue(ownerUserID: ownerUserID, organizationID: organizationID) {
+        while true {
             if Task.isCancelled { break }
+            let record: LedgerRecord
+            do {
+                guard let next = try await ledger.claimNextDue(ownerUserID: ownerUserID, organizationID: organizationID) else { break }
+                record = next
+            } catch {
+                logError("SyncEngine.drain: DB error on claimNextDue: \(error)")
+                break  // next trigger retries; break avoids a tight spin on a persistent DB error
+            }
             let now = Date()
             do {
                 let serverRecordID = try await submitter.submit(record)

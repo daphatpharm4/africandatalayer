@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Camera,
-  Check,
   ChevronDown,
   Clock3,
   Eye,
@@ -19,6 +18,8 @@ import {
   reviewPlatformRecordRequest,
 } from '../../lib/client/platformApi';
 import type { PlatformRecord } from '../../shared/platformTypes';
+import StatusBadge from '../shared/StatusBadge';
+import DecisionBar from '../shared/DecisionBar';
 
 interface ReviewQueueScreenProps {
   organizationId: string;
@@ -185,8 +186,11 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-base font-semibold capitalize text-ink">{record.recordTypeKey.replaceAll('_', ' ')}</h2>
-                    <span className={`micro-label rounded-full px-2.5 py-1 text-[10px] ${record.status === 'approved' ? 'bg-forest-wash text-forest-dark' : record.status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-gold/20 text-ink'}`}>
-                      {record.status === 'pending_review' ? t('Pending review', 'En attente') : record.status === 'approved' ? t('Approved', 'Approuvée') : t('Rejected', 'Rejetée')}
+                    <span data-testid="web-console-review-status">
+                      <StatusBadge
+                        status={record.status === 'approved' ? 'verified' : record.status === 'rejected' ? 'flagged' : 'warning'}
+                        label={record.status === 'pending_review' ? t('Pending review', 'En attente') : record.status === 'approved' ? t('Approved', 'Approuvée') : t('Rejected', 'Rejetée')}
+                      />
                     </span>
                     {record.pointId && (
                       <span className="micro-label inline-flex max-w-[9rem] items-center gap-1 rounded-full bg-navy-wash px-2.5 py-1 text-[10px] text-navy">
@@ -281,12 +285,16 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
                           rows={3} maxLength={2_000} placeholder={t('Required when rejecting; optional when approving.', 'Obligatoire pour un rejet ; facultatif pour une approbation.')}
                           className="mt-2 min-h-24 w-full resize-y rounded-xl border border-navy-border bg-white p-3 text-base text-ink outline-none focus:border-navy" />
                       </label>
-                      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <button type="button" disabled={busyId === record.id} onClick={() => void decide(record.id, 'rejected')}
-                          className="flex min-h-12 items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 text-sm font-semibold text-red-700 disabled:opacity-50"><X size={16} />{busyId === record.id ? t('Saving…', 'Enregistrement…') : t('Reject record', 'Rejeter la donnée')}</button>
-                        <button type="button" disabled={busyId === record.id} onClick={() => void decide(record.id, 'approved')}
-                          className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-forest px-4 text-sm font-semibold text-white disabled:opacity-50"><Check size={16} />{busyId === record.id ? t('Saving…', 'Enregistrement…') : t('Approve record', 'Approuver la donnée')}</button>
-                      </div>
+                      <DecisionBar
+                        testId="web-console-decision-bar"
+                        className="mt-3"
+                        status="warning"
+                        statusLabel={t('Pending review', 'En attente')}
+                        actions={[
+                          { id: 'reject', label: t('Reject record', 'Rejeter la donnée'), intent: 'danger', busy: busyId === record.id, onSelect: () => void decide(record.id, 'rejected') },
+                          { id: 'approve', label: t('Approve record', 'Approuver la donnée'), intent: 'success', busy: busyId === record.id, onSelect: () => void decide(record.id, 'approved') },
+                        ]}
+                      />
                     </section>
                   )}
                 </div>

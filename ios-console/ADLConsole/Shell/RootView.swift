@@ -56,6 +56,9 @@ struct RootView: View {
     }
 
     private func restoreSessionIfNeeded() async {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["ADL_UI_TEST_MODE"] == "1" { return }
+        #endif
         if isRestoringSession { return }
         if appState.isAuthenticated { return }
         isRestoringSession = true

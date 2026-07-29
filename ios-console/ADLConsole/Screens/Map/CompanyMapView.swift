@@ -73,7 +73,11 @@ struct CompanyMapView: View {
                     selectedPoint: Binding(
                         get: { viewModel.selectedPoint },
                         set: { viewModel.selectedPoint = $0 }
-                    )
+                    ),
+                    overlayMode: viewModel.overlayMode,
+                    gridCells: viewModel.gridCells,
+                    heatCells: viewModel.heatCells,
+                    onSelectGridCell: { viewModel.selectGridCell($0) }
                 )
                 .ignoresSafeArea(edges: .bottom)
             } else {
@@ -83,7 +87,11 @@ struct CompanyMapView: View {
                     selectedPoint: Binding(
                         get: { viewModel.selectedPoint },
                         set: { viewModel.selectedPoint = $0 }
-                    )
+                    ),
+                    overlayMode: viewModel.overlayMode,
+                    gridCells: viewModel.gridCells,
+                    heatCells: viewModel.heatCells,
+                    onSelectGridCell: { viewModel.selectGridCell($0) }
                 )
                 .ignoresSafeArea(edges: .bottom)
             }
@@ -96,7 +104,11 @@ struct CompanyMapView: View {
                 selectedPoint: Binding(
                     get: { viewModel.selectedPoint },
                     set: { viewModel.selectedPoint = $0 }
-                )
+                ),
+                overlayMode: viewModel.overlayMode,
+                gridCells: viewModel.gridCells,
+                heatCells: viewModel.heatCells,
+                onSelectGridCell: { viewModel.selectGridCell($0) }
             )
             .ignoresSafeArea(edges: .bottom)
         }
@@ -109,12 +121,20 @@ struct CompanyMapView: View {
             if viewModel.loadState == .loading {
                 loadingPill
             }
+            if viewModel.overlayMode != .none && viewModel.spatialLoadState == .loading {
+                spatialLoadingPill
+            }
+            if let spatialError = viewModel.spatialLoadErrorMessage, viewModel.overlayMode != .none {
+                spatialErrorPill(spatialError)
+            }
             Spacer()
             if viewModel.loadState == .loaded && viewModel.annotations.isEmpty {
                 emptyPill
             }
             if let selected = viewModel.selectedPoint {
                 actionBar(selected: selected)
+            } else if let cell = viewModel.selectedGridCell {
+                gridCellInfoBar(cell)
             }
         }
         .padding(.horizontal, 16)
@@ -131,7 +151,116 @@ struct CompanyMapView: View {
                 modeToggle
                 dailyProgressCircle
             }
+            if displayMode == .map {
+                overlayModeToggle
+            }
         }
+    }
+
+    private var overlayModeToggle: some View {
+        HStack(spacing: 2) {
+            overlayModeButton(.none, icon: "mappin.and.ellipse", label: t("Standard", "Standard"))
+            overlayModeButton(.grid, icon: "square.grid.3x3.fill", label: t("Grid", "Grille"))
+            overlayModeButton(.heat, icon: "flame.fill", label: t("Heat", "Chaleur"))
+        }
+        .padding(3)
+        .background(ADLConsoleColor.surface)
+        .clipShape(Capsule())
+        .adlShadowBorder()
+    }
+
+    private func overlayModeButton(_ mode: CompanyMapViewModel.OverlayMode, icon: String, label: String) -> some View {
+        let isSelected = viewModel.overlayMode == mode
+        return Button {
+            Task { await viewModel.setOverlayMode(mode) }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .semibold))
+                if isSelected {
+                    Text(label)
+                        .font(ADLConsoleFont.caption)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, isSelected ? 12 : 9)
+            .frame(height: 32)
+            .foregroundStyle(isSelected ? .white : ADLConsoleColor.navy)
+            .background(isSelected ? ADLConsoleColor.navy : Color.clear)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(ADLConsolePressStyle())
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    private var spatialLoadingPill: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text(t("Loading spatial intelligence", "Chargement de l'intelligence spatiale"))
+                .font(ADLConsoleFont.caption)
+                .foregroundStyle(ADLConsoleColor.ink)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(ADLConsoleColor.surface)
+        .clipShape(Capsule())
+        .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+    }
+
+    private func spatialErrorPill(_ message: String) -> some View {
+        Button {
+            Task { await viewModel.retrySpatialLoad() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ADLConsoleColor.danger)
+                Text(message)
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .lineLimit(2)
+                Text(t("Retry", "Réessayer"))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.navy)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(ADLConsoleColor.surface)
+            .clipShape(Capsule())
+            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+        }
+        .buttonStyle(ADLConsolePressStyle())
+    }
+
+    private func gridCellInfoBar(_ cell: GeohashScore) -> some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(format: t("Opportunity score %.0f", "Score d'opportunité %.0f"), cell.opportunityScore))
+                    .font(ADLConsoleFont.subheadline)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .lineLimit(1)
+                Text("\(cell.totalPoints) \(t("records", "enregistrements"))")
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+                    .monospacedDigit()
+            }
+            Spacer()
+            Button {
+                viewModel.clearGridSelection()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundStyle(ADLConsoleColor.inkMuted)
+            }
+            .buttonStyle(ADLConsolePressStyle())
+            .accessibilityLabel(t("Dismiss", "Fermer"))
+        }
+        .padding(14)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.card, style: .continuous))
+        .shadow(color: Color.black.opacity(0.12), radius: 14, y: 6)
     }
 
     private var pointsPill: some View {

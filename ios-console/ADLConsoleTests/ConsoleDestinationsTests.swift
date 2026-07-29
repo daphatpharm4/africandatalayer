@@ -31,7 +31,14 @@ final class ConsoleDestinationsTests: XCTestCase {
 
     func testOwnerSeesEveryNavDestination() {
         let screens = Set(ConsoleNavigation.visibleDestinations(role: .owner).map(\.screen))
-        XCTAssertEqual(screens, Set(ConsoleNavigation.allDestinations.map(\.screen)))
+        XCTAssertEqual(screens, Set(ConsoleNavigation.allDestinations.map(\.screen)).subtracting([.admin]))
+    }
+
+    func testAdminOperationsRequiresPlatformAdminFlag() {
+        for role in PlatformRole.allCases {
+            XCTAssertFalse(ConsoleNavigation.visibleDestinations(role: role).map(\.screen).contains(.admin))
+            XCTAssertTrue(ConsoleNavigation.visibleDestinations(role: role, isAdlAdmin: true).map(\.screen).contains(.admin))
+        }
     }
 
     func testCollectorCannotSeeDataReviewMembersOrSettings() {
@@ -93,6 +100,19 @@ final class ConsoleDestinationsTests: XCTestCase {
                 let screens = Set(ConsoleNavigation.visibleDestinations(role: role, isAdlAdmin: isAdlAdmin).map(\.screen))
                 XCTAssertFalse(screens.contains(.onboarding))
                 XCTAssertFalse(screens.contains(.join))
+            }
+        }
+    }
+
+    /// `.analytics` per the analytics-intelligence design spec's role
+    /// matrix: everyone except viewer.
+    func testAnalyticsDestinationVisibleForEveryRoleExceptViewer() {
+        for role in PlatformRole.allCases {
+            let screens = Set(ConsoleNavigation.visibleDestinations(role: role).map(\.screen))
+            if role == .viewer {
+                XCTAssertFalse(screens.contains(.analytics), "role=\(role) must not see ANALYTICS")
+            } else {
+                XCTAssertTrue(screens.contains(.analytics), "role=\(role) must see ANALYTICS")
             }
         }
     }

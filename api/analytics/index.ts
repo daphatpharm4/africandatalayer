@@ -10,6 +10,10 @@ import { drainPendingSmsCampaigns } from "../../lib/server/sms/campaigns.js";
 
 export const maxDuration = 60;
 
+export function canAccessAdlWideAnalytics(user: { role: string } | null): boolean {
+  return user?.role === "admin";
+}
+
 const VALID_METRICS = new Set([
   "total_points",
   "completion_rate",
@@ -32,6 +36,7 @@ export interface CronDispatchSchedule {
   dailyTrustDecay: boolean;
   dailyGpsAnomaly: boolean;
   dailyPurge: boolean;
+  dailyMissions: boolean;
 }
 
 type CronJobSummaryStatus = "skipped" | "ok" | "error";
@@ -55,6 +60,7 @@ interface CronDispatchSummary {
     dailyTrustDecay: CronJobSummary;
     dailyGpsAnomaly: CronJobSummary;
     dailyPurge: CronJobSummary;
+    dailyMissions: CronJobSummary;
     imageSimilarityDrain: CronJobSummary;
   };
 }
@@ -88,6 +94,7 @@ export function getCronDispatchSchedule(now: Date): CronDispatchSchedule {
     dailyTrustDecay: isDailyCronWindow,
     dailyGpsAnomaly: isDailyCronWindow,
     dailyPurge: isDailyCronWindow,
+    dailyMissions: isDailyCronWindow,
   };
 }
 
@@ -128,6 +135,11 @@ async function runDailyPurgeCron(): Promise<unknown> {
   return purgeExpiredMaintenanceRecords();
 }
 
+async function runDailyMissionsCron(): Promise<unknown> {
+  const { runDailyMissionGenerationCron } = await import("../../lib/server/platform/missionsCron.js");
+  return runDailyMissionGenerationCron();
+}
+
 async function runImageSimilarityDrainCron(): Promise<unknown> {
   const { runImageSimilarityDrain } = await import("../../lib/server/imageSimilarityCron.js");
   return runImageSimilarityDrain();
@@ -148,6 +160,7 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     dailyTrustDecay: { due: schedule.dailyTrustDecay, status: "skipped", message: "Not scheduled for this run" },
     dailyGpsAnomaly: { due: schedule.dailyGpsAnomaly, status: "skipped", message: "Not scheduled for this run" },
     dailyPurge: { due: schedule.dailyPurge, status: "skipped", message: "Not scheduled for this run" },
+    dailyMissions: { due: schedule.dailyMissions, status: "skipped", message: "Not scheduled for this run" },
     imageSimilarityDrain: { due: true, status: "skipped", message: "Not yet executed" },
   };
 
@@ -267,6 +280,37 @@ async function handleCronDispatch(url: URL): Promise<Response> {
     }
   }
 
+  if (schedule.dailyMissions) {
+    try {
+      const result = await runDailyMissionsCron();
+      const missionSummary = result as { hasFailures?: unknown };
+      if (missionSummary.hasFailures === true) {
+        hasFailures = true;
+        jobs.dailyMissions = {
+          due: true,
+          status: "error",
+          message: "Daily mission generation completed with organization failures",
+          result,
+        };
+      } else {
+        jobs.dailyMissions = {
+          due: true,
+          status: "ok",
+          message: "Daily mission generation executed",
+          result,
+        };
+      }
+    } catch (error) {
+      hasFailures = true;
+      jobs.dailyMissions = {
+        due: true,
+        status: "error",
+        message: asErrorMessage(error),
+      };
+      console.error("Cron dispatch daily mission generation failed:", error);
+    }
+  }
+
   // Image-similarity drain runs every dispatch tick (no schedule gating).
   // Batch sizes and wall-clock budget are env-tunable (IMAGE_* vars).
   try {
@@ -295,7 +339,8 @@ async function handleCronDispatch(url: URL): Promise<Response> {
       schedule.dailyRoadSnapshot ||
       schedule.dailyTrustDecay ||
       schedule.dailyGpsAnomaly ||
-      schedule.dailyPurge,
+      schedule.dailyPurge ||
+      schedule.dailyMissions,
     hasFailures,
     jobs,
   };
@@ -401,6 +446,11 @@ export async function GET(request: Request): Promise<Response> {
   // All other views require authenticated user
   const user = await requireUser(request);
   if (!user) return errorResponse("Unauthorized", 401);
+  if (!canAccessAdlWideAnalytics(user)) {
+    return errorResponse("ADL-wide analytics is restricted to ADL administrators", 403, {
+      code: "adl_admin_required",
+    });
+  }
 
   switch (view) {
     case "snapshots":

@@ -71,6 +71,28 @@ final class RecordLedgerTests: XCTestCase {
         XCTAssertEqual(u1Records[0].localID, "r1")
     }
 
+    func testErrorHistoryIsWorkspaceScopedNewestFirstAndLimited() async throws {
+        let ledger = try makeLedger()
+        var older = fixtureRecord(localID: "older", createdAt: Date(timeIntervalSince1970: 10))
+        older.lastErrorClassification = "network"
+        older.lastErrorSafeMessage = "Offline"
+        older.updatedAt = Date(timeIntervalSince1970: 20)
+        var newer = fixtureRecord(localID: "newer", createdAt: Date(timeIntervalSince1970: 30))
+        newer.lastErrorClassification = "validation"
+        newer.lastErrorSafeMessage = "Missing field"
+        newer.updatedAt = Date(timeIntervalSince1970: 40)
+        var otherWorkspace = fixtureRecord(localID: "other", organizationID: "o2")
+        otherWorkspace.lastErrorClassification = "server"
+        try await ledger.insert(older)
+        try await ledger.insert(newer)
+        try await ledger.insert(otherWorkspace)
+        try await ledger.insert(fixtureRecord(localID: "clean"))
+
+        let history = try await ledger.errorHistory(ownerUserID: "u1", organizationID: "o1", limit: 1)
+
+        XCTAssertEqual(history.map(\.localID), ["newer"])
+    }
+
     func testOldestFirstClaim() async throws {
         let ledger = try makeLedger()
         try await ledger.insert(fixtureRecord(localID: "r1", createdAt: Date(timeIntervalSince1970: 100)))

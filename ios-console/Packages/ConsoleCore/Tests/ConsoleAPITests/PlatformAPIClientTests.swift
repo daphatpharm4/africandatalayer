@@ -327,6 +327,123 @@ final class PlatformAPIClientTests: XCTestCase {
         XCTAssertEqual(body["role"] as? String, "manager")
     }
 
+    func testListIpReportsUsesPrivacySurfaceAndDecodesQueue() async throws {
+        let transport = MockPlatformTransport()
+        transport.responseData = JSONFixture.data("""
+        [{
+          "id":"11111111-1111-4111-8111-111111111111",
+          "reporterName":"Amina",
+          "reporterEmail":"amina@example.com",
+          "reporterUser":null,
+          "targetKind":"point",
+          "targetRef":"point-1",
+          "description":"This listing uses protected material without permission.",
+          "sworn":true,
+          "status":"open",
+          "resolutionNotes":null,
+          "createdAt":"2026-07-29T10:00:00Z",
+          "updatedAt":"2026-07-29T10:00:00Z"
+        }]
+        """)
+        let client = PlatformAPIClient(baseURL: baseURL, transport: transport)
+
+        let reports = try await client.listIpReports()
+
+        let request = try XCTUnwrap(transport.lastRequest)
+        XCTAssertEqual(request.url?.path, "/api/privacy")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "ip-reports")
+        XCTAssertEqual(reports.first?.reporterName, "Amina")
+    }
+
+    func testUpdateIpReportUsesPatchAndResolutionPayload() async throws {
+        let transport = MockPlatformTransport()
+        transport.responseData = JSONFixture.data("""
+        {
+          "id":"11111111-1111-4111-8111-111111111111",
+          "reporterName":"Amina",
+          "reporterEmail":"amina@example.com",
+          "reporterUser":null,
+          "targetKind":"point",
+          "targetRef":"point-1",
+          "description":"This listing uses protected material without permission.",
+          "sworn":true,
+          "status":"resolved",
+          "resolutionNotes":"Removed after verification.",
+          "createdAt":"2026-07-29T10:00:00Z",
+          "updatedAt":"2026-07-29T11:00:00Z"
+        }
+        """)
+        let client = PlatformAPIClient(baseURL: baseURL, transport: transport)
+
+        let updated = try await client.updateIpReport(
+            id: "11111111-1111-4111-8111-111111111111",
+            status: "resolved",
+            resolutionNotes: "Removed after verification."
+        )
+
+        let request = try XCTUnwrap(transport.lastRequest)
+        XCTAssertEqual(request.httpMethod, "PATCH")
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "ip-report")
+        let body = try JSONFixture.bodyObject(request)
+        XCTAssertEqual(body["status"] as? String, "resolved")
+        XCTAssertEqual(body["resolutionNotes"] as? String, "Removed after verification.")
+        XCTAssertEqual(updated.status, "resolved")
+    }
+
+    func testListMissionsUsesOrganizationScopedPlatformView() async throws {
+        let transport = MockPlatformTransport()
+        transport.responseData = JSONFixture.data("""
+        {"missions":[{
+          "id":"m1","organizationId":"org-1","period":"weekly","state":"pending",
+          "titleEn":"Verify shops","titleFr":"Vérifier les commerces","quota":10,"current":0,
+          "rewardXp":20,"deadline":"2026-08-05T00:00:00Z","projectId":null,"category":null,
+          "notesEn":null,"notesFr":null,"assignedUserIds":[],"createdAt":"2026-07-29T00:00:00Z",
+          "updatedAt":"2026-07-29T00:00:00Z"
+        }]}
+        """)
+        let client = PlatformAPIClient(baseURL: baseURL, transport: transport)
+
+        let missions = try await client.listMissions(organizationId: "org-1")
+
+        let request = try XCTUnwrap(transport.lastRequest)
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "platform_mission_list")
+        XCTAssertEqual(JSONFixture.queryParams(request)["organizationId"], "org-1")
+        XCTAssertEqual(missions.first?.period, .weekly)
+    }
+
+    func testCreateMissionUsesBackendContract() async throws {
+        let transport = MockPlatformTransport()
+        transport.responseData = JSONFixture.data("""
+        {"mission":{
+          "id":"m1","organizationId":"org-1","period":"weekly","state":"pending",
+          "titleEn":"Verify shops","titleFr":"Vérifier les commerces","quota":10,"current":0,
+          "rewardXp":20,"deadline":"2026-08-05T00:00:00Z","projectId":null,"category":null,
+          "notesEn":null,"notesFr":null,"assignedUserIds":[],"createdAt":"2026-07-29T00:00:00Z",
+          "updatedAt":"2026-07-29T00:00:00Z"
+        }}
+        """)
+        let client = PlatformAPIClient(baseURL: baseURL, transport: transport)
+        let input = PlatformMissionCreateInput(
+            organizationId: "org-1",
+            titleEn: "Verify shops",
+            titleFr: "Vérifier les commerces",
+            quota: 10,
+            deadline: "2026-08-05T00:00:00Z",
+            rewardXp: 20
+        )
+
+        let mission = try await client.createMission(input: input)
+
+        let request = try XCTUnwrap(transport.lastRequest)
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "platform_mission_create")
+        XCTAssertEqual(request.httpMethod, "POST")
+        let body = try JSONFixture.bodyObject(request)
+        XCTAssertEqual(body["organizationId"] as? String, "org-1")
+        XCTAssertNil(body["targetUserIds"])
+        XCTAssertEqual(mission.id, "m1")
+    }
+
     // MARK: - Error mapping
 
     func testNonSuccessStatusThrowsPlatformAPIErrorWithStatusMessageAndCode() async throws {
