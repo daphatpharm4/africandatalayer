@@ -86,6 +86,83 @@ enum ADLColor {
     static let lineStrong = Color(hex: 0xe5e7eb)  // gray-200 (ghost btn border)
 }
 
+enum ADLSemanticTone: Equatable {
+    case neutral
+    case primary
+    case success
+    case warning
+    case danger
+    case info
+}
+
+enum ADLOperationalStatus: String, CaseIterable {
+    case idle
+    case loading
+    case success
+    case warning
+    case error
+    case offline
+    case syncing
+    case verified
+    case flagged
+
+    var tone: ADLSemanticTone {
+        switch self {
+        case .idle: return .neutral
+        case .loading, .syncing: return .info
+        case .success, .verified: return .success
+        case .warning, .offline: return .warning
+        case .error, .flagged: return .danger
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .idle: return "circle"
+        case .loading: return "hourglass"
+        case .success: return "checkmark"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.circle.fill"
+        case .offline: return "wifi.slash"
+        case .syncing: return "arrow.triangle.2.circlepath"
+        case .verified: return "checkmark.shield.fill"
+        case .flagged: return "flag.fill"
+        }
+    }
+}
+
+enum ADLMapAnnotationState: String, CaseIterable {
+    case `default`
+    case selected
+    case verified
+    case flagged
+    case cluster
+    case uncertainty
+    case route
+}
+
+extension ADLSemanticTone {
+    var foreground: Color {
+        switch self {
+        case .neutral: return ADLColor.ink
+        case .primary, .info: return ADLColor.navy
+        case .success: return ADLColor.forestDark
+        case .warning: return ADLColor.amber
+        case .danger: return ADLColor.danger
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .neutral: return ADLColor.paper
+        case .primary, .info: return ADLColor.navyWash
+        case .success: return ADLColor.forestWash
+        case .warning: return ADLColor.amberWash
+        case .danger: return Color.red.opacity(0.08)
+        }
+    }
+}
+
 /// Corner radii mirroring tailwind: rounded-2xl=16, rounded-[28px]=28, rounded-[14px]=14.
 enum ADLRadius {
     static let card: CGFloat = 16        // rounded-2xl

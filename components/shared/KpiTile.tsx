@@ -1,5 +1,6 @@
 import React from 'react';
 import { TrendingDown, TrendingUp } from 'lucide-react';
+import { getStatusPresentation, getToneClasses, type OperationalStatus } from '../../lib/shared/ui/semanticTokens';
 
 type Tone = 'navy' | 'terra' | 'forest' | 'streak' | 'amber' | 'gold';
 
@@ -10,6 +11,7 @@ interface Props {
   tone?: Tone;
   icon?: React.ReactNode;
   onClick?: () => void;
+  status?: OperationalStatus;
 }
 
 const toneMap: Record<Tone, { bg: string; text: string }> = {
@@ -21,11 +23,12 @@ const toneMap: Record<Tone, { bg: string; text: string }> = {
   gold: { bg: 'bg-gold-wash', text: 'text-amber' },
 };
 
-const KpiTile: React.FC<Props> = ({ label, value, delta, tone = 'navy', icon, onClick }) => {
+const KpiTile: React.FC<Props> = ({ label, value, delta, tone = 'navy', icon, onClick, status }) => {
   const t = toneMap[tone];
+  const semantic = status ? getToneClasses(getStatusPresentation(status).tone) : undefined;
   const isPos = (delta ?? 0) >= 0;
   const display = typeof value === 'number' ? value.toLocaleString() : value;
-  const className = `${t.bg} stat-tile motion-pressable w-full text-left`;
+  const className = `${semantic?.panel ?? t.bg} stat-tile motion-pressable w-full border text-left`;
   const content = (
     <>
       {(icon || typeof delta === 'number') && (
@@ -44,8 +47,8 @@ const KpiTile: React.FC<Props> = ({ label, value, delta, tone = 'navy', icon, on
           )}
         </div>
       )}
-      <div className={`text-[22px] font-extrabold leading-none ${t.text}`}>{display}</div>
-      <div className={`micro-label-wide mt-1 ${t.text} opacity-70`}>{label}</div>
+      <div className={`text-[22px] font-extrabold leading-none ${semantic?.text ?? t.text}`}>{display}</div>
+      <div className={`micro-label-wide mt-1 ${semantic?.text ?? t.text} opacity-70`}>{label}</div>
     </>
   );
 

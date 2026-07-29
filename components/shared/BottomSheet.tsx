@@ -179,6 +179,9 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
   return (
     <div
       ref={sheetRef}
+      role="dialog"
+      aria-modal="false"
+      aria-label="Context panel"
       className={`fixed inset-x-0 z-30 mx-auto w-full max-w-md md:max-w-lg rounded-t-[28px] border-t border-gray-100 shadow-[0_-4px_24px_rgba(15,43,70,0.12)] ${
         isLowEndDevice ? 'bg-white' : 'bg-white/98 backdrop-blur-xl'
       } ${className}`}
@@ -192,6 +195,9 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
     >
       {/* Drag handle */}
       <div
+        role="button"
+        aria-label="Resize context panel"
+        tabIndex={0}
         className="bottom-sheet flex items-center justify-center h-11 cursor-grab active:cursor-grabbing"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}

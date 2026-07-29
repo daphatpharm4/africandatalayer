@@ -14,9 +14,8 @@ final class ConsoleScreenTests: XCTestCase {
         XCTAssertEqual(ConsoleScreen.members.rawValue, "MEMBERS")
         XCTAssertEqual(ConsoleScreen.settings.rawValue, "SETTINGS")
         XCTAssertEqual(ConsoleScreen.join.rawValue, "JOIN")
-        // 12 TS-mirrored cases + `.map` + `.analytics` (both iOS-console-only,
-        // no TS counterpart) = 13 total; asserted individually below.
-        XCTAssertEqual(ConsoleScreen.allCases.count, 13)
+        // 12 TS-mirrored cases + five iOS-console-only destinations = 16.
+        XCTAssertEqual(ConsoleScreen.allCases.count, 16)
     }
 
     /// `.map` has no TS `ConsoleScreen` counterpart (see its doc comment) —
@@ -29,5 +28,14 @@ final class ConsoleScreenTests: XCTestCase {
     /// comment) — same iOS-console-only pattern as `.map`.
     func testAnalyticsRawValue() {
         XCTAssertEqual(ConsoleScreen.analytics.rawValue, "ANALYTICS")
+    }
+
+    func testAdminRawValue() {
+        XCTAssertEqual(ConsoleScreen.admin.rawValue, "ADMIN")
+    }
+
+    func testMissionRawValues() {
+        XCTAssertEqual(ConsoleScreen.missions.rawValue, "MISSIONS")
+        XCTAssertEqual(ConsoleScreen.leaderboard.rawValue, "LEADERBOARD")
     }
 }

@@ -1,6 +1,82 @@
 import ConsoleModels
 import SwiftUI
 
+enum ADLConsoleSemanticTone: Equatable {
+    case neutral
+    case primary
+    case success
+    case warning
+    case danger
+    case info
+}
+
+struct ADLConsoleStatusPill: View {
+    let text: String
+    let tone: ADLConsoleSemanticTone
+    let systemImage: String
+
+    private var foreground: Color {
+        switch tone {
+        case .neutral: return ADLConsoleColor.ink
+        case .primary, .info: return ADLConsoleColor.navy
+        case .success: return ADLConsoleColor.forestDark
+        case .warning: return ADLConsoleColor.goldDark
+        case .danger: return ADLConsoleColor.danger
+        }
+    }
+
+    private var background: Color {
+        switch tone {
+        case .neutral: return ADLConsoleColor.page
+        case .primary, .info: return ADLConsoleColor.navyWash
+        case .success: return ADLConsoleColor.forestWash
+        case .warning: return ADLConsoleColor.goldWash
+        case .danger: return ADLConsoleColor.dangerWash
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage).accessibilityHidden(true)
+            Text(text)
+        }
+        .font(ADLConsoleFont.caption)
+        .foregroundStyle(foreground)
+        .padding(.horizontal, 10)
+        .frame(minHeight: 44)
+        .background(background)
+        .clipShape(Capsule())
+    }
+}
+
+struct ADLConsoleDecisionBar: View {
+    let statusText: String
+    let approveTitle: String
+    let rejectTitle: String
+    var isBusy = false
+    let onApprove: () -> Void
+    let onReject: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ADLConsoleStatusPill(text: statusText, tone: .warning, systemImage: "clock")
+            HStack(spacing: 12) {
+                Button(action: onReject) {
+                    Label(rejectTitle, systemImage: "xmark")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(ADLConsoleChipStyle(outlined: true, tinted: ADLConsoleColor.danger))
+                Button(action: onApprove) {
+                    Label(approveTitle, systemImage: "checkmark")
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .buttonStyle(ADLConsoleChipStyle(filled: true, fillColor: ADLConsoleColor.forest))
+            }
+            .disabled(isBusy)
+        }
+    }
+}
+
 enum ADLConsoleRadius {
     static let card: CGFloat = 16
     static let hero: CGFloat = 24

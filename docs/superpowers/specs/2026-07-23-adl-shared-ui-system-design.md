@@ -721,3 +721,10 @@ After this spec is approved, follow-on specs should proceed in this order:
 3. Product-specific shared-system application for ADL web
 
 Each follow-on spec should inherit this shared system rather than redefine it.
+
+## Implementation Notes
+
+- The semantic names shipped unchanged across React and native ADL. Native Console keeps its existing connectivity-oriented `OperationalStatus` cases and maps them to the shared six-tone vocabulary.
+- Web map annotations remain Leaflet-specific while native annotations remain MapKit-specific; selection is linked through shared status language and accessibility identifiers rather than identical layouts.
+- The connected Mobbin MCP was unavailable behind a paid-plan gate on 2026-07-29. The six required searches were attempted, no remembered examples were substituted, and the evidence artifact remains tracked in Beads as `africandatalayer-yots`.
+- Native ADL has no XCTest target, so its semantic and accessibility-identifier parity remains source-contract tested plus Xcode-build verified.

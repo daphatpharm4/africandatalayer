@@ -3426,22 +3426,25 @@ const ContributionFlow: React.FC<Props> = ({
             <span>{t('Back', 'Retour')}</span>
           </button>
           {currentStep === STEPS.length - 1 && (
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
-              className="motion-pressable button-breathe flex h-14 items-center justify-center gap-2 rounded-xl bg-navy text-white text-xs font-bold uppercase tracking-widest shadow-lg disabled:opacity-70"
-              style={{ boxShadow: 'var(--shadow-lift)' }}
-            >
-              {isSubmitting ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  <span>{t('Saving', 'Enregistrement')}</span>
-                </>
-              ) : (
-                <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Créer point')}</span>
+            <div className="space-y-2">
+              {typeof navigator !== 'undefined' && !navigator.onLine && (
+                <button type="button" onClick={handleSubmit} className="adl-focusable min-h-12 w-full rounded-xl border border-navy-border bg-white px-4 text-sm font-semibold text-navy">
+                  {t('Save draft', 'Enregistrer le brouillon')}
+                </button>
               )}
-            </button>
+              <button
+                data-testid="capture-primary-cta"
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitting || isResolvingDedup || Boolean(dedupCheck)}
+                className="motion-pressable button-breathe flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-navy text-white text-xs font-bold uppercase tracking-widest shadow-lg disabled:opacity-70"
+                style={{ boxShadow: 'var(--shadow-lift)' }}
+              >
+                {isSubmitting ? <span>{t('Saving', 'Enregistrement')}…</span> : (
+                  <span>{isEnrichMode ? t('Save Enrichment', 'Enregistrer enrichissement') : t('Create Point', 'Créer point')}</span>
+                )}
+              </button>
+            </div>
           )}
         </div>
       </div>

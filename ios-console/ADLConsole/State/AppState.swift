@@ -303,6 +303,27 @@ class AppState: ObservableObject {
         AIAnalyticsAssistantViewModel(repository: analyticsRepository, organizationId: organizationId, language: language)
     }
 
+    func makeCommunicationsViewModel() -> CommunicationsViewModel {
+        CommunicationsViewModel(apiClient: apiClient, language: language)
+    }
+
+    func makeLeadQueueViewModel() -> LeadQueueViewModel {
+        LeadQueueViewModel(apiClient: apiClient, language: language)
+    }
+
+    func makeMissionsViewModel(organizationId: String) -> MissionsViewModel {
+        MissionsViewModel(
+            apiClient: apiClient,
+            organizationId: organizationId,
+            role: role ?? .viewer,
+            language: language
+        )
+    }
+
+    func makeLeaderboardViewModel(organizationId: String) -> LeaderboardViewModel {
+        LeaderboardViewModel(apiClient: apiClient, organizationId: organizationId, language: language)
+    }
+
     private func allowsOfflineCapability(_ capability: OfflineCapability) -> Bool {
         // Lightweight/test auth services do not expose SessionRepository's
         // richer restore result. Their successful sign-in is still an online

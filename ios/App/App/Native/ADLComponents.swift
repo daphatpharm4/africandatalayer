@@ -4,6 +4,26 @@ import SwiftUI
 // Shared web-parity primitives. Populated by Phase 0 tasks.
 enum ADLComponentsModule {}
 
+struct ADLStatusPill: View {
+    let text: String
+    let status: ADLOperationalStatus
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: status.systemImage)
+                .accessibilityHidden(true)
+            Text(text)
+        }
+        .font(ADLFont.inter(12, .semibold))
+        .foregroundStyle(status.tone.foreground)
+        .padding(.horizontal, 12)
+        .frame(minHeight: 44)
+        .background(status.tone.background)
+        .clipShape(Capsule())
+        .accessibilityElement(children: .combine)
+    }
+}
+
 // MARK: - Task 0.1: ADLScreenHeader
 
 struct ADLScreenHeader<Trailing: View>: View {

@@ -43,6 +43,8 @@ final class PendingWorkViewModel: ObservableObject {
     @Published private(set) var isExporting = false
     @Published private(set) var isRetrying = false
     @Published private(set) var exportText: String?
+    @Published private(set) var errorRecords: [LedgerRecord] = []
+    @Published private(set) var errorHistoryMessage: String?
 
     let language: ConsoleLanguage
 
@@ -91,6 +93,22 @@ final class PendingWorkViewModel: ObservableObject {
             }
         } catch {
             viewState = .failed(String(describing: error))
+        }
+    }
+
+    func loadErrorHistory(limit: Int = 100) async {
+        errorHistoryMessage = nil
+        do {
+            errorRecords = try await ledger.errorHistory(
+                ownerUserID: ownerUserID,
+                organizationID: organizationID,
+                limit: limit
+            )
+        } catch {
+            errorHistoryMessage = language.t(
+                "Could not load sync error history.",
+                "Impossible de charger l’historique des erreurs de synchronisation."
+            )
         }
     }
 

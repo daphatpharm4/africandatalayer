@@ -33,6 +33,12 @@ public enum ConsoleScreen: String, Codable, CaseIterable, Sendable, Equatable {
     /// `canAccessConsoleScreen`/`ConsoleNavigation` nav-gating pattern as
     /// `.map` above.
     case analytics = "ANALYTICS"
+    /// Platform-level operations backed by `api/privacy`. This is distinct
+    /// from organization manager tools and is gated by the authenticated
+    /// session's ADL-admin flag.
+    case admin = "ADMIN"
+    case missions = "MISSIONS"
+    case leaderboard = "LEADERBOARD"
 }
 
 /// Mirrors the `ConsoleRoute` interface in `lib/client/consoleState.ts`.

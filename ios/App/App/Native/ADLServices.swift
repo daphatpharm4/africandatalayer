@@ -1,6 +1,7 @@
 import Combine
 import CoreLocation
 import Foundation
+import Network
 import SwiftUI
 import UIKit
 
@@ -22,6 +23,7 @@ final class AppState: ObservableObject {
     @Published var drafts: [ContributionDraft] = []
     @Published var queueSnapshot = QueueSnapshot.empty
     @Published var lastSyncMessage = ""
+    @Published private(set) var isOffline = false
     @Published var authError: String?
     @Published var isSigningIn = false
     @Published var mustChangePassword = false
@@ -148,6 +150,8 @@ final class AppState: ObservableObject {
     private let rewardsService: RewardsService = LocalRewardsService()
     let apiClient = ADLAPIClient()
     private var loadedPointScope: String?
+    private let connectivityMonitor = NWPathMonitor()
+    private let connectivityQueue = DispatchQueue(label: "com.africandatalayer.connectivity")
 
     /// Spendable balance = server-canonical XP minus locally-recorded redemptions.
     var spendableXP: Int { max(0, serverXP - spentXP) }
@@ -161,6 +165,16 @@ final class AppState: ObservableObject {
         vouchers = rewardsService.loadVouchers()
         refreshQueueSnapshot()
         refreshGamification()
+        connectivityMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                self?.isOffline = path.status != .satisfied
+            }
+        }
+        connectivityMonitor.start(queue: connectivityQueue)
+    }
+
+    deinit {
+        connectivityMonitor.cancel()
     }
 
     func loadProfile(force: Bool = false) async {

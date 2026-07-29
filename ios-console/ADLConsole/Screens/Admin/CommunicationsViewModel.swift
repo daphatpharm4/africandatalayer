@@ -68,6 +68,7 @@ final class CommunicationsViewModel: ObservableObject {
     @Published var selectedTemplate: EmailTemplate?
     @Published var subject: String = ""
     @Published var messageBody: String = ""
+    @Published var messageHTMLBody: String = ""
 
     @Published var audienceRoles: Set<String> = []
     @Published var audienceTrustTiers: Set<String> = []
@@ -200,6 +201,7 @@ final class CommunicationsViewModel: ObservableObject {
         selectedTemplate = nil
         subject = ""
         messageBody = ""
+        messageHTMLBody = ""
         audienceRoles = []
         audienceTrustTiers = []
         requireEmailOptIn = true
@@ -218,6 +220,7 @@ final class CommunicationsViewModel: ObservableObject {
         selectedTemplate = template
         subject = language == .fr ? template.subjectFr : template.subjectEn
         messageBody = language == .fr ? template.textFr : template.textEn
+        messageHTMLBody = language == .fr ? template.htmlFr : template.htmlEn
     }
 
     func clearSelectedTemplate() {
@@ -287,7 +290,9 @@ final class CommunicationsViewModel: ObservableObject {
                 let trimmedBody = messageBody.trimmingCharacters(in: .whitespacesAndNewlines)
                 let created = try await apiClient.createEmailCampaign(
                     subject: trimmedSubject,
-                    htmlBody: trimmedBody,
+                    htmlBody: messageHTMLBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        ? trimmedBody
+                        : messageHTMLBody,
                     textBody: trimmedBody,
                     language: language.rawValue,
                     recipientMode: "audience",

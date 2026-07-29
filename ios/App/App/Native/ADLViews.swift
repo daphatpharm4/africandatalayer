@@ -1152,13 +1152,18 @@ struct ADLSyncBar: View {
     @EnvironmentObject private var appState: AppState
 
     var body: some View {
+        let status: ADLOperationalStatus = appState.queueSnapshot.failed > 0
+            ? .error
+            : appState.isOffline && appState.queueSnapshot.queued > 0
+                ? .offline
+                : appState.isSyncingQueue
+                    ? .syncing
+                    : appState.queueSnapshot.queued > 0 ? .warning : .success
         HStack(spacing: 8) {
-            Image(systemName: "checkmark.seal.fill")
-                .font(.system(size: 14))
-                .foregroundColor(ADLColor.forest)
-            Text(message.isEmpty ? appState.t("All synced. Ready to capture.", "Tout synchronisé. Prêt à capturer.") : message)
-                .font(ADLFont.inter(12, .semibold))
-                .foregroundColor(ADLColor.forestDark)
+            ADLStatusPill(
+                text: message.isEmpty ? appState.t("All synced. Ready to capture.", "Tout synchronisé. Prêt à capturer.") : message,
+                status: status
+            )
             Spacer()
             Image(systemName: "arrow.clockwise")
                 .font(.system(size: 13, weight: .semibold))
@@ -1168,6 +1173,7 @@ struct ADLSyncBar: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity)
         .background(ADLColor.forestWash)
+        .accessibilityIdentifier("native-sync-status")
     }
 }
 
@@ -2229,6 +2235,7 @@ struct FieldMapActionBar: View {
                     }
                     Spacer()
                 }
+                .accessibilityIdentifier("native-map-selection-state")
 
                 Button {
                     onCaptureSelectedPoint(selectedPoint)
@@ -2236,6 +2243,7 @@ struct FieldMapActionBar: View {
                     Label(appState.t("Capture Selected Point", "Capturer le point sélectionné"), systemImage: "camera.fill")
                 }
                 .buttonStyle(PrimaryButtonStyle())
+                .accessibilityIdentifier("native-map-primary-action")
             } else {
                 Button {
                     onCaptureMapCenter()
@@ -3459,6 +3467,22 @@ struct ContributionView: View {
                     image: capturedImage,
                     payload: payload
                 )
+            } label: {
+                Label(appState.t("Save Draft", "Enregistrer le brouillon"), systemImage: "tray")
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .accessibilityIdentifier("native-save-draft")
+
+            Button {
+                guard let payload = buildPayload() else { return }
+                appState.enqueueContribution(
+                    title: displayTitle,
+                    notes: notes,
+                    category: category,
+                    location: locationProvider.lastLocation,
+                    image: capturedImage,
+                    payload: payload
+                )
                 resetFormAfterSubmit()
             } label: {
                 HStack(spacing: 8) {
@@ -3467,6 +3491,7 @@ struct ContributionView: View {
                 }
             }
             .buttonStyle(PrimaryButtonStyle())
+            .accessibilityIdentifier("native-capture-primary-action")
         }
     }
 

@@ -6,6 +6,7 @@ import Foundation
 enum PlatformHTTPMethod: String {
     case get = "GET"
     case post = "POST"
+    case patch = "PATCH"
 }
 
 /// Async Swift port of `lib/client/platformApi.ts` — the typed client for the
@@ -644,8 +645,9 @@ public struct PlatformAPIClient: Sendable {
     /// `GET api/leaderboard` — public ranking endpoint, bare-array response,
     /// no `view` param and no query params at all (see
     /// `api/leaderboard/index.ts`).
-    public func leaderboard() async throws -> [LeaderboardEntry] {
-        try await sendAnalyticsRequest(path: "api/leaderboard", method: .get)
+    public func leaderboard(organizationId: String? = nil) async throws -> [LeaderboardEntry] {
+        let queryItems = organizationId.map { [URLQueryItem(name: "organizationId", value: $0)] } ?? []
+        return try await sendAnalyticsRequest(path: "api/leaderboard", method: .get, queryItems: queryItems)
     }
 
     /// `POST api/ai/search?view=analytics-query` — natural-language
@@ -866,5 +868,108 @@ public struct PlatformAPIClient: Sendable {
             bodyData: bodyData
         )
         return response.ok
+    }
+
+    // MARK: - Admin operations: IP/privacy lead queue
+
+    /// Platform-admin-only IP report queue. The server is the authorization
+    /// authority; the iOS shell additionally hides this surface from
+    /// organization-only roles so they never land on a guaranteed 403.
+    public func listIpReports() async throws -> [IpReport] {
+        try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .get,
+            queryItems: [URLQueryItem(name: "view", value: "ip-reports")]
+        )
+    }
+
+    public func updateIpReport(
+        id: String,
+        status: String,
+        resolutionNotes: String?
+    ) async throws -> IpReport {
+        struct Body: Encodable {
+            var id: String
+            var status: String
+            var resolutionNotes: String?
+        }
+        let bodyData = try JSONEncoder().encode(
+            Body(id: id, status: status, resolutionNotes: resolutionNotes)
+        )
+        return try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .patch,
+            queryItems: [URLQueryItem(name: "view", value: "ip-report")],
+            bodyData: bodyData
+        )
+    }
+
+    // MARK: - Missions & gamification
+
+    private struct MissionsEnvelope: Decodable { var missions: [PlatformMission] }
+    private struct MissionEnvelope: Decodable { var mission: PlatformMission }
+    private struct MissionAssignEnvelope: Decodable {
+        var assigned: Bool
+        var missionId: String
+        var targetUserIds: [String]
+    }
+
+    public func listMissions(organizationId: String) async throws -> [PlatformMission] {
+        let envelope: MissionsEnvelope = try await callPlatform(
+            "mission_list",
+            method: .get,
+            params: ["organizationId": organizationId]
+        )
+        return envelope.missions
+    }
+
+    public func createMission(input: PlatformMissionCreateInput) async throws -> PlatformMission {
+        struct CreateBody: Encodable {
+            var organizationId: String
+            var titleEn: String
+            var titleFr: String
+            var quota: Int
+            var deadline: String
+            var rewardXp: Int
+            var projectId: String?
+            var category: String?
+            var notesEn: String?
+            var notesFr: String?
+        }
+        let body = CreateBody(
+            organizationId: input.organizationId,
+            titleEn: input.titleEn,
+            titleFr: input.titleFr,
+            quota: input.quota,
+            deadline: input.deadline,
+            rewardXp: input.rewardXp,
+            projectId: input.projectId,
+            category: input.category,
+            notesEn: input.notesEn,
+            notesFr: input.notesFr
+        )
+        let envelope: MissionEnvelope = try await callPlatform(
+            "mission_create",
+            method: .post,
+            bodyData: try JSONEncoder().encode(body)
+        )
+        if !input.targetUserIds.isEmpty {
+            _ = try await assignMission(id: envelope.mission.id, targetUserIds: input.targetUserIds)
+        }
+        return envelope.mission
+    }
+
+    @discardableResult
+    public func assignMission(id: String, targetUserIds: [String]) async throws -> Bool {
+        struct Body: Encodable {
+            var missionId: String
+            var targetUserIds: [String]
+        }
+        let envelope: MissionAssignEnvelope = try await callPlatform(
+            "mission_assign",
+            method: .post,
+            bodyData: try JSONEncoder().encode(Body(missionId: id, targetUserIds: targetUserIds))
+        )
+        return envelope.assigned
     }
 }

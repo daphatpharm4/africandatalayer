@@ -332,6 +332,7 @@ final class CommunicationsViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.subject, "Bienvenue !")
         XCTAssertEqual(viewModel.messageBody, "Salut à vous")
+        XCTAssertEqual(viewModel.messageHTMLBody, "<p>Salut</p>")
         XCTAssertEqual(viewModel.selectedTemplate?.id, "t1")
     }
 }

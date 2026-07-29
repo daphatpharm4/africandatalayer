@@ -56,10 +56,18 @@ struct ConsoleShellView: View {
                     .foregroundStyle(ADLConsoleColor.ink)
                     .lineLimit(1)
                 if let role = appState.role {
-                    Text(roleLabel(role).uppercased())
-                        .font(ADLConsoleFont.microLabel)
-                        .tracking(0.6)
-                        .foregroundStyle(ADLConsoleColor.inkMuted)
+                    HStack(spacing: 6) {
+                        Text(roleLabel(role).uppercased())
+                            .font(ADLConsoleFont.microLabel)
+                            .tracking(0.6)
+                            .foregroundStyle(ADLConsoleColor.inkMuted)
+                        if appState.isAdlAdmin {
+                            Label(appState.language.t("ADL ADMIN", "ADMIN ADL"), systemImage: "checkmark.shield.fill")
+                                .font(ADLConsoleFont.microLabel)
+                                .foregroundStyle(ADLConsoleColor.forestDark)
+                                .accessibilityLabel(appState.language.t("ADL platform administrator", "Administrateur de la plateforme ADL"))
+                        }
+                    }
                 }
             }
             Spacer(minLength: 8)
@@ -316,6 +324,12 @@ struct ConsoleShellView: View {
             projectsContent
         case .analytics:
             analyticsContent
+        case .admin:
+            adminContent
+        case .missions:
+            missionsContent
+        case .leaderboard:
+            leaderboardContent
         case .members:
             membersContent
         case .settings:
@@ -354,6 +368,37 @@ struct ConsoleShellView: View {
             AnalyticsHubView(organizationId: organizationId, role: role)
         } else {
             PlaceholderScreenView(screen: .analytics)
+        }
+    }
+
+    @ViewBuilder
+    private var adminContent: some View {
+        if appState.isAdlAdmin {
+            AdminOperationsView(
+                communicationsViewModel: appState.makeCommunicationsViewModel(),
+                leadQueueViewModel: appState.makeLeadQueueViewModel(),
+                pendingWorkViewModel: appState.makePendingWorkViewModel()
+            )
+        } else {
+            PlaceholderScreenView(screen: .admin)
+        }
+    }
+
+    @ViewBuilder
+    private var missionsContent: some View {
+        if let organizationId = appState.organization?.id {
+            MissionsView(viewModel: appState.makeMissionsViewModel(organizationId: organizationId))
+        } else {
+            PlaceholderScreenView(screen: .missions)
+        }
+    }
+
+    @ViewBuilder
+    private var leaderboardContent: some View {
+        if let organizationId = appState.organization?.id {
+            LeaderboardView(viewModel: appState.makeLeaderboardViewModel(organizationId: organizationId))
+        } else {
+            PlaceholderScreenView(screen: .leaderboard)
         }
     }
 

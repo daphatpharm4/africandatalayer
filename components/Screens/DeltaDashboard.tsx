@@ -1089,6 +1089,7 @@ const DeltaDashboard: React.FC<Props> = ({ onBack, language }) => {
                         return (
                           <div
                             key={cell.cellId}
+                            data-testid={cell.cellId === focusedSpatialCell?.cellId ? 'dashboard-map-drilldown' : undefined}
                             onClick={() => setFocusedCellId(cell.cellId)}
                             className={`rounded-[28px] border bg-white p-4 shadow-sm space-y-3 cursor-pointer transition-colors ${
                               cell.cellId === focusedSpatialCell?.cellId

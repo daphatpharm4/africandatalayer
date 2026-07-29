@@ -261,6 +261,9 @@ const HomeMap: React.FC<Props> = ({
 
   return (
     <div data-testid="home-map-view" className="flex-1 bg-navy-light relative overflow-hidden z-0 min-h-0">
+      <p data-testid="map-selection-state" className="sr-only" role="status">
+        {t('Select a map point to review it before capture.', 'Sélectionnez un point sur la carte avant la capture.')}
+      </p>
       <MapContainer
         key={`map-${companyMode ? 'company' : mapScope}`}
         center={mapCenter}
@@ -366,6 +369,7 @@ const HomeMap: React.FC<Props> = ({
                       <p className="text-xs leading-4 text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                     )}
                     <button
+                      aria-selected="false"
                       className="mt-2 min-h-12 w-full rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white"
                       onClick={() => onSelectPoint(singlePoint)}
                     >
@@ -380,6 +384,7 @@ const HomeMap: React.FC<Props> = ({
                     <div className="space-y-1.5">
                       {group.points.map((point) => (
                         <button
+                          aria-selected="false"
                           key={point.id}
                           className="w-full min-h-[44px] rounded-lg border border-gray-100 px-3 py-2 text-left hover:bg-gray-50"
                           onClick={() => onSelectPoint(point)}

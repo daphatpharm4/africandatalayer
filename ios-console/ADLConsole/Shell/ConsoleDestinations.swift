@@ -30,10 +30,13 @@ enum ConsoleNavigation {
     static let allDestinations: [ConsoleDestination] = [
         ConsoleDestination(screen: .map, titleEN: "Map", titleFR: "Carte"),
         ConsoleDestination(screen: .overview, titleEN: "Workspace", titleFR: "Espace de travail"),
+        ConsoleDestination(screen: .missions, titleEN: "Missions", titleFR: "Missions"),
+        ConsoleDestination(screen: .leaderboard, titleEN: "Leaderboard", titleFR: "Classement"),
         ConsoleDestination(screen: .data, titleEN: "Company data", titleFR: "Données entreprise"),
         ConsoleDestination(screen: .review, titleEN: "Review queue", titleFR: "File de révision"),
         ConsoleDestination(screen: .projects, titleEN: "Projects", titleFR: "Projets"),
         ConsoleDestination(screen: .analytics, titleEN: "Analytics", titleFR: "Analytique"),
+        ConsoleDestination(screen: .admin, titleEN: "Admin", titleFR: "Admin"),
         ConsoleDestination(screen: .members, titleEN: "Members", titleFR: "Membres"),
         ConsoleDestination(screen: .settings, titleEN: "Settings", titleFR: "Paramètres"),
     ]

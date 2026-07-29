@@ -1,4 +1,5 @@
 import React from 'react';
+import StatusBadge from '../shared/StatusBadge';
 
 interface Props {
   value: number;
@@ -26,9 +27,12 @@ const TrustGauge: React.FC<Props> = ({
 
   const maxForBar = thresholds.yellow * 2;
   const pct = Math.min(100, Math.max(5, (value / maxForBar) * 100));
+  const status = isGreen ? 'verified' : isYellow ? 'warning' : 'flagged';
+  const statusLabel = isGreen ? 'Verified' : isYellow ? 'Monitoring' : 'Needs attention';
 
   return (
-    <div className={`rounded-2xl ${bgColor} p-4`}>
+    <div data-testid="client-trust-overview" className={`rounded-2xl ${bgColor} p-4`}>
+      <StatusBadge status={status} label={statusLabel} />
       <span className="micro-label text-gray-500 block">{label}</span>
       <div className={`mt-1 text-xl font-extrabold ${textColor}`}>
         {value} <span className="text-xs font-bold">{unit}</span>

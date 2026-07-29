@@ -51,11 +51,15 @@ final class ConsoleAccessTests: XCTestCase {
             return role == .manager || role == .owner
         case .settings:
             return role == .owner
-        case .onboarding:
+        case .onboarding, .admin:
             return isAdlAdmin
         case .loading, .authRequired:
             return false
         case .analytics:
+            return role != .viewer
+        case .missions:
+            return role == .collector || role == .manager || role == .owner
+        case .leaderboard:
             return role != .viewer
         }
     }

@@ -102,12 +102,19 @@ struct CampaignComposerView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 ADLConsoleMicroLabel(text: viewModel.channel == .email ? t("Body", "Corps") : t("Message", "Message"))
-                TextEditor(text: $viewModel.messageBody)
-                    .frame(minHeight: 160)
-                    .padding(10)
-                    .background(ADLConsoleColor.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
-                    .adlShadowBorder()
+                if viewModel.channel == .email {
+                    RichTextEmailEditor(
+                        plainText: $viewModel.messageBody,
+                        htmlText: $viewModel.messageHTMLBody
+                    )
+                } else {
+                    TextEditor(text: $viewModel.messageBody)
+                        .frame(minHeight: 160)
+                        .padding(10)
+                        .background(ADLConsoleColor.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+                        .adlShadowBorder()
+                }
                 if viewModel.channel == .sms {
                     Text(t("Plain text only — 160 characters per SMS segment.", "Texte brut uniquement — 160 caractères par segment SMS."))
                         .font(ADLConsoleFont.caption)
