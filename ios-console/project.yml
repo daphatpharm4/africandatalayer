@@ -53,19 +53,6 @@ targets:
       - package: ConsoleCore
         product: ConsolePersistence
 
-  ADLConsoleUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    deploymentTarget: "17.0"
-    sources:
-      - path: ADLConsoleUITests
-    settings:
-      base:
-        SWIFT_VERSION: "6.0"
-        GENERATE_INFOPLIST_FILE: true
-    dependencies:
-      - target: ADLConsole
-
   ADLConsoleTests:
     type: bundle.unit-test
     platform: iOS
@@ -90,6 +77,19 @@ targets:
         product: ConsoleState
       - package: ConsoleCore
         product: ConsoleForms
+
+  ADLConsoleUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ADLConsoleUITests
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: true
+    dependencies:
+      - target: ADLConsole
 
 schemes:
   ADLConsole-Debug:

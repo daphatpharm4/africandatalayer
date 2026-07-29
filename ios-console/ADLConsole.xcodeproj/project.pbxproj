@@ -898,8 +898,8 @@
 			projectRoot = "";
 			targets = (
 				3BD52F0E32332B245942869F /* ADLConsole */,
-				0D1C6CCBB7BFF4F265639828 /* ADLConsoleUITests */,
 				21FE20ED563FA951AEC363E1 /* ADLConsoleTests */,
+				0D1C6CCBB7BFF4F265639828 /* ADLConsoleUITests */,
 			);
 		};
 /* End PBXProject section */
