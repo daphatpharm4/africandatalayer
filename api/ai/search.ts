@@ -113,12 +113,6 @@ export function createAiSearchHandler(
     return value instanceof Response;
   }
 
-  function isClientOrAdmin(auth: AuthUser): boolean {
-    const token = auth.token as { isAdmin?: unknown; role?: unknown } | undefined;
-    const role = typeof token?.role === "string" ? token.role : auth.role;
-    return role === "client" || role === "admin" || token?.isAdmin === true;
-  }
-
   function isAdmin(auth: AuthUser): boolean {
     const token = auth.token as { isAdmin?: unknown; role?: unknown } | undefined;
     return auth.role === "admin" || token?.isAdmin === true || token?.role === "admin";
@@ -258,7 +252,14 @@ export function createAiSearchHandler(
   }
 
   async function handleAnalyticsAssistant(request: Request, auth: AuthUser, reportDraft: boolean): Promise<Response> {
-    if (!isClientOrAdmin(auth)) return errorResponse("Forbidden", 403);
+    // Aggregate analytics facts are ADL-wide. Company identities must use a
+    // future organization-scoped assistant rather than silently crossing the
+    // tenant boundary.
+    if (!isAdmin(auth)) {
+      return errorResponse("ADL-wide analytics is restricted to ADL administrators", 403, {
+        code: "adl_admin_required",
+      });
+    }
     const rawBody = await readObjectBody(request);
     if (isResponse(rawBody)) return rawBody;
     const validation = aiAnalyticsQueryRequestSchema.safeParse(rawBody);

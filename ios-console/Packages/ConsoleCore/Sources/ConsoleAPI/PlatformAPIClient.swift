@@ -563,7 +563,22 @@ public struct PlatformAPIClient: Sendable {
         }
     }
 
-    // MARK: - Analytics (api/analytics, api/leaderboard, api/ai/search — NOT api/user)
+    // MARK: - Organization analytics
+
+    /// Tenant-scoped analytics served by `platform_analytics`. The backend
+    /// validates membership before running organization-filtered queries.
+    public func organizationAnalytics<Response: Decodable>(
+        organizationId: String,
+        section: String,
+        query: [String: String] = [:]
+    ) async throws -> Response {
+        var params = query
+        params["organizationId"] = organizationId
+        params["section"] = section
+        return try await callPlatform("analytics", method: .get, params: params)
+    }
+
+    // MARK: - ADL analytics (admin-only)
 
     /// Shared credentialed-request core for the analytics surface. Mirrors
     /// `callPlatform`'s `URLComponents` construction, credentialed
@@ -642,9 +657,8 @@ public struct PlatformAPIClient: Sendable {
         return try await sendAnalyticsRequest(path: "api/analytics", method: .get, queryItems: queryItems, decoder: decoder)
     }
 
-    /// `GET api/leaderboard` — public ranking endpoint, bare-array response,
-    /// no `view` param and no query params at all (see
-    /// `api/leaderboard/index.ts`).
+    /// `GET api/leaderboard`. Company calls must include `organizationId`;
+    /// the server rejects company identities that fall through to ADL scope.
     public func leaderboard(organizationId: String? = nil) async throws -> [LeaderboardEntry] {
         let queryItems = organizationId.map { [URLQueryItem(name: "organizationId", value: $0)] } ?? []
         return try await sendAnalyticsRequest(path: "api/leaderboard", method: .get, queryItems: queryItems)

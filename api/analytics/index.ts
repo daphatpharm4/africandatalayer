@@ -10,6 +10,10 @@ import { drainPendingSmsCampaigns } from "../../lib/server/sms/campaigns.js";
 
 export const maxDuration = 60;
 
+export function canAccessAdlWideAnalytics(user: { role: string } | null): boolean {
+  return user?.role === "admin";
+}
+
 const VALID_METRICS = new Set([
   "total_points",
   "completion_rate",
@@ -442,6 +446,11 @@ export async function GET(request: Request): Promise<Response> {
   // All other views require authenticated user
   const user = await requireUser(request);
   if (!user) return errorResponse("Unauthorized", 401);
+  if (!canAccessAdlWideAnalytics(user)) {
+    return errorResponse("ADL-wide analytics is restricted to ADL administrators", 403, {
+      code: "adl_admin_required",
+    });
+  }
 
   switch (view) {
     case "snapshots":

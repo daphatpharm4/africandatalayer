@@ -25,9 +25,11 @@ final class AnalyticsRepositoryTests: XCTestCase {
         let snapshot = try await repository.deltaSnapshot(organizationId: "org_1")
 
         let request = try XCTUnwrap(transport.lastRequest)
-        XCTAssertEqual(request.url?.path, "/api/analytics")
+        XCTAssertEqual(request.url?.path, "/api/user")
         XCTAssertEqual(request.httpMethod, "GET")
-        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "kpi_summary")
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "platform_analytics")
+        XCTAssertEqual(JSONFixture.queryParams(request)["organizationId"], "org_1")
+        XCTAssertEqual(JSONFixture.queryParams(request)["section"], "snapshot")
         XCTAssertEqual(snapshot.weeklyActiveContributors, 15)
         XCTAssertEqual(snapshot.verification.verificationRatePct, 60.0)
     }
@@ -37,10 +39,10 @@ final class AnalyticsRepositoryTests: XCTestCase {
     func testWeeklyTrendsSendsVerticalMetricWeeksAndUnwrapsDataEnvelope() async throws {
         let transport = MockPlatformTransport()
         transport.responseData = JSONFixture.data("""
-        {"data": [
+        [
           {"date": "2026-07-13", "value": 80, "movingAvg": null},
           {"date": "2026-07-20", "value": 100, "movingAvg": 90.0}
-        ]}
+        ]
         """)
         let repository = AnalyticsRepository(apiClient: PlatformAPIClient(baseURL: baseURL, transport: transport))
 
@@ -48,7 +50,9 @@ final class AnalyticsRepositoryTests: XCTestCase {
 
         let request = try XCTUnwrap(transport.lastRequest)
         let query = JSONFixture.queryParams(request)
-        XCTAssertEqual(query["view"], "trends")
+        XCTAssertEqual(query["view"], "platform_analytics")
+        XCTAssertEqual(query["organizationId"], "org_1")
+        XCTAssertEqual(query["section"], "trends")
         XCTAssertEqual(query["vertical"], "pharmacy")
         XCTAssertEqual(query["metric"], "total_points")
         XCTAssertEqual(query["weeks"], "8")
@@ -62,15 +66,10 @@ final class AnalyticsRepositoryTests: XCTestCase {
 
     func testCategoryBreakdownDerivesLatestRowPerVerticalAndComputesPercentage() async throws {
         let transport = MockPlatformTransport()
-        // Ordered snapshot_date DESC, vertical_id — as the real server orders it.
-        // pharmacy appears twice (newer first); fuel_station once. The stale
-        // pharmacy row (total_points: 50) must be ignored in favor of the
-        // latest (total_points: 300).
         transport.responseData = JSONFixture.data("""
         [
-          {"id": "s1", "snapshot_date": "2026-07-20", "vertical_id": "pharmacy", "total_points": 300, "completed_points": 200, "completion_rate": 0.66, "new_count": 5, "removed_count": 1, "changed_count": 2, "unchanged_count": 292, "avg_price": null, "week_over_week_growth": null, "moving_avg_4w": null, "z_score_total_points": null, "z_score_new_count": null, "z_score_removed_count": null, "anomaly_flags": [], "is_baseline": false},
-          {"id": "s2", "snapshot_date": "2026-07-20", "vertical_id": "fuel_station", "total_points": 100, "completed_points": 80, "completion_rate": 0.8, "new_count": 1, "removed_count": 0, "changed_count": 0, "unchanged_count": 99, "avg_price": null, "week_over_week_growth": null, "moving_avg_4w": null, "z_score_total_points": null, "z_score_new_count": null, "z_score_removed_count": null, "anomaly_flags": [], "is_baseline": false},
-          {"id": "s3", "snapshot_date": "2026-07-13", "vertical_id": "pharmacy", "total_points": 50, "completed_points": 40, "completion_rate": 0.8, "new_count": 0, "removed_count": 0, "changed_count": 0, "unchanged_count": 50, "avg_price": null, "week_over_week_growth": null, "moving_avg_4w": null, "z_score_total_points": null, "z_score_new_count": null, "z_score_removed_count": null, "anomaly_flags": [], "is_baseline": true}
+          {"category": "pharmacy", "count": 300, "percentage": 75},
+          {"category": "fuel_station", "count": 100, "percentage": 25}
         ]
         """)
         let repository = AnalyticsRepository(apiClient: PlatformAPIClient(baseURL: baseURL, transport: transport))
@@ -78,11 +77,13 @@ final class AnalyticsRepositoryTests: XCTestCase {
         let breakdown = try await repository.categoryBreakdown(organizationId: "org_1")
 
         let request = try XCTUnwrap(transport.lastRequest)
-        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "snapshots")
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "platform_analytics")
+        XCTAssertEqual(JSONFixture.queryParams(request)["organizationId"], "org_1")
+        XCTAssertEqual(JSONFixture.queryParams(request)["section"], "categories")
 
         XCTAssertEqual(breakdown.count, 2)
         let pharmacy = try XCTUnwrap(breakdown.first { $0.category == "pharmacy" })
-        XCTAssertEqual(pharmacy.count, 300, "must use the latest (2026-07-20) row, not the stale 50-point row")
+        XCTAssertEqual(pharmacy.count, 300)
         XCTAssertEqual(pharmacy.percentage, 75.0, accuracy: 0.001)
         let fuel = try XCTUnwrap(breakdown.first { $0.category == "fuel_station" })
         XCTAssertEqual(fuel.count, 100)
@@ -95,11 +96,7 @@ final class AnalyticsRepositoryTests: XCTestCase {
         let transport = MockPlatformTransport()
         transport.responseData = JSONFixture.data("""
         [
-          {
-            "rank": 1, "userId": "em***", "name": "Emmanuel T.", "xp": 3200, "contributions": 44,
-            "lastContributionAt": "2026-07-23T10:00:00.000Z", "lastLocation": "GPS 4.05, 9.71",
-            "averageQualityScore": 87, "rankingScore": 3828, "verticalBreakdown": {"pharmacy": 30}
-          }
+          {"userId": "em***", "displayName": "Emmanuel T.", "submissions": 44, "approvalRate": 0.87, "flags": 0, "trustScore": 87}
         ]
         """)
         let repository = AnalyticsRepository(apiClient: PlatformAPIClient(baseURL: baseURL, transport: transport))
@@ -107,8 +104,10 @@ final class AnalyticsRepositoryTests: XCTestCase {
         let performance = try await repository.agentPerformance(organizationId: "org_1")
 
         let request = try XCTUnwrap(transport.lastRequest)
-        XCTAssertEqual(request.url?.path, "/api/leaderboard")
-        XCTAssertNil(JSONFixture.queryParams(request)["view"])
+        XCTAssertEqual(request.url?.path, "/api/user")
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "platform_analytics")
+        XCTAssertEqual(JSONFixture.queryParams(request)["organizationId"], "org_1")
+        XCTAssertEqual(JSONFixture.queryParams(request)["section"], "agents")
 
         XCTAssertEqual(performance.count, 1)
         XCTAssertEqual(performance[0].userId, "em***")
@@ -123,10 +122,7 @@ final class AnalyticsRepositoryTests: XCTestCase {
     func testSpatialIntelligenceSendsVerticalAndUnwrapsCellsEnvelope() async throws {
         let transport = MockPlatformTransport()
         transport.responseData = JSONFixture.data("""
-        {
-          "snapshotDate": "2026-07-20", "verticalId": "pharmacy", "totalCells": 1, "totalPoints": 24,
-          "narrative": "One standout cell.",
-          "cells": [
+        [
             {
               "cellId": "9q8yy", "verticalId": "pharmacy", "snapshotDate": "2026-07-20",
               "center": {"latitude": 4.05, "longitude": 9.71},
@@ -137,8 +133,7 @@ final class AnalyticsRepositoryTests: XCTestCase {
               "coverageGapScore": 12.1, "changeSignalScore": 40.0, "drivers": [], "caveats": [],
               "summary": "9q8yy stands out."
             }
-          ]
-        }
+        ]
         """)
         let repository = AnalyticsRepository(apiClient: PlatformAPIClient(baseURL: baseURL, transport: transport))
 
@@ -146,7 +141,9 @@ final class AnalyticsRepositoryTests: XCTestCase {
 
         let request = try XCTUnwrap(transport.lastRequest)
         let query = JSONFixture.queryParams(request)
-        XCTAssertEqual(query["view"], "spatial_intelligence")
+        XCTAssertEqual(query["view"], "platform_analytics")
+        XCTAssertEqual(query["organizationId"], "org_1")
+        XCTAssertEqual(query["section"], "spatial")
         XCTAssertEqual(query["vertical"], "pharmacy")
 
         XCTAssertEqual(cells.count, 1)
@@ -159,10 +156,7 @@ final class AnalyticsRepositoryTests: XCTestCase {
     func testHeatMapDataDerivesFromSpatialIntelligenceCells() async throws {
         let transport = MockPlatformTransport()
         transport.responseData = JSONFixture.data("""
-        {
-          "snapshotDate": "2026-07-20", "verticalId": "pharmacy", "totalCells": 1, "totalPoints": 24,
-          "narrative": "",
-          "cells": [
+        [
             {
               "cellId": "9q8yy", "verticalId": "pharmacy", "snapshotDate": "2026-07-20",
               "center": {"latitude": 4.05, "longitude": 9.71},
@@ -173,8 +167,7 @@ final class AnalyticsRepositoryTests: XCTestCase {
               "coverageGapScore": 12.1, "changeSignalScore": 40.0, "drivers": [], "caveats": [],
               "summary": ""
             }
-          ]
-        }
+        ]
         """)
         let repository = AnalyticsRepository(apiClient: PlatformAPIClient(baseURL: baseURL, transport: transport))
 
@@ -193,8 +186,8 @@ final class AnalyticsRepositoryTests: XCTestCase {
         let transport = MockPlatformTransport()
         transport.responseData = JSONFixture.data("""
         [
-          {"snapshot_date": "2026-07-20", "vertical_id": "pharmacy", "total_points": 300, "anomaly_flags": [{"metric": "total_points", "zScore": 3.2, "direction": "increase"}]},
-          {"snapshot_date": "2026-06-01", "vertical_id": "fuel_station", "total_points": 90, "anomaly_flags": [{"metric": "removed_count", "zScore": -2.5, "direction": "decrease"}]}
+          {"snapshotDate": "2026-07-20", "verticalId": "pharmacy", "totalPoints": 300, "anomalyFlags": [{"metric": "total_points", "zScore": 3.2, "direction": "increase"}]},
+          {"snapshotDate": "2026-06-01", "verticalId": "fuel_station", "totalPoints": 90, "anomalyFlags": [{"metric": "removed_count", "zScore": -2.5, "direction": "decrease"}]}
         ]
         """)
         let repository = AnalyticsRepository(apiClient: PlatformAPIClient(baseURL: baseURL, transport: transport))
@@ -210,41 +203,28 @@ final class AnalyticsRepositoryTests: XCTestCase {
         let anomalies = try await repository.anomalies(organizationId: "org_1", since: since)
 
         let request = try XCTUnwrap(transport.lastRequest)
-        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "anomalies")
+        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "platform_analytics")
+        XCTAssertEqual(JSONFixture.queryParams(request)["organizationId"], "org_1")
+        XCTAssertEqual(JSONFixture.queryParams(request)["section"], "anomalies")
         XCTAssertNil(JSONFixture.queryParams(request)["since"], "the real endpoint takes no filter params; since is applied client-side")
 
         XCTAssertEqual(anomalies.count, 1)
         XCTAssertEqual(anomalies[0].verticalId, "pharmacy")
     }
 
-    // MARK: - aiQuery -> POST api/ai/search?view=analytics-query, body { question }
+    // MARK: - AI analytics fails closed until scoped facts exist
 
-    func testAiQuerySendsQuestionBodyToAnalyticsQueryView() async throws {
+    func testAiQueryDoesNotFallThroughToAdlWideAssistant() async throws {
         let transport = MockPlatformTransport()
-        transport.responseData = JSONFixture.data("""
-        {
-          "answer": "Pharmacy coverage grew 12% this week.",
-          "facts": [],
-          "caveats": [],
-          "suggestedNextValidations": [],
-          "confidence": 0.8,
-          "modelMetadata": {"provider": "google", "model": "gemini-1.5-flash", "modelVersion": null, "promptVersion": "analytics-query-v1", "confidence": 0.8}
-        }
-        """)
         let repository = AnalyticsRepository(apiClient: PlatformAPIClient(baseURL: baseURL, transport: transport))
 
-        let response = try await repository.aiQuery(organizationId: "org_1", query: "How is pharmacy coverage trending?")
-
-        let request = try XCTUnwrap(transport.lastRequest)
-        XCTAssertEqual(request.url?.path, "/api/ai/search")
-        XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(JSONFixture.queryParams(request)["view"], "analytics-query")
-        let body = try JSONFixture.bodyObject(request)
-        XCTAssertEqual(body["question"] as? String, "How is pharmacy coverage trending?")
-        XCTAssertNil(body["organizationId"], "organizationId is not part of the real request schema")
-
-        XCTAssertEqual(response.confidence, 0.8)
-        XCTAssertEqual(response.modelMetadata.provider, "google")
-        XCTAssertNil(response.modelMetadata.modelVersion)
+        do {
+            _ = try await repository.aiQuery(organizationId: "org_1", query: "How is pharmacy coverage trending?")
+            XCTFail("Expected tenant-scoped AI to fail closed")
+        } catch let error as PlatformAPIError {
+            XCTAssertEqual(error.status, 403)
+            XCTAssertEqual(error.code, "platform_analytics_ai_unavailable")
+        }
+        XCTAssertNil(transport.lastRequest)
     }
 }

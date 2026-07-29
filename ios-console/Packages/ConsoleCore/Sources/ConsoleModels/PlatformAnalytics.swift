@@ -55,9 +55,7 @@ public struct KpiReviewQueue: Codable, Equatable, Sendable {
     }
 }
 
-/// Real shape of `GET api/analytics?view=kpi_summary` (`handleKpiSummary` in
-/// `api/analytics/index.ts`). Platform-wide, not organization-scoped — the
-/// handler takes no query parameters at all.
+/// KPI summary shape used by both ADL admin and organization-scoped analytics.
 public struct DeltaSnapshot: Codable, Equatable, Sendable {
     public let generatedAt: String
     public let weeklyActiveContributors: Int
@@ -128,14 +126,7 @@ public struct CategoryBreakdown: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-// MARK: - AgentPerformance (derived — composed from `GET api/leaderboard`)
-//
-// DEVIATION: `GET api/leaderboard` (see `LeaderboardEntry` below) has no
-// approval-rate, flag-count, or trust-score fields — those live behind
-// admin-only endpoints out of scope for this task. `approvalRate` and
-// `trustScore` here are proxies derived from the public
-// `averageQualityScore`; `flags` is always `0` (unavailable). Callers should
-// not treat these as ground truth; see `AnalyticsRepository.agentPerformance`.
+// MARK: - AgentPerformance
 
 public struct AgentPerformance: Codable, Equatable, Sendable, Identifiable {
     public var id: String { userId }

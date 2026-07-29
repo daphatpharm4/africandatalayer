@@ -55,6 +55,7 @@ import * as adminStore from "./adminStore.js";
 import * as projectStore from "./projectStore.js";
 import * as recordStore from "./recordStore.js";
 import * as missionStore from "./missionStore.js";
+import * as analyticsStore from "./analyticsStore.js";
 import { writePlatformAudit, type PlatformAuditEventType } from "./audit.js";
 import { createInviteToken, hashInviteToken, INVITE_TTL_DAYS, sendInviteEmail } from "./invites.js";
 import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenancy.js";
@@ -131,6 +132,11 @@ export interface PlatformApiDeps {
   listMissionsForCollectorFn?: typeof missionStore.listMissionsForCollector;
   listMissionsForManagerFn?: typeof missionStore.listMissionsForManager;
   listMissionProgressFn?: typeof missionStore.listMissionProgress;
+  getOrganizationDeltaSnapshotFn?: typeof analyticsStore.getOrganizationDeltaSnapshot;
+  listOrganizationWeeklyTrendsFn?: typeof analyticsStore.listOrganizationWeeklyTrends;
+  listOrganizationCategoryBreakdownFn?: typeof analyticsStore.listOrganizationCategoryBreakdown;
+  listOrganizationAgentPerformanceFn?: typeof analyticsStore.listOrganizationAgentPerformance;
+  listOrganizationSpatialCellsFn?: typeof analyticsStore.listOrganizationSpatialCells;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -211,6 +217,16 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const listMissionsForCollectorFn = deps.listMissionsForCollectorFn ?? missionStore.listMissionsForCollector;
   const listMissionsForManagerFn = deps.listMissionsForManagerFn ?? missionStore.listMissionsForManager;
   const listMissionProgressFn = deps.listMissionProgressFn ?? missionStore.listMissionProgress;
+  const getOrganizationDeltaSnapshotFn =
+    deps.getOrganizationDeltaSnapshotFn ?? analyticsStore.getOrganizationDeltaSnapshot;
+  const listOrganizationWeeklyTrendsFn =
+    deps.listOrganizationWeeklyTrendsFn ?? analyticsStore.listOrganizationWeeklyTrends;
+  const listOrganizationCategoryBreakdownFn =
+    deps.listOrganizationCategoryBreakdownFn ?? analyticsStore.listOrganizationCategoryBreakdown;
+  const listOrganizationAgentPerformanceFn =
+    deps.listOrganizationAgentPerformanceFn ?? analyticsStore.listOrganizationAgentPerformance;
+  const listOrganizationSpatialCellsFn =
+    deps.listOrganizationSpatialCellsFn ?? analyticsStore.listOrganizationSpatialCells;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -880,6 +896,52 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     return jsonResponse({ summary }, { status: 200 });
   }
 
+  // ── analytics ────────────────────────────────────────────────────────────
+  // Company analytics is deliberately served only through the tenant router.
+  // The membership check happens before a store function is called, and every
+  // store query receives the authorized organization id as its first filter.
+  async function handleOrganizationAnalytics(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const section = url.searchParams.get("section");
+    switch (section) {
+      case "snapshot":
+        return jsonResponse(await getOrganizationDeltaSnapshotFn(context.organizationId));
+      case "trends": {
+        const rawWeeks = Number(url.searchParams.get("weeks") ?? "12");
+        const weeks = Number.isFinite(rawWeeks) ? Math.min(52, Math.max(1, Math.floor(rawWeeks))) : 12;
+        const recordTypeKey = url.searchParams.get("vertical")?.trim() || undefined;
+        return jsonResponse(await listOrganizationWeeklyTrendsFn({
+          organizationId: context.organizationId,
+          recordTypeKey,
+          weeks,
+        }));
+      }
+      case "categories":
+        return jsonResponse(await listOrganizationCategoryBreakdownFn(context.organizationId));
+      case "agents":
+        return jsonResponse(await listOrganizationAgentPerformanceFn(context.organizationId));
+      case "spatial": {
+        const requestedVertical = url.searchParams.get("vertical")?.trim();
+        const recordTypeKey = requestedVertical && requestedVertical !== "all"
+          ? requestedVertical
+          : undefined;
+        return jsonResponse(await listOrganizationSpatialCellsFn({
+          organizationId: context.organizationId,
+          recordTypeKey,
+        }));
+      }
+      case "anomalies":
+        // No platform-record anomaly aggregate exists yet. Returning no tenant
+        // data is safer than falling through to ADL-wide analytics.
+        return jsonResponse([]);
+      default:
+        return errorResponse("Invalid analytics section", 400, { code: "platform_analytics_invalid_section" });
+    }
+  }
+
   // Core single-record review logic — applies the decision via `reviewRecordFn`
   // and fires the `record_reviewed` audit event. Both `handleRecordReview`
   // (one record) and `handleRecordBatchReview` (many records, looped) call
@@ -1306,6 +1368,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_list: { method: "GET", handler: (request) => handleRecordList(request, new URL(request.url)) },
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
     platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
+    platform_analytics: { method: "GET", handler: (request) => handleOrganizationAnalytics(request, new URL(request.url)) },
     platform_record_review: { method: "POST", handler: handleRecordReview },
     platform_record_batch_review: { method: "POST", handler: handleRecordBatchReview },
     platform_notification_broadcast: { method: "POST", handler: handleNotificationBroadcast },

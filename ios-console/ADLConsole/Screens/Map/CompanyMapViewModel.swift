@@ -66,11 +66,8 @@ final class CompanyMapViewModel: ObservableObject {
     private let organizationId: String
     private let offlineCache: ConsoleOfflineCacheProtocol
     private let analyticsRepository: AnalyticsRepositoryProtocol
-    /// `view=spatial_intelligence` requires a `vertical` param server-side
-    /// (see `AnalyticsRepositoryProtocol.spatialIntelligence`'s doc comment)
-    /// but `CompanyMapView` shows all record types on one map — there is no
-    /// per-vertical picker for this task. Defaults to `pharmacy`, mirroring
-    /// `DeltaDashboardViewModel`'s same default.
+    /// The company map shows every record type, so its tenant analytics
+    /// request uses the backend's explicit all-types scope.
     private let spatialVertical: String
 
     init(
@@ -79,7 +76,7 @@ final class CompanyMapViewModel: ObservableObject {
         language: ConsoleLanguage,
         offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache(),
         analyticsRepository: AnalyticsRepositoryProtocol? = nil,
-        spatialVertical: String = "pharmacy"
+        spatialVertical: String = "all"
     ) {
         self.apiClient = apiClient
         self.organizationId = organizationId

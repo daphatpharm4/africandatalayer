@@ -130,6 +130,62 @@ test("cross-tenant org_get denied for non-member", async () => {
   assert.equal(response.status, 403);
 });
 
+test("company analytics passes only the authorized organization to its store", async () => {
+  const calls: string[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    getOrganizationDeltaSnapshotFn: async (organizationId: string) => {
+      calls.push(organizationId);
+      return {
+        generatedAt: "2026-07-29T00:00:00.000Z",
+        weeklyActiveContributors: 1,
+        verification: { totalPoints: 2, verifiedPoints: 1, verificationRatePct: 50 },
+        freshness: { medianAgeDays: 1, avgAgeDays: 1 },
+        fraud: { eventsWithFraudCheck: 0, mismatchEvents: 0, fraudRatePct: 0 },
+        reviewQueue: { pendingReview: 1, highRiskEvents: 0 },
+        enrichmentRatePct: 50,
+      };
+    },
+  }));
+  const response = await handler(new Request(
+    `https://x.test/api/user?view=platform_analytics&organizationId=${ORG.id}&section=snapshot`,
+  ));
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [ORG.id]);
+  assert.equal((await response.json()).verification.totalPoints, 2);
+});
+
+test("cross-company analytics is denied before any analytics store call", async () => {
+  let queried = false;
+  const handler = createPlatformHandler(baseDeps({
+    getMembershipFn: async () => null,
+    getOrganizationDeltaSnapshotFn: async () => {
+      queried = true;
+      throw new Error("should not be called");
+    },
+  }));
+  const response = await handler(new Request(
+    "https://x.test/api/user?view=platform_analytics&organizationId=other-org&section=snapshot",
+  ));
+  assert.equal(response.status, 403);
+  assert.equal(queried, false);
+});
+
+test("company spatial analytics forwards authorized org and all-types scope", async () => {
+  const calls: any[] = [];
+  const handler = createPlatformHandler(baseDeps({
+    listOrganizationSpatialCellsFn: async (input: any) => {
+      calls.push(input);
+      return [{ cellId: "s12abc", totalPoints: 2 }];
+    },
+  }));
+  const response = await handler(new Request(
+    `https://x.test/api/user?view=platform_analytics&organizationId=${ORG.id}&section=spatial&vertical=all`,
+  ));
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls, [{ organizationId: ORG.id, recordTypeKey: undefined }]);
+  assert.equal((await response.json())[0].totalPoints, 2);
+});
+
 test("invite_create sends email with hashed-token invite and never leaks token", async () => {
   const sent: any[] = []; const created: any[] = [];
   const handler = createPlatformHandler(baseDeps({

@@ -261,6 +261,7 @@ final class CompanyMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.spatialLoadState, .loaded)
         XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.count, 1)
         XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.first?.organizationId, "org-1")
+        XCTAssertEqual(analyticsRepository.spatialIntelligenceCalls.first?.vertical, "all")
     }
 
     func testHeatCellsAreDerivedFromGridCellsWithoutASecondRepositoryCall() async {

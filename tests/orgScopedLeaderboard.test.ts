@@ -1,9 +1,5 @@
 // tests/orgScopedLeaderboard.test.ts
-// Tests for the org-scoped GET /api/leaderboard?organizationId= extension —
-// omitting the param preserves the existing global (cross-org) leaderboard;
-// providing it filters to members of that organization. Uses
-// createLeaderboardHandler(deps) (mirrors createPlatformHandler(deps)) so no
-// real database is touched.
+// Tenant-isolation tests for GET /api/leaderboard.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createLeaderboardHandler } from "../api/leaderboard/index.js";
@@ -32,11 +28,29 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
   return {
     buildContributionEventsFn: async () => EVENTS,
     getUserProfilesBatchFn: async () => new Map(),
+    requireUserFn: async () => ({ id: ALICE, token: {}, role: "agent" as const }),
+    getMembershipFn: async (_organizationId: string, userId: string) => ({
+      organizationId: "org-1", userId, role: "collector" as const, createdAt: "",
+    }),
+    getOrganizationAccessStateFn: async () => "active" as const,
+    listOrganizationsForUserFn: async () => [],
+    listOrganizationLeaderboardFn: async () => [{
+      rank: 1,
+      userId: "al***",
+      name: "al***",
+      xp: 10,
+      contributions: 1,
+      lastContributionAt: "2026-07-20T00:00:00.000Z",
+      lastLocation: "Company records",
+      averageQualityScore: 100,
+      rankingScore: 100,
+      verticalBreakdown: { pharmacy: 1 },
+    }],
     ...overrides,
   };
 }
 
-test("omitting organizationId returns the existing global leaderboard (all users)", async () => {
+test("ADL field agents without a company membership can use the global leaderboard", async () => {
   const handler = createLeaderboardHandler(baseDeps());
   const response = await handler(new Request("https://x.test/api/leaderboard"));
   assert.equal(response.status, 200);
@@ -52,34 +66,67 @@ test("omitting organizationId returns the existing global leaderboard (all users
 });
 
 test("organizationId filters the leaderboard to members of that organization only", async () => {
-  let listMembersCalledWith: string | null = null;
+  let scopedOrganizationId: string | null = null;
+  let globalEventsLoaded = false;
   const handler = createLeaderboardHandler(baseDeps({
-    listMembersFn: async (organizationId: string) => {
-      listMembersCalledWith = organizationId;
-      return [{ organizationId, userId: ALICE, role: "collector" as const, createdAt: "" }];
+    buildContributionEventsFn: async () => {
+      globalEventsLoaded = true;
+      return EVENTS;
+    },
+    listOrganizationLeaderboardFn: async (organizationId: string) => {
+      scopedOrganizationId = organizationId;
+      return [{
+        rank: 1, userId: "al***", name: "al***", xp: 10, contributions: 1,
+        lastContributionAt: null, lastLocation: "Company records",
+        averageQualityScore: 100, rankingScore: 100, verticalBreakdown: { pharmacy: 1 },
+      }];
     },
   }));
 
   const response = await handler(new Request("https://x.test/api/leaderboard?organizationId=org-1"));
   assert.equal(response.status, 200);
-  assert.equal(listMembersCalledWith, "org-1");
+  assert.equal(scopedOrganizationId, "org-1");
+  assert.equal(globalEventsLoaded, false);
 
   const body = await response.json();
   assert.equal(body.length, 1);
-  assert.equal(body[0].xp, 40); // alice's total, bob (not a member) excluded
+  assert.equal(body[0].contributions, 1);
 });
 
-test("org-scoped requests keep the same cache-control header as the global leaderboard", async () => {
+test("org-scoped requests are private and never shared through the public cache", async () => {
   const handler = createLeaderboardHandler(baseDeps({
     listMembersFn: async (organizationId: string) => [{ organizationId, userId: ALICE, role: "collector" as const, createdAt: "" }],
   }));
   const response = await handler(new Request("https://x.test/api/leaderboard?organizationId=org-1"));
-  assert.equal(response.headers.get("cache-control"), LEADERBOARD_CACHE_CONTROL);
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+});
+
+test("company members cannot omit organizationId and fall through to ADL-wide rankings", async () => {
+  const handler = createLeaderboardHandler(baseDeps({
+    listOrganizationsForUserFn: async () => [{ id: "org-1" }],
+  }));
+  const response = await handler(new Request("https://x.test/api/leaderboard"));
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "organization_scope_required");
+});
+
+test("cross-company leaderboard access is denied before member data is loaded", async () => {
+  let listed = false;
+  const handler = createLeaderboardHandler(baseDeps({
+    getMembershipFn: async () => null,
+    listOrganizationLeaderboardFn: async () => {
+      listed = true;
+      return [];
+    },
+  }));
+  const response = await handler(new Request("https://x.test/api/leaderboard?organizationId=other-org"));
+  assert.equal(response.status, 403);
+  assert.equal(listed, false);
 });
 
 test("an organizationId with no matching members returns an empty leaderboard, not the global one", async () => {
   const handler = createLeaderboardHandler(baseDeps({
-    listMembersFn: async () => [],
+    listOrganizationLeaderboardFn: async () => [],
   }));
   const response = await handler(new Request("https://x.test/api/leaderboard?organizationId=org-empty"));
   const body = await response.json();

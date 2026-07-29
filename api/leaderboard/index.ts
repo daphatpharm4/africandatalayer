@@ -1,7 +1,14 @@
 import "../../lib/server/sentry.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { getUserProfilesBatch, isStorageUnavailableError } from "../../lib/server/storage/index.js";
-import { listMembers } from "../../lib/server/platform/orgStore.js";
+import { requireUser } from "../../lib/auth.js";
+import {
+  getMembership,
+  getOrganizationAccessState,
+  listOrganizationsForUser,
+} from "../../lib/server/platform/orgStore.js";
+import { listOrganizationLeaderboard } from "../../lib/server/platform/analyticsStore.js";
+import { isTenancyFailure, requireOrgRole } from "../../lib/server/platform/tenancy.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import type { LeaderboardEntry, PointEvent, SubmissionCategory } from "../../shared/types.js";
 import { getEffectiveEventXp } from "../../shared/xp.js";
@@ -52,9 +59,9 @@ function redactUserId(userId: string): string {
 
 // A stored profile name that merely echoes the identifier — the email local part
 // ("emmatiatep" for emmatiatep@gmail.com) or the phone-derived "Contributor 1234"
-// default — is not a user-chosen display name. Emitting the email local part on
-// this fully public endpoint reconstructs the full address next to the (already
-// masked) userId, so treat identifier-derived names as auto-generated.
+// default — is not a user-chosen display name. Emitting the email local part can
+// reconstruct the full address next to the masked userId, so treat
+// identifier-derived names as auto-generated.
 function isIdentifierDerivedName(name: string, userId: string): boolean {
   const trimmed = name.trim().toLowerCase();
   if (!trimmed) return true;
@@ -81,7 +88,11 @@ export function getPublicDisplayName(userId: string, profileName?: string | null
 export interface LeaderboardDeps {
   buildContributionEventsFn?: typeof buildContributionEvents;
   getUserProfilesBatchFn?: typeof getUserProfilesBatch;
-  listMembersFn?: typeof listMembers;
+  listOrganizationLeaderboardFn?: typeof listOrganizationLeaderboard;
+  listOrganizationsForUserFn?: typeof listOrganizationsForUser;
+  requireUserFn?: typeof requireUser;
+  getMembershipFn?: typeof getMembership;
+  getOrganizationAccessStateFn?: typeof getOrganizationAccessState;
 }
 
 // Factory (matches the createPlatformHandler(deps) convention used elsewhere
@@ -91,21 +102,41 @@ export interface LeaderboardDeps {
 export function createLeaderboardHandler(deps: LeaderboardDeps = {}): (request: Request) => Promise<Response> {
   const buildContributionEventsFn = deps.buildContributionEventsFn ?? buildContributionEvents;
   const getUserProfilesBatchFn = deps.getUserProfilesBatchFn ?? getUserProfilesBatch;
-  const listMembersFn = deps.listMembersFn ?? listMembers;
+  const listOrganizationLeaderboardFn = deps.listOrganizationLeaderboardFn ?? listOrganizationLeaderboard;
+  const listOrganizationsForUserFn = deps.listOrganizationsForUserFn ?? listOrganizationsForUser;
+  const requireUserFn = deps.requireUserFn ?? requireUser;
+  const getMembershipFn = deps.getMembershipFn ?? getMembership;
+  const getOrganizationAccessStateFn = deps.getOrganizationAccessStateFn ?? getOrganizationAccessState;
 
   return async function handleLeaderboard(request: Request): Promise<Response> {
   try {
     const url = new URL(request.url);
     const organizationId = url.searchParams.get("organizationId")?.trim() || undefined;
+    const user = await requireUserFn(request);
+    if (!user) return errorResponse("Unauthorized", 401);
 
-    // Omitting organizationId preserves the existing global (cross-org)
-    // leaderboard exactly as before. When provided, events are filtered to
-    // members of that organization before aggregation — everything downstream
-    // (ranking, redaction, cache header) is unchanged.
-    let orgMemberUserIds: Set<string> | null = null;
     if (organizationId) {
-      const members = await listMembersFn(organizationId);
-      orgMemberUserIds = new Set(members.map((member) => member.userId.toLowerCase().trim()));
+      const context = await requireOrgRole(request, organizationId, "viewer", {
+        requireUserFn,
+        getMembershipFn,
+        getOrganizationAccessStateFn,
+      });
+      if (isTenancyFailure(context)) return context;
+      const leaderboard = await listOrganizationLeaderboardFn(context.organizationId);
+      return jsonResponse(leaderboard, {
+        status: 200,
+        headers: { "cache-control": "private, no-store" },
+      });
+    } else if (user.role !== "admin") {
+      // A company identity may not omit its organization and fall through to
+      // the ADL-wide ranking. ADL field agents without company memberships
+      // retain the existing global leaderboard.
+      const organizations = await listOrganizationsForUserFn(user.id);
+      if (organizations.length > 0) {
+        return errorResponse("organizationId is required for company members", 403, {
+          code: "organization_scope_required",
+        });
+      }
     }
 
     const submissions = await buildContributionEventsFn();
@@ -114,8 +145,6 @@ export function createLeaderboardHandler(deps: LeaderboardDeps = {}): (request: 
     for (const submission of submissions) {
       const userId = typeof submission.userId === "string" ? submission.userId.toLowerCase().trim() : "";
       if (!userId) continue;
-      if (orgMemberUserIds && !orgMemberUserIds.has(userId)) continue;
-
       const previous = rowsByUser.get(userId);
       const xpAwarded = getXpAwarded(submission);
       const qualityScore = getQualityScore(submission);

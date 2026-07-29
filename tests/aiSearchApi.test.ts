@@ -53,6 +53,26 @@ test("POST /api/ai/search returns 401 for unauthenticated requests", async () =>
   assert.equal(response.status, 401);
 });
 
+test("company clients cannot query ADL-wide analytics facts", async () => {
+  let queried = false;
+  const handler = createAiSearchHandler({
+    requireUserFn: async () => ({ id: "client@acme.com", token: {}, role: "client" as const }),
+    queryFn: async () => {
+      queried = true;
+      return { rows: [], command: "", rowCount: 0, oid: 0, fields: [] };
+    },
+  });
+  const request = new Request("http://localhost/api/ai/search?view=analytics-query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question: "Show all company performance" }),
+  });
+  const response = await handler(request);
+  assert.equal(response.status, 403);
+  assert.equal((await response.json()).code, "adl_admin_required");
+  assert.equal(queried, false);
+});
+
 test("POST /api/ai/search returns 400 for invalid JSON", async () => {
   const handler = createAiSearchHandler({
     requireUserFn: async () => ({ id: "user-1", token: {}, role: "agent" as const }),
