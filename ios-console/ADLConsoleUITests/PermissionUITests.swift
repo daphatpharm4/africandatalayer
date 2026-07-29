@@ -5,6 +5,7 @@ final class PermissionUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testAppLaunchesWithoutCrashing() {
         let app = XCUIApplication()
         app.launch()

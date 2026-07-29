@@ -5,6 +5,7 @@ final class InvitationOnboardingUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testSignedOutScreenShowsNoSignup() {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTestLocale", "en"]

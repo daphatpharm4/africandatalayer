@@ -5,6 +5,7 @@ final class AppStoreScreenshotTests: XCTestCase {
         continueAfterFailure = false
     }
 
+    @MainActor
     func testAppLaunchesForScreenshot() {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "YES"]
