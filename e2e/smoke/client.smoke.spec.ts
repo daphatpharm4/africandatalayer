@@ -29,7 +29,7 @@ test("client account nav keeps delta intelligence one tap away", async ({ page, 
   await expect(page.getByTestId("screen-client-insights")).toBeVisible();
 
   await mainNavigation().getByRole("button", { name: /^Account$/i }).click();
-  await expect(page.getByTestId("screen-profile")).toBeVisible();
+  await expect(page.getByTestId("screen-client-account")).toBeVisible();
 
   await mainNavigation().getByRole("button", { name: /Delta Intelligence/i }).click();
   await expect(page.getByTestId("screen-delta-dashboard")).toBeVisible();

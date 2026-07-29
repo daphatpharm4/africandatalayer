@@ -440,7 +440,10 @@ const Analytics: React.FC<Props> = ({
   const contributorMode = !adminMode && !clientMode;
 
   return (
-    <div data-testid="screen-analytics" className="screen-shell">
+    <div
+      data-testid={clientMode ? 'screen-client-insights' : 'screen-analytics'}
+      className="screen-shell"
+    >
       <ScreenHeader
         title={
           adminMode

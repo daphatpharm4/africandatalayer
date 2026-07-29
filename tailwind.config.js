@@ -34,6 +34,7 @@ const config = {
         },
         amber: {
           DEFAULT: '#d97706',
+          dark: '#92400e',
           wash: '#fef3c7',
         },
         streak: {

@@ -241,6 +241,7 @@ struct ConsoleShellView: View {
                 .font(ADLConsoleFont.caption)
                 .foregroundStyle(tint)
                 .monospacedDigit()
+                .accessibilityIdentifier("console-sync-status")
             Spacer()
             if total > 0, appState.recordLedgerSnapshot != nil {
                 Button {

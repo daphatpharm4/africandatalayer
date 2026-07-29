@@ -369,7 +369,6 @@ const HomeMap: React.FC<Props> = ({
                       <p className="text-xs leading-4 text-gray-500">{formatPharmacyOpenStatus(singlePoint)}</p>
                     )}
                     <button
-                      aria-selected="false"
                       className="mt-2 min-h-12 w-full rounded-lg bg-navy px-3 py-2 text-xs font-semibold text-white"
                       onClick={() => onSelectPoint(singlePoint)}
                     >
@@ -384,7 +383,6 @@ const HomeMap: React.FC<Props> = ({
                     <div className="space-y-1.5">
                       {group.points.map((point) => (
                         <button
-                          aria-selected="false"
                           key={point.id}
                           className="w-full min-h-[44px] rounded-lg border border-gray-100 px-3 py-2 text-left hover:bg-gray-50"
                           onClick={() => onSelectPoint(point)}

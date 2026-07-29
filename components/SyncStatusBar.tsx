@@ -27,14 +27,16 @@ const SyncStatusBar: React.FC<Props> = ({
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
 
   const operationalStatus: OperationalStatus =
-    failed > 0 ? 'error' : isOffline && pending > 0 ? 'offline' : isSyncing ? 'syncing' : 'success';
+    failed > 0 ? 'error' : isOffline ? 'offline' : isSyncing ? 'syncing' : 'success';
   const status = failed > 0
     ? {
         label: t(`${failed} failed uploads. Tap to review.`, `${failed} envois ont échoué. Touchez pour vérifier.`),
       }
-    : isOffline && pending > 0
+    : isOffline
       ? {
-          label: t(`Offline. ${pending} uploads waiting to sync.`, `Hors ligne. ${pending} envois attendent la synchronisation.`),
+          label: pending > 0
+            ? t(`Offline. ${pending} uploads waiting to sync.`, `Hors ligne. ${pending} envois attendent la synchronisation.`)
+            : t('Offline. New captures will be saved on this device.', 'Hors ligne. Les nouvelles captures seront enregistrées sur cet appareil.'),
         }
       : isSyncing
         ? {

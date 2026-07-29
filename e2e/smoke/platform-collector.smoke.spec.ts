@@ -105,25 +105,23 @@ test('invited collector sees company profile and submits the company form on mob
   await expect(page.getByTestId('main-navigation').getByRole('button', { name: 'Leaderboard' })).toHaveCount(0);
   await page.getByRole('button', { name: 'List', exact: true }).click();
   await expect(page.getByText('Approved Nairobi kiosk')).toBeVisible();
-  await expect(page.getByText('Pharmacie le FLEURON')).toBeVisible();
   await expect(page.getByText(/nearby ADL and company points/)).toBeVisible();
   await page.getByRole('button', { name: 'Map', exact: true }).click();
   expect(publicExploreRequests).toEqual([]);
-  const adlPointMarker = page.locator('[title="Pharmacie le FLEURON"]');
-  await expect(adlPointMarker).toBeVisible();
-  await adlPointMarker.click();
+  const companyPointMarker = page.locator('[title="Approved Nairobi kiosk"]');
+  await expect(companyPointMarker).toBeVisible();
+  await companyPointMarker.click();
 
-  await expect(page.getByTestId('screen-details')).toBeVisible();
-  await expect(page.getByText('Last updated')).toBeVisible();
-  await expect(page.getByText('Freshness')).toBeVisible();
-  await expect(page.getByText('Missing info')).toBeVisible();
-  await expect(page.getByText(/Critical: this data may be inaccurate/)).toBeVisible();
-  await page.getByRole('button', { name: 'Enrich this point' }).click();
+  await expect(page.getByTestId('screen-company-record-details')).toBeVisible();
+  await expect(page.getByText('Submitted fields')).toBeVisible();
+  await expect(page.getByText('Field evidence')).toBeVisible();
+  await expect(page.getByText('-1.286389, 36.817223 · ±12 m')).toBeVisible();
+  await page.getByRole('button', { name: 'Update this point' }).click();
 
   await expect(page.getByTestId('screen-platform-collection')).toBeVisible();
   await expect(page.getByText('Usiku Research').first()).toBeVisible();
   await expect(page.getByText('Retail outlet').first()).toBeVisible();
-  await expect(page.getByText('Pharmacie le FLEURON')).toBeVisible();
+  await expect(page.getByText('Approved Nairobi kiosk')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Submit to company' })).toBeDisabled();
   await page.getByRole('button', { name: 'Capture current location' }).click();
   await expect(page.getByText(/GPS captured/)).toBeVisible();
@@ -132,7 +130,7 @@ test('invited collector sees company profile and submits the company form on mob
   await page.getByRole('button', { name: 'Submit to company' }).click();
 
   await expect(page.getByText('Company record sent')).toBeVisible();
-  expect(submittedBody?.pointId).toBe('pharmacy-nairobi-1');
+  expect(submittedBody?.pointId).toBe('retail-outlet-nairobi-1');
   expect((submittedBody?.data as Record<string, unknown>).outlet_name).toBe('Updated Nairobi kiosk');
   await page.getByRole('button', { name: 'Done' }).click();
   await page.getByTestId('main-navigation').getByRole('button', { name: 'Profile' }).click();

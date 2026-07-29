@@ -48,7 +48,7 @@ const classesByTone: Record<SemanticTone, { badge: string; panel: string; text: 
   neutral: { badge: 'border-gray-200 bg-gray-100 text-ink', panel: 'border-gray-200 bg-white', text: 'text-ink' },
   primary: { badge: 'border-navy-border bg-navy-wash text-navy', panel: 'border-navy-border bg-navy-wash', text: 'text-navy' },
   success: { badge: 'border-forest/30 bg-forest-wash text-forest-dark', panel: 'border-forest/30 bg-forest-wash', text: 'text-forest-dark' },
-  warning: { badge: 'border-amber/30 bg-amber-wash text-amber', panel: 'border-amber/30 bg-amber-wash', text: 'text-amber' },
+  warning: { badge: 'border-amber/30 bg-amber-wash text-amber-dark', panel: 'border-amber/30 bg-amber-wash', text: 'text-amber-dark' },
   danger: { badge: 'border-danger/30 bg-red-50 text-danger', panel: 'border-danger/30 bg-red-50', text: 'text-danger' },
   info: { badge: 'border-navy-border bg-navy-light text-navy', panel: 'border-navy-border bg-navy-light', text: 'text-navy' },
 };

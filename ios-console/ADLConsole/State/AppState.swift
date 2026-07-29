@@ -537,6 +537,20 @@ class AppState: ObservableObject {
         organizationsLoadState = loadState
     }
 
+    func configureSignedOutForUITest(locale: String) {
+        runtimeDisabledForUITest = true
+        language = locale == "fr" ? .fr : .en
+        currentUserID = nil
+        organizations = []
+        organization = nil
+        role = nil
+        isAuthenticated = false
+        sessionState = .unauthenticated
+        organizationsLoadState = .idle
+        route = ConsoleRoute(screen: .authRequired)
+        connectivityState = .satisfied
+    }
+
     func configureForUITest(role roleValue: String, locale: String, connectivity: String) {
         runtimeDisabledForUITest = true
         let resolvedRole = PlatformRole(rawValue: roleValue) ?? .collector

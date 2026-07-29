@@ -226,7 +226,7 @@
   }
 
   .risk-medium {
-    @apply bg-amber-wash text-amber;
+    @apply bg-amber-wash text-amber-dark;
   }
 
   .risk-high {
@@ -234,7 +234,7 @@
   }
 
   .tier-gold {
-    @apply bg-gold-wash text-amber;
+    @apply bg-gold-wash text-amber-dark;
   }
 
   .tier-silver {

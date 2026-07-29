@@ -186,7 +186,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
         isLowEndDevice ? 'bg-white' : 'bg-white/98 backdrop-blur-xl'
       } ${className}`}
       style={{
-        bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom, 0px) + 0.25rem)',
+        bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom, 0px) + 1.25rem)',
         height: `${maxH}px`,
         transform: `translateY(${translateY}px)`,
         transition: transitionStyle,
