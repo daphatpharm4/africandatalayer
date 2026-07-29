@@ -50,6 +50,12 @@ final class CompanyMapViewModel: ObservableObject {
     @Published private(set) var loadState: LoadState = .idle
     /// The point-detail sheet's driving state — `.sheet(item:)`-friendly.
     @Published var selectedPoint: CollapsedPlatformPoint?
+    /// Latest device fix used to put the collector—not the nearest record—
+    /// at the center of the map. MapKit keeps the blue marker updated after
+    /// this one-shot request; the value also powers the recenter control.
+    @Published private(set) var userLocation: FormGpsValue?
+    @Published private(set) var isLocatingUser = false
+    @Published private(set) var locationErrorMessage: String?
 
     /// Current overlay mode; only mutated through `setOverlayMode(_:)` so a
     /// mode switch to `.grid`/`.heat` can trigger a lazy load.
@@ -66,6 +72,7 @@ final class CompanyMapViewModel: ObservableObject {
     private let organizationId: String
     private let offlineCache: ConsoleOfflineCacheProtocol
     private let analyticsRepository: AnalyticsRepositoryProtocol
+    private let locationService: LocationServiceProtocol?
     /// The company map shows every record type, so its tenant analytics
     /// request uses the backend's explicit all-types scope.
     private let spatialVertical: String
@@ -76,7 +83,8 @@ final class CompanyMapViewModel: ObservableObject {
         language: ConsoleLanguage,
         offlineCache: ConsoleOfflineCacheProtocol = ConsoleOfflineCache(),
         analyticsRepository: AnalyticsRepositoryProtocol? = nil,
-        spatialVertical: String = "all"
+        spatialVertical: String = "all",
+        locationService: LocationServiceProtocol? = nil
     ) {
         self.apiClient = apiClient
         self.organizationId = organizationId
@@ -84,6 +92,7 @@ final class CompanyMapViewModel: ObservableObject {
         self.offlineCache = offlineCache
         self.analyticsRepository = analyticsRepository ?? AnalyticsRepository(apiClient: apiClient)
         self.spatialVertical = spatialVertical
+        self.locationService = locationService
     }
 
     // MARK: - Derived state
@@ -159,6 +168,38 @@ final class CompanyMapViewModel: ObservableObject {
         }
     }
 
+    /// Requests a current device fix independently from record loading.
+    /// Returning the value lets an explicit recenter tap work even when the
+    /// coordinate is unchanged and therefore emits no `onChange`.
+    @discardableResult
+    func refreshUserLocation() async -> FormGpsValue? {
+        guard !isLocatingUser else { return userLocation }
+        guard let locationService else { return nil }
+
+        isLocatingUser = true
+        locationErrorMessage = nil
+        defer { isLocatingUser = false }
+
+        do {
+            let location = try await locationService.requestOneShotLocation()
+            guard (-90 ... 90).contains(location.latitude),
+                  (-180 ... 180).contains(location.longitude)
+            else {
+                throw LocationServiceError.unavailable
+            }
+            userLocation = location
+            return location
+        } catch is CancellationError {
+            return nil
+        } catch let error as LocationServiceError {
+            locationErrorMessage = mapLocationMessage(for: error)
+            return nil
+        } catch {
+            locationErrorMessage = mapLocationMessage(for: .unavailable)
+            return nil
+        }
+    }
+
     // MARK: - Selection
 
     func select(_ point: CollapsedPlatformPoint) {
@@ -167,6 +208,21 @@ final class CompanyMapViewModel: ObservableObject {
 
     func clearSelection() {
         selectedPoint = nil
+    }
+
+    private func mapLocationMessage(for error: LocationServiceError) -> String {
+        switch error {
+        case .permissionDenied:
+            return language.t(
+                "Location access is off. Enable it in Settings to show your position.",
+                "L'accès à la position est désactivé. Activez-le dans Réglages pour afficher votre position."
+            )
+        case .unavailable, .timedOut:
+            return language.t(
+                "Your position is unavailable. Tap the location button to try again.",
+                "Votre position est indisponible. Appuyez sur le bouton de localisation pour réessayer."
+            )
+        }
     }
 
     // MARK: - Overlay mode (Grid / Heat)

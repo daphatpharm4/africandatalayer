@@ -164,7 +164,8 @@ class AppState: ObservableObject {
             apiClient: apiClient,
             organizationId: organizationId,
             language: language,
-            offlineCache: offlineCache
+            offlineCache: offlineCache,
+            locationService: locationServiceFactory()
         )
     }
 

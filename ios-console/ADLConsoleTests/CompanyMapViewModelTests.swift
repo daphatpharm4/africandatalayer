@@ -153,6 +153,71 @@ final class CompanyMapViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.annotations.count, 1)
     }
 
+    // MARK: - Collector location
+
+    func testRefreshUserLocationPublishesCurrentDeviceFix() async {
+        let transport = RoutingMockPlatformTransport()
+        let expected = FormGpsValue(latitude: -1.286389, longitude: 36.817223, accuracyMeters: 7)
+        let locationService = MockLocationService(behavior: .succeed(expected))
+        let viewModel = CompanyMapViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            language: .en,
+            locationService: locationService
+        )
+
+        let location = await viewModel.refreshUserLocation()
+
+        XCTAssertEqual(location, expected)
+        XCTAssertEqual(viewModel.userLocation, expected)
+        XCTAssertNil(viewModel.locationErrorMessage)
+        XCTAssertFalse(viewModel.isLocatingUser)
+        XCTAssertEqual(locationService.requestCount, 1)
+    }
+
+    func testRefreshUserLocationSurfacesPermissionFailureWithoutInventingCoordinate() async {
+        let transport = RoutingMockPlatformTransport()
+        let locationService = MockLocationService(behavior: .fail(.permissionDenied))
+        let viewModel = CompanyMapViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            language: .en,
+            locationService: locationService
+        )
+
+        let location = await viewModel.refreshUserLocation()
+
+        XCTAssertNil(location)
+        XCTAssertNil(viewModel.userLocation)
+        XCTAssertEqual(
+            viewModel.locationErrorMessage,
+            "Location access is off. Enable it in Settings to show your position."
+        )
+        XCTAssertFalse(viewModel.isLocatingUser)
+    }
+
+    func testRefreshUserLocationRejectsInvalidCoordinate() async {
+        let transport = RoutingMockPlatformTransport()
+        let locationService = MockLocationService(
+            behavior: .succeed(FormGpsValue(latitude: 120, longitude: 36.817223, accuracyMeters: 7))
+        )
+        let viewModel = CompanyMapViewModel(
+            apiClient: PlatformAPIClient(baseURL: URL(string: "https://example.com")!, transport: transport),
+            organizationId: "org-1",
+            language: .en,
+            locationService: locationService
+        )
+
+        let location = await viewModel.refreshUserLocation()
+
+        XCTAssertNil(location)
+        XCTAssertNil(viewModel.userLocation)
+        XCTAssertEqual(
+            viewModel.locationErrorMessage,
+            "Your position is unavailable. Tap the location button to try again."
+        )
+    }
+
     // MARK: - Annotations (map-placeable subset)
 
     func testAnnotationsExcludePointsWithNoGpsOnTheirRepresentative() async {

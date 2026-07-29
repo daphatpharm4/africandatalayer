@@ -42,6 +42,7 @@ struct CompanyMapView: View {
         }
         .background(ADLConsoleColor.page)
         .task { await viewModel.load() }
+        .task { await viewModel.refreshUserLocation() }
         .sheet(item: $viewModel.selectedPoint) { collapsedPoint in
             CompanyPointDetailView(
                 collapsedPoint: collapsedPoint,
@@ -59,6 +60,13 @@ struct CompanyMapView: View {
                 }
                 cameraFocused = true
             }
+        }
+        .onChange(of: viewModel.userLocation) { _, location in
+            guard let location else { return }
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                focusCamera(on: location)
+            }
+            cameraFocused = true
         }
     }
 
@@ -121,6 +129,9 @@ struct CompanyMapView: View {
             if viewModel.loadState == .loading {
                 loadingPill
             }
+            if let locationError = viewModel.locationErrorMessage {
+                locationErrorPill(locationError)
+            }
             if viewModel.overlayMode != .none && viewModel.spatialLoadState == .loading {
                 spatialLoadingPill
             }
@@ -152,9 +163,44 @@ struct CompanyMapView: View {
                 dailyProgressCircle
             }
             if displayMode == .map {
-                overlayModeToggle
+                HStack(spacing: 10) {
+                    overlayModeToggle
+                    Spacer(minLength: 8)
+                    currentLocationButton
+                }
             }
         }
+    }
+
+    private var currentLocationButton: some View {
+        Button {
+            Task {
+                guard let location = await viewModel.refreshUserLocation() else { return }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                    focusCamera(on: location)
+                }
+                cameraFocused = true
+            }
+        } label: {
+            Group {
+                if viewModel.isLocatingUser {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(ADLConsoleColor.navy)
+                } else {
+                    Image(systemName: "location.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(ADLConsoleColor.navy)
+                }
+            }
+            .frame(width: 48, height: 48)
+            .background(ADLConsoleColor.surface)
+            .clipShape(Circle())
+            .adlShadowBorder()
+        }
+        .buttonStyle(ADLConsolePressStyle())
+        .disabled(viewModel.isLocatingUser)
+        .accessibilityLabel(t("Show my location", "Afficher ma position"))
     }
 
     private var overlayModeToggle: some View {
@@ -207,6 +253,32 @@ struct CompanyMapView: View {
         .background(ADLConsoleColor.surface)
         .clipShape(Capsule())
         .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+    }
+
+    private func locationErrorPill(_ message: String) -> some View {
+        Button {
+            Task { await viewModel.refreshUserLocation() }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "location.slash.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(ADLConsoleColor.danger)
+                Text(message)
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.ink)
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                Text(t("Retry", "Réessayer"))
+                    .font(ADLConsoleFont.caption)
+                    .foregroundStyle(ADLConsoleColor.navy)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(ADLConsoleColor.surface)
+            .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))
+            .shadow(color: Color.black.opacity(0.08), radius: 8, y: 3)
+        }
+        .buttonStyle(ADLConsolePressStyle())
     }
 
     private func spatialErrorPill(_ message: String) -> some View {
@@ -602,6 +674,18 @@ struct CompanyMapView: View {
             longitudeDelta: max((maxLon - minLon) * 1.4, 0.01)
         )
         region = MKCoordinateRegion(center: center, span: span)
+    }
+
+    private func focusCamera(on location: FormGpsValue) {
+        let coordinate = CLLocationCoordinate2D(
+            latitude: location.latitude,
+            longitude: location.longitude
+        )
+        region = MKCoordinateRegion(
+            center: coordinate,
+            latitudinalMeters: 1_200,
+            longitudinalMeters: 1_200
+        )
     }
 
     private var captureButton: some View {
