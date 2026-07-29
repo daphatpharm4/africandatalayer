@@ -31,24 +31,12 @@ targets:
         SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1"
         DEVELOPMENT_TEAM: "6AC36NWFGP"
-        GENERATE_INFOPLIST_FILE: true
-        INFOPLIST_KEY_ADL_BUILD_CHANNEL: "$(ADL_BUILD_CHANNEL)"
-        INFOPLIST_KEY_ADL_API_BASE_URL: "$(ADL_API_BASE_URL)"
-        INFOPLIST_KEY_CFBundleDisplayName: ADL Console
-        INFOPLIST_KEY_UILaunchScreen_Generation: true
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        GENERATE_INFOPLIST_FILE: false
+        INFOPLIST_FILE: ADLConsole/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_PREVIEWS: true
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
-        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
-        INFOPLIST_KEY_NSCameraUsageDescription: "ADL Console uses your camera to attach photo evidence to a captured record."
-        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "ADL Console lets you attach a photo from your library as evidence for a captured record."
-        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "ADL Console uses your location to attach a GPS fix as evidence for a captured record."
-        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "ADL Console uses speech recognition to let you dictate field values by voice."
-        INFOPLIST_KEY_NSMicrophoneUsageDescription: "ADL Console uses the microphone to let you dictate field values by voice."
-        INFOPLIST_KEY_NSMotionUsageDescription: "ADL Console uses motion sensors to verify the GPS fix on a captured record is genuine."
     configFiles:
       Debug: Config/Debug.xcconfig
       Staging: Config/Staging.xcconfig
