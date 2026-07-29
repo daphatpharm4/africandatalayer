@@ -25,6 +25,12 @@ import {
   reviewPlatformRecordRequest,
   nearbyPlatformPointsRequest,
   sendNotificationBroadcastRequest,
+  getOrganizationAnalyticsSnapshotRequest,
+  listOrganizationAnalyticsAgentsRequest,
+  listOrganizationAnalyticsCategoriesRequest,
+  listOrganizationAnalyticsTrendsRequest,
+  listOrganizationLeaderboardRequest,
+  listOrganizationMissionsRequest,
 } from "../lib/client/platformApi.ts";
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -97,6 +103,35 @@ test("listMyOrganizations gets platform_org_list and unwraps organizations array
   assert.equal(calls[0].init?.credentials, "include");
   assert.equal(calls[0].init?.body, undefined);
   assert.deepEqual(result, organizations);
+});
+
+test("tenant insight clients always bind the selected organization", async () => {
+  const mission = { id: "m1", organizationId: "org-1" };
+  const missions = stubFetch(() => jsonResponse({ missions: [mission] }));
+  assert.deepEqual(await listOrganizationMissionsRequest("org-1", { fetchFn: missions.fetchFn }), [mission]);
+  assert.equal(missions.calls[0].url, "/api/user?view=platform_mission_list&organizationId=org-1");
+
+  const snapshotBody = { generatedAt: "x", verification: { totalPoints: 2 } };
+  const snapshot = stubFetch(() => jsonResponse(snapshotBody));
+  assert.deepEqual(await getOrganizationAnalyticsSnapshotRequest("org-1", { fetchFn: snapshot.fetchFn }), snapshotBody);
+  assert.equal(snapshot.calls[0].url, "/api/user?view=platform_analytics&organizationId=org-1&section=snapshot");
+
+  const trends = stubFetch(() => jsonResponse([]));
+  await listOrganizationAnalyticsTrendsRequest("org-1", 8, { fetchFn: trends.fetchFn });
+  assert.equal(trends.calls[0].url, "/api/user?view=platform_analytics&organizationId=org-1&section=trends&weeks=8");
+
+  const categories = stubFetch(() => jsonResponse([]));
+  await listOrganizationAnalyticsCategoriesRequest("org-1", { fetchFn: categories.fetchFn });
+  assert.equal(categories.calls[0].url, "/api/user?view=platform_analytics&organizationId=org-1&section=categories");
+
+  const agents = stubFetch(() => jsonResponse([]));
+  await listOrganizationAnalyticsAgentsRequest("org-1", { fetchFn: agents.fetchFn });
+  assert.equal(agents.calls[0].url, "/api/user?view=platform_analytics&organizationId=org-1&section=agents");
+
+  const leaderboard = stubFetch(() => jsonResponse([]));
+  await listOrganizationLeaderboardRequest("org-1", { fetchFn: leaderboard.fetchFn });
+  assert.equal(leaderboard.calls[0].url, "/api/leaderboard?organizationId=org-1");
+  assert.equal(leaderboard.calls[0].init?.credentials, "include");
 });
 
 test("getOrganizationRequest gets platform_org_get with organizationId query param", async () => {

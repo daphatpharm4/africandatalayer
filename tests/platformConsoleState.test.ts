@@ -57,6 +57,12 @@ test("parseConsoleHash: onboarding route", () => {
   assert.deepEqual(parseConsoleHash("#/onboarding"), { screen: "ONBOARDING" });
 });
 
+test("parseConsoleHash: tenant insight routes", () => {
+  assert.deepEqual(parseConsoleHash("#/missions"), { screen: "MISSIONS" });
+  assert.deepEqual(parseConsoleHash("#/leaderboard"), { screen: "LEADERBOARD" });
+  assert.deepEqual(parseConsoleHash("#/analytics"), { screen: "ANALYTICS" });
+});
+
 test("parseConsoleHash: garbage/unknown path falls back to OVERVIEW", () => {
   assert.deepEqual(parseConsoleHash("#/nonsense/xyz"), { screen: "OVERVIEW" });
   assert.deepEqual(parseConsoleHash("#totally-unknown"), { screen: "OVERVIEW" });
@@ -84,6 +90,9 @@ test("consoleRouteToHash: inverse of parseConsoleHash for every screen", () => {
     { screen: "OVERVIEW" },
     { screen: "DATA" },
     { screen: "REVIEW" },
+    { screen: "MISSIONS" },
+    { screen: "LEADERBOARD" },
+    { screen: "ANALYTICS" },
     { screen: "PROJECTS" },
     { screen: "MEMBERS" },
     { screen: "SETTINGS" },
@@ -101,6 +110,9 @@ test("console role routing gives each role only its work surfaces", () => {
   assert.deepEqual(consoleLandingRoute("reviewer"), { screen: "REVIEW" });
   assert.deepEqual(consoleLandingRoute("viewer"), { screen: "OVERVIEW" });
   assert.equal(canAccessConsoleScreen("viewer", "PROJECTS"), true);
+  assert.equal(canAccessConsoleScreen("viewer", "MISSIONS"), true);
+  assert.equal(canAccessConsoleScreen("collector", "LEADERBOARD"), true);
+  assert.equal(canAccessConsoleScreen("reviewer", "ANALYTICS"), true);
   assert.equal(canAccessConsoleScreen("viewer", "DATA"), true);
   assert.equal(canAccessConsoleScreen("viewer", "REVIEW"), false);
   assert.equal(canAccessConsoleScreen("reviewer", "REVIEW"), true);

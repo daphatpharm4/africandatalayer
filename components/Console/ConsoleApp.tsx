@@ -14,7 +14,10 @@ import ConsoleShell from './ConsoleShell';
 import ConsoleAuthScreen from './ConsoleAuthScreen';
 
 const JoinScreen = lazy(() => import('./JoinScreen'));
+const AnalyticsScreen = lazy(() => import('./AnalyticsScreen'));
+const LeaderboardScreen = lazy(() => import('./LeaderboardScreen'));
 const MembersScreen = lazy(() => import('./MembersScreen'));
+const MissionsScreen = lazy(() => import('./MissionsScreen'));
 const OnboardingWizard = lazy(() => import('./OnboardingWizard'));
 const ProjectsScreen = lazy(() => import('./ProjectsScreen'));
 const RecordsScreen = lazy(() => import('./RecordsScreen'));
@@ -338,6 +341,21 @@ const ConsoleApp: React.FC = () => {
     case 'DATA':
       screenContent = selectedOrganization ? (
         <RecordsScreen organizationId={selectedOrganization.id} language={language} />
+      ) : null;
+      break;
+    case 'MISSIONS':
+      screenContent = selectedOrganization ? (
+        <MissionsScreen organizationId={selectedOrganization.id} language={language} />
+      ) : null;
+      break;
+    case 'LEADERBOARD':
+      screenContent = selectedOrganization ? (
+        <LeaderboardScreen organizationId={selectedOrganization.id} language={language} />
+      ) : null;
+      break;
+    case 'ANALYTICS':
+      screenContent = selectedOrganization ? (
+        <AnalyticsScreen organizationId={selectedOrganization.id} language={language} />
       ) : null;
       break;
     case 'PROJECTS':

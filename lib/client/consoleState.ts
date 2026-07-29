@@ -18,6 +18,9 @@ export type ConsoleScreen =
   | "OVERVIEW"
   | "DATA"
   | "REVIEW"
+  | "MISSIONS"
+  | "LEADERBOARD"
+  | "ANALYTICS"
   | "ONBOARDING"
   | "PROJECTS"
   | "SCHEMA_BUILDER"
@@ -63,6 +66,9 @@ export function parseConsoleHash(hash: string): ConsoleRoute {
   if (first === "overview") return { screen: "OVERVIEW" };
   if (first === "data") return { screen: "DATA" };
   if (first === "review") return { screen: "REVIEW" };
+  if (first === "missions") return { screen: "MISSIONS" };
+  if (first === "leaderboard") return { screen: "LEADERBOARD" };
+  if (first === "analytics") return { screen: "ANALYTICS" };
 
   if (first === "projects") {
     if (second && third === "schema") {
@@ -93,6 +99,12 @@ export function consoleRouteToHash(route: ConsoleRoute): string {
       return "#/data";
     case "REVIEW":
       return "#/review";
+    case "MISSIONS":
+      return "#/missions";
+    case "LEADERBOARD":
+      return "#/leaderboard";
+    case "ANALYTICS":
+      return "#/analytics";
     case "MEMBERS":
       return "#/members";
     case "SETTINGS":
@@ -119,6 +131,9 @@ export function canAccessConsoleScreen(
     case "JOIN":
     case "OVERVIEW":
     case "PROJECTS":
+    case "MISSIONS":
+    case "LEADERBOARD":
+    case "ANALYTICS":
       return true;
     case "DATA":
       return role !== "collector";

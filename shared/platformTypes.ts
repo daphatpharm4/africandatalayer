@@ -179,3 +179,61 @@ export interface PlatformMissionProgressEntry {
   current: number;
   state: MissionState;
 }
+
+export interface PlatformAnalyticsSnapshot {
+  generatedAt: string;
+  weeklyActiveContributors: number;
+  verification: {
+    totalPoints: number;
+    verifiedPoints: number;
+    verificationRatePct: number;
+  };
+  freshness: {
+    medianAgeDays: number;
+    avgAgeDays: number;
+  };
+  fraud: {
+    eventsWithFraudCheck: number;
+    mismatchEvents: number;
+    fraudRatePct: number;
+  };
+  reviewQueue: {
+    pendingReview: number;
+    highRiskEvents: number;
+  };
+  enrichmentRatePct: number;
+}
+
+export interface PlatformAnalyticsTrend {
+  date: string;
+  value: number;
+  movingAvg: number | null;
+}
+
+export interface PlatformAnalyticsCategory {
+  category: string;
+  count: number;
+  percentage: number;
+}
+
+export interface PlatformAnalyticsAgent {
+  userId: string;
+  displayName: string;
+  submissions: number;
+  approvalRate: number;
+  flags: number;
+  trustScore: number;
+}
+
+export interface PlatformLeaderboardEntry {
+  rank: number;
+  userId: string;
+  name: string;
+  xp: number;
+  contributions: number;
+  lastContributionAt: string | null;
+  lastLocation: string;
+  averageQualityScore: number;
+  rankingScore: number;
+  verticalBreakdown: Record<string, number>;
+}

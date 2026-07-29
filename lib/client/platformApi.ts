@@ -7,8 +7,14 @@
 
 import type {
   PlatformAdminOrganizationSummary,
+  PlatformAnalyticsAgent,
+  PlatformAnalyticsCategory,
+  PlatformAnalyticsSnapshot,
+  PlatformAnalyticsTrend,
   PlatformInvite,
+  PlatformLeaderboardEntry,
   PlatformMembership,
+  PlatformMission,
   PlatformNearbyPoint,
   PlatformOrganization,
   PlatformOrganizationAccessStatus,
@@ -70,6 +76,26 @@ async function callPlatform<T>(
   return payload as T;
 }
 
+async function callAuthenticatedJson<T>(
+  url: string,
+  deps: PlatformApiDeps = {},
+): Promise<T> {
+  const fetchFn = deps.fetchFn ?? fetch;
+  const response = await fetchFn(url, {
+    method: "GET",
+    credentials: "include",
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new PlatformApiError(
+      payload.error ?? `Request failed (${response.status})`,
+      response.status,
+      typeof payload.code === "string" ? payload.code : undefined,
+    );
+  }
+  return payload as T;
+}
+
 // ─── Organizations ──────────────────────────────────────────────────────────
 
 export async function listMyOrganizations(
@@ -81,6 +107,76 @@ export async function listMyOrganizations(
     deps,
   );
   return payload.organizations;
+}
+
+// ─── Tenant insights ────────────────────────────────────────────────────────
+
+export async function listOrganizationMissionsRequest(
+  organizationId: string,
+  deps?: PlatformApiDeps,
+): Promise<PlatformMission[]> {
+  const payload = await callPlatform<{ missions: PlatformMission[] }>(
+    "mission_list",
+    { method: "GET", params: { organizationId } },
+    deps,
+  );
+  return payload.missions;
+}
+
+export async function getOrganizationAnalyticsSnapshotRequest(
+  organizationId: string,
+  deps?: PlatformApiDeps,
+): Promise<PlatformAnalyticsSnapshot> {
+  return callPlatform<PlatformAnalyticsSnapshot>(
+    "analytics",
+    { method: "GET", params: { organizationId, section: "snapshot" } },
+    deps,
+  );
+}
+
+export async function listOrganizationAnalyticsTrendsRequest(
+  organizationId: string,
+  weeks = 12,
+  deps?: PlatformApiDeps,
+): Promise<PlatformAnalyticsTrend[]> {
+  return callPlatform<PlatformAnalyticsTrend[]>(
+    "analytics",
+    { method: "GET", params: { organizationId, section: "trends", weeks: String(weeks) } },
+    deps,
+  );
+}
+
+export async function listOrganizationAnalyticsCategoriesRequest(
+  organizationId: string,
+  deps?: PlatformApiDeps,
+): Promise<PlatformAnalyticsCategory[]> {
+  return callPlatform<PlatformAnalyticsCategory[]>(
+    "analytics",
+    { method: "GET", params: { organizationId, section: "categories" } },
+    deps,
+  );
+}
+
+export async function listOrganizationAnalyticsAgentsRequest(
+  organizationId: string,
+  deps?: PlatformApiDeps,
+): Promise<PlatformAnalyticsAgent[]> {
+  return callPlatform<PlatformAnalyticsAgent[]>(
+    "analytics",
+    { method: "GET", params: { organizationId, section: "agents" } },
+    deps,
+  );
+}
+
+export async function listOrganizationLeaderboardRequest(
+  organizationId: string,
+  deps?: PlatformApiDeps,
+): Promise<PlatformLeaderboardEntry[]> {
+  const search = new URLSearchParams({ organizationId });
+  return callAuthenticatedJson<PlatformLeaderboardEntry[]>(
+    `/api/leaderboard?${search.toString()}`,
+    deps,
+  );
 }
 
 export async function createOrganizationRequest(

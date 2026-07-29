@@ -33,7 +33,7 @@ test('console shell exposes responsive navigation and a visible sign-out action'
     </ConsoleShell>,
   );
 
-  assert.match(html, /flex-col bg-page text-ink lg:flex-row/);
+  assert.match(html, /flex-col overflow-hidden bg-page text-ink lg:flex-row/);
   assert.match(html, /aria-label="Console sections"/);
   assert.match(html, /overflow-x-auto/);
   assert.match(html, /min-h-12/);
@@ -59,6 +59,9 @@ test('console shell navigation follows the selected company role', () => {
   const viewer = renderFor('viewer');
   assert.match(viewer, />Workspace<\/button>/);
   assert.match(viewer, />Projects<\/button>/);
+  assert.match(viewer, />Missions<\/button>/);
+  assert.match(viewer, />Leaderboard<\/button>/);
+  assert.match(viewer, />Analytics<\/button>/);
   assert.doesNotMatch(viewer, />Review queue<\/button>/);
   assert.doesNotMatch(viewer, />Members<\/button>/);
 
