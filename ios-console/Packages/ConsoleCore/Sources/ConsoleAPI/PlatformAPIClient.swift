@@ -666,4 +666,205 @@ public struct PlatformAPIClient: Sendable {
             bodyData: bodyData
         )
     }
+
+    // MARK: - Communications: email + SMS campaigns (api/privacy — NOT api/user)
+
+    private struct EmailCampaignsEnvelope: Decodable {
+        var campaigns: [EmailCampaign]
+        var maxRecipients: Int
+    }
+
+    /// `GET api/privacy?view=campaigns` — admin-only list of the most recent
+    /// email campaigns. Port of the `view === "campaigns"` GET handler in
+    /// `api/privacy/index.ts`, backed by `listCampaigns` in
+    /// `lib/server/email/campaigns.ts`. Reuses `sendAnalyticsRequest` the
+    /// same way `listEmailCampaigns`'s siblings do below: campaigns live on
+    /// the privacy surface, not `api/user?view=platform_*`, so this can't go
+    /// through `callPlatform`.
+    public func listEmailCampaigns() async throws -> (campaigns: [EmailCampaign], maxRecipients: Int) {
+        let envelope: EmailCampaignsEnvelope = try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .get,
+            queryItems: [URLQueryItem(name: "view", value: "campaigns")]
+        )
+        return (envelope.campaigns, envelope.maxRecipients)
+    }
+
+    /// `POST api/privacy?view=campaigns` — creates an email campaign and,
+    /// unless `dryRun` or a future `scheduledAt` applies, immediately
+    /// fast-path-dispatches the first batch. Port of `campaignCreateSchema` +
+    /// `createCampaign` in `lib/server/email/campaigns.ts`. `createdBy` is
+    /// derived server-side from the session and is intentionally not a
+    /// parameter here.
+    public func createEmailCampaign(
+        subject: String,
+        htmlBody: String,
+        textBody: String,
+        language: String = "en",
+        recipientMode: String = "audience",
+        audience: CommsAudienceFilter = CommsAudienceFilter(),
+        manualRecipients: [String] = [],
+        cc: [String] = [],
+        scheduledAt: String? = nil,
+        dryRun: Bool? = nil
+    ) async throws -> CreatedEmailCampaign {
+        struct Body: Encodable {
+            var subject: String
+            var htmlBody: String
+            var textBody: String
+            var language: String
+            var recipientMode: String
+            var audience: CommsAudienceFilter
+            var manualRecipients: [String]
+            var cc: [String]
+            var scheduledAt: String?
+            var dryRun: Bool?
+        }
+        let bodyData = try JSONEncoder().encode(
+            Body(
+                subject: subject,
+                htmlBody: htmlBody,
+                textBody: textBody,
+                language: language,
+                recipientMode: recipientMode,
+                audience: audience,
+                manualRecipients: manualRecipients,
+                cc: cc,
+                scheduledAt: scheduledAt,
+                dryRun: dryRun
+            )
+        )
+        return try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .post,
+            queryItems: [URLQueryItem(name: "view", value: "campaigns")],
+            bodyData: bodyData
+        )
+    }
+
+    private struct CampaignCancelResponse: Decodable {
+        var ok: Bool
+    }
+
+    /// `POST api/privacy?view=campaigns:cancel`, `{ id }`. Port of
+    /// `cancelCampaign` in `lib/server/email/campaigns.ts`; returns `false`
+    /// when the campaign was already terminal (server responds 404).
+    public func cancelEmailCampaign(id: String) async throws -> Bool {
+        struct Body: Encodable { var id: String }
+        let bodyData = try JSONEncoder().encode(Body(id: id))
+        let response: CampaignCancelResponse = try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .post,
+            queryItems: [URLQueryItem(name: "view", value: "campaigns:cancel")],
+            bodyData: bodyData
+        )
+        return response.ok
+    }
+
+    private struct EmailTemplatesEnvelope: Decodable {
+        var templates: [EmailTemplate]
+    }
+
+    /// `GET api/privacy?view=email-templates[&includeArchived=true]`. Port
+    /// of `listTemplates` in `lib/server/email/templates.ts`.
+    public func listEmailTemplates(includeArchived: Bool = false) async throws -> [EmailTemplate] {
+        var queryItems = [URLQueryItem(name: "view", value: "email-templates")]
+        if includeArchived {
+            queryItems.append(URLQueryItem(name: "includeArchived", value: "true"))
+        }
+        let envelope: EmailTemplatesEnvelope = try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .get,
+            queryItems: queryItems
+        )
+        return envelope.templates
+    }
+
+    /// `GET api/privacy?view=audience-preview&audience=<json>`. Port of the
+    /// `audience-preview` GET handler, which JSON-decodes the `audience`
+    /// query param, validates it against `audienceSchema`, and resolves it
+    /// via `resolveAudience`. Used by both the email and SMS composer flows
+    /// before a send to show the recipient count up front.
+    public func previewAudience(_ audience: CommsAudienceFilter) async throws -> AudiencePreview {
+        let audienceData = try JSONEncoder().encode(audience)
+        let audienceJson = String(data: audienceData, encoding: .utf8) ?? "{}"
+        return try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .get,
+            queryItems: [
+                URLQueryItem(name: "view", value: "audience-preview"),
+                URLQueryItem(name: "audience", value: audienceJson),
+            ]
+        )
+    }
+
+    private struct SmsCampaignsEnvelope: Decodable {
+        var campaigns: [SmsCampaign]
+        var maxRecipients: Int
+    }
+
+    /// `GET api/privacy?view=sms-campaigns`. Port of `listSmsCampaigns` in
+    /// `lib/server/sms/campaigns.ts`.
+    public func listSmsCampaigns() async throws -> (campaigns: [SmsCampaign], maxRecipients: Int) {
+        let envelope: SmsCampaignsEnvelope = try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .get,
+            queryItems: [URLQueryItem(name: "view", value: "sms-campaigns")]
+        )
+        return (envelope.campaigns, envelope.maxRecipients)
+    }
+
+    /// `POST api/privacy?view=sms-campaigns`. Port of
+    /// `smsCampaignCreateSchema` + `createSmsCampaign` in
+    /// `lib/server/sms/campaigns.ts`. Unlike the email path, a live
+    /// (non-dry-run) send additionally requires `acknowledgeCost: true` once
+    /// segment/cost estimates have been reviewed — omitting it gets a 400
+    /// `cost_ack_required` from `api/privacy/index.ts`.
+    public func createSmsCampaign(
+        message: String,
+        language: String = "en",
+        audience: CommsAudienceFilter = CommsAudienceFilter(),
+        scheduledAt: String? = nil,
+        dryRun: Bool? = nil,
+        acknowledgeCost: Bool? = nil
+    ) async throws -> CreatedSmsCampaign {
+        struct Body: Encodable {
+            var message: String
+            var language: String
+            var audience: CommsAudienceFilter
+            var scheduledAt: String?
+            var dryRun: Bool?
+            var acknowledgeCost: Bool?
+        }
+        let bodyData = try JSONEncoder().encode(
+            Body(
+                message: message,
+                language: language,
+                audience: audience,
+                scheduledAt: scheduledAt,
+                dryRun: dryRun,
+                acknowledgeCost: acknowledgeCost
+            )
+        )
+        return try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .post,
+            queryItems: [URLQueryItem(name: "view", value: "sms-campaigns")],
+            bodyData: bodyData
+        )
+    }
+
+    /// `POST api/privacy?view=sms-campaigns:cancel`, `{ id }`. Port of
+    /// `cancelSmsCampaign` in `lib/server/sms/campaigns.ts`.
+    public func cancelSmsCampaign(id: String) async throws -> Bool {
+        struct Body: Encodable { var id: String }
+        let bodyData = try JSONEncoder().encode(Body(id: id))
+        let response: CampaignCancelResponse = try await sendAnalyticsRequest(
+            path: "api/privacy",
+            method: .post,
+            queryItems: [URLQueryItem(name: "view", value: "sms-campaigns:cancel")],
+            bodyData: bodyData
+        )
+        return response.ok
+    }
 }
