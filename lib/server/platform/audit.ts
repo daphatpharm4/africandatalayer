@@ -18,7 +18,9 @@ export type PlatformAuditEventType =
   | "record_created"
   | "record_reviewed"
   | "record_exported"
-  | "notification_broadcast_sent";
+  | "notification_broadcast_sent"
+  | "mission_created"
+  | "mission_assigned";
 
 export interface PlatformAuditEvent {
   organizationId: string;

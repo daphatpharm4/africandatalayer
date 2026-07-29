@@ -147,3 +147,35 @@ export interface PlatformAdminOrganizationSummary {
   members: PlatformAdminMemberSummary[];
   projects: PlatformAdminProjectSummary[];
 }
+
+// ─── Missions & gamification ────────────────────────────────────────────────
+// See docs/superpowers/specs/2026-07-24-ios-console-missions-gamification-design.md
+
+export type MissionPeriod = "daily" | "weekly";
+export type MissionState = "pending" | "in_progress" | "completed" | "expired";
+
+export interface PlatformMission {
+  id: string;
+  organizationId: string;
+  period: MissionPeriod;
+  state: MissionState;
+  titleEn: string;
+  titleFr: string;
+  quota: number;
+  current: number;
+  rewardXp: number;
+  deadline: string | null;
+  projectId: string | null;
+  category: string | null;
+  notesEn: string | null;
+  notesFr: string | null;
+  assignedUserIds: string[] | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlatformMissionProgressEntry {
+  userId: string;
+  current: number;
+  state: MissionState;
+}

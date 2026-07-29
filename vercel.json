@@ -11,6 +11,10 @@
     {
       "path": "/api/analytics?view=campaign_drain",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/daily-missions",
+      "schedule": "10 6 * * *"
     }
   ],
   "headers": [

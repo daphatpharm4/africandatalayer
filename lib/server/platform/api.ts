@@ -30,6 +30,12 @@
 //                                the same per-record logic as record_review
 //   point_nearby        GET   — org's own nearby points for the picker (collector+)
 //   notification_broadcast POST — notify lower-role members in an organization
+//   mission_list        GET   — missions visible to the caller (manager+ sees
+//                                all with an org rollup; below manager sees
+//                                only their own assigned missions)
+//   mission_create       POST  — create a weekly mission (manager+)
+//   mission_assign        POST  — assign a mission to org collectors (manager+)
+//   mission_progress      GET   — per-collector progress for one mission (manager+)
 //
 // Every org/project view resolves tenancy via requireOrgRole/requireProjectOrgRole
 // BEFORE touching data; failures (401/403/404) are tenancy Responses returned as-is.
@@ -38,16 +44,17 @@ import { requireUser } from "../../auth.js";
 import { normalizeEmail } from "../../shared/identifier.js";
 import { isStorageUnavailableError } from "../db.js";
 import { errorResponse, jsonResponse } from "../http.js";
-import { ROLE_RANK, validateSchemaDefinition } from "../../../shared/platformSchema.js";
+import { ROLE_RANK, roleAtLeast, validateSchemaDefinition } from "../../../shared/platformSchema.js";
 import type { PlatformRole } from "../../../shared/platformTypes.js";
 import { validatePlatformRecord } from "../../../shared/platformRecord.js";
-import type { PlatformRecord } from "../../../shared/platformTypes.js";
+import type { PlatformMission, PlatformRecord } from "../../../shared/platformTypes.js";
 import { readIdempotencyKey } from "../idempotencyCore.js";
 import { hashRequestPayload } from "../idempotencyGeneric.js";
 import * as orgStore from "./orgStore.js";
 import * as adminStore from "./adminStore.js";
 import * as projectStore from "./projectStore.js";
 import * as recordStore from "./recordStore.js";
+import * as missionStore from "./missionStore.js";
 import { writePlatformAudit, type PlatformAuditEventType } from "./audit.js";
 import { createInviteToken, hashInviteToken, INVITE_TTL_DAYS, sendInviteEmail } from "./invites.js";
 import { isTenancyFailure, requireOrgRole, requireProjectOrgRole } from "./tenancy.js";
@@ -60,6 +67,8 @@ import {
   inviteRevokeSchema,
   memberRemoveSchema,
   memberUpdateSchema,
+  missionAssignSchema,
+  missionCreateSchema,
   notificationBroadcastSchema,
   orgCreateSchema,
   orgUpdateSchema,
@@ -116,6 +125,12 @@ export interface PlatformApiDeps {
   findOrgPointFn?: typeof findOrgPoint;
   listNearbyOrgPointsFn?: typeof listNearbyOrgPoints;
   hasRecentRecordForPointFn?: typeof recordStore.hasRecentRecordForPoint;
+  createMissionDefinitionFn?: typeof missionStore.createMissionDefinition;
+  getMissionDefinitionFn?: typeof missionStore.getMissionDefinition;
+  assignMissionToUsersFn?: typeof missionStore.assignMissionToUsers;
+  listMissionsForCollectorFn?: typeof missionStore.listMissionsForCollector;
+  listMissionsForManagerFn?: typeof missionStore.listMissionsForManager;
+  listMissionProgressFn?: typeof missionStore.listMissionProgress;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -190,6 +205,12 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
   const findOrgPointFn = deps.findOrgPointFn ?? findOrgPoint;
   const listNearbyOrgPointsFn = deps.listNearbyOrgPointsFn ?? listNearbyOrgPoints;
   const hasRecentRecordForPointFn = deps.hasRecentRecordForPointFn ?? recordStore.hasRecentRecordForPoint;
+  const createMissionDefinitionFn = deps.createMissionDefinitionFn ?? missionStore.createMissionDefinition;
+  const getMissionDefinitionFn = deps.getMissionDefinitionFn ?? missionStore.getMissionDefinition;
+  const assignMissionToUsersFn = deps.assignMissionToUsersFn ?? missionStore.assignMissionToUsers;
+  const listMissionsForCollectorFn = deps.listMissionsForCollectorFn ?? missionStore.listMissionsForCollector;
+  const listMissionsForManagerFn = deps.listMissionsForManagerFn ?? missionStore.listMissionsForManager;
+  const listMissionProgressFn = deps.listMissionProgressFn ?? missionStore.listMissionProgress;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -1101,6 +1122,167 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     });
   }
 
+  // ── mission_list ──────────────────────────────────────────────────────────
+  // Visible to every role (mirrors OVERVIEW). Managers/owners see every mission
+  // in the org with an org-wide rollup of progress; everyone else sees only
+  // the missions assigned to them, with their own progress.
+  async function handleMissionList(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const context = await requireOrgRole(request, organizationId, "viewer", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const missions = roleAtLeast(context.role, "manager")
+      ? await listMissionsForManagerFn(organizationId)
+      : await listMissionsForCollectorFn({ organizationId, userId: context.userId });
+
+    return jsonResponse({ missions }, { status: 200 });
+  }
+
+  // ── mission_create ───────────────────────────────────────────────────────
+  // Manager/owner only. Always creates a `weekly` mission — daily missions are
+  // exclusively auto-generated by the cron (missionsCron.ts).
+  async function handleMissionCreate(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(missionCreateSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const context = await requireOrgRole(request, body.organizationId, "manager", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const definition = await createMissionDefinitionFn({
+      organizationId: body.organizationId,
+      period: "weekly",
+      titleEn: body.titleEn,
+      titleFr: body.titleFr,
+      quota: body.quota,
+      deadline: body.deadline,
+      rewardXp: body.rewardXp,
+      projectId: body.projectId ?? null,
+      category: body.category ?? null,
+      notesEn: body.notesEn ?? null,
+      notesFr: body.notesFr ?? null,
+      createdBy: context.userId,
+    });
+
+    await audit({
+      organizationId: body.organizationId,
+      projectId: body.projectId ?? null,
+      actorUserId: context.userId,
+      eventType: "mission_created",
+      payload: { missionId: definition.id, quota: definition.quota, rewardXp: definition.rewardXp, deadline: definition.deadline },
+    });
+
+    const mission: PlatformMission = {
+      id: definition.id,
+      organizationId: definition.organizationId,
+      period: definition.period,
+      state: missionStore.computeMissionAssignmentState({ current: 0, quota: definition.quota, deadline: definition.deadline }),
+      titleEn: definition.titleEn,
+      titleFr: definition.titleFr,
+      quota: definition.quota,
+      current: 0,
+      rewardXp: definition.rewardXp,
+      deadline: definition.deadline,
+      projectId: definition.projectId,
+      category: definition.category,
+      notesEn: definition.notesEn,
+      notesFr: definition.notesFr,
+      assignedUserIds: [],
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+    };
+    return jsonResponse({ mission }, { status: 201 });
+  }
+
+  // ── mission_assign ───────────────────────────────────────────────────────
+  // Manager/owner only. Rejects any target id that isn't a CURRENT collector
+  // of the mission's organization (spec risk: manager targets a collector who
+  // has since left the org). Re-assigning an already-assigned collector is a
+  // no-op (handled by assignMissionToUsersFn's ON CONFLICT DO NOTHING) so
+  // their existing progress is never disturbed.
+  async function handleMissionAssign(request: Request): Promise<Response> {
+    const rawBody = await readJson(request);
+    if (rawBody === null) return errorResponse("Invalid JSON body", 400);
+    const parsed = parse(missionAssignSchema, rawBody);
+    if ("response" in parsed) return parsed.response;
+    const body = parsed.data;
+
+    const definition = await getMissionDefinitionFn(body.missionId);
+    if (!definition) return errorResponse("Mission not found", 404, { code: "platform_mission_not_found" });
+
+    const context = await requireOrgRole(request, definition.organizationId, "manager", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const targetUserIds = Array.from(new Set(body.targetUserIds));
+    const members = await listMembersFn(definition.organizationId);
+    const collectorIds = new Set(members.filter((member) => member.role === "collector").map((member) => member.userId));
+    const invalidUserIds = targetUserIds.filter((userId) => !collectorIds.has(userId));
+    if (invalidUserIds.length > 0) {
+      return jsonResponse({
+        error: "Some target users are not current collectors in this organization",
+        code: "platform_mission_invalid_targets",
+        invalidUserIds,
+      }, { status: 400 });
+    }
+
+    await assignMissionToUsersFn({ missionId: body.missionId, userIds: targetUserIds });
+
+    await audit({
+      organizationId: definition.organizationId,
+      actorUserId: context.userId,
+      eventType: "mission_assigned",
+      payload: { missionId: body.missionId, targetUserIds },
+    });
+
+    return jsonResponse({ assigned: true, missionId: body.missionId, targetUserIds }, { status: 200 });
+  }
+
+  // ── mission_progress ─────────────────────────────────────────────────────
+  // Manager/owner only. Per-collector progress breakdown for one mission, plus
+  // an org-wide rollup `mission` summary (same shape mission_list returns for
+  // managers).
+  async function handleMissionProgress(request: Request, url: URL): Promise<Response> {
+    const organizationId = url.searchParams.get("organizationId") ?? "";
+    const missionId = url.searchParams.get("missionId") ?? "";
+    const context = await requireOrgRole(request, organizationId, "manager", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const definition = await getMissionDefinitionFn(missionId);
+    if (!definition || definition.organizationId !== organizationId) {
+      return errorResponse("Mission not found", 404, { code: "platform_mission_not_found" });
+    }
+
+    const progress = await listMissionProgressFn(missionId);
+    const totalCurrent = progress.reduce((sum, entry) => sum + entry.current, 0);
+    const state = missionStore.computeMissionAssignmentState({
+      current: totalCurrent,
+      quota: definition.quota,
+      deadline: definition.deadline,
+    });
+    const mission: PlatformMission = {
+      id: definition.id,
+      organizationId: definition.organizationId,
+      period: definition.period,
+      state,
+      titleEn: definition.titleEn,
+      titleFr: definition.titleFr,
+      quota: definition.quota,
+      current: totalCurrent,
+      rewardXp: definition.rewardXp,
+      deadline: definition.deadline,
+      projectId: definition.projectId,
+      category: definition.category,
+      notesEn: definition.notesEn,
+      notesFr: definition.notesFr,
+      assignedUserIds: progress.map((entry) => entry.userId),
+      createdAt: definition.createdAt,
+      updatedAt: definition.updatedAt,
+    };
+    return jsonResponse({ mission, progress }, { status: 200 });
+  }
+
   // ── Dispatch map ──────────────────────────────────────────────────────────
   const routes: Record<string, { method: "GET" | "POST"; handler: (request: Request) => Promise<Response> }> = {
     platform_admin_org_list: { method: "GET", handler: handleAdminOrgList },
@@ -1130,6 +1312,10 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_export_csv: { method: "GET", handler: (request) => handleRecordExportCsv(request, new URL(request.url)) },
     platform_record_export_geojson: { method: "GET", handler: (request) => handleRecordExportGeojson(request, new URL(request.url)) },
     platform_point_nearby: { method: "GET", handler: (request) => handlePointNearby(request, new URL(request.url)) },
+    platform_mission_list: { method: "GET", handler: (request) => handleMissionList(request, new URL(request.url)) },
+    platform_mission_create: { method: "POST", handler: handleMissionCreate },
+    platform_mission_assign: { method: "POST", handler: handleMissionAssign },
+    platform_mission_progress: { method: "GET", handler: (request) => handleMissionProgress(request, new URL(request.url)) },
   };
 
   return async function handlePlatform(request: Request): Promise<Response> {

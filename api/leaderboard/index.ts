@@ -1,6 +1,7 @@
 import "../../lib/server/sentry.js";
 import { buildContributionEvents } from "../../lib/server/submissionEvents.js";
 import { getUserProfilesBatch, isStorageUnavailableError } from "../../lib/server/storage/index.js";
+import { listMembers } from "../../lib/server/platform/orgStore.js";
 import { errorResponse, jsonResponse } from "../../lib/server/http.js";
 import type { LeaderboardEntry, PointEvent, SubmissionCategory } from "../../shared/types.js";
 import { getEffectiveEventXp } from "../../shared/xp.js";
@@ -77,14 +78,43 @@ export function getPublicDisplayName(userId: string, profileName?: string | null
   return redactUserId(userId);
 }
 
-export async function GET(): Promise<Response> {
+export interface LeaderboardDeps {
+  buildContributionEventsFn?: typeof buildContributionEvents;
+  getUserProfilesBatchFn?: typeof getUserProfilesBatch;
+  listMembersFn?: typeof listMembers;
+}
+
+// Factory (matches the createPlatformHandler(deps) convention used elsewhere
+// under lib/server/platform/) so the org-scoped filter and cache header can be
+// unit-tested without a real database. `export const GET` below is the
+// zero-deps instance Vercel actually routes to.
+export function createLeaderboardHandler(deps: LeaderboardDeps = {}): (request: Request) => Promise<Response> {
+  const buildContributionEventsFn = deps.buildContributionEventsFn ?? buildContributionEvents;
+  const getUserProfilesBatchFn = deps.getUserProfilesBatchFn ?? getUserProfilesBatch;
+  const listMembersFn = deps.listMembersFn ?? listMembers;
+
+  return async function handleLeaderboard(request: Request): Promise<Response> {
   try {
-    const submissions = await buildContributionEvents();
+    const url = new URL(request.url);
+    const organizationId = url.searchParams.get("organizationId")?.trim() || undefined;
+
+    // Omitting organizationId preserves the existing global (cross-org)
+    // leaderboard exactly as before. When provided, events are filtered to
+    // members of that organization before aggregation — everything downstream
+    // (ranking, redaction, cache header) is unchanged.
+    let orgMemberUserIds: Set<string> | null = null;
+    if (organizationId) {
+      const members = await listMembersFn(organizationId);
+      orgMemberUserIds = new Set(members.map((member) => member.userId.toLowerCase().trim()));
+    }
+
+    const submissions = await buildContributionEventsFn();
     const rowsByUser = new Map<string, AggregateRow>();
 
     for (const submission of submissions) {
       const userId = typeof submission.userId === "string" ? submission.userId.toLowerCase().trim() : "";
       if (!userId) continue;
+      if (orgMemberUserIds && !orgMemberUserIds.has(userId)) continue;
 
       const previous = rowsByUser.get(userId);
       const xpAwarded = getXpAwarded(submission);
@@ -134,7 +164,7 @@ export async function GET(): Promise<Response> {
     });
 
     const topRows = sorted.slice(0, 100);
-    const profileMap = await getUserProfilesBatch(topRows.map((row) => row.userId));
+    const profileMap = await getUserProfilesBatchFn(topRows.map((row) => row.userId));
 
     const leaderboard: LeaderboardEntry[] = topRows.map((row, index) => {
       const profile = profileMap.get(row.userId);
@@ -166,4 +196,7 @@ export async function GET(): Promise<Response> {
     }
     throw error;
   }
+  };
 }
+
+export const GET = createLeaderboardHandler();
