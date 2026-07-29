@@ -1,7 +1,4 @@
 import Foundation
-#if canImport(UIKit)
-import UIKit
-#endif
 
 /// Seam between the capture flow's device-adaptive behavior (e.g. skipping
 /// heavy on-device work on low-end hardware) and `sysctlbyname`/`UIDevice`/
@@ -25,7 +22,7 @@ struct DeviceProfile: Equatable, Sendable, Codable {
 }
 
 /// Production `DeviceProfilingProviding` backed by `sysctlbyname("hw.machine")`
-/// for the model identifier, `UIDevice`/`ProcessInfo` for the rest. The
+/// for the model identifier and `ProcessInfo` for the rest. The
 /// individual system reads are injectable closures (all defaulted to the
 /// real system calls) so `DeviceProfilingProviderTests` can drive the
 /// low-end heuristic deterministically instead of depending on whatever
@@ -86,19 +83,11 @@ final class SystemDeviceProfilingProvider: DeviceProfilingProviding {
     }
 
     static func readSystemVersionFromDevice() -> String {
-        #if canImport(UIKit)
-        return UIDevice.current.systemVersion
-        #else
         return ProcessInfo.processInfo.operatingSystemVersionString
-        #endif
     }
 
     private static func readSystemVersionFallbackModel() -> String {
-        #if canImport(UIKit)
-        return UIDevice.current.model
-        #else
         return "unknown"
-        #endif
     }
 
     private static func thermalStateString(_ state: ProcessInfo.ThermalState) -> String {
