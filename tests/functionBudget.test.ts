@@ -18,6 +18,8 @@ test("budget script passes with current routes + crons", () => {
   const result = run();
   assert.equal(result.code, 0, `stdout: ${result.stdout}\nstderr: ${result.stderr}`);
   assert.match(result.stdout, /not covered by existing routes/);
+  assert.match(result.stdout, /projected deployment functions: 12/);
+  assert.match(result.stdout, /budget limit: 12/);
 });
 
 test("budget script fails when limit lowered below current count", () => {

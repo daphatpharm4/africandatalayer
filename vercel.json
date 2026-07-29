@@ -11,10 +11,6 @@
     {
       "path": "/api/analytics?view=campaign_drain",
       "schedule": "0 7 * * *"
-    },
-    {
-      "path": "/api/cron/daily-missions",
-      "schedule": "10 6 * * *"
     }
   ],
   "headers": [
@@ -109,12 +105,6 @@
         { "key": "Access-Control-Allow-Methods", "value": "GET, OPTIONS" },
         { "key": "Access-Control-Allow-Headers", "value": "Content-Type" },
         { "key": "Access-Control-Max-Age", "value": "86400" }
-      ]
-    },
-    {
-      "source": "/api/cron/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store" }
       ]
     },
     {

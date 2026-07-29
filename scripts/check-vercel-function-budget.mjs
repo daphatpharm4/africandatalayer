@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve, extname } from "node:path";
 
-const DEFAULT_LIMIT = 13;
+const DEFAULT_LIMIT = 12;
 const ALLOWED_ROUTE_EXTENSIONS = new Set([".ts", ".js", ".mjs", ".cjs"]);
 
 function parseLimit(value) {
