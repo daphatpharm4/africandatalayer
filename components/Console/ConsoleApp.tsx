@@ -355,7 +355,11 @@ const ConsoleApp: React.FC = () => {
       break;
     case 'ANALYTICS':
       screenContent = selectedOrganization ? (
-        <AnalyticsScreen organizationId={selectedOrganization.id} language={language} />
+        <AnalyticsScreen
+          organizationId={selectedOrganization.id}
+          role={selectedOrganization.role}
+          language={language}
+        />
       ) : null;
       break;
     case 'PROJECTS':

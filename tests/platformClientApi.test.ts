@@ -26,6 +26,7 @@ import {
   nearbyPlatformPointsRequest,
   sendNotificationBroadcastRequest,
   getOrganizationAnalyticsSnapshotRequest,
+  askOrganizationAnalyticsAssistantRequest,
   listOrganizationAnalyticsAgentsRequest,
   listOrganizationAnalyticsCategoriesRequest,
   listOrganizationAnalyticsTrendsRequest,
@@ -127,6 +128,15 @@ test("tenant insight clients always bind the selected organization", async () =>
   const agents = stubFetch(() => jsonResponse([]));
   await listOrganizationAnalyticsAgentsRequest("org-1", { fetchFn: agents.fetchFn });
   assert.equal(agents.calls[0].url, "/api/user?view=platform_analytics&organizationId=org-1&section=agents");
+
+  const assistant = stubFetch(() => jsonResponse({ answer: "Company only", facts: [], caveats: [], suggestedNextValidations: [], confidence: 1 }));
+  await askOrganizationAnalyticsAssistantRequest("org-1", "What changed?", { fetchFn: assistant.fetchFn });
+  assert.equal(assistant.calls[0].url, "/api/user?view=platform_analytics_assistant");
+  assert.equal(assistant.calls[0].init?.method, "POST");
+  assert.deepEqual(JSON.parse(String(assistant.calls[0].init?.body)), {
+    organizationId: "org-1",
+    question: "What changed?",
+  });
 
   const leaderboard = stubFetch(() => jsonResponse([]));
   await listOrganizationLeaderboardRequest("org-1", { fetchFn: leaderboard.fetchFn });

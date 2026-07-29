@@ -188,6 +188,11 @@ export const notificationBroadcastSchema = z.object({
   body: z.string().trim().min(2).max(500),
 });
 
+export const analyticsAssistantSchema = z.object({
+  organizationId: uuid,
+  question: z.string().trim().min(3).max(500),
+});
+
 // ─── Missions & gamification ────────────────────────────────────────────────
 // See docs/superpowers/specs/2026-07-24-ios-console-missions-gamification-design.md
 

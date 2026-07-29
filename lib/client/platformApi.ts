@@ -8,6 +8,7 @@
 import type {
   PlatformAdminOrganizationSummary,
   PlatformAnalyticsAgent,
+  PlatformAnalyticsAssistantResponse,
   PlatformAnalyticsCategory,
   PlatformAnalyticsSnapshot,
   PlatformAnalyticsTrend,
@@ -164,6 +165,18 @@ export async function listOrganizationAnalyticsAgentsRequest(
   return callPlatform<PlatformAnalyticsAgent[]>(
     "analytics",
     { method: "GET", params: { organizationId, section: "agents" } },
+    deps,
+  );
+}
+
+export async function askOrganizationAnalyticsAssistantRequest(
+  organizationId: string,
+  question: string,
+  deps?: PlatformApiDeps,
+): Promise<PlatformAnalyticsAssistantResponse> {
+  return callPlatform<PlatformAnalyticsAssistantResponse>(
+    "analytics_assistant",
+    { method: "POST", body: { organizationId, question } },
     deps,
   );
 }

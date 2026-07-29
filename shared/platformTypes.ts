@@ -225,6 +225,20 @@ export interface PlatformAnalyticsAgent {
   trustScore: number;
 }
 
+export interface PlatformAnalyticsAssistantFact {
+  label: string;
+  value: string | number;
+  source: string;
+}
+
+export interface PlatformAnalyticsAssistantResponse {
+  answer: string;
+  facts: PlatformAnalyticsAssistantFact[];
+  caveats: string[];
+  suggestedNextValidations: string[];
+  confidence: number;
+}
+
 export interface PlatformLeaderboardEntry {
   rank: number;
   userId: string;

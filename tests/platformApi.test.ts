@@ -21,6 +21,7 @@ function baseDeps(overrides: Record<string, unknown> = {}) {
     requireUserFn: async () => OWNER,
     getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "owner" as const, createdAt: "" }),
     getOrganizationAccessStateFn: async () => "active" as const,
+    consumeRateLimitFn: async () => ({ allowed: true, remaining: 29, retryAfterSeconds: 0, count: 1 }),
     writeAuditFn: async () => {},
     ...overrides,
   };
@@ -184,6 +185,97 @@ test("company spatial analytics forwards authorized org and all-types scope", as
   assert.equal(response.status, 200);
   assert.deepEqual(calls, [{ organizationId: ORG.id, recordTypeKey: undefined }]);
   assert.equal((await response.json())[0].totalPoints, 2);
+});
+
+test("owner analytics assistant builds facts only from the authorized company", async () => {
+  const organizations: string[] = [];
+  let receivedFacts: Array<{ label: string; value: string | number; source: string }> = [];
+  const handler = createPlatformHandler(baseDeps({
+    getOrganizationDeltaSnapshotFn: async (organizationId: string) => {
+      organizations.push(organizationId);
+      return {
+        generatedAt: "2026-07-29T00:00:00.000Z",
+        weeklyActiveContributors: 2,
+        verification: { totalPoints: 12, verifiedPoints: 10, verificationRatePct: 83 },
+        freshness: { medianAgeDays: 3, avgAgeDays: 4 },
+        fraud: { eventsWithFraudCheck: 8, mismatchEvents: 1, fraudRatePct: 12.5 },
+        reviewQueue: { pendingReview: 2, highRiskEvents: 1 },
+        enrichmentRatePct: 70,
+      };
+    },
+    listOrganizationWeeklyTrendsFn: async (input: { organizationId: string }) => {
+      organizations.push(input.organizationId);
+      return Array.from({ length: 8 }, (_, index) => ({ date: `2026-0${index + 1}-01`, value: index + 1, movingAvg: null }));
+    },
+    listOrganizationCategoryBreakdownFn: async (organizationId: string) => {
+      organizations.push(organizationId);
+      return [{ category: "pharmacy", count: 8, percentage: 67 }];
+    },
+    listOrganizationAgentPerformanceFn: async (organizationId: string) => {
+      organizations.push(organizationId);
+      return [{ userId: "collector-1", displayName: "Collector 1", submissions: 7, approvalRate: 0.86, flags: 0, trustScore: 86 }];
+    },
+    answerAnalyticsQuestionFn: async (input: { facts: typeof receivedFacts }) => {
+      receivedFacts = input.facts;
+      return {
+        answer: "Company collection increased.",
+        facts: input.facts,
+        caveats: ["Aggregate records only."],
+        suggestedNextValidations: ["Review pending records."],
+        confidence: 0.8,
+        modelMetadata: { provider: "test", model: "test", modelVersion: null, promptVersion: "test", confidence: 0.8 },
+      };
+    },
+  }));
+  const response = await handler(jsonPost("analytics_assistant", {
+    organizationId: ORG.id,
+    question: "What changed?",
+  }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(organizations, [ORG.id, ORG.id, ORG.id, ORG.id]);
+  assert.ok(receivedFacts.length >= 9);
+  assert.ok(receivedFacts.every((fact) => fact.source.startsWith("company_records.")));
+  assert.equal((await response.json()).answer, "Company collection increased.");
+});
+
+test("analytics assistant denies non-owners and foreign companies before loading facts", async () => {
+  let queried = false;
+  const stores = {
+    getOrganizationDeltaSnapshotFn: async () => { queried = true; throw new Error("must not run"); },
+  };
+  const managerHandler = createPlatformHandler(baseDeps({
+    ...stores,
+    getMembershipFn: async () => ({ organizationId: ORG.id, userId: OWNER.id, role: "manager" as const, createdAt: "" }),
+  }));
+  const managerResponse = await managerHandler(jsonPost("analytics_assistant", {
+    organizationId: ORG.id,
+    question: "What changed?",
+  }));
+  assert.equal(managerResponse.status, 403);
+  assert.equal(queried, false);
+
+  const foreignHandler = createPlatformHandler(baseDeps({ ...stores, getMembershipFn: async () => null }));
+  const foreignResponse = await foreignHandler(jsonPost("analytics_assistant", {
+    organizationId: "5a2f8f18-0000-4000-8000-000000000099",
+    question: "What changed?",
+  }));
+  assert.equal(foreignResponse.status, 403);
+  assert.equal(queried, false);
+});
+
+test("analytics assistant rate limits an owner before loading company facts", async () => {
+  let queried = false;
+  const handler = createPlatformHandler(baseDeps({
+    consumeRateLimitFn: async () => ({ allowed: false, remaining: 0, retryAfterSeconds: 60, count: 31 }),
+    getOrganizationDeltaSnapshotFn: async () => { queried = true; throw new Error("must not run"); },
+  }));
+  const response = await handler(jsonPost("analytics_assistant", {
+    organizationId: ORG.id,
+    question: "What changed?",
+  }));
+  assert.equal(response.status, 429);
+  assert.equal(response.headers.get("retry-after"), "60");
+  assert.equal(queried, false);
 });
 
 test("invite_create sends email with hashed-token invite and never leaks token", async () => {

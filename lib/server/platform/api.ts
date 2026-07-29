@@ -50,6 +50,9 @@ import { validatePlatformRecord } from "../../../shared/platformRecord.js";
 import type { PlatformMission, PlatformRecord } from "../../../shared/platformTypes.js";
 import { readIdempotencyKey } from "../idempotencyCore.js";
 import { hashRequestPayload } from "../idempotencyGeneric.js";
+import { answerAnalyticsQuestion } from "../ai/analyticsAssistant.js";
+import { AiModelUpstreamError, defaultAiModelClient, type AiModelClient } from "../ai/modelClient.js";
+import { consumeRateLimit } from "../rateLimit.js";
 import * as orgStore from "./orgStore.js";
 import * as adminStore from "./adminStore.js";
 import * as projectStore from "./projectStore.js";
@@ -63,6 +66,7 @@ import { findOrgPoint, listNearbyOrgPoints } from "./pointLookup.js";
 import { haversineKm } from "../submissionFraud.js";
 import {
   adminOrgAccessUpdateSchema,
+  analyticsAssistantSchema,
   inviteAcceptSchema,
   inviteCreateSchema,
   inviteRevokeSchema,
@@ -137,6 +141,9 @@ export interface PlatformApiDeps {
   listOrganizationCategoryBreakdownFn?: typeof analyticsStore.listOrganizationCategoryBreakdown;
   listOrganizationAgentPerformanceFn?: typeof analyticsStore.listOrganizationAgentPerformance;
   listOrganizationSpatialCellsFn?: typeof analyticsStore.listOrganizationSpatialCells;
+  answerAnalyticsQuestionFn?: typeof answerAnalyticsQuestion;
+  aiModelClient?: AiModelClient;
+  consumeRateLimitFn?: typeof consumeRateLimit;
   // services
   requireUserFn?: typeof requireUser;
   sendInviteEmailFn?: typeof sendInviteEmail;
@@ -227,6 +234,9 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     deps.listOrganizationAgentPerformanceFn ?? analyticsStore.listOrganizationAgentPerformance;
   const listOrganizationSpatialCellsFn =
     deps.listOrganizationSpatialCellsFn ?? analyticsStore.listOrganizationSpatialCells;
+  const answerAnalyticsQuestionFn = deps.answerAnalyticsQuestionFn ?? answerAnalyticsQuestion;
+  const aiModelClient = deps.aiModelClient ?? defaultAiModelClient;
+  const consumeRateLimitFn = deps.consumeRateLimitFn ?? consumeRateLimit;
 
   const requireUserFn = deps.requireUserFn ?? requireUser;
   const sendInviteEmailFn = deps.sendInviteEmailFn ?? sendInviteEmail;
@@ -942,6 +952,78 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     }
   }
 
+  async function handleOrganizationAnalyticsAssistant(request: Request): Promise<Response> {
+    const parsed = parse(analyticsAssistantSchema, await readJson(request));
+    if ("response" in parsed) return parsed.response;
+
+    const context = await requireOrgRole(request, parsed.data.organizationId, "owner", tenancyDeps);
+    if (isTenancyFailure(context)) return context;
+
+    const rateLimit = await consumeRateLimitFn({
+      route: "POST /api/user:platform_analytics_assistant",
+      key: context.userId,
+      windowSeconds: 60 * 60,
+      max: 30,
+      request,
+      userId: context.userId,
+    });
+    if (!rateLimit.allowed) {
+      return jsonResponse(
+        { error: "Too many assistant requests", code: "rate_limited" },
+        { status: 429, headers: { "retry-after": String(rateLimit.retryAfterSeconds) } },
+      );
+    }
+
+    const [snapshot, trends, categories, agents] = await Promise.all([
+      getOrganizationDeltaSnapshotFn(context.organizationId),
+      listOrganizationWeeklyTrendsFn({ organizationId: context.organizationId, weeks: 12 }),
+      listOrganizationCategoryBreakdownFn(context.organizationId),
+      listOrganizationAgentPerformanceFn(context.organizationId),
+    ]);
+    const recentTotal = trends.slice(-4).reduce((sum, point) => sum + point.value, 0);
+    const previousTotal = trends.slice(-8, -4).reduce((sum, point) => sum + point.value, 0);
+    const topCategory = categories[0];
+    const topAgent = agents[0];
+    const facts = [
+      { label: "Total company records", value: snapshot.verification.totalPoints, source: "company_records.snapshot" },
+      { label: "Verification rate", value: `${snapshot.verification.verificationRatePct}%`, source: "company_records.snapshot" },
+      { label: "Pending review", value: snapshot.reviewQueue.pendingReview, source: "company_records.snapshot" },
+      { label: "Weekly active contributors", value: snapshot.weeklyActiveContributors, source: "company_records.snapshot" },
+      { label: "Median freshness", value: `${snapshot.freshness.medianAgeDays} days`, source: "company_records.snapshot" },
+      { label: "Fraud mismatch rate", value: `${snapshot.fraud.fraudRatePct}%`, source: "company_records.snapshot" },
+      { label: "Enrichment rate", value: `${snapshot.enrichmentRatePct}%`, source: "company_records.snapshot" },
+      { label: "Records in latest four weeks", value: recentTotal, source: "company_records.weekly_trends" },
+      { label: "Records in preceding four weeks", value: previousTotal, source: "company_records.weekly_trends" },
+      ...(topCategory
+        ? [{ label: "Largest category", value: `${topCategory.category} (${topCategory.count})`, source: "company_records.categories" }]
+        : []),
+      ...(topAgent
+        ? [{ label: "Leading contributor", value: `${topAgent.displayName} (${topAgent.submissions} submissions)`, source: "company_records.agents" }]
+        : []),
+    ];
+
+    try {
+      const result = await answerAnalyticsQuestionFn(
+        { question: parsed.data.question, facts },
+        aiModelClient,
+      );
+      return jsonResponse({
+        answer: result.answer,
+        facts: result.facts,
+        caveats: result.caveats,
+        suggestedNextValidations: result.suggestedNextValidations,
+        confidence: result.confidence,
+      });
+    } catch (error) {
+      if (error instanceof AiModelUpstreamError) {
+        return errorResponse("Company analytics assistant is temporarily unavailable", 503, {
+          code: "analytics_assistant_unavailable",
+        });
+      }
+      throw error;
+    }
+  }
+
   // Core single-record review logic — applies the decision via `reviewRecordFn`
   // and fires the `record_reviewed` audit event. Both `handleRecordReview`
   // (one record) and `handleRecordBatchReview` (many records, looped) call
@@ -1369,6 +1451,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     platform_record_browse: { method: "GET", handler: (request) => handleRecordBrowse(request, new URL(request.url)) },
     platform_record_my_summary: { method: "GET", handler: handleMyRecordSummary },
     platform_analytics: { method: "GET", handler: (request) => handleOrganizationAnalytics(request, new URL(request.url)) },
+    platform_analytics_assistant: { method: "POST", handler: handleOrganizationAnalyticsAssistant },
     platform_record_review: { method: "POST", handler: handleRecordReview },
     platform_record_batch_review: { method: "POST", handler: handleRecordBatchReview },
     platform_notification_broadcast: { method: "POST", handler: handleNotificationBroadcast },
