@@ -1,44 +1,16 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Camera, MapPin, Trophy, ArrowRight, Route as RouteIcon } from 'lucide-react';
+import React, { useRef, useState, useCallback } from 'react';
+import { Camera, MapPin, ArrowRight, Route as RouteIcon } from 'lucide-react';
 import { Screen } from '../../types';
 import BrandLogo from '../BrandLogo';
-import VerticalIcon from '../shared/VerticalIcon';
-import { VERTICALS, VERTICAL_IDS, categoryLabel } from '../../shared/verticals';
-import { apiJson } from '../../lib/client/api';
-import type { LeaderboardEntry } from '../../shared/types';
 
 interface Props {
   onStart: (screen: Screen) => void;
   language: 'en' | 'fr';
 }
 
-type SlideId = 'welcome' | 'permissions' | 'verticals' | 'rewards' | 'ready';
-
-type LeaderboardState = 'loading' | LeaderboardEntry[] | 'fallback';
+type SlideId = 'mission' | 'proof';
 
 const t = (lang: 'en' | 'fr', en: string, fr: string) => (lang === 'fr' ? fr : en);
-
-function useLeaderboardTop3(enabled: boolean): LeaderboardState {
-  const [state, setState] = useState<LeaderboardState>('loading');
-  useEffect(() => {
-    if (!enabled) return undefined;
-    const controller = new AbortController();
-    apiJson<LeaderboardEntry[]>('/api/leaderboard', { signal: controller.signal })
-      .then((rows) => {
-        if (controller.signal.aborted) return;
-        if (Array.isArray(rows) && rows.length > 0) {
-          setState(rows.slice(0, 3));
-        } else {
-          setState('fallback');
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setState('fallback');
-      });
-    return () => controller.abort();
-  }, [enabled]);
-  return state;
-}
 
 function useSwipe(go: (delta: 1 | -1) => void) {
   const downRef = useRef<{ x: number; y: number; t: number; id: number } | null>(null);
@@ -68,7 +40,6 @@ const SHEET_FADE = 'linear-gradient(180deg, rgba(15,43,70,0) 0%, rgba(15,43,70,0
 
 const Splash: React.FC<Props> = ({ onStart, language }) => {
   const [idx, setIdx] = useState(0);
-  const leaderboard = useLeaderboardTop3(idx >= 3);
 
   const slides: Array<{
     id: SlideId;
@@ -78,66 +49,26 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
     Hero: React.FC;
   }> = [
     {
-      id: 'welcome',
-      eyebrow: t(language, 'Welcome', 'Bienvenue'),
-      title: t(language, 'The city, mapped\nfrom the ground up.', 'La ville cartographiée\ndepuis le terrain.'),
+      id: 'mission',
+      eyebrow: t(language, 'Your first mission', 'Votre première mission'),
+      title: t(language, 'Find what your area\nstill needs.', 'Repérez ce qui manque\ndans votre quartier.'),
       body: t(
         language,
-        'African Data Layer turns everyday movement in Bonamoussadi into verified infrastructure data.',
-        "African Data Layer transforme les déplacements quotidiens à Bonamoussadi en données d'infrastructure vérifiées."
+        'Explore the live map, choose a nearby coverage gap, and turn one short field visit into trusted local data.',
+        'Explorez la carte, choisissez un manque à proximité et transformez une courte visite terrain en donnée locale fiable.'
       ),
       Hero: Hero1Welcome,
     },
     {
-      id: 'permissions',
-      eyebrow: t(language, 'Before you start', 'Avant de commencer'),
-      title: t(language, 'Camera + GPS,\nverified at capture.', 'Caméra + GPS,\nvérifiés à la capture.'),
+      id: 'proof',
+      eyebrow: t(language, 'How verification works', 'Comment fonctionne la vérification'),
+      title: t(language, 'One live photo.\nOne trusted location.', 'Une photo en direct.\nUn lieu vérifié.'),
       body: t(
         language,
-        'We need your camera and location to verify each capture. Only live photos are accepted — no gallery uploads.',
-        'Nous avons besoin de votre caméra et de votre position pour vérifier chaque capture. Seules les photos en direct sont acceptées.'
+        'When you begin a capture, ADL asks for camera and precise location access to prove the visit. Your result is then saved or queued safely.',
+        "Au début d'une collecte, ADL demande la caméra et la position précise pour prouver la visite. Le résultat est ensuite enregistré ou mis en attente en toute sécurité."
       ),
       Hero: Hero2Permissions,
-    },
-    {
-      id: 'verticals',
-      eyebrow: t(language, '7 Verticals', '7 catégories'),
-      title: t(language, 'Every corner\nof the city counts.', 'Chaque coin\nde la ville compte.'),
-      body: t(
-        language,
-        'Pharmacies, mobile money, fuel, alcohol, billboards, roads, buildings — all mapped and verified in real time.',
-        'Pharmacies, mobile money, carburant, alcool, panneaux, routes, bâtiments — tout cartographié et vérifié en temps réel.'
-      ),
-      Hero: () => <Hero3Verticals language={language} />,
-    },
-    {
-      id: 'rewards',
-      eyebrow: t(language, 'Rewards', 'Récompenses'),
-      title: t(language, 'Map more.\nClimb higher.', 'Cartographiez plus.\nMontez plus haut.'),
-      body:
-        leaderboard === 'fallback'
-          ? t(
-              language,
-              'Be among the first to climb. The leaderboard fills with the first verified submissions.',
-              'Soyez parmi les premiers à grimper. Le classement se remplit avec les premières contributions vérifiées.'
-            )
-          : t(
-              language,
-              'Earn XP on every verified submission. Rise up the leaderboard. Unlock badges and real rewards.',
-              'Gagnez des XP à chaque contribution vérifiée. Grimpez le classement. Débloquez des badges et de vraies récompenses.'
-            ),
-      Hero: () => <Hero4Rewards state={leaderboard} language={language} />,
-    },
-    {
-      id: 'ready',
-      eyebrow: t(language, 'Ready?', 'Prêt ?'),
-      title: t(language, 'Join the\nmission.', 'Rejoignez la\nmission.'),
-      body: t(
-        language,
-        'Sign in or create your account to start contributing. Data collection starts now.',
-        'Connectez-vous ou créez un compte pour commencer à contribuer. La collecte démarre maintenant.'
-      ),
-      Hero: () => <Hero5Ready language={language} />,
     },
   ];
 
@@ -183,7 +114,7 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
     >
       {/* Hero region (dark) */}
       <div
-        className="relative flex-[0_0_58%] overflow-hidden"
+        className="relative flex-[0_0_52%] overflow-hidden"
         style={{ background: HERO_GRADIENT }}
       >
         <div key={slide.id} className="surface-reveal absolute inset-0">
@@ -196,15 +127,9 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
             <BrandLogo size={18} />
             <span className="micro-label text-white/90">ADL</span>
           </div>
-          {!isFinal && (
-            <button
-              type="button"
-              onClick={() => goTo(total - 1)}
-              className="motion-pressable inline-flex h-11 items-center rounded-full bg-white/10 px-4 text-xs font-semibold uppercase tracking-widest text-white/90 backdrop-blur min-w-[44px]"
-            >
-              {t(language, 'Skip', 'Passer')}
-            </button>
-          )}
+          <span className="rounded-full bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/80 backdrop-blur">
+            {t(language, 'Map · Verify · Improve', 'Cartographier · Vérifier')}
+          </span>
         </div>
 
         {/* Bottom fade into sheet */}
@@ -245,46 +170,47 @@ const Splash: React.FC<Props> = ({ onStart, language }) => {
 
             {/* CTA row */}
             {!isFinal && (
-              <button
-                type="button"
-                onClick={() => goRel(1)}
-                className="motion-pressable flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-navy text-sm font-bold uppercase tracking-widest text-white shadow-sm"
-                style={{ boxShadow: 'var(--shadow-lift)' }}
-              >
-                <span>{t(language, 'Next', 'Suivant')}</span>
-                <ArrowRight size={18} />
-              </button>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => onStart(Screen.HOME)}
+                  className="motion-pressable flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-navy text-sm font-bold uppercase tracking-widest text-white shadow-sm"
+                  style={{ boxShadow: 'var(--shadow-lift)' }}
+                >
+                  <RouteIcon size={18} />
+                  <span>{t(language, 'Explore nearby missions', 'Explorer les missions proches')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => goRel(1)}
+                  className="motion-pressable flex h-12 w-full items-center justify-center gap-2 text-xs font-semibold uppercase tracking-widest text-navy"
+                >
+                  <span>{t(language, 'How verification works', 'Comment ça marche')}</span>
+                  <ArrowRight size={16} />
+                </button>
+              </div>
             )}
 
             {isFinal && (
               <div className="space-y-3">
                 <button
                   type="button"
+                  onClick={() => onStart(Screen.HOME)}
+                  className="motion-pressable button-breathe flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-terra text-sm font-bold uppercase tracking-widest text-white"
+                  style={{ boxShadow: 'var(--shadow-terra)' }}
+                >
+                  <RouteIcon size={18} />
+                  <span>{t(language, 'Find my first mission', 'Trouver ma première mission')}</span>
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
                     stashAuthMode('signin');
                     onStart(Screen.AUTH);
                   }}
-                  className="motion-pressable button-breathe flex h-14 w-full items-center justify-center rounded-2xl bg-terra text-sm font-bold uppercase tracking-widest text-white"
-                  style={{ boxShadow: 'var(--shadow-terra)' }}
+                  className="motion-pressable flex h-12 w-full items-center justify-center rounded-2xl border border-navy/20 bg-white text-xs font-bold uppercase tracking-widest text-navy"
                 >
-                  <span>Sign In · Connexion</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    stashAuthMode('signup');
-                    onStart(Screen.AUTH);
-                  }}
-                  className="motion-pressable flex h-14 w-full items-center justify-center rounded-2xl border border-navy/20 bg-white text-sm font-bold uppercase tracking-widest text-navy"
-                >
-                  <span>Create Account · Créer un compte</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onStart(Screen.HOME)}
-                  className="motion-pressable flex h-12 w-full items-center justify-center text-xs font-semibold uppercase tracking-widest text-gray-500"
-                >
-                  {t(language, 'Browse as Guest', 'Continuer en invité')}
+                  <span>{t(language, 'Already contributing? Sign in', 'Déjà contributeur ? Connexion')}</span>
                 </button>
               </div>
             )}
@@ -396,182 +322,5 @@ const Hero2Permissions: React.FC = () => (
     </div>
   </div>
 );
-
-const Hero3Verticals: React.FC<{ language: 'en' | 'fr' }> = ({ language }) => {
-  const ids = VERTICAL_IDS;
-  return (
-    <div className="relative h-full w-full overflow-hidden">
-      <svg viewBox="0 0 390 490" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <pattern id="dotgrid" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
-          <circle cx="1.5" cy="1.5" r="1.2" fill="rgba(255,255,255,0.06)" />
-        </pattern>
-        <rect width="390" height="490" fill="url(#dotgrid)" />
-      </svg>
-      <div className="absolute inset-x-0 top-16 flex justify-center px-5">
-        <div className="grid w-full max-w-[340px] grid-cols-4 gap-2">
-          {ids.map((id) => {
-            const v = VERTICALS[id];
-            return (
-              <div
-                key={id}
-                className="flex h-[78px] flex-col items-center justify-center gap-1 rounded-xl border border-white/10 px-1 py-1.5 text-center"
-                style={{ background: `${v.bgColor}20` }}
-              >
-                <div className="flex h-7 w-7 items-center justify-center rounded-md" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                  {v.icon === 'route' ? (
-                    <RouteIcon size={16} style={{ color: v.color }} />
-                  ) : (
-                    <VerticalIcon name={v.icon} size={16} style={{ color: v.color }} />
-                  )}
-                </div>
-                <div className="text-[9px] font-bold leading-[1.1] text-white/85">
-                  {categoryLabel(id, language)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const Hero4Rewards: React.FC<{ state: LeaderboardState; language: 'en' | 'fr' }> = ({ state, language }) => {
-  const isFallback = state === 'fallback';
-  const isLoading = state === 'loading';
-  const rows = Array.isArray(state) ? state : [];
-
-  if (isFallback) {
-    return (
-      <div className="relative h-full w-full">
-        <svg viewBox="0 0 390 490" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-          <defs>
-            <radialGradient id="reward-glow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#f4c317" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#f4c317" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-          <ellipse cx="195" cy="240" rx="180" ry="140" fill="url(#reward-glow)" />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-6">
-          <div className="flex h-28 w-28 items-center justify-center rounded-[32px] bg-white/10 backdrop-blur" style={{ boxShadow: '0 18px 40px -20px rgba(244,195,23,0.4)' }}>
-            <Trophy size={48} className="text-gold" />
-          </div>
-          <div className="mt-5 text-center text-sm font-semibold text-white/85">
-            {t(language, 'Be the first verified.', 'Soyez le premier vérifié.')}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const maxXp = Math.max(1, ...rows.map((r) => r.xp));
-  const initials = (name: string) =>
-    name
-      .split(' ')
-      .map((part) => part[0])
-      .filter(Boolean)
-      .slice(0, 2)
-      .join('')
-      .toUpperCase();
-  const rankColors = ['#f4c317', '#cbd5e1', '#c86b4a'];
-
-  return (
-    <div className="relative h-full w-full">
-      {/* Background dots */}
-      <svg viewBox="0 0 390 490" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        {Array.from({ length: 22 }).map((_, i) => {
-          const x = 18 + (i * 47) % 360;
-          const y = 30 + ((i * 53) % 380);
-          return <circle key={i} cx={x} cy={y} r={1.4} fill="#f4c317" opacity={0.25 + (i % 3) * 0.12} />;
-        })}
-      </svg>
-
-      <div className="absolute inset-0 flex flex-col justify-center px-5 pt-14 pb-6">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-3 backdrop-blur">
-          <div className="micro-label text-white/60 mb-2">
-            {t(language, 'Top agents', 'Meilleurs agents')}
-          </div>
-          {(isLoading ? ([null, null, null] as Array<LeaderboardEntry | null>) : rows).map((entry, i) => {
-            const isSkeleton = entry === null;
-            const widthPct = entry ? Math.max(28, Math.round((entry.xp / maxXp) * 100)) : 80 - i * 18;
-            return (
-              <div key={i} className="mb-2 flex items-center gap-2.5 last:mb-0">
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[11px] font-bold"
-                  style={{ background: rankColors[i] ?? 'rgba(255,255,255,0.15)', color: i === 1 ? '#0f2b46' : '#0f2b46' }}
-                >
-                  {i + 1}
-                </div>
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-white/15 text-[10px] font-bold text-white">
-                  {entry ? initials(entry.name) : ''}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className={`truncate text-[11px] font-bold text-white ${isSkeleton ? 'animate-pulse' : ''}`}>
-                    {entry ? entry.name : <span className="inline-block h-2 w-20 rounded bg-white/15" />}
-                  </div>
-                  <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${widthPct}%`,
-                        background: 'linear-gradient(90deg, #f4c317 0%, #c86b4a 100%)',
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="text-[10px] font-bold text-white/85 min-w-[44px] text-right">
-                  {entry ? `${entry.xp.toLocaleString()} XP` : <span className="inline-block h-2 w-10 rounded bg-white/15" />}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* "You" placeholder row */}
-        <div className="mt-3 rounded-2xl border border-terra/30 bg-terra/10 p-2.5 backdrop-blur">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-terra/30 text-[10px] font-bold text-white">
-              {t(language, 'YOU', 'VOUS')}
-            </div>
-            <div className="flex-1 text-[11px] font-bold text-white">
-              {t(language, 'Your level — start to rank', 'Votre niveau — commencez à grimper')}
-            </div>
-            <div className="rounded-full bg-forest/80 px-2 py-0.5 text-[10px] font-bold text-white">+25 XP</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const Hero5Ready: React.FC<{ language: 'en' | 'fr' }> = ({ language }) => {
-  const pillIds = ['pharmacy', 'fuel_station', 'mobile_money', 'transport_road', 'census_proxy'];
-  return (
-    <div className="relative h-full w-full">
-      <svg viewBox="0 0 390 490" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        {[60, 110, 160, 220].map((r, i) => (
-          <circle key={i} cx="195" cy="220" r={r} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="1" />
-        ))}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center pt-14">
-        <BrandLogo size={88} />
-        <div className="mt-3 text-base font-extrabold tracking-tight text-white">African Data Layer</div>
-        <div className="mt-1 micro-label-wide text-white/55">DOUALA · CAMEROON</div>
-
-        <div className="absolute inset-x-0 bottom-20 flex flex-wrap items-center justify-center gap-1.5 px-4">
-          {pillIds.map((id) => (
-            <span
-              key={id}
-              className="rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white/85 backdrop-blur"
-            >
-              {categoryLabel(id, language)}
-            </span>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
 
 export default Splash;

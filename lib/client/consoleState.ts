@@ -165,7 +165,7 @@ export function shouldRequireCompanyInvitation(
 // Onboarding wizard state machine
 // ---------------------------------------------------------------------------
 
-export type WizardStep = "org" | "project" | "record_type" | "invite" | "done";
+export type WizardStep = "org" | "project" | "record_type" | "invite" | "launch" | "done";
 
 export interface WizardState {
   step: WizardStep;
@@ -179,6 +179,7 @@ export interface WizardState {
   recordTypeLabelFr: string;
   inviteEmail: string;
   inviteRole: "manager" | "reviewer" | "collector" | "viewer";
+  inviteSent: boolean;
   organizationId: string | null;
   projectId: string | null;
 }
@@ -195,6 +196,7 @@ export const initialWizardState: WizardState = {
   recordTypeLabelFr: "",
   inviteEmail: "",
   inviteRole: "collector",
+  inviteSent: false,
   organizationId: null,
   projectId: null,
 };
@@ -204,7 +206,8 @@ export type WizardAction =
   | { type: "ORG_CREATED"; organizationId: string }
   | { type: "PROJECT_CREATED"; projectId: string }
   | { type: "RECORD_TYPE_SAVED" }
-  | { type: "INVITE_SENT_OR_SKIPPED" };
+  | { type: "INVITE_SENT_OR_SKIPPED"; invited?: boolean }
+  | { type: "COMPLETE" };
 
 /**
  * SET_FIELD may only write the free-text string fields. step/slugTouched/
@@ -262,7 +265,9 @@ export function wizardReducer(state: WizardState, action: WizardAction): WizardS
     case "RECORD_TYPE_SAVED":
       return { ...state, step: "invite" };
     case "INVITE_SENT_OR_SKIPPED":
-      return { ...state, step: "done" };
+      return { ...state, inviteSent: Boolean(action.invited), step: "launch" };
+    case "COMPLETE":
+      return state.step === "launch" ? { ...state, step: "done" } : state;
     default:
       return state;
   }
@@ -279,6 +284,7 @@ export function wizardStepValid(state: WizardState): boolean {
     case "record_type":
       return state.recordTypeLabelEn.trim().length > 0 && state.recordTypeLabelFr.trim().length > 0;
     case "invite":
+    case "launch":
       return true;
     case "done":
       return true;

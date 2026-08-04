@@ -166,7 +166,7 @@ test("slugFromName: clamps to 40 characters", () => {
 // Wizard reducer happy path
 // ---------------------------------------------------------------------------
 
-test("wizard happy path: org -> project -> record_type -> invite -> done", () => {
+test("wizard happy path: org -> project -> record_type -> invite -> launch -> done", () => {
   let state = initialWizardState;
   assert.equal(state.step, "org");
 
@@ -194,7 +194,11 @@ test("wizard happy path: org -> project -> record_type -> invite -> done", () =>
   assert.equal(state.step, "invite");
   assert.equal(wizardStepValid(state), true); // invite always valid (skip allowed)
 
-  state = wizardReducer(state, { type: "INVITE_SENT_OR_SKIPPED" });
+  state = wizardReducer(state, { type: "INVITE_SENT_OR_SKIPPED", invited: true });
+  assert.equal(state.step, "launch");
+  assert.equal(state.inviteSent, true);
+
+  state = wizardReducer(state, { type: "COMPLETE" });
   assert.equal(state.step, "done");
 });
 
@@ -213,6 +217,19 @@ test("wizard: SET_FIELD orgName auto-derives orgSlug until slugTouched", () => {
   state = wizardReducer(state, { type: "SET_FIELD", field: "orgName", value: "Something Else" });
   assert.equal(state.orgName, "Something Else");
   assert.equal(state.orgSlug, "custom-slug");
+});
+
+test("wizard launch result records a skipped invite and cannot be bypassed early", () => {
+  const inviteStep = {
+    ...initialWizardState,
+    step: "invite" as const,
+    organizationId: "org-1",
+    projectId: "project-1",
+  };
+  const launchStep = wizardReducer(inviteStep, { type: "INVITE_SENT_OR_SKIPPED", invited: false });
+  assert.equal(launchStep.step, "launch");
+  assert.equal(launchStep.inviteSent, false);
+  assert.equal(wizardReducer(inviteStep, { type: "COMPLETE" }), inviteStep);
 });
 
 test("SET_FIELD ignores non-text fields (step, slugTouched, organizationId)", () => {

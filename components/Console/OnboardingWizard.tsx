@@ -1,5 +1,5 @@
 import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { Check } from 'lucide-react';
+import { ArrowRight, Check, CheckCircle, Copy, MapPinned, Rocket, Smartphone, Users } from 'lucide-react';
 import {
   initialWizardState,
   slugFromName,
@@ -16,6 +16,7 @@ import {
   saveSchemaDraftRequest,
   PlatformApiError,
 } from '../../lib/client/platformApi';
+import { buildFieldLaunchHref } from '../../lib/client/fieldLaunch';
 import type { PlatformProjectCoverageScope, PlatformRole } from '../../shared/platformTypes';
 import ProjectCoverageFields from './ProjectCoverageFields';
 
@@ -27,6 +28,13 @@ export interface OnboardingWizardProps {
 const STEP_ORDER: WizardState['step'][] = ['org', 'project', 'record_type', 'invite'];
 
 const INVITE_ROLES: Array<Exclude<PlatformRole, 'owner'>> = ['manager', 'reviewer', 'collector', 'viewer'];
+
+const STARTER_RECORD_TYPES = [
+  { key: 'business', labelEn: 'Business or outlet', labelFr: 'Commerce ou point de vente' },
+  { key: 'infrastructure', labelEn: 'Infrastructure asset', labelFr: "Équipement d'infrastructure" },
+  { key: 'inspection', labelEn: 'Site inspection', labelFr: 'Inspection de site' },
+  { key: 'waste', labelEn: 'Waste point', labelFr: 'Point de déchets' },
+] as const;
 
 function inviteRoleLabel(role: Exclude<PlatformRole, 'owner'>, t: (en: string, fr: string) => string): string {
   switch (role) {
@@ -76,6 +84,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
   const [state, dispatch] = useReducer(wizardReducer, initialWizardState);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const doneCalledRef = useRef(false);
 
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
@@ -91,8 +100,18 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
     }
   }, [state.step, state.organizationId, onDone]);
 
-  const stepIndex = STEP_ORDER.indexOf(state.step);
+  const stepIndex = state.step === 'launch' || state.step === 'done'
+    ? STEP_ORDER.length
+    : STEP_ORDER.indexOf(state.step);
   const isValid = wizardStepValid(state);
+  const recordTypeKey = wizardRecordTypeDefinition(state).recordTypes[0]?.key ?? 'record_type_1';
+  const fieldLaunchHref = state.organizationId && state.projectId
+    ? buildFieldLaunchHref({
+        organizationId: state.organizationId,
+        projectId: state.projectId,
+        recordTypeKey,
+      })
+    : '/';
 
   const setField = (field: 'orgName' | 'orgSlug' | 'projectName' | 'projectCoverageScope' | 'projectCoverageLabel' | 'recordTypeLabelEn' | 'recordTypeLabelFr' | 'inviteEmail' | 'inviteRole', value: string) => {
     dispatch({ type: 'SET_FIELD', field, value });
@@ -158,7 +177,7 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
           role: state.inviteRole,
         });
       }
-      dispatch({ type: 'INVITE_SENT_OR_SKIPPED' });
+      dispatch({ type: 'INVITE_SENT_OR_SKIPPED', invited: state.inviteEmail.trim().length > 0 });
     } catch (err) {
       setError(describeError(err, t));
     } finally {
@@ -168,7 +187,18 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
 
   const handleSkipInvite = () => {
     setError(null);
-    dispatch({ type: 'INVITE_SENT_OR_SKIPPED' });
+    dispatch({ type: 'INVITE_SENT_OR_SKIPPED', invited: false });
+  };
+
+  const handleCopyFieldLink = async () => {
+    try {
+      const absoluteHref = new URL(fieldLaunchHref, window.location.origin).href;
+      await navigator.clipboard.writeText(absoluteHref);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      setLinkCopied(false);
+    }
   };
 
   // "done" is a transient state — the handoff to the parent happens in the
@@ -226,6 +256,86 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
           );
         })}
       </ol>
+
+      {state.step === 'launch' && (
+        <section className="overflow-hidden rounded-3xl border border-forest/20 bg-white shadow-sm" aria-labelledby="launch-title">
+          <div className="bg-forest px-6 py-7 text-white">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
+              <Rocket size={24} aria-hidden="true" />
+            </div>
+            <p className="micro-label mt-5 text-white/70">{t('Ready for the field', 'Prêt pour le terrain')}</p>
+            <h2 id="launch-title" className="mt-2 text-2xl font-semibold">
+              {t(`${state.projectName} is ready`, `${state.projectName} est prêt`)}
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-white/80">
+              {t(
+                'You created a real, published collection operation. Test the field experience before your team starts.',
+                "Vous avez créé une opération de collecte réelle et publiée. Testez l'expérience terrain avant le démarrage de l'équipe.",
+              )}
+            </p>
+          </div>
+
+          <div className="space-y-5 p-6">
+            <ul className="space-y-3">
+              {[
+                { icon: <MapPinned size={18} />, text: `${state.projectName} · ${state.projectCoverageScope === 'worldwide' ? t('Worldwide', 'Monde entier') : state.projectCoverageLabel}` },
+                { icon: <CheckCircle size={18} />, text: t(`${state.recordTypeLabelEn} form published`, `Formulaire ${state.recordTypeLabelFr} publié`) },
+                { icon: <Users size={18} />, text: state.inviteSent ? t(`Invitation sent to ${state.inviteEmail}`, `Invitation envoyée à ${state.inviteEmail}`) : t('Team invitation can be added later', "L'invitation de l'équipe peut être ajoutée plus tard") },
+              ].map((item) => (
+                <li key={item.text} className="flex min-h-12 items-center gap-3 rounded-2xl bg-page px-4 py-3 text-sm font-medium text-ink">
+                  <span className="text-forest" aria-hidden="true">{item.icon}</span>
+                  <span>{item.text}</span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="rounded-2xl border border-navy-border bg-navy-wash p-4">
+              <div className="flex items-start gap-3">
+                <Smartphone className="mt-0.5 shrink-0 text-navy" size={20} aria-hidden="true" />
+                <div>
+                  <h3 className="text-sm font-semibold text-navy">{t('Field handoff', 'Passage au terrain')}</h3>
+                  <p className="mt-1 text-xs leading-5 text-ink-muted">
+                    {t(
+                      'This secure link opens the published form after ADL confirms the signed-in user has access.',
+                      "Ce lien ouvre le formulaire publié après vérification par ADL de l'accès de l'utilisateur connecté.",
+                    )}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleCopyFieldLink()}
+                className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-navy/15 bg-white px-4 text-sm font-semibold text-navy"
+              >
+                <Copy size={16} aria-hidden="true" />
+                {linkCopied ? t('Link copied', 'Lien copié') : t('Copy field link', 'Copier le lien terrain')}
+              </button>
+              <span className="sr-only" role="status" aria-live="polite">
+                {linkCopied ? t('Field link copied to clipboard', 'Lien terrain copié dans le presse-papiers') : ''}
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => dispatch({ type: 'COMPLETE' })}
+                className="btn-ghost flex min-h-12 items-center justify-center"
+              >
+                {t('Go to workspace', "Accéder à l'espace")}
+              </button>
+              <a
+                href={fieldLaunchHref}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-primary flex min-h-12 items-center justify-center gap-2 text-center"
+              >
+                {t('Run a test capture', 'Tester une collecte')}
+                <ArrowRight size={16} aria-hidden="true" />
+              </a>
+            </div>
+          </div>
+        </section>
+      )}
 
       {state.step === 'org' && (
         <div className="card p-6">
@@ -340,6 +450,31 @@ const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ language, onDone })
               'Que va enregistrer votre équipe sur le terrain ? Vous pourrez affiner les champs plus tard.',
             )}
           </p>
+          <fieldset className="mt-4">
+            <legend className="px-1 text-xs font-semibold text-gray-500">
+              {t('Choose a useful starting point', 'Choisissez un point de départ utile')}
+            </legend>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {STARTER_RECORD_TYPES.map((template) => {
+                const active = state.recordTypeLabelEn === template.labelEn && state.recordTypeLabelFr === template.labelFr;
+                return (
+                  <button
+                    key={template.key}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => {
+                      setField('recordTypeLabelEn', template.labelEn);
+                      setField('recordTypeLabelFr', template.labelFr);
+                    }}
+                    disabled={isBusy}
+                    className={`min-h-12 rounded-xl border px-3 py-2 text-left text-sm font-semibold transition-colors ${active ? 'border-navy bg-navy text-white' : 'border-navy-border bg-white text-ink hover:bg-navy-wash'}`}
+                  >
+                    {t(template.labelEn, template.labelFr)}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
           <div className="mt-4 space-y-4">
             <div className="space-y-2">
               <label className="px-1 text-xs font-semibold text-gray-500" htmlFor="wizard-record-type-en">

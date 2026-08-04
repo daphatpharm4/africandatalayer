@@ -44,6 +44,7 @@ import {
   loadPlatformFieldContext,
   type PlatformFieldContext,
 } from './lib/client/platformFieldContext';
+import { fieldLaunchChoiceKey, parseFieldLaunchIntent } from './lib/client/fieldLaunch';
 import type { PlatformNearbyPoint } from './shared/platformTypes';
 
 const importDetails = () => import('./components/Screens/Details');
@@ -85,7 +86,7 @@ type ContributionLaunchOptions = {
 
 type PlatformContributionTarget = {
   choiceKey: string;
-  point: PlatformNearbyPoint;
+  point?: PlatformNearbyPoint;
 };
 
 const defaultQueueSnapshot: QueueSnapshot = {
@@ -137,7 +138,12 @@ const App: React.FC = () => {
   const [isLoadingPlatformFieldContext, setIsLoadingPlatformFieldContext] = useState(false);
   const [platformFieldContextError, setPlatformFieldContextError] = useState('');
   const [useGenericContribution, setUseGenericContribution] = useState(false);
-  const [platformContributionTarget, setPlatformContributionTarget] = useState<PlatformContributionTarget | null>(null);
+  const [fieldLaunchIntent] = useState(() => (
+    typeof window === 'undefined' ? null : parseFieldLaunchIntent(window.location.href)
+  ));
+  const [platformContributionTarget, setPlatformContributionTarget] = useState<PlatformContributionTarget | null>(() => (
+    fieldLaunchIntent ? { choiceKey: fieldLaunchChoiceKey(fieldLaunchIntent) } : null
+  ));
 
   const isClient = userRole === 'client';
   const isPointOperator = userRole === 'point_operator';
@@ -496,10 +502,24 @@ const App: React.FC = () => {
         window.location.replace(inviteReturn);
         return;
       }
+      const role = (session?.user?.role as UserRole) ?? 'agent';
+      if (fieldLaunchIntent && role !== 'client' && role !== 'point_operator') {
+        if (hasUser) {
+          try { localStorage.setItem('adl_splash_seen', 'true'); } catch { /* private browsing */ }
+          setUseGenericContribution(false);
+          setIsLoadingPlatformFieldContext(true);
+          setHistory([]);
+          setCurrentScreen(Screen.CONTRIBUTE);
+          window.history.replaceState({}, '', window.location.pathname);
+        } else {
+          setAuthReturnScreen(Screen.HOME);
+          setCurrentScreen(Screen.AUTH);
+        }
+        return;
+      }
       const hasSeenSplash = (() => { try { return localStorage.getItem('adl_splash_seen') === 'true'; } catch { return false; } })();
       if (currentScreen === Screen.SPLASH && (hasUser || hasSeenSplash)) {
         setHistory([]);
-        const role = (session?.user?.role as UserRole) ?? 'agent';
         if (session?.user?.mustChangePassword && role === 'point_operator') {
           setCurrentScreen(Screen.POINT_OPERATOR_PASSWORD);
         } else {
@@ -607,6 +627,15 @@ const App: React.FC = () => {
                 setCurrentScreen(Screen.POINT_OPERATOR_PASSWORD);
                 return;
               }
+              if (fieldLaunchIntent && role !== 'client' && role !== 'point_operator') {
+                setPlatformContributionTarget({ choiceKey: fieldLaunchChoiceKey(fieldLaunchIntent) });
+                setUseGenericContribution(false);
+                setIsLoadingPlatformFieldContext(true);
+                setHistory([]);
+                setCurrentScreen(Screen.CONTRIBUTE);
+                window.history.replaceState({}, '', window.location.pathname);
+                return;
+              }
               switchTab(defaultScreenForRole(role));
             }}
           />
@@ -637,6 +666,7 @@ const App: React.FC = () => {
           isLoadingPlatformFieldContext
           || platformFieldContextError
           || Boolean(platformFieldContext?.organizations.length)
+          || Boolean(platformContributionTarget)
         )) {
           return (
             <PlatformCollectionFlow

@@ -27,7 +27,7 @@ interface Props {
   onRetry: () => void;
   initialTarget?: {
     choiceKey: string;
-    point: PlatformNearbyPoint;
+    point?: PlatformNearbyPoint;
   } | null;
 }
 
@@ -419,6 +419,19 @@ const PlatformCollectionFlow: React.FC<Props> = ({
 
         {recordChoices.length > 0 && (
           <>
+            {selectedKey && !selected && (
+              <section className="rounded-2xl border border-amber-300 bg-amber-50 p-4" role="alert">
+                <h2 className="text-sm font-bold text-amber-950">
+                  {t('That field form is not available to this account', "Ce formulaire terrain n'est pas accessible à ce compte")}
+                </h2>
+                <p className="mt-1 text-xs leading-5 text-amber-900">
+                  {t(
+                    'Choose one of your authorized forms below or ask the company manager to confirm your access.',
+                    "Choisissez ci-dessous l'un de vos formulaires autorisés ou demandez au responsable de confirmer votre accès.",
+                  )}
+                </p>
+              </section>
+            )}
             <section className="card space-y-3 p-4">
               <div>
                 <div className="micro-label text-gray-400">{t('What are you collecting?', 'Que collectez-vous ?')}</div>
@@ -439,8 +452,15 @@ const PlatformCollectionFlow: React.FC<Props> = ({
             {submittedLabel ? (
               <section className="card p-6 text-center">
                 <CheckCircle className="mx-auto text-forest" size={44} />
-                <h2 className="mt-3 text-xl font-bold text-gray-900">{t('Company record sent', 'Donnée entreprise envoyée')}</h2>
+                <div className="micro-label mt-3 text-forest">{t('Pending verification', 'Vérification en attente')}</div>
+                <h2 className="mt-2 text-xl font-bold text-gray-900">{t('Capture safely received', 'Collecte reçue en toute sécurité')}</h2>
                 <p className="mt-2 text-sm text-gray-600">{submittedLabel} · {selected?.project.name}</p>
+                <p className="mt-3 rounded-xl bg-forest-wash px-4 py-3 text-sm leading-6 text-forest-dark">
+                  {t(
+                    'Your evidence is ready for review. Verified results will appear in the company workspace after approval.',
+                    "Vos justificatifs sont prêts pour révision. Les résultats vérifiés apparaîtront dans l'espace entreprise après approbation.",
+                  )}
+                </p>
                 <div className="mt-5 grid gap-2 sm:grid-cols-2">
                   <button type="button" onClick={() => chooseRecordType(selected?.key ?? '')} className="min-h-12 rounded-xl bg-navy px-4 text-sm font-bold text-white">{t('Collect another', 'Collecter à nouveau')}</button>
                   <button type="button" onClick={onComplete} className="min-h-12 rounded-xl border border-gray-200 bg-white px-4 text-sm font-bold text-gray-800">{t('Done', 'Terminer')}</button>
