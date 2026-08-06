@@ -1,0 +1,17 @@
+{
+  "invitationOnly": false,
+  "localizations": {
+    "en-US": {
+      "name": "African Data Layer",
+      "subtitle": "Map verified field data",
+      "keywords": "field data,mapping,infrastructure,GPS,offline,Africa,survey,photos,verification,community",
+      "description": "Map real-world infrastructure from the ground up.\n\nFIND WHAT MATTERS\nSee nearby coverage gaps and choose the next useful place to verify.\n\nCAPTURE WITH CONTEXT\nAdd structured details, live photo evidence, and GPS coordinates to each contribution.\n\nWORK THROUGH INTERRUPTIONS\nSave drafts on your iPhone when connectivity drops. Review queued work and sync when your connection returns.\n\nBUILD VERIFIED PROGRESS\nTrack quality, verified contributions, XP, and field progress. Quality matters more than raw volume.\n\nAfrican Data Layer supports English and French and is designed for clear, practical fieldwork. Camera and location access are requested only when needed for evidence and coordinates."
+    },
+    "fr-FR": {
+      "name": "African Data Layer",
+      "subtitle": "Cartographiez le terrain",
+      "keywords": "données terrain,cartographie,infrastructure,GPS,hors ligne,Afrique,enquête,photos,validation",
+      "description": "Cartographiez les infrastructures réelles depuis le terrain.\n\nREPÉREZ L'ESSENTIEL\nIdentifiez les zones peu couvertes à proximité et choisissez le prochain lieu utile à vérifier.\n\nCAPTUREZ AVEC LE BON CONTEXTE\nAjoutez des informations structurées, une photo en direct et des coordonnées GPS à chaque contribution.\n\nCONTINUEZ MALGRÉ LES COUPURES\nEnregistrez vos brouillons sur l'iPhone lorsque la connexion disparaît. Vérifiez la file d'attente et synchronisez au retour du réseau.\n\nPROGRESSEZ PAR LA QUALITÉ\nSuivez la qualité, les contributions vérifiées, les XP et votre progression terrain. La qualité compte plus que le volume.\n\nAfrican Data Layer fonctionne en français et en anglais. L'accès à la caméra et à la position est demandé uniquement pour les preuves et coordonnées nécessaires."
+    }
+  }
+}

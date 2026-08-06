@@ -18,6 +18,7 @@
 		A10000000000000000000006 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000016 /* PrivacyInfo.xcprivacy */; };
 		A10000000000000000000007 /* Fonts/Inter-VariableFont.ttf in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017 /* Fonts/Inter-VariableFont.ttf */; };
 		A100000000000000000000A1 /* ADLComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000A2 /* ADLComponents.swift */; };
+		A100000000000000000000B1 /* AppStoreCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A100000000000000000000B2 /* AppStoreCaptureView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		A10000000000000000000016 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		A10000000000000000000017 /* Fonts/Inter-VariableFont.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Fonts/Inter-VariableFont.ttf"; sourceTree = "<group>"; };
 		A100000000000000000000A2 /* ADLComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ADLComponents.swift; sourceTree = "<group>"; };
+		A100000000000000000000B2 /* AppStoreCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStoreCaptureView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -88,6 +90,7 @@
 				A10000000000000000000014 /* ADLDesignSystem.swift */,
 				A10000000000000000000015 /* ADLViews.swift */,
 				A100000000000000000000A2 /* ADLComponents.swift */,
+				A100000000000000000000B2 /* AppStoreCaptureView.swift */,
 			);
 			path = Native;
 			sourceTree = "<group>";
@@ -174,6 +177,7 @@
 				A10000000000000000000005 /* ADLViews.swift in Sources */,
 				A100000000000000000000A1 /* ADLComponents.swift in Sources */,
 				A10000000000000000000001 /* ADLNativeApp.swift in Sources */,
+				A100000000000000000000B1 /* AppStoreCaptureView.swift in Sources */,
 				A10000000000000000000003 /* ADLServices.swift in Sources */,
 				A10000000000000000000002 /* ADLModels.swift in Sources */,
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
@@ -335,7 +339,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1";
 			};
 			name = Debug;
 		};
@@ -357,7 +361,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = "1";
 			};
 			name = Release;
 		};

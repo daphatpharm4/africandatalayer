@@ -2,6 +2,7 @@ import Foundation
 
 struct AppStoreMetadata: Decodable {
     struct Localization: Decodable { let name: String; let subtitle: String; let keywords: String; let description: String }
+    let invitationOnly: Bool?
     let localizations: [String: Localization]
 }
 
@@ -18,8 +19,10 @@ for (locale, item) in metadata.localizations {
     assert(item.subtitle.count <= 30, "\(locale): subtitle length \(item.subtitle.count) > 30")
     assert(item.keywords.count <= 100, "\(locale): keywords length \(item.keywords.count) > 100")
     assert(item.description.count <= 4_000, "\(locale): description length \(item.description.count) > 4000")
-    assert(item.description.localizedCaseInsensitiveContains("invited") || item.description.localizedCaseInsensitiveContains("invités"),
-           "\(locale): description must contain invitation-only language")
+    if metadata.invitationOnly ?? true {
+        assert(item.description.localizedCaseInsensitiveContains("invited") || item.description.localizedCaseInsensitiveContains("invités"),
+               "\(locale): description must contain invitation-only language")
+    }
     print("\(locale): ✅ name=\(item.name.count) subtitle=\(item.subtitle.count) keywords=\(item.keywords.count) desc=\(item.description.count)")
 }
 

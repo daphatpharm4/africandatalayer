@@ -66,7 +66,9 @@ struct ADLConsoleApp: App {
 
     var body: some Scene {
         WindowGroup {
-            if let message = configurationError {
+            if AppStoreCaptureConfiguration.isEnabled {
+                AppStoreCaptureView(configuration: .current)
+            } else if let message = configurationError {
                 ConfigurationErrorView(message: message)
             } else {
                 RootView()

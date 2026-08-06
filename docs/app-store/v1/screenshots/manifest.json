@@ -1,12 +1,12 @@
 {
   "locales": ["en-US", "fr-FR"],
   "frames": [
-    {"id": "operation"},
-    {"id": "capture"},
-    {"id": "review"},
-    {"id": "manage"},
-    {"id": "recover"},
-    {"id": "bilingual"}
+    {"id": "operation", "file": "01-operation.png"},
+    {"id": "capture", "file": "02-capture.png"},
+    {"id": "review", "file": "03-review.png"},
+    {"id": "manage", "file": "04-manage.png"},
+    {"id": "recover", "file": "05-recover.png"},
+    {"id": "bilingual", "file": "06-bilingual.png"}
   ],
   "width": 1320,
   "height": 2868

@@ -1,0 +1,15 @@
+{
+  "product": "African Data Layer iOS",
+  "deviceClass": "iPhone 6.9-inch",
+  "locales": ["en-US", "fr-FR"],
+  "frames": [
+    {"id": "map", "file": "01-map.png"},
+    {"id": "capture", "file": "02-capture.png"},
+    {"id": "offline", "file": "03-offline.png"},
+    {"id": "sync", "file": "04-sync.png"},
+    {"id": "progress", "file": "05-progress.png"},
+    {"id": "bilingual", "file": "06-bilingual.png"}
+  ],
+  "width": 1320,
+  "height": 2868
+}

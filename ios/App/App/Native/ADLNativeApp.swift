@@ -14,10 +14,15 @@ struct ADLNativeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(appState)
-                .environment(\.font, ADLFont.body)
-                .tint(ADLColor.navy)
+            if AppStoreCaptureConfiguration.isEnabled {
+                AppStoreCaptureView(configuration: .current)
+                    .environment(\.font, ADLFont.body)
+            } else {
+                RootView()
+                    .environmentObject(appState)
+                    .environment(\.font, ADLFont.body)
+                    .tint(ADLColor.navy)
+            }
         }
     }
 }
