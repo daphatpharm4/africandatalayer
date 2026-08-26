@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run check:function-budget && vite build",
+    "build:console": "npm run check:function-budget && ADL_BUILD_TARGET=console vite build && node scripts/rename-console-entry.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -19,7 +20,7 @@
     "test:e2e:update": "playwright test --update-snapshots",
     "docs:media:sync": "node scripts/sync-docs-media.mjs",
     "playwright:install": "playwright install chromium",
-    "test:ci": "npm run lint && npm run typecheck && npm run test && npm run test:publisher && npm run build",
+    "test:ci": "npm run lint && npm run typecheck && npm run test && npm run test:publisher && npm run build && npm run build:console",
     "check:function-budget": "node scripts/check-vercel-function-budget.mjs",
     "typecheck": "tsc --noEmit",
     "migrate": "node scripts/migrate.mjs",
