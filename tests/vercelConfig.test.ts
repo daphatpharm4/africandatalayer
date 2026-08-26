@@ -44,33 +44,25 @@ test("vercel auth rewrites route Auth.js endpoints to the catch-all auth handler
   }
 });
 
-test("vercel serves the console entry before the field app fallback", () => {
+test("vercel has no console routing (console is its own site)", () => {
   const vercelConfig = JSON.parse(
     readFileSync(resolve(process.cwd(), "vercel.json"), "utf8"),
   ) as { rewrites?: RewriteRule[] };
 
   const rewrites = vercelConfig.rewrites ?? [];
-  const consoleRewriteIndexes = ["/console", "/console/"].map((source) =>
-    rewrites.findIndex(
-      (rule) =>
-        rule.source === source && rule.destination === "/console.html",
-    ),
-  );
-  const fallbackIndex = rewrites.findIndex(
+  const consoleRules = rewrites.filter(
     (rule) =>
-      rule.source === "/(.*)" && rule.destination === "/index.html",
+      (typeof rule.source === "string" && rule.source.startsWith("/console")) ||
+      rule.destination === "/console.html",
+  );
+  assert.deepEqual(
+    consoleRules,
+    [],
+    "No /console rewrites allowed — the console is served by the adl-console Vercel project",
   );
 
-  assert.notEqual(fallbackIndex, -1, "Missing field app fallback rewrite");
-  for (const [pathIndex, routeIndex] of consoleRewriteIndexes.entries()) {
-    assert.notEqual(
-      routeIndex,
-      -1,
-      `Missing ${pathIndex === 0 ? "/console" : "/console/"} rewrite to the built console entry`,
-    );
-    assert.ok(
-      routeIndex < fallbackIndex,
-      "Console rewrites must run before the field app fallback",
-    );
-  }
+  const fallbackIndex = rewrites.findIndex(
+    (rule) => rule.source === "/(.*)" && rule.destination === "/index.html",
+  );
+  assert.notEqual(fallbackIndex, -1, "Missing SPA fallback rewrite");
 });
