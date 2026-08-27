@@ -516,7 +516,7 @@ export function createPlatformHandler(deps: PlatformApiDeps = {}): (request: Req
     // Join URL built ONLY from the server-derived request origin + the server-
     // generated token — never from client-supplied strings.
     const origin = new URL(request.url).origin;
-    const joinUrl = `${origin}/console#/join?token=${token}`;
+    const joinUrl = `${origin}/#/join?token=${token}`;
 
     await sendInviteEmailFn({
       email: body.email,

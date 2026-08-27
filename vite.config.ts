@@ -3,6 +3,8 @@ import { fileURLToPath } from 'url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// Needed because tests/viteBuildTargets.test.ts imports this config directly via tsx:
+// native ESM has no __dirname, and while Vite's own config loader shims it, tsx does not.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
