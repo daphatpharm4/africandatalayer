@@ -92,7 +92,8 @@
   }
 
   html {
-    font-size: 16px;
+    /* Respect the user's browser/OS text-size setting (Dynamic Type on iOS WebView). */
+    font-size: 100%;
   }
 
   body {
@@ -132,6 +133,15 @@
   /* Suppress focus ring on pointer interactions */
   :focus:not(:focus-visible) {
     outline: none;
+  }
+
+  /* Navy outline is invisible on navy surfaces — swap to gold there. */
+  .btn-primary:focus-visible,
+  .bg-navy :focus-visible,
+  .bg-navy:focus-visible,
+  .bg-navy-dark :focus-visible,
+  .bg-navy-dark:focus-visible {
+    outline-color: #f4c317;
   }
 }
 
@@ -213,7 +223,12 @@
 
   /* Ghost button */
   .btn-ghost {
-    @apply h-14 rounded-2xl border border-gray-200 bg-white px-4 text-sm font-semibold tracking-[0.01em] text-navy;
+    @apply h-14 rounded-2xl border border-gray-200 bg-white px-4 text-sm font-semibold tracking-[0.01em] text-navy active:scale-95 transition-all;
+  }
+
+  /* Secondary button — bordered, navy text on white */
+  .btn-secondary {
+    @apply h-14 rounded-2xl border border-navy-border bg-white px-4 text-sm font-semibold tracking-[0.01em] text-navy hover:bg-navy-wash active:scale-95 transition-all;
   }
 
   /* Stat tile — colored background with micro label + large number */

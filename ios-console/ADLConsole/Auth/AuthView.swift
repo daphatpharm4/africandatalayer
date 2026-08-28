@@ -1,8 +1,10 @@
+import Accessibility
 import SwiftUI
 
 /// Credential sign-in — mirrors web `ConsoleAuthScreen` two-tone card.
 struct AuthView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var email: String = ""
     @State private var password: String = ""
@@ -36,6 +38,12 @@ struct AuthView: View {
                 .padding(.top, 28)
                 .frame(maxWidth: 480)
                 .frame(maxWidth: .infinity)
+            }
+        }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: appState.authErrorMessage)
+        .onChange(of: appState.authErrorMessage) { _, newValue in
+            if let newValue {
+                AccessibilityNotification.Announcement(newValue).post()
             }
         }
     }
@@ -163,6 +171,7 @@ struct AuthView: View {
                     Text(error)
                         .font(ADLConsoleFont.footnote)
                         .foregroundStyle(ADLConsoleColor.danger)
+                        .transition(.opacity)
                 }
 
                 ADLConsolePrimaryButton(

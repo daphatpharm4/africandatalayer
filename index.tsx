@@ -3,6 +3,7 @@ import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { isNative } from './lib/client/native';
 
 const Analytics = lazy(() => import('@vercel/analytics/react').then((module) => ({ default: module.Analytics })));
 const SpeedInsights = lazy(() => import('@vercel/speed-insights/react').then((module) => ({ default: module.SpeedInsights })));
@@ -36,12 +37,14 @@ const DeferredTelemetry: React.FC = () => {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    if (isNative()) return;
     return scheduleAfterFirstPaint(() => {
       setReady(true);
     });
   }, []);
 
-  if (!ready) return null;
+  // Native builds skip web telemetry: PrivacyInfo.xcprivacy declares no Analytics purpose.
+  if (isNative() || !ready) return null;
 
   return (
     <Suspense fallback={null}>

@@ -1,14 +1,18 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugin": ["superpowers@git+https://github.com/obra/superpowers.git"],
   "shell": "/bin/zsh",
   "instructions": [
     "CLAUDE.md",
     "AGENTS.md",
-    "RTK.md"
+    "RTK.md",
+    "~/.claude/OPERATING-MANUAL.md"
   ],
   "skills": {
     "paths": [
-      ".claude/skills"
+      ".claude/skills",
+      ".opencode/skills",
+      "~/GitHub/hub/.claude/skills"
     ]
   },
   "references": {
@@ -30,6 +34,7 @@
     "bash": {
       "git *": "allow",
       "bd *": "allow",
+      "hub *": "allow",
       "npm *": "allow",
       "npx *": "allow",
       "node *": "allow",

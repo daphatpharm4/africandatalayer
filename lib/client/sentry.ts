@@ -1,4 +1,5 @@
 import type * as SentryBrowser from "@sentry/browser";
+import { isNative } from "./native";
 
 let initialized = false;
 let initPromise: Promise<typeof SentryBrowser | null> | null = null;
@@ -38,6 +39,9 @@ export function initClientSentry(): void {
 
 async function loadSentry(): Promise<typeof SentryBrowser | null> {
   if (initPromise) return initPromise;
+  // Native builds skip Sentry: PrivacyInfo.xcprivacy declares no crash/diagnostics
+  // data types, so shipping the SDK there would make the manifest inaccurate.
+  if (isNative()) return null;
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn) return null;
 

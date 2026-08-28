@@ -46,13 +46,19 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
   const t = (en: string, fr: string) => (language === 'fr' ? fr : en);
   const accentColor = organization?.accentColor ?? '#c86b4a';
   const initial = (organization?.name ?? 'A').trim().charAt(0).toUpperCase() || 'A';
+  const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
+
+  const handleNavigate = (route: ConsoleRoute) => {
+    setMobileNavOpen(false);
+    onNavigate(route);
+  };
 
   return (
     <div
       className="flex h-[var(--app-height)] min-h-0 flex-col overflow-hidden bg-page text-ink lg:flex-row"
       style={{ ['--org-accent' as string]: accentColor }}
     >
-      <aside className="flex max-h-[52vh] w-full shrink-0 flex-col overflow-y-auto border-b border-navy-border bg-white px-4 py-4 lg:h-full lg:max-h-none lg:w-64 lg:border-b-0 lg:border-r lg:py-6">
+      <aside className="flex w-full shrink-0 flex-col border-b border-navy-border bg-white px-4 py-4 lg:h-full lg:w-64 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:py-6">
         <div className="flex items-center gap-3 px-1">
           {organization?.logoUrl ? (
             <img
@@ -65,7 +71,7 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
               {initial}
             </div>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold text-ink">
               {organization?.name ?? t('No organization', 'Aucune organisation')}
             </p>
@@ -73,8 +79,28 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
               {organization ? organization.role : t('Data Ops Console', 'Console Data Ops')}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setMobileNavOpen((open) => !open)}
+            aria-expanded={mobileNavOpen}
+            aria-controls="console-nav-panel"
+            aria-label={t('Toggle navigation', 'Afficher ou masquer la navigation')}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-navy-border text-navy transition-colors hover:bg-navy-wash active:scale-95 lg:hidden"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              {mobileNavOpen ? (
+                <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              ) : (
+                <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+              )}
+            </svg>
+          </button>
         </div>
 
+        <div
+          id="console-nav-panel"
+          className={`${mobileNavOpen ? 'flex' : 'hidden'} max-h-[60vh] flex-col overflow-y-auto lg:flex lg:max-h-none lg:flex-1 lg:overflow-visible`}
+        >
         {organizations.length > 1 && (
           <label className="mt-5 block">
             <span className="micro-label mb-1 block text-ink-muted">
@@ -97,8 +123,8 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
         {isAdlAdmin && organization && (
           <button
             type="button"
-            onClick={() => onNavigate({ screen: 'ONBOARDING' })}
-            className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-navy-border px-4 text-sm font-semibold text-navy transition-colors hover:bg-navy-wash"
+            onClick={() => handleNavigate({ screen: 'ONBOARDING' })}
+            className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-navy-border px-4 text-sm font-semibold text-navy transition-colors hover:bg-navy-wash active:scale-95"
           >
             {t('Create company', 'Créer une entreprise')}
           </button>
@@ -114,9 +140,10 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
               <button
                 key={item.screen}
                 type="button"
-                onClick={() => onNavigate({ screen: item.screen })}
-                className={`micro-label min-h-12 shrink-0 whitespace-nowrap rounded-xl px-4 py-3 text-left transition-colors ${
-                  isActive ? 'bg-navy-wash text-navy' : 'text-ink-muted hover:bg-navy-wash/60 hover:text-navy'
+                onClick={() => handleNavigate({ screen: item.screen })}
+                aria-current={isActive ? 'page' : undefined}
+                className={`micro-label min-h-12 shrink-0 whitespace-nowrap rounded-xl px-4 py-3 text-left transition-all active:scale-[0.98] ${
+                  isActive ? 'bg-navy-wash text-navy' : 'text-ink-muted hover:bg-navy-wash/60 hover:text-navy active:bg-navy-wash/60'
                 }`}
               >
                 {t(item.en, item.fr)}
@@ -146,6 +173,7 @@ const ConsoleShell: React.FC<ConsoleShellProps> = ({
               {signOutError}
             </p>
           )}
+        </div>
         </div>
       </aside>
 

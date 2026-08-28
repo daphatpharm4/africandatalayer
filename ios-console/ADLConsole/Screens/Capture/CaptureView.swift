@@ -331,6 +331,7 @@ struct CaptureView: View {
                     Spacer()
                     Toggle("", isOn: batchModeBinding)
                         .labelsHidden()
+                        .accessibilityLabel(t("Batch capture", "Capture en lot"))
                 }
 
                 if viewModel.isBatchMode {

@@ -25,7 +25,6 @@
 		"CAPCameraPlugin",
 		"GeolocationPlugin",
 		"CAPNetworkPlugin",
-		"PushNotificationsPlugin",
 		"SplashScreenPlugin",
 		"StatusBarPlugin"
 	]

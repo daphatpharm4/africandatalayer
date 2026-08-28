@@ -106,10 +106,10 @@ const XPPopup: React.FC<Props> = ({
         <div className="mission-card w-full max-w-sm rounded-3xl border border-gray-100 bg-white/95 p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="text-left">
-              <div className="micro-label-wide text-gray-400">{t('Contribution result', 'Resultat contribution')}</div>
+              <div className="micro-label-wide text-gray-400">{t('Contribution result', 'Résultat contribution')}</div>
               <div className="mt-1 text-sm font-bold text-gray-900">
                 {quickEnrichPrompt
-                  ? t('You created a partial point with clear next value.', 'Vous avez cree un point partiel avec une prochaine etape claire.')
+                  ? t('You created a partial point with clear next value.', 'Vous avez créé un point partiel avec une prochaine étape claire.')
                   : t('Your evidence is now in the trust loop.', 'Votre preuve entre maintenant dans la boucle de confiance.')}
               </div>
             </div>
@@ -180,7 +180,7 @@ const XPPopup: React.FC<Props> = ({
         </div>
       </div>
 
-      <div className="relative z-10 p-6 pt-0 space-y-3">
+      <div className="relative z-10 p-6 pt-0 pb-[calc(1.5rem+var(--safe-bottom))] space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <button type="button" onClick={onPrimary} className="btn-cta motion-pressable button-breathe" style={{ boxShadow: 'var(--shadow-terra)' }}>
             {quickEnrichPrompt

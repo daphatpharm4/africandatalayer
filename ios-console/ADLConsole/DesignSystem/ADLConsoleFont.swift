@@ -5,19 +5,21 @@ import SwiftUI
 /// fine on the system face; Inter can be added in a later task if a pixel
 /// match to the marketing surfaces becomes a requirement.
 ///
-/// All sizes are fixed-point (not Dynamic Type) to maintain the precise
-/// clinical hierarchy of the console UI. For accessibility, screens use
-/// sufficient contrast ratios (≥4.5:1) and large enough touch targets
-/// that font scaling is not the primary accommodation path.
+/// Every token is anchored to a semantic text style so the whole ramp
+/// scales with the user's Dynamic Type setting (nominal size at the
+/// default setting noted per token). Screens with layouts that cannot
+/// absorb the largest accessibility sizes cap themselves with
+/// `.dynamicTypeSize(...)` at the container level rather than opting the
+/// ramp out of scaling.
 enum ADLConsoleFont {
-    static let largeTitle = Font.system(size: 28, weight: .bold)
-    static let title = Font.system(size: 22, weight: .bold)
-    static let title2 = Font.system(size: 18, weight: .semibold)
-    static let headline = Font.system(size: 16, weight: .semibold)
-    static let body = Font.system(size: 15, weight: .regular)
-    static let callout = Font.system(size: 14, weight: .regular)
-    static let subheadline = Font.system(size: 14, weight: .medium)
-    static let footnote = Font.system(size: 13, weight: .regular)
-    static let caption = Font.system(size: 12, weight: .regular)
-    static let microLabel = Font.system(size: 11, weight: .bold)
+    static let largeTitle = Font.system(.title, weight: .bold)          // 28pt at default
+    static let title = Font.system(.title2, weight: .bold)              // 22pt
+    static let title2 = Font.system(.body, weight: .semibold)           // 17pt
+    static let headline = Font.system(.callout, weight: .semibold)      // 16pt
+    static let body = Font.system(.subheadline, weight: .regular)       // 15pt
+    static let callout = Font.system(.footnote, weight: .regular)       // 13pt
+    static let subheadline = Font.system(.footnote, weight: .medium)    // 13pt, medium
+    static let footnote = Font.system(.footnote, weight: .regular)      // 13pt
+    static let caption = Font.system(.caption, weight: .regular)        // 12pt
+    static let microLabel = Font.system(.caption2, weight: .bold)       // 11pt
 }

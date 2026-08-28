@@ -107,7 +107,7 @@ struct InvestorDashboardView: View {
                     Text(t("ESTIMATED", "ESTIMÉ"))
                         .font(ADLConsoleFont.caption)
                         .fontWeight(.bold)
-                        .foregroundStyle(ADLConsoleColor.gold)
+                        .foregroundStyle(ADLConsoleColor.goldDark)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(ADLConsoleColor.gold.opacity(0.15), in: Capsule())

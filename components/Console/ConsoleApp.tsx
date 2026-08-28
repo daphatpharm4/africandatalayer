@@ -419,20 +419,24 @@ const ConsoleApp: React.FC = () => {
       );
       break;
     default:
-      screenContent = <div>{t('Projects coming soon.', 'Projets à venir.')}</div>;
+      // Unknown route (enum drift): fall back to the role's landing screen
+      // rather than rendering placeholder UI.
+      screenContent = selectedOrganization ? (
+        <RoleWorkspaceScreen organization={selectedOrganization} language={language} onNavigate={handleNavigate} />
+      ) : null;
   }
 
   return (
     <>
       {joinBanner && (
         <div className="fixed inset-x-0 top-0 z-50 flex justify-center p-3">
-          <div className="flex items-center gap-3 rounded-2xl bg-forest px-4 py-2.5 text-sm font-medium text-white shadow-lg">
+          <div role="status" className="flex items-center gap-2 rounded-2xl bg-forest py-1.5 pl-4 pr-1.5 text-sm font-medium text-white shadow-lg">
             <span>{joinBanner}</span>
             <button
               type="button"
               onClick={() => setJoinBanner(null)}
               aria-label={t('Dismiss', 'Fermer')}
-              className="text-white/80 transition-colors hover:text-white"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white/80 transition-colors hover:bg-white/10 hover:text-white active:scale-95"
             >
               ×
             </button>
@@ -452,7 +456,15 @@ const ConsoleApp: React.FC = () => {
         signOutError={signOutError}
         isAdlAdmin={isAdlAdmin}
       >
-        <Suspense fallback={<p className="micro-label text-ink-muted" role="status">{t('Loading view…', 'Chargement de la vue…')}</p>}>
+        <Suspense
+          fallback={
+            <div className="flex flex-col gap-3" role="status" aria-label={t('Loading view…', 'Chargement de la vue…')}>
+              <div className="card h-24 animate-pulse bg-navy-wash" />
+              <div className="card h-40 animate-pulse bg-navy-wash" />
+              <div className="card h-40 animate-pulse bg-navy-wash" />
+            </div>
+          }
+        >
           {screenContent}
         </Suspense>
       </ConsoleShell>

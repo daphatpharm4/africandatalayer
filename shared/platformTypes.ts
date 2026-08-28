@@ -22,7 +22,7 @@ export interface PlatformOrganization {
   suspendedAt?: string | null;
 }
 export type PlatformOrganizationAccessStatus = "active" | "suspended";
-export interface PlatformMembership { organizationId: string; userId: string; role: PlatformRole; createdAt: string }
+export interface PlatformMembership { organizationId: string; userId: string; role: PlatformRole; createdAt: string; name?: string; email?: string }
 export type PlatformProjectStatus = "draft" | "active" | "archived";
 export type PlatformProjectCoverageScope = "town" | "country" | "worldwide";
 export interface PlatformProject {

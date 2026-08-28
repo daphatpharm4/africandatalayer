@@ -130,7 +130,7 @@ struct KpiTile: View {
 struct ADLPill: View {
     let text: String; let bg: Color; let fg: Color
     var body: some View {
-        Text(text.uppercased()).font(ADLFont.inter(10, .bold)).tracking(1.2)
+        Text(text.uppercased()).font(ADLFont.inter(11, .bold)).tracking(1.2)
             .foregroundColor(fg).padding(.horizontal, 8).padding(.vertical, 3)
             .background(bg).clipShape(Capsule())
     }

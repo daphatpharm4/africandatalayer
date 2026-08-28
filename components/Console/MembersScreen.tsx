@@ -189,7 +189,11 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
       </div>
 
       {members === null && !loadError && (
-        <p className="micro-label text-ink-muted">{t('Loading members…', 'Chargement des membres…')}</p>
+        <div className="flex flex-col gap-3" role="status" aria-label={t('Loading members…', 'Chargement des membres…')}>
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="card h-20 animate-pulse bg-navy-wash" />
+          ))}
+        </div>
       )}
 
       {loadError && (
@@ -215,8 +219,9 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
             return (
               <div key={member.userId} className="card flex items-center justify-between gap-4 p-4">
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-ink">{member.userId}</p>
+                  <p className="truncate text-sm font-semibold text-ink">{member.name ?? member.email ?? member.userId}</p>
                   <p className="micro-label mt-1 text-ink-muted">
+                    {member.email && member.name ? <>{member.email}{' · '}</> : null}
                     {t('Member since', 'Membre depuis')} {formatDate(member.createdAt, language)}
                   </p>
                 </div>
@@ -236,7 +241,7 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
                       ))}
                     </select>
                   ) : (
-                    <span className="micro-label rounded-full bg-navy-wash px-2.5 py-1 text-[10px] text-navy">
+                    <span className="micro-label rounded-full bg-navy-wash px-2.5 py-1 text-[11px] text-navy">
                       {roleLabel(member.role, t)}
                     </span>
                   )}
@@ -289,7 +294,7 @@ const MembersScreen: React.FC<MembersScreenProps> = ({ organizationId, viewerRol
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className={`micro-label rounded-full px-2.5 py-1 text-[10px] ${accepted ? 'bg-forest-wash text-forest-dark' : 'bg-navy-wash text-navy'}`}>
+                  <span className={`micro-label rounded-full px-2.5 py-1 text-[11px] ${accepted ? 'bg-forest-wash text-forest-dark' : 'bg-navy-wash text-navy'}`}>
                     {accepted ? t('Accepted', 'Acceptée') : t('Pending', 'En attente')}
                   </span>
                   {!accepted && roleAtLeast(viewerRole, 'manager') && (

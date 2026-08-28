@@ -3404,7 +3404,7 @@ const ContributionFlow: React.FC<Props> = ({
         )}
       </div>
 
-      <div className="sticky bottom-0 z-20 border-t border-gray-100 bg-page/95 px-6 pb-6 pt-3 backdrop-blur">
+      <div className="sticky bottom-0 z-20 border-t border-gray-100 bg-page/95 px-6 pb-[calc(1.5rem+var(--safe-bottom))] pt-3 backdrop-blur">
         <div className="rounded-2xl border border-navy-border bg-white px-4 py-4 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-1">

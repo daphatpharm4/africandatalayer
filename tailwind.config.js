@@ -2,8 +2,10 @@
 const config = {
   content: [
     "./index.html",
+    "./console.html",
     "./App.tsx",
     "./index.tsx",
+    "./console.tsx",
     "./components/**/*.{js,ts,jsx,tsx}",
     "./lib/**/*.{js,ts,jsx,tsx}",
   ],

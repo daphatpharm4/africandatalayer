@@ -1126,7 +1126,7 @@
 				);
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ADLConsole.app/ADLConsole";
 			};
 			name = Staging;
@@ -1145,7 +1145,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.ADLConsoleUITests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = ADLConsole;
 			};
 			name = Debug;
@@ -1164,7 +1164,7 @@
 				);
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ADLConsole.app/ADLConsole";
 			};
 			name = Debug;
@@ -1183,7 +1183,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.ADLConsoleUITests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = ADLConsole;
 			};
 			name = Release;
@@ -1267,7 +1267,7 @@
 				);
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ADLConsole.app/ADLConsole";
 			};
 			name = Release;
@@ -1390,7 +1390,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.africandatalayer.ADLConsoleUITests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = ADLConsole;
 			};
 			name = Staging;

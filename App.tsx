@@ -253,6 +253,12 @@ const App: React.FC = () => {
     setCurrentScreen(isPointOperator ? Screen.POINT_OPERATOR_STATUS : isClient ? Screen.DELTA_DASHBOARD : Screen.HOME);
   }, [history, currentScreen, authReturnScreen, isClient, isPointOperator]);
 
+  // Refs so the once-registered native backButton listener never closes over stale state.
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  const goBackRef = useRef(goBack);
+  goBackRef.current = goBack;
+
   const switchTab = useCallback((screen: Screen) => {
     const nextScreen = normalizeScreenForRole(screen);
     setHistory([]);
@@ -535,14 +541,18 @@ const App: React.FC = () => {
 
     void SplashScreen.hide();
 
-    void StatusBar.setStyle({ style: Style.Dark });
     if (getPlatform() === 'android') {
+      // Android keeps a navy status-bar background, so light text (Style.Dark) is correct.
+      void StatusBar.setStyle({ style: Style.Dark });
       void StatusBar.setBackgroundColor({ color: '#0f2b46' });
+    } else {
+      // iOS draws the app's white chrome behind the status bar, so it needs dark text.
+      void StatusBar.setStyle({ style: Style.Light });
     }
 
     const listener = CapApp.addListener('backButton', () => {
-      if (history.length > 0) {
-        goBack();
+      if (historyRef.current.length > 0) {
+        goBackRef.current();
       } else {
         void CapApp.exitApp();
       }

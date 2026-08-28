@@ -140,17 +140,17 @@ export default function LevelUpCelebration({
         </div>
 
         <div className="grid grid-cols-3 gap-3 w-full max-w-sm">
-          <div className="rounded-2xl bg-white/8 px-3 py-4">
+          <div className="rounded-2xl bg-white/[0.08] px-3 py-4">
             <div className="micro-label text-white/60">{language === "fr" ? "Statut" : "Status"}</div>
             <div className="mt-2 text-sm font-bold text-white">{language === "fr" ? "Monte" : "Rising"}</div>
           </div>
-          <div className="rounded-2xl bg-white/8 px-3 py-4">
+          <div className="rounded-2xl bg-white/[0.08] px-3 py-4">
             <div className="micro-label text-white/60">XP</div>
             <div className="mt-2 text-sm font-bold text-white">{language === "fr" ? "Visible" : "Visible"}</div>
           </div>
-          <div className="rounded-2xl bg-white/8 px-3 py-4">
+          <div className="rounded-2xl bg-white/[0.08] px-3 py-4">
             <div className="micro-label text-white/60">{language === "fr" ? "Confiance" : "Trust"}</div>
-            <div className="mt-2 text-sm font-bold text-white">{language === "fr" ? "Renforcee" : "Stronger"}</div>
+            <div className="mt-2 text-sm font-bold text-white">{language === "fr" ? "Renforcée" : "Stronger"}</div>
           </div>
         </div>
       </div>

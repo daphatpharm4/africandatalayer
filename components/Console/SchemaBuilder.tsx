@@ -778,7 +778,7 @@ const SchemaBuilderEditor: React.FC<EditorProps> = ({
             <ul className="mt-2 space-y-1">
               {issues.map((issue, index) => (
                 <li key={`${issue.path}-${index}`} className="text-xs text-danger">
-                  <span className="font-mono text-[10px] text-ink-muted">{issue.path || '(root)'}</span> — {issue.message}
+                  <span className="font-mono text-[11px] text-ink-muted">{issue.path || '(root)'}</span> — {issue.message}
                 </li>
               ))}
             </ul>

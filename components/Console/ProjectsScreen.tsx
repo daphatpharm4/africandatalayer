@@ -203,7 +203,11 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, canMana
       )}
 
       {projects === null && !loadError && (
-        <p className="micro-label text-ink-muted">{t('Loading projects…', 'Chargement des projets…')}</p>
+        <div className="flex flex-col gap-3" role="status" aria-label={t('Loading projects…', 'Chargement des projets…')}>
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="card h-24 animate-pulse bg-navy-wash" />
+          ))}
+        </div>
       )}
 
       {loadError && (
@@ -246,7 +250,7 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, canMana
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-3">
-                <span className={`micro-label rounded-full px-2.5 py-1 text-[10px] ${statusPillClass(project.status)}`}>
+                <span className={`micro-label rounded-full px-2.5 py-1 text-[11px] ${statusPillClass(project.status)}`}>
                   {statusLabel(project.status, t)}
                 </span>
                 {canManage && <ChevronRight size={18} className="text-ink-muted" />}
@@ -254,7 +258,7 @@ const ProjectsScreen: React.FC<ProjectsScreenProps> = ({ organizationId, canMana
               </>
             );
             return canManage ? (
-              <button key={project.id} type="button" onClick={() => onNavigate({ screen: 'SCHEMA_BUILDER', projectId: project.id })} className="card flex items-center justify-between gap-4 p-4 text-left transition-colors hover:border-navy">{content}</button>
+              <button key={project.id} type="button" onClick={() => onNavigate({ screen: 'SCHEMA_BUILDER', projectId: project.id })} className="card flex items-center justify-between gap-4 p-4 text-left transition-all hover:border-navy active:scale-[0.99]">{content}</button>
             ) : (
               <article key={project.id} className="card flex items-center justify-between gap-4 p-4">{content}</article>
             );

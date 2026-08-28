@@ -8,10 +8,10 @@ interface MissionsScreenProps {
 }
 
 const stateClasses: Record<MissionState, string> = {
-  pending: 'bg-gray-100 text-gray-700',
-  in_progress: 'bg-blue-50 text-blue-800',
-  completed: 'bg-green-50 text-green-800',
-  expired: 'bg-red-50 text-red-700',
+  pending: 'bg-navy-wash text-navy-mid',
+  in_progress: 'bg-navy-wash text-navy',
+  completed: 'bg-forest-wash text-forest-dark',
+  expired: 'bg-terra-wash text-danger',
 };
 
 const stateLabels: Record<MissionState, { en: string; fr: string }> = {
@@ -56,7 +56,7 @@ const MissionsScreen: React.FC<MissionsScreenProps> = ({ organizationId, languag
       {error ? (
         <div role="alert" className="card border border-red-200 p-5">
           <p className="text-sm text-red-700">{error}</p>
-          <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="btn-secondary mt-4">
+          <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="btn-secondary mt-4 h-11">
             {t('Try again', 'Réessayer')}
           </button>
         </div>
@@ -92,7 +92,14 @@ const MissionsScreen: React.FC<MissionsScreenProps> = ({ organizationId, languag
                   </div>
                   <p className="text-sm font-semibold text-terra">+{mission.rewardXp} XP</p>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-navy-wash" aria-label={`${progress}%`}>
+                <div
+                  className="mt-3 h-2 overflow-hidden rounded-full bg-navy-wash"
+                  role="progressbar"
+                  aria-valuenow={mission.current}
+                  aria-valuemin={0}
+                  aria-valuemax={mission.quota}
+                  aria-label={t('Mission progress', 'Progression de la mission')}
+                >
                   <div className="h-full rounded-full bg-forest" style={{ width: `${progress}%` }} />
                 </div>
                 {mission.deadline && (

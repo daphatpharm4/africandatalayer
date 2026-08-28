@@ -36,6 +36,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'csv' | 'geojson' | null>(null);
 
   useEffect(() => {
@@ -51,7 +52,8 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
           : t('Could not load records. Check your connection and try again.', 'Impossible de charger les données. Vérifiez votre connexion et réessayez.'));
       });
     return () => { cancelled = true; };
-  }, [organizationId, selectedProject, t]);
+    // selectedProject intentionally omitted: filtering is client-side (see filteredRecords)
+  }, [organizationId, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -87,6 +89,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
 
   const handleExportCsv = useCallback(async () => {
     setExporting('csv');
+    setExportError(null);
     try {
       const csv = await exportPlatformRecordsCsv({
         organizationId,
@@ -101,7 +104,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('CSV export failed:', err);
-      alert(t('Export failed. Please try again.', "L'export a échoué. Veuillez réessayer."));
+      setExportError(t('Export failed. Please try again.', "L'export a échoué. Veuillez réessayer."));
     } finally {
       setExporting(null);
     }
@@ -109,6 +112,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
 
   const handleExportGeojson = useCallback(async () => {
     setExporting('geojson');
+    setExportError(null);
     try {
       const geojson = await exportPlatformRecordsGeojson({
         organizationId,
@@ -123,7 +127,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('GeoJSON export failed:', err);
-      alert(t('Export failed. Please try again.', "L'export a échoué. Veuillez réessayer."));
+      setExportError(t('Export failed. Please try again.', "L'export a échoué. Veuillez réessayer."));
     } finally {
       setExporting(null);
     }
@@ -190,6 +194,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
           <div className="flex rounded-lg border border-navy-border bg-white">
             <button
               onClick={() => setViewMode('table')}
+              aria-pressed={viewMode === 'table'}
               className={`flex items-center gap-1.5 rounded-l-lg px-3 py-2 text-sm font-medium transition-colors ${
                 viewMode === 'table'
                   ? 'bg-navy text-white'
@@ -201,6 +206,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
             </button>
             <button
               onClick={() => setViewMode('map')}
+              aria-pressed={viewMode === 'map'}
               className={`flex items-center gap-1.5 rounded-r-lg px-3 py-2 text-sm font-medium transition-colors ${
                 viewMode === 'map'
                   ? 'bg-navy text-white'
@@ -216,7 +222,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
           <button
             onClick={handleExportCsv}
             disabled={exporting !== null || filteredRecords.length === 0}
-            className="flex items-center gap-1.5 rounded-lg border border-navy-border bg-white px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-navy-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 rounded-lg border border-navy-border bg-white px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-navy-wash disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exporting === 'csv' ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-terra border-t-transparent" />
@@ -228,7 +234,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
           <button
             onClick={handleExportGeojson}
             disabled={exporting !== null || filteredRecords.length === 0}
-            className="flex items-center gap-1.5 rounded-lg border border-navy-border bg-white px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-navy-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 rounded-lg border border-navy-border bg-white px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-navy-wash disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exporting === 'geojson' ? (
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-terra border-t-transparent" />
@@ -247,6 +253,21 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
         </div>
       )}
 
+      {/* Export error */}
+      {exportError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+          <p className="text-sm text-red-800">{exportError}</p>
+          <button
+            type="button"
+            onClick={() => setExportError(null)}
+            className="shrink-0 rounded-lg p-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 active:scale-95"
+            aria-label={t('Dismiss', 'Fermer')}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Loading state */}
       {records === null && !error && (
         <div className="flex items-center justify-center py-12">
@@ -257,7 +278,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
       {/* Empty state */}
       {records && filteredRecords.length === 0 && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-          <div className="rounded-full bg-navy-50 p-4">
+          <div className="rounded-full bg-navy-wash p-4">
             <Filter className="h-8 w-8 text-ink-muted" />
           </div>
           <h3 className="mt-4 text-lg font-semibold text-ink">
@@ -276,7 +297,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
         <div className="overflow-hidden rounded-xl border border-navy-border bg-white">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="border-b border-navy-border bg-navy-50">
+              <thead className="border-b border-navy-border bg-navy-wash">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted">
                     {t('Type', 'Type')}
@@ -297,9 +318,9 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
               </thead>
               <tbody className="divide-y divide-navy-border">
                 {filteredRecords.map((record) => (
-                  <tr key={record.id} className="hover:bg-navy-50/50">
+                  <tr key={record.id} className="hover:bg-navy-wash/50">
                     <td className="px-4 py-3">
-                      <span className="rounded-full bg-terra-50 px-2.5 py-1 text-xs font-medium text-terra">
+                      <span className="rounded-full bg-terra-wash px-2.5 py-1 text-xs font-medium text-terra">
                         {record.recordTypeKey}
                       </span>
                     </td>
@@ -347,7 +368,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
               </tbody>
             </table>
           </div>
-          <div className="border-t border-navy-border bg-navy-50 px-4 py-2 text-sm text-ink-muted">
+          <div className="border-t border-navy-border bg-navy-wash px-4 py-2 text-sm text-ink-muted">
             {t(
               `Showing ${filteredRecords.length} of ${records.length} records`,
               `Affichage de ${filteredRecords.length} sur ${records.length} données`
@@ -398,7 +419,7 @@ const RecordsScreen: React.FC<RecordsScreenProps> = ({ organizationId, language 
               );
             })}
           </MapContainer>
-          <div className="border-t border-navy-border bg-navy-50 px-4 py-2 text-sm text-ink-muted">
+          <div className="border-t border-navy-border bg-navy-wash px-4 py-2 text-sm text-ink-muted">
             {t(
               `Showing ${mapRecords.length} records with GPS data`,
               `Affichage de ${mapRecords.length} données avec données GPS`

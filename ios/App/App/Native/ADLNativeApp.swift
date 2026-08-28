@@ -14,14 +14,19 @@ struct ADLNativeApp: App {
 
     var body: some Scene {
         WindowGroup {
+            // Light mode is the shipped appearance: surfaces are hardcoded to the
+            // light palette, so following the system dark setting would mix
+            // adaptive .secondary text into white cards and break legibility.
             if AppStoreCaptureConfiguration.isEnabled {
                 AppStoreCaptureView(configuration: .current)
                     .environment(\.font, ADLFont.body)
+                    .preferredColorScheme(.light)
             } else {
                 RootView()
                     .environmentObject(appState)
                     .environment(\.font, ADLFont.body)
                     .tint(ADLColor.navy)
+                    .preferredColorScheme(.light)
             }
         }
     }

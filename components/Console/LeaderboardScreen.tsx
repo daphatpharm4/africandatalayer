@@ -40,7 +40,7 @@ const LeaderboardScreen: React.FC<LeaderboardScreenProps> = ({ organizationId, l
       {error ? (
         <div role="alert" className="card border border-red-200 p-5">
           <p className="text-sm text-red-700">{error}</p>
-          <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="btn-secondary mt-4">{t('Try again', 'Réessayer')}</button>
+          <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="btn-secondary mt-4 h-11">{t('Try again', 'Réessayer')}</button>
         </div>
       ) : entries === null ? (
         <div className="card p-6 text-sm text-ink-muted" role="status">{t('Loading leaderboard…', 'Chargement du classement…')}</div>

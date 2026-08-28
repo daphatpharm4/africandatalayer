@@ -1,4 +1,5 @@
 import path from 'path';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -22,6 +23,11 @@ export default defineConfig(({ mode }) => {
         },
       },
       plugins: [react()],
+      define: {
+        __APP_VERSION__: JSON.stringify(
+          JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8')).version,
+        ),
+      },
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),

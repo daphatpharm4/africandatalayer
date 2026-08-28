@@ -1050,7 +1050,7 @@ const Home: React.FC<Props> = ({
                         key={entry.id}
                         type="button"
                         role="option"
-                        aria-selected={isActive}
+                        aria-pressed={isActive}
                         onClick={() => {
                           setActiveCompanyVerticalId(entry.id);
                           setIsVerticalPickerOpen(false);
@@ -1074,7 +1074,7 @@ const Home: React.FC<Props> = ({
                         key={category}
                         type="button"
                         role="option"
-                        aria-selected={isActive}
+                        aria-pressed={isActive}
                         onClick={() => {
                           onCategoryChange(category);
                           setIsVerticalPickerOpen(false);

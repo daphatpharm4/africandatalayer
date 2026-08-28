@@ -8,6 +8,7 @@ import SwiftUI
 /// a destination has already been deemed accessible.
 struct PlaceholderScreenView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let screen: ConsoleScreen
     @State private var isAnimating = false
 
@@ -17,8 +18,11 @@ struct PlaceholderScreenView: View {
                 .font(.system(size: 32))
                 .foregroundStyle(ADLConsoleColor.inkMuted)
                 .rotationEffect(.degrees(isAnimating ? 15 : -15))
-                .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
-                .onAppear { isAnimating = true }
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: 2).repeatForever(autoreverses: true),
+                    value: isAnimating
+                )
+                .onAppear { isAnimating = !reduceMotion }
                 .accessibilityHidden(true)
             Text(appState.language.t("Coming soon", "Bientôt disponible"))
                 .font(ADLConsoleFont.headline)

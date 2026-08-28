@@ -124,12 +124,12 @@ const Navigation: React.FC<Props> = ({
             onClick={() => onNavigate(item.id)}
             aria-current={isActive ? 'page' : undefined}
             aria-label={item.ariaLabel ?? item.label}
-            className={`flex min-h-[54px] w-full flex-1 flex-col items-center justify-center gap-1 rounded-[1.35rem] px-2 transition-all ${
+            className={`flex min-h-[54px] w-full flex-1 flex-col items-center justify-center gap-1 rounded-[1.35rem] px-2 transition-all active:scale-95 ${
               isActive
                 ? 'bg-navy-wash text-navy shadow-[inset_0_0_0_1px_rgba(15,43,70,0.06)]'
                 : isContribute
-                  ? 'text-terra hover:bg-terra-wash hover:text-terra-dark'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                  ? 'text-terra hover:bg-terra-wash hover:text-terra-dark active:bg-terra-wash'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 active:bg-gray-50'
             }`}
           >
             <Icon size={19} aria-hidden="true" />

@@ -266,9 +266,11 @@ private struct OrganizationsErrorView: View {
 }
 
 private struct SettingsSplitViewContainer: View {
+    @State private var selectedSection: String? = "general"
+
     var body: some View {
         NavigationSplitView {
-            List(selection: .constant("general")) {
+            List(selection: $selectedSection) {
                 Label(NSLocalizedString("General", comment: "Général"), systemImage: "gearshape").tag("general")
             }
             .navigationTitle(NSLocalizedString("Settings", comment: "Réglages"))
@@ -310,14 +312,14 @@ private struct ADLOnboardingView: View {
                 title: t("Data that drives action.", "Des données qui déclenchent l'action."),
                 body: t("Prioritize the next capture, see progress clearly, and keep contributors moving.", "Priorisez la prochaine capture, visualisez les progrès et gardez les contributeurs en mouvement."),
                 visual: .metrics,
-                chips: [t("1.2M+ points verified", "1,2 M+ points vérifiés"), t("54 countries covered", "54 pays couverts")]
+                chips: [t("Field-verified data points", "Points de données vérifiés terrain"), t("Coverage tracked live", "Couverture suivie en direct")]
             ),
             ADLOnboardingPage(
                 eyebrow: t("TRUST LAYER", "COUCHE DE CONFIANCE"),
                 title: t("Built for trusted operations.", "Conçu pour des opérations fiables."),
                 body: t("Security, provenance, and review workflows protect the quality of every infrastructure record.", "La sécurité, la traçabilité et les revues protègent la qualité de chaque donnée d'infrastructure."),
                 visual: .trust,
-                chips: [t("ISO 27001 aligned", "Aligné ISO 27001"), t("Review-ready evidence", "Preuves prêtes à revoir")]
+                chips: [t("Privacy-first architecture", "Architecture axée confidentialité"), t("Review-ready evidence", "Preuves prêtes à revoir")]
             )
         ]
     }
@@ -350,6 +352,7 @@ private struct ADLOnboardingView: View {
                 }
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .onAppear { revealContent() }
         .onChange(of: selectedPage) { _, _ in revealContent() }
     }
@@ -453,7 +456,7 @@ private struct ADLOnboardingSplashView: View {
 
                 VStack(spacing: 12) {
                     Text("ADL Console")
-                        .font(.system(size: 30, weight: .bold))
+                        .font(.system(.title, weight: .bold))
                         .foregroundStyle(.white)
 
                     Capsule()
@@ -539,15 +542,14 @@ private struct ADLOnboardingPageView: View {
                 ADLConsoleMicroLabel(text: page.eyebrow, color: ADLConsoleColor.terra)
 
                 Text(page.title)
-                    .font(.system(size: isWide ? 42 : 38, weight: .bold))
+                    .font(.system(.largeTitle, weight: .bold))
                     .lineSpacing(2)
                     .foregroundStyle(ADLConsoleColor.ink)
-                    .minimumScaleFactor(0.82)
                     .accessibilityAddTraits(.isHeader)
             }
 
             Text(page.body)
-                .font(.system(size: 17, weight: .regular))
+                .font(.system(.body, weight: .regular))
                 .lineSpacing(5)
                 .foregroundStyle(ADLConsoleColor.ink)
                 .fixedSize(horizontal: false, vertical: true)
@@ -753,18 +755,18 @@ private struct MetricsVisual: View {
     var body: some View {
         VStack(spacing: 16) {
             HStack(spacing: 16) {
-                MetricTile(value: "1.2M+", label: "POINTS VERIFIED", color: ADLConsoleColor.gold, icon: "target")
-                MetricTile(value: "99.8%", label: "ACCURACY", color: ADLConsoleColor.forestDark, icon: "checkmark.circle")
+                MetricTile(value: "Live", label: "FIELD ACTIVITY", color: ADLConsoleColor.gold, icon: "target")
+                MetricTile(value: "GPS", label: "EVIDENCE-LINKED", color: ADLConsoleColor.forestDark, icon: "checkmark.circle")
             }
 
             ADLConsoleCard(padding: 20) {
                 HStack {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("54")
+                        Text("24/7")
                             .font(.system(size: 34, weight: .bold))
                             .foregroundStyle(ADLConsoleColor.navy)
                             .monospacedDigit()
-                        ADLConsoleMicroLabel(text: "COUNTRIES COVERED", color: ADLConsoleColor.ink)
+                        ADLConsoleMicroLabel(text: "OFFLINE-FIRST CAPTURE", color: ADLConsoleColor.ink)
                     }
                     Spacer()
                     HStack(spacing: -8) {
@@ -772,15 +774,6 @@ private struct MetricsVisual: View {
                             Circle()
                                 .fill(index == 2 ? ADLConsoleColor.ink.opacity(0.18) : ADLConsoleColor.ink.opacity(0.10))
                                 .frame(width: 42, height: 42)
-                                .overlay {
-                                    if index == 2 {
-                                        Text("+51")
-                                            .font(ADLConsoleFont.caption)
-                                            .fontWeight(.bold)
-                                            .foregroundStyle(ADLConsoleColor.ink)
-                                            .monospacedDigit()
-                                    }
-                                }
                         }
                     }
                 }
@@ -827,7 +820,7 @@ private struct MetricTile: View {
 private struct TrustVisual: View {
     var body: some View {
         VStack(spacing: 16) {
-            TrustRow(icon: "shield.checkered", title: "ISO 27001 aligned", subtitle: "Security and access controls for infrastructure data")
+            TrustRow(icon: "shield.checkered", title: "Security-first controls", subtitle: "Security and access controls for infrastructure data")
             TrustRow(icon: "globe.europe.africa.fill", title: "Partner-ready protocols", subtitle: "Clear provenance for teams, reviewers, and clients")
             TrustRow(icon: "camera.metering.center.weighted", title: "Evidence-first review", subtitle: "Photos, GPS, and schema fields stay linked to the record")
         }

@@ -8,6 +8,7 @@ import SwiftUI
 struct ConsoleShellView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAppSettingsPresented = false
     @State private var isPendingWorkPresented = false
 
@@ -19,6 +20,9 @@ struct ConsoleShellView: View {
             Divider().overlay(ADLConsoleColor.navyBorder.opacity(0.6))
             screenBody
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .id(appState.route.screen)
+                .transition(.opacity)
+                .animation(reduceMotion ? nil : .smooth(duration: 0.2), value: appState.route.screen)
         }
         .background(ADLConsoleColor.page.ignoresSafeArea())
         .fullScreenCover(isPresented: $isAppSettingsPresented) {
@@ -152,13 +156,10 @@ struct ConsoleShellView: View {
     @ViewBuilder
     private var orgAvatar: some View {
         if let logo = appState.organization?.logoUrl, let url = URL(string: logo) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image.resizable().scaledToFill()
-                default:
-                    avatarFallback
-                }
+            ADLCachedAsyncImage(url: url, targetSize: CGSize(width: 40, height: 40)) { image in
+                image.resizable().scaledToFill()
+            } placeholder: {
+                avatarFallback
             }
             .frame(width: 40, height: 40)
             .clipShape(Circle())
@@ -211,12 +212,15 @@ struct ConsoleShellView: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(ADLConsolePressStyle())
+                    .accessibilityAddTraits(selected ? [.isSelected] : [])
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
         }
         .background(ADLConsoleColor.surface)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(appState.language.t("Sections", "Sections"))
     }
 
     // MARK: - Controls

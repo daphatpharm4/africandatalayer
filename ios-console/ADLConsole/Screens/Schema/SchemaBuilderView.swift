@@ -355,7 +355,7 @@ struct SchemaBuilderView: View {
                             .foregroundStyle(ADLConsoleColor.danger)
                         ForEach(Array(viewModel.issues.enumerated()), id: \.offset) { _, issue in
                             Text("\(issue.path.isEmpty ? "(root)" : issue.path) — \(issue.message)")
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(.system(.caption2, design: .monospaced))
                                 .foregroundStyle(ADLConsoleColor.danger)
                         }
                     }

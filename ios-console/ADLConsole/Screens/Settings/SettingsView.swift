@@ -226,6 +226,7 @@ struct SettingsView: View {
                             )
                         )
                         .labelsHidden()
+                        .accessibilityLabel(t("Accent color", "Couleur d'accent"))
                         .disabled(!viewModel.isOwner || viewModel.colorBusy)
                     }
 

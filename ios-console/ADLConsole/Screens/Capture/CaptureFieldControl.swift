@@ -122,6 +122,7 @@ struct CaptureFieldControl: View {
                 displayedComponents: .date
             )
             .labelsHidden()
+            .accessibilityLabel(t(descriptor.label.en, descriptor.label.fr))
             .padding(12)
             .background(ADLConsoleColor.surface)
             .clipShape(RoundedRectangle(cornerRadius: ADLConsoleRadius.input, style: .continuous))

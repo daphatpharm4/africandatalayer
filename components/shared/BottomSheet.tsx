@@ -183,7 +183,7 @@ const BottomSheet: React.FC<BottomSheetProps> = ({
       aria-modal="false"
       aria-label="Context panel"
       className={`fixed inset-x-0 z-30 mx-auto w-full max-w-md md:max-w-lg rounded-t-[28px] border-t border-gray-100 shadow-[0_-4px_24px_rgba(15,43,70,0.12)] ${
-        isLowEndDevice ? 'bg-white' : 'bg-white/98 backdrop-blur-xl'
+        isLowEndDevice ? 'bg-white' : 'bg-white/[0.98] backdrop-blur-xl'
       } ${className}`}
       style={{
         bottom: 'calc(var(--bottom-nav-height) + var(--safe-bottom, 0px) + 1.25rem)',

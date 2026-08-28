@@ -387,13 +387,12 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ organizationId, role,
         </p>
       </header>
 
-      <nav aria-label={t('Analytics views', 'Vues d’analyse')} className="flex gap-2 overflow-x-auto pb-1" role="tablist">
+      <nav aria-label={t('Analytics views', 'Vues d’analyse')} className="flex gap-2 overflow-x-auto pb-1">
         {visibleViews.map((view) => (
           <button
             key={view.id}
             type="button"
-            role="tab"
-            aria-selected={selectedView === view.id}
+            aria-pressed={selectedView === view.id}
             onClick={() => setActiveView(view.id)}
             className={`min-h-12 shrink-0 rounded-full px-4 text-sm font-semibold transition-colors ${
               selectedView === view.id ? 'bg-navy text-white' : 'border border-navy-border bg-white text-navy hover:bg-navy-wash'
@@ -407,7 +406,7 @@ const AnalyticsScreen: React.FC<AnalyticsScreenProps> = ({ organizationId, role,
       {error ? (
         <div role="alert" className="card border border-red-200 p-5">
           <p className="text-sm text-red-700">{error}</p>
-          <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="btn-secondary mt-4">{t('Try again', 'Réessayer')}</button>
+          <button type="button" onClick={() => setReloadKey((key) => key + 1)} className="btn-secondary mt-4 h-11">{t('Try again', 'Réessayer')}</button>
         </div>
       ) : visibleData === null ? (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" role="status" aria-label={t('Loading analytics', 'Chargement des analyses')}>

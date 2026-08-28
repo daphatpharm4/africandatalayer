@@ -49,12 +49,17 @@ function rowToOrg(row: OrgRow): PlatformOrganization {
   };
 }
 
-function rowToMembership(row: { organization_id: string; user_id: string; role: PlatformRole; created_at: unknown }): PlatformMembership {
+function rowToMembership(row: {
+  organization_id: string; user_id: string; role: PlatformRole; created_at: unknown;
+  member_name?: string | null; member_email?: string | null;
+}): PlatformMembership {
   return {
     organizationId: row.organization_id,
     userId: row.user_id,
     role: row.role,
     createdAt: toIso(row.created_at),
+    ...(row.member_name ? { name: row.member_name } : {}),
+    ...(row.member_email ? { email: row.member_email } : {}),
   };
 }
 
@@ -216,10 +221,12 @@ export async function getMembership(
 
 export async function listMembers(organizationId: string, deps: StoreDeps = {}): Promise<PlatformMembership[]> {
   const result = await db(deps)(
-    `SELECT organization_id, user_id, role, created_at
-     FROM public.platform_organization_members
-     WHERE organization_id = $1
-     ORDER BY created_at ASC`,
+    `SELECT m.organization_id, m.user_id, m.role, m.created_at,
+       p.name AS member_name, p.email AS member_email
+     FROM public.platform_organization_members m
+     LEFT JOIN public.user_profiles p ON p.id = m.user_id
+     WHERE m.organization_id = $1
+     ORDER BY m.created_at ASC`,
     [organizationId],
   );
   return result.rows.map(rowToMembership);

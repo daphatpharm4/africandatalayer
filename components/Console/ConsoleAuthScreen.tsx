@@ -7,6 +7,7 @@ import {
   signInWithCredentials,
 } from '../../lib/client/auth';
 import { normalizeIdentifier } from '../../lib/shared/identifier';
+import { apiJson } from '../../lib/client/api';
 import BrandLogo from '../BrandLogo';
 
 interface Props {
@@ -24,6 +25,35 @@ const ConsoleAuthScreen: React.FC<Props> = ({ language, inviteMode, onAuthentica
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (resetBusy) return;
+    setErrorMessage('');
+    setResetMessage('');
+    const normalized = normalizeIdentifier(email);
+    if (!normalized || normalized.type !== 'email') {
+      setErrorMessage(t('Enter your email above first, then tap "Forgot password?".', 'Saisissez d’abord votre e-mail ci-dessus, puis touchez « Mot de passe oublié ? ».'));
+      return;
+    }
+    setResetBusy(true);
+    try {
+      await apiJson('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'password-reset-request', identifier: normalized.value, language }),
+      });
+      setResetMessage(t(
+        'If an account exists for this email, a reset link has been sent. Check your inbox.',
+        'Si un compte existe pour cet e-mail, un lien de réinitialisation a été envoyé. Vérifiez votre boîte mail.',
+      ));
+    } catch {
+      setErrorMessage(t('Could not send the reset email. Try again.', 'Impossible d’envoyer l’e-mail de réinitialisation. Réessayez.'));
+    } finally {
+      setResetBusy(false);
+    }
+  };
 
   const mapError = (error: unknown): string => {
     if (error instanceof AuthClientError) {
@@ -181,6 +211,23 @@ const ConsoleAuthScreen: React.FC<Props> = ({ language, inviteMode, onAuthentica
               <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-800" role="alert">
                 {errorMessage}
               </div>
+            )}
+
+            {resetMessage && (
+              <div className="rounded-2xl border border-forest/30 bg-forest-wash p-3 text-sm font-semibold text-forest-dark" role="status">
+                {resetMessage}
+              </div>
+            )}
+
+            {mode === 'signin' && (
+              <button
+                type="button"
+                onClick={() => void handleForgotPassword()}
+                disabled={resetBusy}
+                className="min-h-11 w-full rounded-2xl text-sm font-semibold text-navy underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy disabled:cursor-wait disabled:opacity-60"
+              >
+                {resetBusy ? t('Sending reset link…', 'Envoi du lien…') : t('Forgot password?', 'Mot de passe oublié ?')}
+              </button>
             )}
 
             <button

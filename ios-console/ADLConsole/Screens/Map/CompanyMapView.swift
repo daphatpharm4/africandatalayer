@@ -41,6 +41,7 @@ struct CompanyMapView: View {
             captureButton
         }
         .background(ADLConsoleColor.page)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .task { await viewModel.load() }
         .task { await viewModel.refreshUserLocation() }
         .sheet(item: $viewModel.selectedPoint) { collapsedPoint in

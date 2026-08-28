@@ -74,3 +74,4 @@ session-*.md
 .impeccable/live/pending-manual-edits.json
 .impeccable/live/deferred-svelte-component-accepts.json
 xcuserdata/
+.vercel

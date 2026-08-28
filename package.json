@@ -1,7 +1,7 @@
 {
   "name": "african-data-layer",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -46,7 +46,6 @@
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/ios": "^8.3.0",
     "@capacitor/network": "^8.0.1",
-    "@capacitor/push-notifications": "^8.0.3",
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@google/genai": "1.3.0",

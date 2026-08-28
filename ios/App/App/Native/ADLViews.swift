@@ -377,7 +377,7 @@ private struct HeroVerticals: View {
                             .background(Color.white.opacity(0.08))
                             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                         Text(cat.title)
-                            .font(ADLFont.inter(9, .bold))
+                            .font(ADLFont.inter(11, .bold))
                             .foregroundColor(.white.opacity(0.85))
                             .multilineTextAlignment(.center)
                             .lineLimit(2)
@@ -470,7 +470,7 @@ private struct FlowPills: View {
     }
     private func pill(_ text: String) -> some View {
         Text(text.uppercased())
-            .font(ADLFont.inter(10, .bold))
+            .font(ADLFont.inter(11, .bold))
             .tracking(0.8)
             .foregroundColor(.white.opacity(0.85))
             .padding(.horizontal, 10)
@@ -543,25 +543,6 @@ struct AuthView: View {
                         .padding(.top, 8)
                         .padding(.horizontal, 8)
 
-                    // OAuth buttons
-                    Button { appState.authError = appState.t("Apple sign-in is available in the production build.", "La connexion Apple est disponible dans la version de production.") } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "applelogo").font(.system(size: 17, weight: .medium))
-                            Text(appState.t("Sign in with Apple", "Se connecter avec Apple")).font(ADLFont.inter(15, .semibold))
-                        }
-                    }
-                    .buttonStyle(PrimaryButtonStyle())
-                    .padding(.top, 28)
-
-                    Button { appState.authError = appState.t("Google sign-in is available in the production build.", "La connexion Google est disponible dans la version de production.") } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "globe").font(.system(size: 16, weight: .semibold))
-                            Text(appState.t("Continue with Google", "Continuer avec Google")).font(ADLFont.inter(15, .semibold))
-                        }
-                    }
-                    .buttonStyle(SecondaryButtonStyle())
-                    .padding(.top, 12)
-
                     // Credentials form
                     VStack(alignment: .leading, spacing: 16) {
                         fieldLabel(appState.t("Phone number or email", "Numéro de téléphone ou email"))
@@ -633,7 +614,7 @@ struct AuthView: View {
                         .buttonStyle(PrimaryButtonStyle())
                         .disabled(appState.isSigningIn)
                     }
-                    .padding(.top, 24)
+                    .padding(.top, 28)
 
                     if mode == .signin {
                         Button { showForgotPassword = true } label: {
@@ -1088,6 +1069,7 @@ struct ADLInputField: View {
 
 struct AppShellView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var routes: [AppRoute] { AppReleaseMode.tabs(for: appState.selectedRole) }
 
@@ -1099,6 +1081,9 @@ struct AppShellView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(ADLColor.paper)
                     .toolbar(.hidden, for: .navigationBar)
+                    .id(appState.selectedTab)
+                    .transition(.opacity)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: appState.selectedTab)
             }
             ADLTabBar(
                 routes: routes,
@@ -1165,12 +1150,21 @@ struct ADLSyncBar: View {
                 status: status
             )
             Spacer()
-            Image(systemName: "arrow.clockwise")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(ADLColor.forest)
+            Button {
+                Task { await appState.syncQueuedDrafts() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(ADLColor.forest)
+                    .frame(width: 44, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(appState.isSyncingQueue)
+            .accessibilityLabel(appState.t("Sync queued captures now", "Synchroniser les captures en attente"))
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity)
         .background(ADLColor.forestWash)
         .accessibilityIdentifier("native-sync-status")
@@ -1196,9 +1190,8 @@ struct ADLTabBar: View {
                         Image(systemName: icon(for: route))
                             .font(.system(size: compact ? 17 : 19, weight: .medium))
                         Text(title(for: route))
-                            .font(ADLFont.inter(compact ? 10 : 11, .semibold))
+                            .font(ADLFont.inter(11, .semibold))
                             .lineLimit(1)
-                            .minimumScaleFactor(0.8)
                     }
                     .foregroundColor(active ? ADLColor.navy : (isContribute ? ADLColor.terracotta : Color(hex: 0x6b7280)))
                     .frame(maxWidth: .infinity, minHeight: compact ? 50 : 54)
@@ -1211,7 +1204,9 @@ struct ADLTabBar: View {
                             .stroke(active ? ADLColor.navy.opacity(0.06) : Color.clear, lineWidth: 1)
                     )
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(TabItemPressStyle())
+                .accessibilityLabel(title(for: route))
+                .accessibilityAddTraits(active ? [.isSelected] : [])
             }
         }
         .padding(.horizontal, compact ? 8 : 12)
@@ -2171,7 +2166,7 @@ struct FieldMapHeader: View {
             HStack(spacing: 8) {
                 StatusPill(title: appState.t("\(pointCount) points", "\(pointCount) points"), tint: ADLColor.navy)
                 StatusPill(title: appState.t("\(refreshCount) refresh", "\(refreshCount) à actualiser"), tint: refreshCount > 0 ? ADLColor.terracotta : ADLColor.forest)
-                StatusPill(title: locationStatus, tint: ADLColor.gold)
+                StatusPill(title: locationStatus, tint: ADLColor.amber)
             }
 
             Menu {
@@ -2705,6 +2700,43 @@ struct DetailRow: View {
     }
 }
 
+/// Lightweight capture-success confirmation: every capture should feel like it counted.
+struct CaptureSuccessToast: View {
+    let title: String
+    let subtitle: String
+    let reduceMotion: Bool
+
+    @State private var checkVisible = false
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 44, weight: .semibold))
+                .foregroundColor(ADLColor.forest)
+                .scaleEffect(checkVisible || reduceMotion ? 1 : 0.6)
+                .onAppear {
+                    guard !reduceMotion else { return }
+                    withAnimation(.snappy(duration: 0.35)) { checkVisible = true }
+                }
+            Text(title)
+                .font(ADLFont.inter(17, .bold))
+                .foregroundColor(ADLColor.ink)
+            Text(subtitle)
+                .font(ADLFont.inter(13, .semibold))
+                .foregroundColor(ADLColor.inkMuted)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 24)
+        .background(Color.white)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .shadow(color: ADLColor.navy.opacity(0.18), radius: 24, x: 0, y: 10)
+        .padding(.horizontal, 40)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
+    }
+}
+
 struct ContributionView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var locationProvider = LocationProvider()
@@ -2742,8 +2774,30 @@ struct ContributionView: View {
     @State private var mapPointId: String?
     // Step machine: 0=category, 1=photo, 2=location, 3=fields, 4=review
     @State private var currentStep: Int = 0
+    /// +1 = advancing, -1 = going back; drives the mirrored slide transition.
+    @State private var stepDirection: Int = 1
+    @State private var showCaptureSuccess = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let totalSteps = 5
+
+    /// Step changes slide forward/back along mirrored paths; reduce-motion gets a plain fade.
+    private func goToStep(_ step: Int) {
+        stepDirection = step >= currentStep ? 1 : -1
+        if reduceMotion {
+            withAnimation(.easeInOut(duration: 0.15)) { currentStep = step }
+        } else {
+            withAnimation(.snappy(duration: 0.3)) { currentStep = step }
+        }
+    }
+
+    private var stepTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        return .asymmetric(
+            insertion: .move(edge: stepDirection > 0 ? .trailing : .leading).combined(with: .opacity),
+            removal: .move(edge: stepDirection > 0 ? .leading : .trailing).combined(with: .opacity)
+        )
+    }
 
     var body: some View {
         Group {
@@ -2782,9 +2836,12 @@ struct ContributionView: View {
                 .font(ADLFont.inter(11, .semibold))
                 .foregroundColor(ADLColor.inkMuted)
         }
+        // Dots are decorative; the "Step x of y" text carries the same info for VoiceOver.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(appState.t("Step \(currentStep + 1) of \(totalSteps)", "Étape \(currentStep + 1) sur \(totalSteps)"))
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .animation(.easeInOut(duration: 0.2), value: currentStep)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: currentStep)
     }
 
     // MARK: - Main form shell
@@ -2793,7 +2850,7 @@ struct ContributionView: View {
             ADLScreenHeader(
                 title: appState.t("Capture", "Capture"),
                 subtitle: stepSubtitle,
-                onBack: currentStep > 0 ? { currentStep -= 1 } : nil
+                onBack: currentStep > 0 ? { goToStep(currentStep - 1) } : nil
             )
             stepProgressBar
             ScrollView {
@@ -2807,6 +2864,8 @@ struct ContributionView: View {
                         default: step4Review
                         }
                     }
+                    .id(currentStep)
+                    .transition(stepTransition)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
                 }
@@ -2815,8 +2874,35 @@ struct ContributionView: View {
             }
         }
         .background(ADLColor.paper.ignoresSafeArea())
+        .overlay {
+            if showCaptureSuccess {
+                CaptureSuccessToast(
+                    title: appState.t("Capture queued!", "Capture en file !"),
+                    subtitle: appState.t(
+                        "It will upload automatically and earn XP.",
+                        "Envoi automatique — vous gagnerez des XP."
+                    ),
+                    reduceMotion: reduceMotion
+                )
+                .transition(reduceMotion ? .opacity : .scale(scale: 0.9).combined(with: .opacity))
+                .task {
+                    try? await Task.sleep(nanoseconds: 1_600_000_000)
+                    if reduceMotion {
+                        showCaptureSuccess = false
+                    } else {
+                        withAnimation(.easeOut(duration: 0.25)) { showCaptureSuccess = false }
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $showingCamera) {
             CameraPicker(image: $capturedImage)
+        }
+        .onChange(of: capturedImage) { _, newImage in
+            // Physical confirmation the shot registered — matters with gloves/sunlight.
+            if newImage != nil {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            }
         }
         .onAppear {
             applyMapCaptureContextIfNeeded()
@@ -2889,7 +2975,7 @@ struct ContributionView: View {
                 )
             }
             Button {
-                currentStep = 1
+                goToStep(1)
             } label: {
                 HStack {
                     Text(appState.t("Continue", "Continuer"))
@@ -3010,7 +3096,7 @@ struct ContributionView: View {
                     validationMessage = appState.t("Please capture a photo before continuing.", "Veuillez capturer une photo avant de continuer.")
                 } else {
                     validationMessage = nil
-                    currentStep = 2
+                    goToStep(2)
                 }
             } label: {
                 HStack {
@@ -3094,7 +3180,7 @@ struct ContributionView: View {
                     validationMessage = appState.t("Capture GPS before continuing.", "Capturez le GPS avant de continuer.")
                 } else {
                     validationMessage = nil
-                    currentStep = 3
+                    goToStep(3)
                 }
             } label: {
                 HStack {
@@ -3109,7 +3195,7 @@ struct ContributionView: View {
     private func coordChip(label: String, value: String) -> some View {
         VStack(spacing: 2) {
             Text(label)
-                .font(ADLFont.inter(9, .bold))
+                .font(ADLFont.inter(11, .bold))
                 .tracking(1.4)
                 .foregroundColor(ADLColor.navy)
             Text(value)
@@ -3172,7 +3258,7 @@ struct ContributionView: View {
                     validationMessage = msg
                 } else {
                     validationMessage = nil
-                    currentStep = 4
+                    goToStep(4)
                 }
             } label: {
                 HStack {
@@ -3483,7 +3569,13 @@ struct ContributionView: View {
                     image: capturedImage,
                     payload: payload
                 )
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
                 resetFormAfterSubmit()
+                if reduceMotion {
+                    showCaptureSuccess = true
+                } else {
+                    withAnimation(.snappy(duration: 0.3)) { showCaptureSuccess = true }
+                }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "tray.and.arrow.down.fill")
@@ -3736,7 +3828,7 @@ struct RequiredFieldsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(appState.t("Required Fields", "Champs requis").uppercased())
-                    .font(ADLFont.inter(10, .bold))
+                    .font(ADLFont.inter(11, .bold))
                     .tracking(1.4)
                     .foregroundColor(category.tint)
                 Text(fields.isEmpty ? appState.t("No required fields", "Aucun champ requis") : fields.joined(separator: " · "))
@@ -4234,7 +4326,7 @@ private struct ADLShortcutTile: View {
                         .font(ADLFont.inter(12, .bold))
                         .lineLimit(1)
                     Text(subtitle)
-                        .font(ADLFont.inter(10, .regular))
+                        .font(ADLFont.inter(11, .regular))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                         .foregroundColor(filled ? Color.white.opacity(0.72) : .secondary)
@@ -4478,7 +4570,7 @@ private struct ProfileStreakTracker: View {
                             .frame(width: 28, height: 28)
                             .overlay(
                                 Text(String(Calendar.current.shortWeekdaySymbols[(index + 1) % 7].prefix(1)))
-                                    .font(ADLFont.inter(10, .bold))
+                                    .font(ADLFont.inter(11, .bold))
                                     .foregroundColor(index < min(streakDays, 7) ? .white : .secondary)
                             )
                     }
@@ -4870,7 +4962,7 @@ struct AdminReviewView: View {
                         .font(.system(size: 16, weight: .bold))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(appState.t("Cockpit", "Cockpit").uppercased())
-                            .font(ADLFont.inter(10, .bold))
+                            .font(ADLFont.inter(11, .bold))
                             .tracking(1.4)
                             .foregroundColor(ADLColor.inkMuted)
                         Text(activeMode.title(appState.language))
@@ -5133,7 +5225,7 @@ struct AdminReviewView: View {
                 .font(.system(size: 13, weight: .bold))
             VStack(alignment: .leading, spacing: 1) {
                 Text(title.uppercased())
-                    .font(ADLFont.inter(9, .bold))
+                    .font(ADLFont.inter(11, .bold))
                     .tracking(1.1)
                     .foregroundColor(ADLColor.inkMuted)
                 Text(value)
@@ -5769,7 +5861,7 @@ private struct AdminSubmissionCard: View {
                 ForEach(reviewRows, id: \.0) { label, value in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(label.uppercased())
-                            .font(ADLFont.inter(9, .bold))
+                            .font(ADLFont.inter(11, .bold))
                             .tracking(1.2)
                             .foregroundColor(Color(hex: 0x9ca3af))
                         Text(value)
@@ -6990,7 +7082,7 @@ struct ClientDashboardView: View {
                             Spacer()
                             VStack(alignment: .trailing, spacing: 4) {
                                 Text(appState.t("Latest Report", "Dernier rapport").uppercased())
-                                    .font(ADLFont.inter(10, .bold))
+                                    .font(ADLFont.inter(11, .bold))
                                     .tracking(1.2)
                                     .foregroundColor(.white.opacity(0.7))
                                 Text(summary != nil
@@ -7086,7 +7178,7 @@ struct ClientDashboardView: View {
                                     VStack(spacing: 4) {
                                         if bar.totalEvents > 0 {
                                             Text("\(bar.totalEvents)")
-                                                .font(ADLFont.inter(9, .bold))
+                                                .font(ADLFont.inter(11, .bold))
                                                 .foregroundColor(Color(hex: 0x9ca3af))
                                         } else {
                                             Spacer().frame(height: 12)
@@ -7101,7 +7193,7 @@ struct ClientDashboardView: View {
                                         }
                                         .frame(maxWidth: .infinity)
                                         Text(dayLabels[index])
-                                            .font(ADLFont.inter(9))
+                                            .font(ADLFont.inter(11))
                                             .foregroundColor(Color(hex: 0x9ca3af))
                                     }
                                     .frame(maxWidth: .infinity)
@@ -7314,7 +7406,7 @@ struct ClientDashboardView: View {
         HStack(spacing: 5) {
             Circle().fill(color).frame(width: 8, height: 8)
             Text(label)
-                .font(ADLFont.inter(10, .semibold))
+                .font(ADLFont.inter(11, .semibold))
                 .foregroundColor(ADLColor.inkMuted)
         }
     }
@@ -7337,7 +7429,7 @@ struct ClientDashboardView: View {
                         ADLCard {
                             HStack(spacing: 10) {
                                 Text(delta.deltaType.uppercased())
-                                    .font(ADLFont.inter(9, .bold))
+                                    .font(ADLFont.inter(11, .bold))
                                     .tracking(1)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 4)
@@ -7352,7 +7444,7 @@ struct ClientDashboardView: View {
                                         .foregroundColor(ADLColor.ink)
                                         .lineLimit(2)
                                     Text(delta.snapshotDate)
-                                        .font(ADLFont.inter(10))
+                                        .font(ADLFont.inter(11))
                                         .foregroundColor(ADLColor.inkMuted)
                                 }
                                 Spacer()
@@ -7428,7 +7520,7 @@ struct ClientDashboardView: View {
                                     .foregroundColor(ADLColor.ink)
                                     .lineLimit(3)
                                 Text("\(cell.totalPoints) pts · \(String(format: "%.0f%%", cell.completionRate <= 1 ? cell.completionRate * 100 : cell.completionRate))")
-                                    .font(ADLFont.inter(10, .semibold))
+                                    .font(ADLFont.inter(11, .semibold))
                                     .foregroundColor(ADLColor.inkMuted)
                             }
                         }
@@ -7505,7 +7597,7 @@ struct ClientDashboardView: View {
                         }
                         if !answer.caveats.isEmpty {
                             Text(answer.caveats.joined(separator: " · "))
-                                .font(ADLFont.inter(10))
+                                .font(ADLFont.inter(11))
                                 .foregroundColor(ADLColor.inkMuted)
                         }
                     }
@@ -7643,7 +7735,7 @@ struct InvestorDashboardView: View {
                             }
                             Spacer()
                             Text(appState.t("Client", "Client").uppercased())
-                                .font(ADLFont.inter(10, .bold))
+                                .font(ADLFont.inter(11, .bold))
                                 .tracking(1.2)
                                 .foregroundColor(.white.opacity(0.7))
                                 .padding(.horizontal, 10)
@@ -7655,7 +7747,7 @@ struct InvestorDashboardView: View {
                         // Network status sub-card
                         VStack(alignment: .leading, spacing: 6) {
                             Text(appState.t("Network status", "Statut réseau").uppercased())
-                                .font(ADLFont.inter(9, .bold))
+                                .font(ADLFont.inter(11, .bold))
                                 .tracking(1.8)
                                 .foregroundColor(.white.opacity(0.5))
 
@@ -7696,7 +7788,7 @@ struct InvestorDashboardView: View {
                         HStack(spacing: 10) {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(appState.t("Verified", "Vérifiés").uppercased())
-                                    .font(ADLFont.inter(9, .bold))
+                                    .font(ADLFont.inter(11, .bold))
                                     .tracking(1.6)
                                     .foregroundColor(.white.opacity(0.5))
                                 Text("\(verifiedPoints.formatted())")
@@ -7714,7 +7806,7 @@ struct InvestorDashboardView: View {
 
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(appState.t("Coverage", "Couverture").uppercased())
-                                    .font(ADLFont.inter(9, .bold))
+                                    .font(ADLFont.inter(11, .bold))
                                     .tracking(1.6)
                                     .foregroundColor(.white.opacity(0.5))
                                 Text(String(format: "%.0f%%", verificationRate))
@@ -7778,7 +7870,7 @@ struct InvestorDashboardView: View {
                                     VStack(spacing: 4) {
                                         if bar.totalEvents > 0 {
                                             Text("\(bar.totalEvents)")
-                                                .font(ADLFont.inter(9, .bold))
+                                                .font(ADLFont.inter(11, .bold))
                                                 .foregroundColor(Color(hex: 0x9ca3af))
                                         } else {
                                             Spacer().frame(height: 12)
@@ -7793,7 +7885,7 @@ struct InvestorDashboardView: View {
                                         }
                                         .frame(maxWidth: .infinity)
                                         Text(dayLabels[index])
-                                            .font(ADLFont.inter(9))
+                                            .font(ADLFont.inter(11))
                                             .foregroundColor(Color(hex: 0x9ca3af))
                                     }
                                     .frame(maxWidth: .infinity)
@@ -7919,12 +8011,12 @@ struct InvestorDashboardView: View {
                                 .fill(bucket.color)
                                 .frame(width: 8, height: 8)
                             Text(bucket.label)
-                                .font(ADLFont.inter(10, .semibold))
+                                .font(ADLFont.inter(11, .semibold))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                             Spacer()
                             Text("\(Int(Double(bucket.value) / Double(total) * 100))%")
-                                .font(ADLFont.inter(10, .bold))
+                                .font(ADLFont.inter(11, .bold))
                                 .foregroundColor(ADLColor.ink)
                         }
                     }
@@ -8214,7 +8306,7 @@ struct AnalyticsView: View {
                     ForEach(categoryRows, id: \.0.id) { category, value in
                         HStack(spacing: 10) {
                             Text(category.title)
-                                .font(ADLFont.inter(10, .semibold))
+                                .font(ADLFont.inter(11, .semibold))
                                 .foregroundColor(.secondary)
                                 .frame(width: 86, alignment: .leading)
                                 .lineLimit(1)
@@ -8259,7 +8351,7 @@ struct AnalyticsView: View {
                             }
                             .frame(width: 32, height: 92)
                             Text(bucket.label)
-                                .font(ADLFont.inter(10, .bold))
+                                .font(ADLFont.inter(11, .bold))
                                 .foregroundColor(.secondary)
                                 .lineLimit(1)
                         }
@@ -9177,7 +9269,7 @@ struct ProfileView: View {
                         .foregroundColor(ADLColor.ink)
                     Spacer()
                     Text(progress.current.title.uppercased())
-                        .font(ADLFont.inter(10, .bold))
+                        .font(ADLFont.inter(11, .bold))
                         .tracking(1.2)
                         .foregroundColor(ADLColor.amber)
                         .padding(.horizontal, 8)
@@ -9670,7 +9762,7 @@ private struct AdminAccountAccessCard: View {
                     roleMenu(title: appState.t("Role", "Rôle"), role: $createRole)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(appState.t("Temporary password", "Mot de passe temporaire").uppercased())
-                            .font(ADLFont.inter(10, .bold))
+                            .font(ADLFont.inter(11, .bold))
                             .tracking(1.1)
                             .foregroundColor(ADLColor.inkMuted)
                         SecureField(appState.t("Minimum 10 chars, mixed case, number", "10 caractères min., majuscule, minuscule, chiffre"), text: $createPassword)
@@ -9854,7 +9946,7 @@ private struct AdminAccountAccessCard: View {
             )
             VStack(alignment: .leading, spacing: 6) {
                 Text(appState.t("Temporary password", "Mot de passe temporaire").uppercased())
-                    .font(ADLFont.inter(10, .bold))
+                    .font(ADLFont.inter(11, .bold))
                     .tracking(1.1)
                     .foregroundColor(ADLColor.inkMuted)
                 SecureField(appState.t("Minimum 10 chars", "10 caractères minimum"), text: $operatorPassword)
@@ -9964,7 +10056,7 @@ private struct AdminAccountAccessCard: View {
                     .font(ADLFont.inter(11))
                     .foregroundColor(ADLColor.inkMuted)
                 Text(String(format: "%.4f, %.4f · %@", point.location.latitude, point.location.longitude, appState.t("No active operator", "Aucun opérateur actif")))
-                    .font(ADLFont.inter(10))
+                    .font(ADLFont.inter(11))
                     .foregroundColor(ADLColor.inkMuted)
             }
             Spacer()
@@ -9981,7 +10073,7 @@ private struct AdminAccountAccessCard: View {
 
     private func rolePill(_ role: UserRole) -> some View {
         Text(roleTitle(role))
-            .font(ADLFont.inter(10, .bold))
+            .font(ADLFont.inter(11, .bold))
             .tracking(1.1)
             .foregroundColor(ADLColor.amber)
             .padding(.horizontal, 9)
@@ -9993,7 +10085,7 @@ private struct AdminAccountAccessCard: View {
     private func roleMenu(title: String, role: Binding<UserRole>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
-                .font(ADLFont.inter(10, .bold))
+                .font(ADLFont.inter(11, .bold))
                 .tracking(1.1)
                 .foregroundColor(ADLColor.inkMuted)
             Menu {
@@ -10022,7 +10114,7 @@ private struct AdminAccountAccessCard: View {
     private func adminTextField(title: String, text: Binding<String>, placeholder: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased())
-                .font(ADLFont.inter(10, .bold))
+                .font(ADLFont.inter(11, .bold))
                 .tracking(1.1)
                 .foregroundColor(ADLColor.inkMuted)
             TextField(placeholder, text: text)
@@ -10370,7 +10462,7 @@ struct SettingsView: View {
                     .font(ADLFont.inter(11, .medium))
                     .foregroundColor(.white.opacity(0.55))
                 Text(text("Client", "Client").uppercased())
-                    .font(ADLFont.inter(9, .bold))
+                    .font(ADLFont.inter(11, .bold))
                     .tracking(1.2)
                     .foregroundColor(.white.opacity(0.75))
                     .padding(.horizontal, 8)
@@ -10673,7 +10765,7 @@ struct SettingsSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(ADLFont.inter(10, .bold))
+                .font(ADLFont.inter(11, .bold))
                 .tracking(1.2)
                 .foregroundColor(Color(hex: 0x9ca3af))
                 .padding(.horizontal, 4)
@@ -11272,6 +11364,12 @@ struct DailyProgressWidget: View {
                 Spacer()
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(appState.t("Today's goal", "Objectif du jour"))
+        .accessibilityValue(appState.t(
+            "\(goal.completed) of \(goal.target) captures completed",
+            "\(goal.completed) captures sur \(goal.target) effectuées"
+        ))
     }
 }
 

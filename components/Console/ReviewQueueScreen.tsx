@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Camera,
   ChevronDown,
@@ -52,6 +52,7 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [photoPreview, setPhotoPreview] = useState<{ src: string; alt: string } | null>(null);
+  const photoCloseButtonRef = useRef<HTMLButtonElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -75,8 +76,14 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
   useEffect(() => {
     if (!photoPreview) return undefined;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    photoCloseButtonRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setPhotoPreview(null);
+      // The close button is the dialog's only focusable element — keep Tab inside.
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        photoCloseButtonRef.current?.focus();
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => {
@@ -193,7 +200,7 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
                       />
                     </span>
                     {record.pointId && (
-                      <span className="micro-label inline-flex max-w-[9rem] items-center gap-1 rounded-full bg-navy-wash px-2.5 py-1 text-[10px] text-navy">
+                      <span className="micro-label inline-flex max-w-[9rem] items-center gap-1 rounded-full bg-navy-wash px-2.5 py-1 text-[11px] text-navy">
                         <MapPin size={11} className="shrink-0" />
                         <span className="truncate">{t('Linked point', 'Point associé')} {record.pointId}</span>
                       </span>
@@ -327,7 +334,7 @@ const ReviewQueueScreen: React.FC<ReviewQueueScreenProps> = ({ organizationId, l
 
       {photoPreview && (
         <div role="dialog" aria-modal="true" aria-label={photoPreview.alt} className="fixed inset-0 z-[100] flex items-center justify-center bg-navy/90 p-4" onClick={() => setPhotoPreview(null)}>
-          <button type="button" onClick={() => setPhotoPreview(null)} aria-label={t('Close photo', 'Fermer la photo')} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-12 w-12 items-center justify-center rounded-full bg-white text-navy"><X size={22} /></button>
+          <button ref={photoCloseButtonRef} type="button" onClick={() => setPhotoPreview(null)} aria-label={t('Close photo', 'Fermer la photo')} className="absolute right-4 top-[max(1rem,env(safe-area-inset-top))] flex h-12 w-12 items-center justify-center rounded-full bg-white text-navy"><X size={22} /></button>
           <img src={photoPreview.src} alt={photoPreview.alt} className="max-h-full max-w-full rounded-2xl object-contain" onClick={(event) => event.stopPropagation()} />
         </div>
       )}

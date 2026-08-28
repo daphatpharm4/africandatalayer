@@ -224,7 +224,7 @@ struct ADLConsolePressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(isEnabled && configuration.isPressed ? 0.96 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .animation(.snappy(duration: 0.2), value: configuration.isPressed)
     }
 }
 
@@ -248,7 +248,7 @@ struct ADLConsoleChipStyle: ButtonStyle {
                     .stroke(filled ? Color.clear : tinted.opacity(0.45), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .animation(.snappy(duration: 0.2), value: configuration.isPressed)
     }
 }
 
@@ -403,6 +403,7 @@ struct ADLConsoleEmptyState: View {
 /// Loading skeleton placeholder: three pulsing bars used as a content placeholder
 /// while data loads. Gives a visual hint of the layout to come.
 struct ADLConsoleSkeleton: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isAnimating = false
 
     var body: some View {
@@ -422,9 +423,12 @@ struct ADLConsoleSkeleton: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .opacity(isAnimating ? 0.5 : 1)
-        .animation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: isAnimating)
-        .onAppear { isAnimating = true }
+        .opacity(reduceMotion ? 0.7 : (isAnimating ? 0.5 : 1))
+        .animation(
+            reduceMotion ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: true),
+            value: isAnimating
+        )
+        .onAppear { isAnimating = !reduceMotion }
     }
 }
 
@@ -691,7 +695,7 @@ struct ADLConsoleDailyProgressWidget: View {
                     )
                     .frame(width: 52, height: 52)
                     .rotationEffect(.degrees(-90))
-                    .animation(.easeOut(duration: 0.6), value: progress)
+                    .animation(.smooth(duration: 0.6), value: progress)
                 Text("\(capturedToday)")
                     .font(ADLConsoleFont.headline)
                     .foregroundStyle(ADLConsoleColor.ink)

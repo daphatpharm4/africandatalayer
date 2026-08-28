@@ -116,26 +116,26 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
                 id: 'data-access',
                 title: t('Data Access', 'Accès aux données'),
                 items: [
-                  { id: 'subscription', label: t('Active subscription', 'Abonnement actif'), onSelect: () => {} },
-                  { id: 'api-key', label: t('API key management', 'Gestion clé API'), onSelect: () => {} },
-                  { id: 'webhooks', label: t('Webhook endpoints', 'Points Webhook'), onSelect: () => {} },
+                  { id: 'subscription', label: t('Active subscription', 'Abonnement actif') },
+                  { id: 'api-key', label: t('API key management', 'Gestion clé API') },
+                  { id: 'webhooks', label: t('Webhook endpoints', 'Points Webhook') },
                 ],
               },
               {
                 id: 'export',
                 title: t('Export', 'Export'),
                 items: [
-                  { id: 'csv', label: t('Download CSV', 'Télécharger CSV'), onSelect: () => {} },
-                  { id: 'geojson', label: t('Download GeoJSON', 'Télécharger GeoJSON'), onSelect: () => {} },
-                  { id: 'scheduled', label: t('Scheduled exports', 'Exports planifiés'), onSelect: () => {} },
+                  { id: 'csv', label: t('Download CSV', 'Télécharger CSV'), onSelect: () => navigateTo(Screen.DELTA_DASHBOARD) },
+                  { id: 'geojson', label: t('Download GeoJSON', 'Télécharger GeoJSON'), onSelect: () => navigateTo(Screen.DELTA_DASHBOARD) },
+                  { id: 'scheduled', label: t('Scheduled exports', 'Exports planifiés') },
                 ],
               },
               {
                 id: 'account',
                 title: t('Account', 'Compte'),
                 items: [
-                  { id: 'profile', label: t('Profile settings', 'Paramètres profil'), onSelect: () => {} },
-                  { id: 'billing', label: t('Billing', 'Facturation'), onSelect: () => {} },
+                  { id: 'profile', label: t('Profile settings', 'Paramètres profil') },
+                  { id: 'billing', label: t('Billing', 'Facturation') },
                   { id: 'signout', label: t('Sign out', 'Se déconnecter'), onSelect: onLogout },
                 ],
               },
@@ -143,18 +143,33 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
               <section key={section.id} className="px-4 pb-3.5">
                 <div className="micro-label mb-2 text-[10px] text-gray-400">{section.title}</div>
                 <div className="card-soft overflow-hidden">
-                  {section.items.map((item, i, arr) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={item.onSelect}
-                      className={`flex w-full items-center justify-between px-4 py-3 text-left motion-pressable ${
-                        i < arr.length - 1 ? 'border-b border-gray-50' : ''
-                      }`}
-                    >
-                      <span className="text-[13px] font-medium text-gray-700">{item.label}</span>
-                      <ChevronRight size={14} className="text-gray-400" />
-                    </button>
+                  {section.items.map((item: { id: string; label: string; onSelect?: () => void }, i, arr) => (
+                    item.onSelect ? (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={item.onSelect}
+                        className={`flex w-full items-center justify-between px-4 py-3 text-left motion-pressable ${
+                          i < arr.length - 1 ? 'border-b border-gray-50' : ''
+                        }`}
+                      >
+                        <span className="text-[13px] font-medium text-gray-700">{item.label}</span>
+                        <ChevronRight size={14} className="text-gray-400" />
+                      </button>
+                    ) : (
+                      <div
+                        key={item.id}
+                        aria-disabled="true"
+                        className={`flex w-full items-center justify-between px-4 py-3 text-left opacity-50 cursor-default ${
+                          i < arr.length - 1 ? 'border-b border-gray-50' : ''
+                        }`}
+                      >
+                        <span className="text-[13px] font-medium text-gray-700">{item.label}</span>
+                        <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                          {t('Coming soon', 'Bientôt disponible')}
+                        </span>
+                      </div>
+                    )
                   ))}
                 </div>
               </section>
@@ -187,7 +202,10 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
         <div className="space-y-2">
           <h4 className="micro-label px-1 text-gray-400">{t('Display', 'Affichage')}</h4>
           <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
-            <div className="flex w-full items-center justify-between px-4 min-h-[52px]">
+            <div
+              className="flex w-full cursor-pointer items-center justify-between px-4 min-h-[52px] transition-colors active:bg-gray-50"
+              onClick={() => setHighContrast((prev) => !prev)}
+            >
               <div className="flex items-center gap-3">
                 <Contrast size={18} className="text-gray-500 shrink-0" />
                 <span className="text-sm font-medium text-gray-900">{t('High Contrast', 'Contraste élevé')}</span>
@@ -197,7 +215,10 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
                 role="switch"
                 aria-checked={highContrast}
                 aria-label={t('High Contrast', 'Contraste élevé')}
-                onClick={() => setHighContrast((prev) => !prev)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setHighContrast((prev) => !prev);
+                }}
                 className={`relative h-8 w-14 rounded-full transition-colors ${highContrast ? 'bg-navy' : 'bg-gray-200'}`}
               >
                 <span className={`absolute left-0.5 top-0.5 h-7 w-7 rounded-full bg-white shadow transition-transform ${highContrast ? 'translate-x-6' : ''}`} />
@@ -210,7 +231,13 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
           <div className="space-y-2">
             <h4 className="micro-label px-1 text-gray-400">{t('Notifications', 'Notifications')}</h4>
             <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white">
-              <div className="flex items-start justify-between gap-3 px-4 py-3">
+              <div
+                className="flex cursor-pointer items-start justify-between gap-3 px-4 py-3 transition-colors active:bg-gray-50"
+                onClick={() => {
+                  if (smsConsentSaving || smsConsent === null) return;
+                  void toggleSmsConsent(!smsConsent?.optedIn);
+                }}
+              >
                 <div className="flex flex-1 items-start gap-3">
                   <MessageSquare size={18} className="mt-0.5 text-gray-500 shrink-0" />
                   <div className="flex-1">
@@ -240,7 +267,10 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
                   aria-checked={smsConsent?.optedIn ?? false}
                   aria-label={t('SMS notifications', 'Notifications SMS')}
                   disabled={smsConsentSaving || smsConsent === null}
-                  onClick={() => void toggleSmsConsent(!smsConsent?.optedIn)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void toggleSmsConsent(!smsConsent?.optedIn);
+                  }}
                   className={`relative h-8 w-14 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
                     smsConsent?.optedIn ? 'bg-navy' : 'bg-gray-200'
                   }`}
@@ -297,7 +327,9 @@ const Settings: React.FC<Props> = ({ onBack, onLogout, language, onLanguageChang
 
         <div className="flex flex-col items-center pt-4">
           <BrandLogo size={18} className="mb-2" />
-          <p className="text-[11px] font-medium leading-4 text-gray-400">African Data Layer v2.4.0</p>
+          <p className="text-[11px] font-medium leading-4 text-gray-400">
+            African Data Layer v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '2.4.0'}
+          </p>
         </div>
       </div>
     </div>

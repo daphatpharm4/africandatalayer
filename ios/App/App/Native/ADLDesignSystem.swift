@@ -516,7 +516,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .clipShape(RoundedRectangle(cornerRadius: ADLRadius.button, style: .continuous))
             .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -532,7 +532,16 @@ struct CTAButtonStyle: ButtonStyle {
             .clipShape(RoundedRectangle(cornerRadius: ADLRadius.button, style: .continuous))
             .shadow(color: Color.black.opacity(0.05), radius: 1, x: 0, y: 1)
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+/// Tab bar item: instant press-down feedback without a background swap.
+struct TabItemPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -551,6 +560,6 @@ struct SecondaryButtonStyle: ButtonStyle {
                     .stroke(ADLColor.lineStrong, lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.95 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .animation(.snappy(duration: 0.15), value: configuration.isPressed)
     }
 }
